@@ -6,10 +6,11 @@ from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 
 class ImageEnhancementApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title('图像局部暗化增强工具')
-        self.root.geometry('1200x800')
+    def __init__(self, parent):
+        self.parent = parent
+        self.window = tk.Toplevel(parent)
+        self.window.title('图像局部暗化增强工具')
+        self.window.geometry('1200x800')
         
         self.image = None
         self.processed_image = None
@@ -20,7 +21,7 @@ class ImageEnhancementApp:
         
     def initUI(self):
         # 创建主框架
-        main_frame = ttk.Frame(self.root)
+        main_frame = ttk.Frame(self.window)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # 左侧图像显示区域

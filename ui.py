@@ -6,7 +6,7 @@ import zipfile
 import threading
 import time
 from shutil import rmtree,copytree
-import install,search_result,functions,cp_trans_just_list,get_font,organization
+import install,search_result,functions,lighter,get_font,organization
 print('启动完毕')
 
 class AdvancedTranslateUI:
@@ -70,7 +70,8 @@ class AdvancedTranslateUI:
             "从零协下载汉化": self.show_llc_frame,
             "进行文本搜索": self.show_search_frame,
             "备份原文": self.show_backup_frame,
-            "缓存文件管理": self.show_cache_frame
+            "缓存文件管理": self.show_cache_frame,
+            "黑影图调色": self.show_lighter_window
         }
         
         for func_name, func_command in self.functions.items():
@@ -717,6 +718,9 @@ class AdvancedTranslateUI:
         self.show_frame("cache")
         self.log("切换到缓存文件管理")
 
+    def show_lighter_window(self):
+        self.log("启动图片亮度工具")
+        lighter.ImageEnhancementApp(self.root)
     def create_menu(self):
         menubar = tk.Menu(self.root)
         

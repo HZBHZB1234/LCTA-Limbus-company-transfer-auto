@@ -187,16 +187,35 @@ class GachaCalculator:
         """计算所有目标的概率"""
         results = {}
         targets = ["二级", "三级", "ego", "播报员"]
+        base_probs = [self.p_2nd, self.p_3rd, self.p_ego, self.p_announcer]
         
         for i, target in enumerate(targets):
             target_count = target_counts[i]
             if target_count > 0:  # 只计算目标数量大于0的
-                prob = self.cal_probability(times, target, up_counts, ego_percent, target_count)
-                results[target] = prob
+                base_prob = base_probs[i]
+                up_count = up_counts[i]
                 
+                # 特殊处理 ego 的已抽取百分比
+                if target == "ego":
+                    base_prob *= (1 - ego_percent / 100)
+
+                # 如果UP数量为0，视为无视该种类，概率为0
+                if up_count == 0:
+                    continue
+
+                # 计算实际概率 (50% up池, 50% 全池)
+                total_chars = 50  # 假设总角色数为50
+                actual_prob = base_prob * (0.5 * (1 / up_count) + 0.5 * (1 / total_chars))
+
+                # 计算至少获得target_count个的概率
+                prob = 0
+                for j in range(target_count, times + 1):
+                    prob += self.cal_exact(times, actual_prob, j)
+                results[target] = prob
+
                 # 计算概率分布
-                x_vals = list(range(0, min(times+1, 51)))  # 限制显示范围
-                y_vals = [self.cal_probability(times, target, up_counts, ego_percent, i) for i in x_vals]
+                x_vals = list(range(0, min(times + 1, 51)))  # 限制显示范围
+                y_vals = [self.cal_exact(times, actual_prob, k) for k in x_vals]
                 results[f"{target}_dist"] = (x_vals, y_vals)
         
         return results
@@ -302,16 +321,23 @@ class GachaCalculator:
             for i, target in enumerate(targets):
                 if f"{target}_dist" in self.calculation_results:
                     x_vals, y_vals = self.calculation_results[f"{target}_dist"]
+                    # 跳过0个的情况（第一个元素）
+                    x_vals = x_vals[1:]
+                    y_vals = y_vals[1:]
+                    
                     axes[i].bar(x_vals, y_vals, color=colors[i], alpha=0.7)
                     axes[i].set_xlabel('获得数量')
                     axes[i].set_ylabel('概率')
                     axes[i].set_title(f'{target}获得数量概率分布')
                     
                     # 添加数值标注（只标注概率较高的几个点）
-                    max_val = max(y_vals)
+                    max_val = max(y_vals) if y_vals else 0
                     for j, (x, y) in enumerate(zip(x_vals, y_vals)):
-                        if y > max_val * 0.1:  # 只标注概率大于最大值10%的点
+                        if y > max_val * 0.1 and max_val > 0:  # 只标注概率大于最大值10%的点
+                            # 在柱子上方显示概率
                             axes[i].text(x, y + 0.01, f'{y:.2%}', ha='center', va='bottom', fontsize=8)
+                            # 在柱子下方显示数量
+                            axes[i].text(x, -0.02, str(x), ha='center', va='top', fontsize=8)
             
             self.figure.tight_layout()
             
@@ -321,16 +347,23 @@ class GachaCalculator:
             
             if f"{chart_target}_dist" in self.calculation_results:
                 x_vals, y_vals = self.calculation_results[f"{chart_target}_dist"]
+                # 跳过0个的情况（第一个元素）
+                x_vals = x_vals[1:]
+                y_vals = y_vals[1:]
+                
                 bars = ax.bar(x_vals, y_vals, alpha=0.7)
                 ax.set_xlabel('获得数量')
                 ax.set_ylabel('概率')
                 ax.set_title(f'{chart_target}获得数量概率分布')
                 
                 # 添加数值标注
-                max_val = max(y_vals)
+                max_val = max(y_vals) if y_vals else 0
                 for i, (x, y) in enumerate(zip(x_vals, y_vals)):
-                    if y > max_val * 0.1:  # 只标注概率大于最大值10%的点
+                    if y > max_val * 0.1 and max_val > 0:  # 只标注概率大于最大值10%的点
+                        # 在柱子上方显示概率
                         ax.text(x, y + 0.01, f'{y:.2%}', ha='center', va='bottom', fontsize=8)
+                        # 在柱子下方显示数量
+                        ax.text(x, -0.02, str(x), ha='center', va='top', fontsize=8)
             
             self.figure.tight_layout()
         

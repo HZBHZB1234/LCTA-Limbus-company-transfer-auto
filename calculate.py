@@ -252,15 +252,26 @@ class GachaCalculator:
                 
                 # 特殊处理 ego 的已抽取百分比
                 if target == "ego":
-                    base_prob *= (1 - ego_percent / 100)
+                    # 计算已获得的非up ego数量
+                    total_non_up_ego = 50  # 假设总ego数量为50
+                    obtained_non_up_ego = (ego_percent / 100) * (total_non_up_ego - up_count)
+                    remaining_non_up_ego = total_non_up_ego - up_count - obtained_non_up_ego
+                    
+                    # 计算实际概率 (50% up池, 50% 全池)
+                    # up池中的概率: 0.5 * (1/up_count)
+                    # 全池中的概率: 0.5 * (1/(remaining_non_up_ego + up_count))
+                    actual_prob = 0.5 * (1/up_count) + 0.5 * (1/(remaining_non_up_ego + up_count))
+                    
+                    # 乘以基础ego概率
+                    actual_prob *= base_prob
+                else:
+                    # 计算实际概率 (50% up池, 50% 全池)
+                    total_chars = 50  # 假设总角色数为50
+                    actual_prob = base_prob * (0.5 * (1 / up_count) + 0.5 * (1 / total_chars))
 
                 # 如果UP数量为0，视为无视该种类，概率为0
                 if up_count == 0:
                     continue
-
-                # 计算实际概率 (50% up池, 50% 全池)
-                total_chars = 50  # 假设总角色数为50
-                actual_prob = base_prob * (0.5 * (1 / up_count) + 0.5 * (1 / total_chars))
 
                 # 计算至少获得target_count个的概率
                 prob = self.cal_probability_optimized(times, actual_prob, target_count)
@@ -379,23 +390,31 @@ class GachaCalculator:
         if target == "二级":
             base_prob = self.p_2nd
             up_count = up_counts[0]
+            total_chars = 50
+            return base_prob * (0.5 * (1/up_count) + 0.5 * (1/total_chars))
         elif target == "三级":
             base_prob = self.p_3rd
             up_count = up_counts[1]
+            total_chars = 50
+            return base_prob * (0.5 * (1/up_count) + 0.5 * (1/total_chars))
         elif target == "ego":
-            base_prob = self.p_ego * (1 - ego_percent/100)
+            base_prob = self.p_ego
             up_count = up_counts[2]
+            # 计算已获得的非up ego数量
+            total_non_up_ego = 50  # 假设总ego数量为50
+            obtained_non_up_ego = (ego_percent / 100) * (total_non_up_ego - up_count)
+            remaining_non_up_ego = total_non_up_ego - up_count - obtained_non_up_ego
+            
+            # 计算实际概率 (50% up池, 50% 全池)
+            actual_prob = 0.5 * (1/up_count) + 0.5 * (1/(remaining_non_up_ego + up_count))
+            return base_prob * actual_prob
         elif target == "播报员":
             base_prob = self.p_announcer
             up_count = up_counts[3]
+            total_chars = 50
+            return base_prob * (0.5 * (1/up_count) + 0.5 * (1/total_chars))
         else:
             return 0
-        
-        if up_count == 0:
-            return 0
-            
-        total_chars = 50
-        return base_prob * (0.5 * (1/up_count) + 0.5 * (1/total_chars))
     
     def check_queue(self):
         """检查计算队列，更新UI"""
@@ -482,8 +501,8 @@ class GachaCalculator:
                 if f"{target}_dist" in self.calculation_results:
                     x_vals, y_vals = self.calculation_results[f"{target}_dist"]
                     # 跳过0个的情况（第一个元素）
-                    x_vals = x_vals[1:]
-                    y_vals = y_vals[1:]
+                    #x_vals = x_vals[1:]
+                    #y_vals = y_vals[1:]
                     
                     axes[i].bar(x_vals, y_vals, color=colors[i], alpha=0.7)
                     axes[i].set_xlabel('获得数量')
@@ -508,8 +527,8 @@ class GachaCalculator:
             if f"{chart_target}_dist" in self.calculation_results:
                 x_vals, y_vals = self.calculation_results[f"{chart_target}_dist"]
                 # 跳过0个的情况（第一个元素）
-                x_vals = x_vals[1:]
-                y_vals = y_vals[1:]
+                #x_vals = x_vals[1:]
+                #y_vals = y_vals[1:]
                 
                 bars = ax.bar(x_vals, y_vals, alpha=0.7)
                 ax.set_xlabel('获得数量')

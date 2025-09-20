@@ -2,7 +2,7 @@ import json
 import os
 import jsonpatch
 import importlib.util
-import translate
+#import translate
 class translate_organize():
     def __init__(self,config,log):
         self.config=config

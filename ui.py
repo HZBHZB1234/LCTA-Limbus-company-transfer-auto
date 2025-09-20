@@ -1055,13 +1055,23 @@ class AdvancedTranslateUI:
         local_low_path = os.path.abspath(local_low_path)
         if self.clean_progress_var.get():
             self.log("清除本地进程文件...")
-            path_config=local_low_path+r'\ProjectMoon\LimbusCompany\synchronous-data_product.json'
+            lists=os.listdir(local_low_path+r'\ProjectMoon\LimbusCompany')
+            progress_file=[i for i in lists if 'save' in i][0]
+            path_config=local_low_path+rf'\ProjectMoon\LimbusCompany\{progress_file}'
             if os.path.exists(path_config):
                 os.remove(path_config)
                 self.log("本地进程文件已清除")
             else:
                 self.log("本地进程文件不存在")
-            
+        if self.clean_notice_var.get():
+            self.log("清除本地通知文件...")
+            path_notice=local_low_path+r'\ProjectMoon\LimbusCompany\synchronous-data_product.json'
+            path_notice_dir=local_low_path+r'\ProjectMoon\LimbusCompany\notice'
+            try:os.remove(path_notice)    
+            except:None
+            try:rmtree(path_notice_dir)
+            except:None
+            self.log("本地通知文件已清除")
         # 清除自定义选择的文件
         self.deleted_count = 0
         for file_path in self.custom_files_to_delete:
@@ -1092,6 +1102,7 @@ class AdvancedTranslateUI:
             if os.path.isdir(path):
                 try:
                     rmtree(path)
+                    self.deleted_count += 1
                     self.log(f"已删除 {path_del}")
                 except Exception as e:
                     self.log(f"删除 {path_del} 失败: {str(e)}")

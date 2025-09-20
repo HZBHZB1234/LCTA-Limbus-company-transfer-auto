@@ -6,7 +6,7 @@ import zipfile
 import threading
 import time
 from shutil import rmtree,copytree
-import install,search_result,functions,lighter,get_font,organization
+import install,search_result,functions,lighter,get_font,organization,calculate
 print('启动完毕')
 
 class AdvancedTranslateUI:
@@ -71,7 +71,8 @@ class AdvancedTranslateUI:
             "进行文本搜索": self.show_search_frame,
             "备份原文": self.show_backup_frame,
             "缓存文件夹管理": self.show_cache_frame,
-            "黑影图调色": self.show_lighter_window
+            "黑影图调色": self.show_lighter_window,
+            "抽卡概率计算":self.show_calculate_window
         }
         
         for func_name, func_command in self.functions.items():
@@ -765,6 +766,9 @@ class AdvancedTranslateUI:
     def show_lighter_window(self):
         self.log("启动图片亮度工具")
         lighter.ImageEnhancementApp(self.root)
+    def show_calculate_window(self):
+        self.log("启动概率计算工具")
+        calculate.GachaCalculator(self.root)
     def create_menu(self):
         menubar = tk.Menu(self.root)
         

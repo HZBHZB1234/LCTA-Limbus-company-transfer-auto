@@ -11,8 +11,8 @@ import time
 from queue import Queue
 
 class GachaCalculator:
-    def __init__(self, root):
-        self.root = root
+    def __init__(self, root__):
+        self.root = tk.Toplevel(root__)
         self.root.title("边狱公司抽卡概率计算器")
         self.root.geometry("1000x800")
         

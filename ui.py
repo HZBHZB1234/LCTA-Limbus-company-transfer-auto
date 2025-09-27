@@ -6,14 +6,14 @@ import zipfile
 import threading
 import time
 from shutil import rmtree,copytree
-import install,search_result,functions,lighter,get_font,organization,calculate
+import install,search_result,functions,lighter,get_font,organization,calculate,about
 print('启动完毕')
 
 class AdvancedTranslateUI:
     def __init__(self, root):
         self.root = root
         self.root.title("LCTA v3.0.0")
-        self.root.geometry("900x650")
+        self.root.geometry("900x800")
         
         # 初始化变量
         self.custom_script_var = tk.BooleanVar(value=False)
@@ -72,7 +72,8 @@ class AdvancedTranslateUI:
             "备份原文": self.show_backup_frame,
             "缓存文件夹管理": self.show_cache_frame,
             "黑影图调色": self.show_lighter_window,
-            "抽卡概率计算":self.show_calculate_window
+            "抽卡概率计算":self.show_calculate_window,
+            "关于": self.show_about_window
         }
         
         for func_name, func_command in self.functions.items():
@@ -769,6 +770,9 @@ class AdvancedTranslateUI:
     def show_calculate_window(self):
         self.log("启动概率计算工具")
         calculate.GachaCalculator(self.root)
+    def show_about_window(self):
+        self.log("启动关于窗口")
+        about.AboutWindow(self.root)
     def create_menu(self):
         menubar = tk.Menu(self.root)
         

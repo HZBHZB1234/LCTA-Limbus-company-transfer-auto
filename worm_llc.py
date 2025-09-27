@@ -1,17 +1,27 @@
 import requests
 import json
 #测试用
-def worm():
+def worm(logger):
     c=[]
-    for i in range(3):
-        r=requests.get(f"https://paratranz.cn/api/projects/6860/terms?pageSize=800&page={i+1}")
-        print(r.status_code)
+    for i in range(10):
+        r=requests.get(f"https://paratranz.cn/api/projects/6860/terms?pageSize=800&page={i+1}",timeout=10)
+        if r.status_code!=200:
+            logger("请求失败") 
+            return
+        logger('获取第%d页成功'%(i+1))
+        if len(r.json()["results"])==0: 
+            logger("没有更多数据了") 
+            break
+        if i==9: 
+            logger("未知原因导致超出限额")
+            return
         c=c+r.json()["results"]
-    with open("c.json",'w',encoding='utf-8') as f:
-        json.dump(c,f,ensure_ascii=False,indent=4)
-def get_simple():
-    with open("c.json",'r',encoding='utf-8') as f:
-        c=json.load(f)
+    return c
+def get_simple(logger,c=None):
+    logger('开始简化')
+    if c==None:
+        with open("c.json",'r',encoding='utf-8') as f:
+            c=json.load(f)
     s=[]
     for i in c:
         s.append(
@@ -21,11 +31,12 @@ def get_simple():
                 "note":i["note"]
             }
         )
-    with open("s.json",'w',encoding='utf-8') as f:
-        json.dump(s,f,ensure_ascii=False,indent=4)
-def make_baidu():
-    with open("s.json",'r',encoding='utf-8') as f:
-        s=json.load(f)
+    return s
+def make_baidu(logger,s=None):
+    logger('开始制作百度翻译词库')
+    if not s:
+        with open("s.json",'r',encoding='utf-8') as f:
+            s=json.load(f)
     times=0
     final=''
     for i in s:
@@ -34,6 +45,9 @@ def make_baidu():
             if times==500:
                 break
             final+=i["term"]+'|||'+i["translation"]+'\n'
-    with open("baidu.txt",'w',encoding='utf-8') as f:
-        f.write(final)
-make_baidu()
+    return final
+def make_two(logger,s=None):
+    logger('开始制作双份词库')
+if __name__=='__main__':
+    with open("s.json",'w',encoding='utf-8') as f:
+        json.dump(get_simple(print,worm(print)),f,indent=4)

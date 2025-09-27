@@ -6,9 +6,43 @@ import zipfile
 import threading
 import time
 from shutil import rmtree,copytree
+import json
 import install,search_result,functions,lighter,get_font,organization,calculate,about
 print('启动完毕')
-
+TRANSLATION_SERVICES = {
+    "baidu": [
+        {"key": "appid", "label": "APP ID", "type": "entry"},
+        {"key": "secret", "label": "密钥", "type": "password"}
+    ],
+    "tencent": [
+        {"key": "secret_id", "label": "SecretId", "type": "entry"},
+        {"key": "secret_key", "label": "SecretKey", "type": "password"}
+    ],
+    "caiyun": [
+        {"key": "token", "label": "Token", "type": "password"}
+    ],
+    "youdao": [
+        {"key": "app_key", "label": "AppKey", "type": "entry"},
+        {"key": "app_secret", "label": "密钥", "type": "password"}
+    ],
+    "xiaoniu": [
+        {"key": "apikey", "label": "API Key", "type": "password"}
+    ],
+    "aliyun": [
+        {"key": "access_key_id", "label": "AccessKeyId", "type": "entry"},
+        {"key": "access_key_secret", "label": "AccessKeySecret", "type": "password"}
+    ],
+    "huoshan": [
+        {"key": "ak", "label": "Access Key", "type": "entry"},
+        {"key": "sk", "label": "Secret Key", "type": "password"}
+    ],
+    "google": [
+        {"key": "key", "label": "API密钥", "type": "password"}
+    ],
+    "deepl": [
+        {"key": "key", "label": "API密钥", "type": "password"}
+    ]
+}
 class AdvancedTranslateUI:
     def __init__(self, root):
         self.root = root
@@ -36,7 +70,12 @@ class AdvancedTranslateUI:
         # 配置网格权重
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
+        self.current_service = "baidu"  # 当前选中的翻译服务
+        self.service_widgets = {}  # 存储每个服务的输入框控件
+        self.api_test_functions = {}  # 存储测试函数
         
+        # 初始化测试函数（这些函数需要从其他模块导入）
+        self.init_test_functions()
         # 创建左右分栏
         self.create_sidebar()
         
@@ -48,7 +87,29 @@ class AdvancedTranslateUI:
         
         # 初始显示翻译界面
         self.show_translate_frame()
-    
+
+        
+    def init_test_functions(self):
+        """初始化翻译服务的测试函数"""
+        try:
+            # 导入测试模块
+            import api_test
+            
+            # 注册测试函数
+            self.api_test_functions = {
+                "baidu": api_test.test_baidu,
+                "tencent": api_test.test_tencent,
+                "caiyun": api_test.test_caiyun,
+                "youdao": api_test.test_youdao,
+                "xiaoniu": api_test.test_xiaoniu,
+                "aliyun": api_test.test_aliyun,
+                "huoshan": api_test.test_huoshan,
+                "google": api_test.test_google,
+                "deepl": api_test.test_deepl
+            }
+        except ImportError:
+            self.log("警告: 未找到api_test模块，测试功能将不可用")
+            self.api_test_functions = {}
     def create_sidebar(self):
         # 创建左侧边栏
         self.sidebar_frame = ttk.Frame(self.main_frame, width=150)
@@ -65,6 +126,7 @@ class AdvancedTranslateUI:
             "从ourplay下载汉化": self.show_ourplay_frame,
             "清除本地缓存": self.show_clean_frame,
             "从零协下载汉化": self.show_llc_frame,
+            "配置汉化api": self.show_config_frame,
             "进行文本搜索": self.show_search_frame,
             "备份原文": self.show_backup_frame,
             "缓存文件夹管理": self.show_cache_frame,
@@ -109,6 +171,9 @@ class AdvancedTranslateUI:
         # 零协下载框架
         self.frames["llc"] = ttk.Frame(self.content_frame)
         self.create_llc_frame(self.frames["llc"])
+
+        self.frames['config']=ttk.Frame(self.content_frame)
+        self.create_config_frame(self.frames['config'])
 
         self.frames["search"] = ttk.Frame(self.content_frame)
         self.create_search_frame(self.frames["search"])
@@ -548,6 +613,67 @@ class AdvancedTranslateUI:
         
         ttk.Button(button_frame, text="开始下载", command=self.start_llc_download).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消下载", command=self.cancel_download).pack(side=tk.LEFT, padx=5)
+    def create_config_frame(self, parent):
+        """配置汉化API界面 - 修改后的版本"""
+        ttk.Label(parent, text="配置汉化API", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
+        
+        # API配置说明
+        ttk.Label(parent, text="配置用于翻译的API密钥和服务", font=('TkDefaultFont', 9)).pack(pady=5)
+        
+        # 翻译服务选择框架
+        service_select_frame = ttk.LabelFrame(parent, text="翻译服务选择", padding="10")
+        service_select_frame.pack(fill=tk.X, pady=10)
+        
+        # 服务选择下拉框
+        ttk.Label(service_select_frame, text="选择翻译服务:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.service_var = tk.StringVar(value="baidu")
+        service_combo = ttk.Combobox(service_select_frame, textvariable=self.service_var, 
+                                   values=list(TRANSLATION_SERVICES.keys()), state="readonly")
+        service_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        service_combo.bind('<<ComboboxSelected>>', self.on_service_change)
+        
+        # 参数配置框架
+        self.param_frame = ttk.LabelFrame(parent, text="API参数配置", padding="10")
+        self.param_frame.pack(fill=tk.X, pady=10)
+        
+        # 默认翻译服务选择
+        service_frame = ttk.LabelFrame(parent, text="默认翻译服务", padding="10")
+        service_frame.pack(fill=tk.X, pady=10)
+        
+        self.default_service_var = tk.StringVar(value="baidu")
+        
+        # 创建两列布局以容纳更多选项
+        service_col1 = ttk.Frame(service_frame)
+        service_col1.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        service_col2 = ttk.Frame(service_frame)
+        service_col2.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+        
+        services = [
+            ("百度翻译", "baidu", service_col1),
+            ("腾讯翻译", "tencent", service_col1),
+            ("彩云翻译", "caiyun", service_col1),
+            ("有道翻译", "youdao", service_col1),
+            ("小牛翻译", "xiaoniu", service_col2),
+            ("阿里云翻译", "aliyun", service_col2),
+            ("火山翻译", "huoshan", service_col2),
+            ("Google翻译", "google", service_col2),
+            ("DeepL翻译", "deepl", service_col2)
+        ]
+        
+        for i, (text, value, frame) in enumerate(services):
+            ttk.Radiobutton(frame, text=text, variable=self.default_service_var, value=value).pack(anchor=tk.W)
+        
+        # 按钮框架
+        button_frame = ttk.Frame(parent)
+        button_frame.pack(pady=20)
+        
+        ttk.Button(button_frame, text="保存配置", command=self.save_api_config).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="测试连接", command=self.test_api_connection).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="加载配置", command=self.load_api_config).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="清空当前", command=self.clear_current_service).pack(side=tk.LEFT, padx=5)
+        
+        # 初始创建当前服务的输入框
+        self.create_service_widgets("baidu")
     def create_search_frame(self, parent):
         ttk.Label(parent, text="搜索指定文本", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
         
@@ -739,6 +865,9 @@ class AdvancedTranslateUI:
         self.show_frame("llc")
         self.log("切换到零协下载")
     
+    def show_config_frame(self):
+        self.show_frame("config")
+        self.log("切换到配置界面")
     def show_search_frame(self):
         self.show_frame("search")
         self.log("切换到文本搜索")
@@ -1001,6 +1130,146 @@ class AdvancedTranslateUI:
         self.stop_download = True
         self.download_progress.set(0)
         self.log("下载已取消")
+    def on_service_change(self, event=None):
+        """当翻译服务改变时的回调函数"""
+        new_service = self.service_var.get()
+        if new_service != self.current_service:
+            self.current_service = new_service
+            self.create_service_widgets(new_service)
+
+    def create_service_widgets(self, service_name):
+        """为指定服务创建参数输入框"""
+        # 清除现有控件
+        for widget in self.param_frame.winfo_children():
+            widget.destroy()
+        
+        # 更新标题
+        self.param_frame.configure(text=f"{service_name.upper()} API参数配置")
+        
+        # 获取该服务的参数定义
+        params = TRANSLATION_SERVICES.get(service_name, [])
+        self.service_widgets[service_name] = {}
+        
+        # 创建参数输入框
+        for i, param in enumerate(params):
+            # 参数标签
+            ttk.Label(self.param_frame, text=param["label"] + ":").grid(row=i, column=0, sticky=tk.W, pady=5, padx=5)
+            
+            # 参数输入框
+            if param["type"] == "password":
+                entry = ttk.Entry(self.param_frame, width=40, show="*")
+            else:
+                entry = ttk.Entry(self.param_frame, width=40)
+            
+            entry.grid(row=i, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+            self.service_widgets[service_name][param["key"]] = entry
+            
+            # 存储当前值（如果有）
+            if hasattr(self, 'loaded_config') and service_name in self.loaded_config:
+                config_value = self.loaded_config[service_name].get(param["key"], "")
+                entry.delete(0, tk.END)
+                entry.insert(0, config_value)
+        
+        # 配置网格权重使输入框可以扩展
+        self.param_frame.columnconfigure(1, weight=1)
+
+    def clear_current_service(self):
+        """清空当前服务的配置"""
+        service_name = self.service_var.get()
+        if service_name in self.service_widgets:
+            for param_key, widget in self.service_widgets[service_name].items():
+                widget.delete(0, tk.END)
+        self.log(f"已清空 {service_name} 的配置")
+
+    def save_api_config(self):
+        """保存所有API配置"""
+        config_data = {'default_service': self.default_service_var.get()}
+        
+        # 收集所有服务的配置
+        for service_name in TRANSLATION_SERVICES.keys():
+            config_data[service_name] = {}
+            
+            if service_name in self.service_widgets:
+                for param_key, widget in self.service_widgets[service_name].items():
+                    config_data[service_name][param_key] = widget.get()
+        
+        try:
+            with open('api_config.json', 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=4)
+            self.log("API配置已保存")
+            messagebox.showinfo("成功", "API配置已保存")
+        except Exception as e:
+            self.log(f"保存配置失败: {e}")
+            messagebox.showerror("错误", f"保存配置失败: {e}")
+
+    def load_api_config(self):
+        """加载API配置"""
+        try:
+            if os.path.exists('api_config.json'):
+                with open('api_config.json', 'r', encoding='utf-8') as f:
+                    self.loaded_config = json.load(f)
+                
+                # 设置默认服务
+                if 'default_service' in self.loaded_config:
+                    self.default_service_var.set(self.loaded_config['default_service'])
+                
+                # 为每个服务填充配置
+                for service_name in TRANSLATION_SERVICES.keys():
+                    if service_name in self.loaded_config:
+                        # 如果当前显示的是该服务，直接更新界面
+                        if service_name == self.current_service:
+                            self.create_service_widgets(service_name)
+                        # 否则存储配置，在切换到该服务时自动填充
+                        elif service_name in self.service_widgets:
+                            for param_key, widget in self.service_widgets[service_name].items():
+                                if param_key in self.loaded_config[service_name]:
+                                    widget.delete(0, tk.END)
+                                    widget.insert(0, self.loaded_config[service_name][param_key])
+                
+                self.log("API配置已加载")
+                messagebox.showinfo("成功", "API配置已加载")
+            else:
+                self.log("未找到配置文件")
+                messagebox.showinfo("提示", "未找到配置文件")
+        except Exception as e:
+            self.log(f"加载配置失败: {e}")
+            messagebox.showerror("错误", f"加载配置失败: {e}")
+
+    def test_api_connection(self):
+        """测试当前选中服务的API连接"""
+        service_name = self.service_var.get()
+        
+        if service_name not in self.api_test_functions:
+            messagebox.showerror("错误", f"未找到 {service_name} 的测试函数")
+            return
+        
+        # 收集当前服务的配置参数
+        test_params = {}
+        if service_name in self.service_widgets:
+            for param_key, widget in self.service_widgets[service_name].items():
+                value = widget.get()
+                if not value:
+                    messagebox.showerror("错误", f"请填写{service_name}的所有必需参数")
+                    return
+                test_params[param_key] = value
+        
+        try:
+            self.log(f"开始测试 {service_name} API连接...")
+            
+            # 调用测试函数
+            test_function = self.api_test_functions[service_name]
+            success, message = test_function(test_params)
+            
+            if success:
+                self.log(f"{service_name} API连接测试成功")
+                messagebox.showinfo("成功", f"{service_name} API连接测试成功")
+            else:
+                self.log(f"{service_name} API连接测试失败: {message}")
+                messagebox.showerror("错误", f"{service_name} API连接测试失败: {message}")
+                
+        except Exception as e:
+            self.log(f"测试过程中发生错误: {e}")
+            messagebox.showerror("错误", f"测试过程中发生错误: {e}")
     def add_custom_file(self):
         """添加自定义文件到删除列表"""
         files = filedialog.askopenfilenames(title="选择要删除的文件")

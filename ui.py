@@ -28,12 +28,10 @@ class AdvancedTranslateUI:
         self.download_thread = None
         self.stop_download = False
         
-        # 创建菜单栏
-        self.create_menu()
         
         # 创建主框架
         self.main_frame = ttk.Frame(root, padding="10")
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        self.main_frame.pack(fill=tk.BOTH, expand=True,pady=(10,0))
         
         # 配置网格权重
         root.columnconfigure(0, weight=1)
@@ -64,7 +62,6 @@ class AdvancedTranslateUI:
         self.functions = {
             "翻译工具": self.show_translate_frame,
             "安装已有汉化": self.show_install_frame,
-            "使用excel表格附加": self.show_excel_frame,
             "从ourplay下载汉化": self.show_ourplay_frame,
             "清除本地缓存": self.show_clean_frame,
             "从零协下载汉化": self.show_llc_frame,
@@ -100,11 +97,7 @@ class AdvancedTranslateUI:
         # 安装已有汉化框架
         self.frames["install"] = ttk.Frame(self.content_frame)
         self.create_install_frame(self.frames["install"])
-        
-        # Excel表格附加框架
-        self.frames["excel"] = ttk.Frame(self.content_frame)
-        self.create_excel_frame(self.frames["excel"])
-        
+          
         # ourplay下载框架
         self.frames["ourplay"] = ttk.Frame(self.content_frame)
         self.create_ourplay_frame(self.frames["ourplay"])
@@ -446,10 +439,6 @@ class AdvancedTranslateUI:
             self.log("请输入搜索内容")
             messagebox.showerror("错误", "请输入搜索内容")
     
-    def create_excel_frame(self, parent):
-        # Excel表格附加界面
-        ttk.Label(parent, text="使用Excel表格附加", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
-        ttk.Label(parent, text="此功能暂未实现").pack(pady=20)
     
     def create_ourplay_frame(self, parent):
         # ourplay下载界面
@@ -738,10 +727,6 @@ class AdvancedTranslateUI:
         self.show_frame("install")
         self.log("切换到安装已有汉化")
     
-    def show_excel_frame(self):
-        self.show_frame("excel")
-        self.log("切换到Excel表格附加")
-    
     def show_ourplay_frame(self):
         self.show_frame("ourplay")
         self.log("切换到ourplay下载")
@@ -773,18 +758,6 @@ class AdvancedTranslateUI:
     def show_about_window(self):
         self.log("启动关于窗口")
         about.AboutWindow(self.root)
-    def create_menu(self):
-        menubar = tk.Menu(self.root)
-        
-        # 关于菜单
-        about_menu = tk.Menu(menubar, tearoff=0)
-        about_menu.add_command(label="项目简介", command=self.show_project_info)
-        about_menu.add_command(label="更新内容", command=self.show_update_info)
-        about_menu.add_command(label="关于", command=self.show_about)
-        menubar.add_cascade(label="关于", menu=about_menu)
-        
-        self.root.config(menu=menubar)
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def on_closing(self):
         # 确保程序完全退出
@@ -1201,32 +1174,6 @@ class AdvancedTranslateUI:
             # 如果日志区域尚未创建，打印到控制台
             print(message)
     
-    # 关于功能
-    def show_project_info(self):
-        info = """LCTA即LimbusCompany Translate Automation，是一项开源边狱公司自动翻译软件
-当前版本2.0.0
-github开源链接HZBHZB1234/LCTA-Limbus-company-transfer-auto
-使用本软件产出的项目需要在引用时标明"""
-        messagebox.showinfo("项目简介", info)
-    
-    def show_update_info(self):
-        info = """2.0.0(未发布)与3.0.0版本更新内容:
-增加了UI
-添加了翻译选项功能
-添加了工具箱功能
-修复了在翻译文件缺失时的错误处理
-挖了更多的坑
-修复了少量bug
-增加了更多bug"""
-        messagebox.showinfo("更新内容", info)
-    
-    def show_about(self):
-        info = """LCTA高级汉化工具
-作者: HZBHZB1234
-贴吧: HZBHZB31415926
-GitHub: HZBHZB1234
-Bilibili: ygdtpnn"""
-        messagebox.showinfo("关于", info)
 
 def check_path():
     global game_path

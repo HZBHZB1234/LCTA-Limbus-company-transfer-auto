@@ -149,8 +149,23 @@ def test_deepl(params):
         if not key:
             return False, "API密钥不能为空"
         
-        # 这里需要实现DeepL翻译的测试逻辑
-        # 暂时返回成功，需要根据实际的api模块实现
-        return True, "连接成功（测试模式）"
+        import deepl
+
+        # 替换成你自己的 DeepL API 认证密钥
+        auth_key = key
+        translator = deepl.Translator(auth_key)
+
+        # 要翻译的文本
+        text_to_translate = "Hello, world!"
+
+        # 进行翻译，target_lang 指定目标语言
+        try:
+            result = translator.translate_text(text_to_translate, target_lang="ZH")
+            if result.text:
+                return True, "连接成功"
+            else:
+                return False, "翻译失败"
+        except Exception as e:
+            return False, str(e)
     except Exception as e:
         return False, str(e)

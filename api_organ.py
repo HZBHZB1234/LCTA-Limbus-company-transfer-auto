@@ -1,8 +1,3 @@
-# api_test.py
-"""
-翻译API测试函数
-"""
-
 import api
 import logging
 
@@ -151,7 +146,6 @@ def test_deepl(params):
         
         import deepl
 
-        # 替换成你自己的 DeepL API 认证密钥
         auth_key = key
         translator = deepl.Translator(auth_key)
 

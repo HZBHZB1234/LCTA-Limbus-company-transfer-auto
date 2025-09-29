@@ -93,19 +93,19 @@ class AdvancedTranslateUI:
         """初始化翻译服务的测试函数"""
         try:
             # 导入测试模块
-            import api_test
+            import api_organ
             
             # 注册测试函数
             self.api_test_functions = {
-                "baidu": api_test.test_baidu,
-                "tencent": api_test.test_tencent,
-                "caiyun": api_test.test_caiyun,
-                "youdao": api_test.test_youdao,
-                "xiaoniu": api_test.test_xiaoniu,
-                "aliyun": api_test.test_aliyun,
-                "huoshan": api_test.test_huoshan,
-                "google": api_test.test_google,
-                "deepl": api_test.test_deepl
+                "baidu": api_organ.test_baidu,
+                "tencent": api_organ.test_tencent,
+                "caiyun": api_organ.test_caiyun,
+                "youdao": api_organ.test_youdao,
+                "xiaoniu": api_organ.test_xiaoniu,
+                "aliyun": api_organ.test_aliyun,
+                "huoshan": api_organ.test_huoshan,
+                "google": api_organ.test_google,
+                "deepl": api_organ.test_deepl
             }
         except ImportError:
             self.log("警告: 未找到api_test模块，测试功能将不可用")

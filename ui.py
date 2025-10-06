@@ -129,7 +129,6 @@ class AdvancedTranslateUI:
             "配置汉化api": self.show_config_frame,
             "进行文本搜索": self.show_search_frame,
             "备份原文": self.show_backup_frame,
-            "缓存文件夹管理": self.show_cache_frame,
             '资源管理': self.show_assets_frame,
             "黑影图调色": self.show_lighter_window,
             "抽卡概率计算":self.show_calculate_window,
@@ -181,9 +180,6 @@ class AdvancedTranslateUI:
 
         self.frames["backup"] = ttk.Frame(self.content_frame)
         self.create_backup_frame(self.frames["backup"])
-    
-        self.frames["cache"] = ttk.Frame(self.content_frame)
-        self.create_cache_frame(self.frames["cache"])
 
         self.frames['assets']=ttk.Frame(self.content_frame)
         self.create_assets_frame(self.frames['assets'])
@@ -756,43 +752,7 @@ class AdvancedTranslateUI:
         
         ttk.Button(button_frame, text="开始备份", command=self.start_backup).pack(side=tk.LEFT, padx=5)
         #ttk.Button(button_frame, text="从备份恢复", command=self.restore_backup).pack(side=tk.LEFT, padx=5)
-    def create_cache_frame(self, parent):
-        # 缓存管理界面
-        ttk.Label(parent, text="缓存文件管理", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
-        
-        # 说明文本
-        ttk.Label(parent, text="管理游戏缓存数据包").pack(pady=5)
-        
 
-        # 缓存文件列表
-        ttk.Label(parent, text="缓存文件:").pack(anchor=tk.W, pady=5)
-        
-        # 创建框架包含列表和滚动条
-        list_frame = ttk.Frame(parent)
-        list_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        # 创建滚动条
-        scrollbar = ttk.Scrollbar(list_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # 创建列表框
-        self.cache_listbox = tk.Listbox(
-            list_frame, 
-            yscrollcommand=scrollbar.set,
-            selectmode=tk.EXTENDED,  # 允许多选
-            height=10
-        )
-        self.cache_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        # 配置滚动条
-        scrollbar.config(command=self.cache_listbox.yview)
-        
-        # 按钮框架
-        button_frame = ttk.Frame(parent)
-        button_frame.pack(pady=10)
-        # 统计信息
-        self.cache_stats_label = ttk.Label(parent, text="缓存文件数量: 0, 总大小: 0 KB")
-        self.cache_stats_label.pack(pady=5)
     def create_assets_frame(self, parent):
         """
         创建资源管理器界面
@@ -1166,9 +1126,6 @@ class AdvancedTranslateUI:
     def show_backup_frame(self):
         self.show_frame("backup")
         self.log("切换到备份原文")
-    def show_cache_frame(self):
-        self.show_frame("cache")
-        self.log("切换到缓存文件管理")
     
     def show_assets_frame(self):
         self.show_frame("assets")

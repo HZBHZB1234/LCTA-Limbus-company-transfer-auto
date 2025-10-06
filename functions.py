@@ -8,6 +8,7 @@ import zipfile
 import hashlib
 import shutil
 import py7zr
+import base64
 log_callback = None
 
 def set_log_callback(callback):
@@ -34,9 +35,42 @@ def walk_all_files(path,rel):
             }
             path_list.append(final)
     return path_list
+def make_device():
+    device={
+        "vc":929331944,
+        "vn":"2.3.9293.31944",
+        "chid":910005,
+        "subchid":1,
+        "chidname":"910005",
+        "scchidname":"1",
+        "rid":0,
+        "product":"910005",
+        "productId":68,
+        "ochid":"910005",
+        "mac":"00:00:00:00:00:00",
+        "deviceId":"102025070000000000",
+        "apiPublicFlag":"12",
+        "ab_info":["BJ-1","BK-1","BL-1","BM-0","BX-3"],
+        "pkg":"OPPC",
+        "aid":"102025070000000000",
+        "deviceCreatTime":1736770000,
+        "userRegTime":0,
+        "ip":None,
+        "nuser_id":"1000682520000000000",
+        "nuserid_is_new":"老用户",
+        "nuserid_activation_date":"2025-01-01 12:00:00",
+        "nuserid_channel":"910005",
+        "nuserid_sub_channel":"1",
+        "nuserid_ad_sub_channel":None,
+        "appHash":"334e130a2d7db01b5846348bb8c859d1"
+        }
+    device_str=json.dumps(device)
+    base64_device=base64.b64encode(device_str.encode('utf-8')).decode('utf-8')
+    print(base64_device)
+    return base64_device
 def download_ourplay():
     headers = {
-        'device-user': 'eyJ2YyI6OTI5MzMxOTQ0LCJ2biI6IjIuMy45MjkzLjMxOTQ0IiwiY2hpZCI6OTEwMDA1LCJzdWJjaGlkIjoxLCJjaGlkbmFtZSI6IjkxMDAwNSIsInNjY2hpZG5hbWUiOiIxIiwicmlkIjowLCJwcm9kdWN0IjoiOTEwMDA1IiwicHJvZHVjdElkIjo2OCwib2NoaWQiOiI5MTAwMDUiLCJtYWMiOiJGODo5NDpDMjo5RTpEMzoxNSIsImRldmljZUlkIjoiMTAyMDI1MDcwMDAyMzcyMzk4IiwiYXBpUHVibGljRmxhZyI6IjEyIiwiYWJfaW5mbyI6WyJCSi0xIiwiQkstMSIsIkJMLTEiLCJCTS0wIiwiQlgtMyJdLCJwa2ciOiJPUFBDIiwiYWlkIjoiMTAyMDI1MDcwMDAyMzcyMzk4IiwiZGV2aWNlQ3JlYXRUaW1lIjoxNzM2Nzc5NzIwLCJ1c2VyUmVnVGltZSI6MCwiaXAiOm51bGwsIm51c2VyX2lkIjoiMTAwMDY4MjUyMDAwMjIxMTUxNiIsIm51c2VyaWRfaXNfbmV3Ijoi6ICB55So5oi3IiwibnVzZXJpZF9hY3RpdmF0aW9uX2RhdGUiOiIyMDI1LTA2LTE2IDE3OjMyOjU3IiwibnVzZXJpZF9jaGFubmVsIjoiOTEwMDA1IiwibnVzZXJpZF9zdWJfY2hhbm5lbCI6IjEiLCJudXNlcmlkX2FkX3N1Yl9jaGFubmVsIjpudWxsLCJhcHBIYXNoIjoiMzM0ZTEzMGEyZDdkYjAxYjU4NDYzNDhiYjhjODU5ZDEifQ==',
+        'device-user': make_device(),
         'traceparent': '00-6ab78dbd83864f7c9d9315a590765cdd-83864f7c9d9315a5-00',
         'tracestate': 'ODM4NjRmN2M5ZDkzMTVhNQ==',
         'Accept': 'application/json, text/json, text/x-json, text/javascript, application/xml, text/xml',
@@ -281,4 +315,4 @@ def clean_llc_temp():
     return True
 
 if __name__ == '__main__':
-    download_llc()
+    make_device()

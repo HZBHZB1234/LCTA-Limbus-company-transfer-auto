@@ -172,13 +172,13 @@ Bilibili: ygdtpnn
         baidu_link.pack(side=tk.LEFT)
         baidu_link.bind("<Button-1>", lambda e: self.open_url("https://tieba.baidu.com/home/main?id=tb.1.61b6e0a8.3u85IPhI8SxCTKr10fA00g&fr=userbar"))
     def create_tips_section(self):
-        """创建小贴士区域"""
-        tips_frame = ttk.LabelFrame(self.main_frame, text="小贴士", padding="10")
+        """创建每日一言区域"""
+        tips_frame = ttk.LabelFrame(self.main_frame, text="每日一言", padding="10")
         tips_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
         
-        # 小贴士内容
+        # 每日一言内容
         self.tips_text = tk.StringVar()
-        self.tips_text.set(bonus.get_bonus())  # 从bonus模块获取随机小贴士
+        self.tips_text.set(bonus.get_bonus())  # 从bonus模块获取随机每日一言
         
         tips_label = ttk.Label(
             tips_frame, 
@@ -188,17 +188,17 @@ Bilibili: ygdtpnn
         )
         tips_label.pack(anchor=tk.W, fill=tk.X)
         
-        # 刷新小贴士按钮
+        # 刷新每日一言按钮
         refresh_btn = ttk.Button(
             tips_frame, 
-            text="刷新小贴士",
+            text="刷新",
             command=self.refresh_tip
         )
         refresh_btn.pack(anchor=tk.E, pady=(10, 0))
     
     
     def refresh_tip(self):
-        """刷新小贴士"""
+        """刷新每日一言"""
         self.tips_text.set(bonus.get_bonus())
     
     def open_url(self, url):

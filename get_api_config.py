@@ -46,3 +46,4 @@ services_ = [
 custom_=[
     ('自定义','custom')
 ]
+default_service_list=[i for (_,i) in services_]

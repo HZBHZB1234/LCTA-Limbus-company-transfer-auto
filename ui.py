@@ -656,7 +656,7 @@ class AdvancedTranslateUI:
         
         ttk.Button(self.service_button_frame, text="保存配置", command=self.save_api_config).pack(side=tk.LEFT, padx=5)
         ttk.Button(self.service_button_frame, text="测试连接", command=self.test_api_connection).pack(side=tk.LEFT, padx=5)
-        ttk.Button(self.service_button_frame, text="加载配置", command=self.load_api_config).pack(side=tk.LEFT, padx=5)
+        ttk.Button(self.service_button_frame, text="刷新页面", command=self.refresh_config_frame).pack(side=tk.LEFT, padx=5)
         ttk.Button(self.service_button_frame, text="清空当前", command=self.clear_current_service).pack(side=tk.LEFT, padx=5)
         
         # 初始创建当前服务的输入框
@@ -671,6 +671,38 @@ class AdvancedTranslateUI:
             self.service_frame_custom.pack_forget()
             self.service_frame.pack(fill=tk.X, pady=10,before=self.service_button_frame)
             self.custom_service_var.set('none')
+    def refresh_config_frame(self):
+        """
+        刷新配置汉化API界面
+        重新加载所有配置和服务选项
+        """
+        # 获取当前选中的服务
+        current_service = self.service_var.get() if hasattr(self, 'service_var') else "baidu"
+        current_type_service = self.type_service_var.get() if hasattr(self, 'type_service_var') else "defalt"
+        current_default_service = self.default_service_var.get() if hasattr(self, 'default_service_var') else "baidu"
+        current_custom_service = self.custom_service_var.get() if hasattr(self, 'custom_service_var') else "none"
+        
+        # 清除现有的配置框架中的所有内容
+        for widget in self.frames['config'].winfo_children():
+            widget.destroy()
+        
+        # 重新创建整个配置界面
+        self.create_config_frame(self.frames['config'])
+        
+        # 恢复之前的选择状态
+        self.service_var.set(current_service)
+        self.type_service_var.set(current_type_service)
+        self.default_service_var.set(current_default_service)
+        self.custom_service_var.set(current_custom_service)
+        
+        # 重新加载配置文件
+        self.load_api_config()
+        
+        # 触发服务变更以确保界面正确显示
+        self.on_service_change()
+        self.type_service_change()
+        
+        self.log("配置界面已刷新")
     def create_search_frame(self, parent):
         ttk.Label(parent, text="搜索指定文本", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
         
@@ -1393,7 +1425,7 @@ class AdvancedTranslateUI:
             widget.destroy()
         
         # 更新标题
-        self.param_frame.configure(text=f"{service_name.upper()} API参数配置")
+        self.param_frame.configure(text=f"{[cn for (cn,id) in services_ if id==service_name][0]} API参数配置")
         
         # 获取该服务的参数定义
         params = TRANSLATION_SERVICES.get(service_name, [])
@@ -1432,10 +1464,26 @@ class AdvancedTranslateUI:
 
     def save_api_config(self):
         """保存所有API配置"""
-        config_data = {'default_service': self.default_service_var.get()}
+        default_service_type=False
+        default_service=None
+        if self.default_service_var.get()=='none' and (self.custom_service_var.get() in ('none','custom')):
+            if not messagebox.askyesno("警告", "翻译服务未选择，是否继续？"):
+                self.log('已取消')
+                return
+        else:
+            if self.default_service_var.get()!='none':
+                default_service_type='default'
+                default_service=self.default_service_var.get()
+            else:
+                default_service_type='custom'
+                default_service=self.custom_service_var.get()
+        config_data = {
+            'default_service':default_service,
+            'default_service_type':default_service_type
+            }
         
         # 收集所有服务的配置
-        for service_name in TRANSLATION_SERVICES.keys():
+        for service_name in default_service_list:
             config_data[service_name] = {}
             
             if service_name in self.service_widgets:
@@ -1458,10 +1506,14 @@ class AdvancedTranslateUI:
                 with open('api_config.json', 'r', encoding='utf-8') as f:
                     self.loaded_config = json.load(f)
                 
+                global custom_
+                custom_=self.loaded_config.get('custom', [])
                 # 设置默认服务
                 if 'default_service' in self.loaded_config:
-                    self.default_service_var.set(self.loaded_config['default_service'])
-                
+                    if self.loaded_config['default_service'] in default_service_list:
+                        self.default_service_var.set(self.loaded_config['default_service'])
+                    else:
+                        self.custom_service_var.set(self.loaded_config['default_service'])
                 # 为每个服务填充配置
                 for service_name in TRANSLATION_SERVICES.keys():
                     if service_name in self.loaded_config:
@@ -1476,10 +1528,10 @@ class AdvancedTranslateUI:
                                     widget.insert(0, self.loaded_config[service_name][param_key])
                 
                 self.log("API配置已加载")
-                messagebox.showinfo("成功", "API配置已加载")
+                #messagebox.showinfo("成功", "API配置已加载")
             else:
                 self.log("未找到配置文件")
-                messagebox.showinfo("提示", "未找到配置文件")
+                #messagebox.showinfo("提示", "未找到配置文件")
         except Exception as e:
             self.log(f"加载配置失败: {e}")
             messagebox.showerror("错误", f"加载配置失败: {e}")

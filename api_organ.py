@@ -127,7 +127,7 @@ def trans_google(params,text):
         
         if not key:
             return False, "API密钥不能为空"
-        
+        result=None
         # 这里需要实现Google翻译的测试逻辑
         # 暂时返回成功，需要根据实际的api模块实现
         return True, result

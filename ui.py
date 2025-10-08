@@ -635,17 +635,27 @@ class AdvancedTranslateUI:
         # 参数配置框架
         self.param_frame = ttk.LabelFrame(parent, text="API参数配置", padding="10")
         self.param_frame.pack(fill=tk.X, pady=10)
+
+        # 翻译服务类别选择
+        service_type_frame = ttk.LabelFrame(parent, text="翻译服务类别", padding="10")
+        service_type_frame.pack(fill=tk.X, pady=10)
         
+        self.type_service_var = tk.StringVar(value="defalt")
+        service_type_col = ttk.Frame(service_type_frame)
+        service_type_col.pack(fill=tk.X, expand=True)
+        ttk.Radiobutton(service_type_col, text='内建翻译服务', variable=self.type_service_var, value='defalt').pack(anchor=tk.W)
+        ttk.Radiobutton(service_type_col, text='自定义翻译服务', variable=self.type_service_var, value='custom').pack(anchor=tk.W)
+        self.type_service_var.trace('w',self.type_service_change)
         # 默认翻译服务选择
-        service_frame = ttk.LabelFrame(parent, text="默认翻译服务", padding="10")
-        service_frame.pack(fill=tk.X, pady=10)
+        self.service_frame = ttk.LabelFrame(parent, text="默认翻译服务", padding="10")
+        self.service_frame.pack(fill=tk.X, pady=10)
         
         self.default_service_var = tk.StringVar(value="baidu")
         
         # 创建两列布局以容纳更多选项
-        service_col1 = ttk.Frame(service_frame)
+        service_col1 = ttk.Frame(self.service_frame)
         service_col1.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        service_col2 = ttk.Frame(service_frame)
+        service_col2 = ttk.Frame(self.service_frame)
         service_col2.pack(side=tk.RIGHT, fill=tk.X, expand=True)
         
         services = [
@@ -663,17 +673,53 @@ class AdvancedTranslateUI:
         for i, (text, value, frame) in enumerate(services):
             ttk.Radiobutton(frame, text=text, variable=self.default_service_var, value=value).pack(anchor=tk.W)
         
-        # 按钮框架
-        button_frame = ttk.Frame(parent)
-        button_frame.pack(pady=20)
+        # 自定义翻译服务选择
+        self.service_frame_custom = ttk.LabelFrame(parent, text="自定义翻译服务", padding="10")
+        self.service_frame_custom.pack(fill=tk.X, pady=10)
         
-        ttk.Button(button_frame, text="保存配置", command=self.save_api_config).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="测试连接", command=self.test_api_connection).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="加载配置", command=self.load_api_config).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="清空当前", command=self.clear_current_service).pack(side=tk.LEFT, padx=5)
+        self.default_service_var = tk.StringVar(value="baidu")
+        
+        # 创建两列布局以容纳更多选项
+        service_col1_custom = ttk.Frame(self.service_frame_custom)
+        service_col1_custom.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        service_col2_custom = ttk.Frame(self.service_frame_custom)
+        service_col2_custom.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+        
+        custom_=[
+            ("百度翻译", "baidu"),
+            ("腾讯翻译", "tencent"),
+            ("彩云翻译", "caiyun"),
+            ("有道翻译", "youdao"),
+            ("小牛翻译", "xiaoniu"),
+            ("阿里云翻译", "aliyun"),
+            ("火山翻译", "huoshan"),
+            ("Google翻译", "google"),
+            ("DeepL翻译", "deepl")
+        ]
+        services_custom = [(text, value, service_col1_custom if i <= len(custom_) // 2 else service_col2_custom) 
+                  for i, (text, value) in enumerate(custom_)]        
+        for i, (text, value, frame) in enumerate(services_custom):
+            ttk.Radiobutton(frame, text=text, variable=self.default_service_var, value=value).pack(anchor=tk.W)
+
+        # 按钮框架
+        self.service_button_frame = ttk.Frame(parent)
+        self.service_button_frame.pack(pady=20)
+        
+        ttk.Button(self.service_button_frame, text="保存配置", command=self.save_api_config).pack(side=tk.LEFT, padx=5)
+        ttk.Button(self.service_button_frame, text="测试连接", command=self.test_api_connection).pack(side=tk.LEFT, padx=5)
+        ttk.Button(self.service_button_frame, text="加载配置", command=self.load_api_config).pack(side=tk.LEFT, padx=5)
+        ttk.Button(self.service_button_frame, text="清空当前", command=self.clear_current_service).pack(side=tk.LEFT, padx=5)
         
         # 初始创建当前服务的输入框
         self.create_service_widgets("baidu")
+        self.type_service_change()
+    def type_service_change(self,_=None,__=None,___=None):
+        if self.type_service_var.get() == 'custom':
+            self.service_frame.pack_forget()
+            self.service_frame_custom.pack(fill=tk.X, pady=10,before=self.service_button_frame)
+        else:
+            self.service_frame_custom.pack_forget()
+            self.service_frame.pack(fill=tk.X, pady=10,before=self.service_button_frame)
     def create_search_frame(self, parent):
         ttk.Label(parent, text="搜索指定文本", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
         

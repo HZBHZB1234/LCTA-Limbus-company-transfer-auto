@@ -589,17 +589,6 @@ class AdvancedTranslateUI:
         ttk.Label(parent, text="配置用于翻译的API密钥和服务", font=('TkDefaultFont', 9)).pack(pady=5)
         ttk.Label(parent, text="配置完key记得保存，离开时记得切换至想要用的服务并保存至文件", font=('TkDefaultFont', 9)).pack(pady=5)
         
-        # 翻译服务选择框架
-        service_select_frame = ttk.LabelFrame(parent, text="翻译服务选择", padding="10")
-        service_select_frame.pack(fill=tk.X, pady=10)
-        
-        # 服务选择下拉框
-        ttk.Label(service_select_frame, text="选择翻译服务:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.service_var = tk.StringVar(value="baidu")
-        service_combo = ttk.Combobox(service_select_frame, textvariable=self.service_var, 
-                                   values=list(TRANSLATION_SERVICES.keys()), state="readonly")
-        service_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-        service_combo.bind('<<ComboboxSelected>>', self.on_service_change)
         
         # 参数配置框架
         self.param_frame = ttk.LabelFrame(parent, text="API参数配置", padding="10")
@@ -609,10 +598,10 @@ class AdvancedTranslateUI:
         service_type_frame = ttk.LabelFrame(parent, text="翻译服务类别", padding="10")
         service_type_frame.pack(fill=tk.X, pady=10)
         
-        self.type_service_var = tk.StringVar(value="defalt")
+        self.type_service_var = tk.StringVar(value="default")
         service_type_col = ttk.Frame(service_type_frame)
         service_type_col.pack(fill=tk.X, expand=True)
-        ttk.Radiobutton(service_type_col, text='内建翻译服务', variable=self.type_service_var, value='defalt').pack(anchor=tk.W)
+        ttk.Radiobutton(service_type_col, text='内建翻译服务', variable=self.type_service_var, value='default').pack(anchor=tk.W)
         ttk.Radiobutton(service_type_col, text='自定义翻译服务', variable=self.type_service_var, value='custom').pack(anchor=tk.W)
         self.type_service_var.trace('w',self.type_service_change)
         # 默认翻译服务选择
@@ -620,7 +609,8 @@ class AdvancedTranslateUI:
         self.service_frame.pack(fill=tk.X, pady=10)
         
         self.default_service_var = tk.StringVar(value="baidu")
-        
+        self.default_service_var.trace('w',self.on_service_change)
+
         # 创建两列布局以容纳更多选项
         service_col1 = ttk.Frame(self.service_frame)
         service_col1.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -638,7 +628,8 @@ class AdvancedTranslateUI:
         self.service_frame_custom.pack(fill=tk.X, pady=10)
         
         self.custom_service_var = tk.StringVar(value="none")
-        
+        self.custom_service_var.trace('w',self.on_service_change)
+
         # 创建两列布局以容纳更多选项
         service_col1_custom = ttk.Frame(self.service_frame_custom)
         service_col1_custom.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -677,7 +668,6 @@ class AdvancedTranslateUI:
         重新加载所有配置和服务选项
         """
         # 获取当前选中的服务
-        current_service = self.service_var.get() if hasattr(self, 'service_var') else "baidu"
         current_type_service = self.type_service_var.get() if hasattr(self, 'type_service_var') else "defalt"
         current_default_service = self.default_service_var.get() if hasattr(self, 'default_service_var') else "baidu"
         current_custom_service = self.custom_service_var.get() if hasattr(self, 'custom_service_var') else "none"
@@ -690,7 +680,6 @@ class AdvancedTranslateUI:
         self.create_config_frame(self.frames['config'])
         
         # 恢复之前的选择状态
-        self.service_var.set(current_service)
         self.type_service_var.set(current_type_service)
         self.default_service_var.set(current_default_service)
         self.custom_service_var.set(current_custom_service)
@@ -1411,9 +1400,18 @@ class AdvancedTranslateUI:
         self.stop_download = True
         self.download_progress.set(0)
         self.log("下载已取消")
-    def on_service_change(self, event=None):
+    def get_organization_service(self):
+        if self.type_service_var.get()=='default':
+            new_service = self.default_service_var.get()
+        else:
+            new_service = self.custom_service_var.get()
+        if new_service in ['none','custom']:
+            return False
+        else:return new_service
+    def on_service_change(self, _=None,__=None,___=None):
         """当翻译服务改变时的回调函数"""
-        new_service = self.service_var.get()
+        new_service = self.get_organization_service()
+        if not new_service: return
         if new_service != self.current_service:
             self.current_service = new_service
             self.create_service_widgets(new_service)
@@ -1538,7 +1536,7 @@ class AdvancedTranslateUI:
 
     def test_api_connection(self):
         """测试当前选中服务的API连接"""
-        service_name = self.service_var.get()
+        service_name = self.get_organization_service()
         
         if service_name not in self.api_test_functions:
             messagebox.showerror("错误", f"未找到 {service_name} 的测试函数")

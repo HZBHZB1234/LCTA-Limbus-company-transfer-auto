@@ -43,6 +43,20 @@ TRANSLATION_SERVICES = {
         {"key": "key", "label": "API密钥", "type": "password"}
     ]
 }
+services_ = [
+    ("百度翻译", "baidu"),
+    ("腾讯翻译", "tencent"),
+    ("彩云翻译", "caiyun"),
+    ("有道翻译", "youdao"),
+    ("小牛翻译", "xiaoniu"),
+    ("阿里云翻译", "aliyun"),
+    ("火山翻译", "huoshan"),
+    ("Google翻译", "google"),
+    ("DeepL翻译", "deepl")
+]
+custom_=[
+    ('自定义','custom')
+]
 class AdvancedTranslateUI:
     def __init__(self, root):
         self.root = root
@@ -619,6 +633,7 @@ class AdvancedTranslateUI:
         
         # API配置说明
         ttk.Label(parent, text="配置用于翻译的API密钥和服务", font=('TkDefaultFont', 9)).pack(pady=5)
+        ttk.Label(parent, text="配置完key记得保存，离开时记得切换至想要用的服务并保存至文件", font=('TkDefaultFont', 9)).pack(pady=5)
         
         # 翻译服务选择框架
         service_select_frame = ttk.LabelFrame(parent, text="翻译服务选择", padding="10")
@@ -658,17 +673,8 @@ class AdvancedTranslateUI:
         service_col2 = ttk.Frame(self.service_frame)
         service_col2.pack(side=tk.RIGHT, fill=tk.X, expand=True)
         
-        services = [
-            ("百度翻译", "baidu", service_col1),
-            ("腾讯翻译", "tencent", service_col1),
-            ("彩云翻译", "caiyun", service_col1),
-            ("有道翻译", "youdao", service_col1),
-            ("小牛翻译", "xiaoniu", service_col2),
-            ("阿里云翻译", "aliyun", service_col2),
-            ("火山翻译", "huoshan", service_col2),
-            ("Google翻译", "google", service_col2),
-            ("DeepL翻译", "deepl", service_col2)
-        ]
+        services = [(text, value, service_col1 if i <= len(services_) // 2 else service_col2) 
+                  for i, (text, value) in enumerate(services_)]
         
         for i, (text, value, frame) in enumerate(services):
             ttk.Radiobutton(frame, text=text, variable=self.default_service_var, value=value).pack(anchor=tk.W)
@@ -677,7 +683,7 @@ class AdvancedTranslateUI:
         self.service_frame_custom = ttk.LabelFrame(parent, text="自定义翻译服务", padding="10")
         self.service_frame_custom.pack(fill=tk.X, pady=10)
         
-        self.default_service_var = tk.StringVar(value="baidu")
+        self.custom_service_var = tk.StringVar(value="none")
         
         # 创建两列布局以容纳更多选项
         service_col1_custom = ttk.Frame(self.service_frame_custom)
@@ -685,21 +691,10 @@ class AdvancedTranslateUI:
         service_col2_custom = ttk.Frame(self.service_frame_custom)
         service_col2_custom.pack(side=tk.RIGHT, fill=tk.X, expand=True)
         
-        custom_=[
-            ("百度翻译", "baidu"),
-            ("腾讯翻译", "tencent"),
-            ("彩云翻译", "caiyun"),
-            ("有道翻译", "youdao"),
-            ("小牛翻译", "xiaoniu"),
-            ("阿里云翻译", "aliyun"),
-            ("火山翻译", "huoshan"),
-            ("Google翻译", "google"),
-            ("DeepL翻译", "deepl")
-        ]
         services_custom = [(text, value, service_col1_custom if i <= len(custom_) // 2 else service_col2_custom) 
                   for i, (text, value) in enumerate(custom_)]        
         for i, (text, value, frame) in enumerate(services_custom):
-            ttk.Radiobutton(frame, text=text, variable=self.default_service_var, value=value).pack(anchor=tk.W)
+            ttk.Radiobutton(frame, text=text, variable=self.custom_service_var, value=value).pack(anchor=tk.W)
 
         # 按钮框架
         self.service_button_frame = ttk.Frame(parent)
@@ -717,9 +712,11 @@ class AdvancedTranslateUI:
         if self.type_service_var.get() == 'custom':
             self.service_frame.pack_forget()
             self.service_frame_custom.pack(fill=tk.X, pady=10,before=self.service_button_frame)
+            self.default_service_var.set('none')
         else:
             self.service_frame_custom.pack_forget()
             self.service_frame.pack(fill=tk.X, pady=10,before=self.service_button_frame)
+            self.custom_service_var.set('none')
     def create_search_frame(self, parent):
         ttk.Label(parent, text="搜索指定文本", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
         

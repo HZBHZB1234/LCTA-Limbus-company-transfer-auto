@@ -40,9 +40,9 @@ class AdvancedTranslateUI:
         root.rowconfigure(0, weight=1)
         self.current_service = "baidu"  # 当前选中的翻译服务
         self.service_widgets = {}  # 存储每个服务的输入框控件
-        self.api_test_functions = {}  # 存储测试函数
+        self.api_test_functions = {}  # 存储api函数
         
-        # 初始化测试函数（这些函数需要从其他模块导入）
+        # 初始化api函数（这些函数需要从其他模块导入）
         self.init_test_functions()
         # 创建左右分栏
         self.create_sidebar()
@@ -58,12 +58,12 @@ class AdvancedTranslateUI:
 
         
     def init_test_functions(self):
-        """初始化翻译服务的测试函数"""
+        """初始化翻译服务的api函数"""
         try:
-            # 导入测试模块
+            # 导入api模块
             import api_organ
             
-            # 注册测试函数
+            # 注册api函数
             self.api_test_functions = {
                 "baidu": api_organ.trans_baidu,
                 "tencent": api_organ.trans_tencent,
@@ -76,7 +76,7 @@ class AdvancedTranslateUI:
                 "deepl": api_organ.trans_deepl
             }
         except ImportError:
-            self.log("警告: 未找到api_trans模块，测试功能将不可用")
+            self.log("警告: 未找到api_trans模块，api功能将不可用")
             self.api_test_functions = {}
     def create_sidebar(self):
         # 创建左侧边栏
@@ -589,7 +589,6 @@ class AdvancedTranslateUI:
         ttk.Label(parent, text="配置用于翻译的API密钥和服务", font=('TkDefaultFont', 9)).pack(pady=5)
         ttk.Label(parent, text="配置完key记得保存，离开时记得切换至想要用的服务并保存至文件", font=('TkDefaultFont', 9)).pack(pady=5)
         
-        
         # 参数配置框架
         self.param_frame = ttk.LabelFrame(parent, text="API参数配置", padding="10")
         self.param_frame.pack(fill=tk.X, pady=10)
@@ -604,6 +603,7 @@ class AdvancedTranslateUI:
         ttk.Radiobutton(service_type_col, text='内建翻译服务', variable=self.type_service_var, value='default').pack(anchor=tk.W)
         ttk.Radiobutton(service_type_col, text='自定义翻译服务', variable=self.type_service_var, value='custom').pack(anchor=tk.W)
         self.type_service_var.trace('w',self.type_service_change)
+        
         # 默认翻译服务选择
         self.service_frame = ttk.LabelFrame(parent, text="默认翻译服务", padding="10")
         self.service_frame.pack(fill=tk.X, pady=10)
@@ -618,7 +618,7 @@ class AdvancedTranslateUI:
         service_col2.pack(side=tk.RIGHT, fill=tk.X, expand=True)
         
         services = [(text, value, service_col1 if i <= len(services_) // 2 else service_col2) 
-                  for i, (text, value) in enumerate(services_)]
+                for i, (text, value) in enumerate(services_)]
         
         for i, (text, value, frame) in enumerate(services):
             ttk.Radiobutton(frame, text=text, variable=self.default_service_var, value=value).pack(anchor=tk.W)
@@ -637,7 +637,7 @@ class AdvancedTranslateUI:
         service_col2_custom.pack(side=tk.RIGHT, fill=tk.X, expand=True)
         
         services_custom = [(text, value, service_col1_custom if i <= len(custom_) // 2 else service_col2_custom) 
-                  for i, (text, value) in enumerate(custom_)]        
+                for i, (text, value) in enumerate(custom_)]        
         for i, (text, value, frame) in enumerate(services_custom):
             ttk.Radiobutton(frame, text=text, variable=self.custom_service_var, value=value).pack(anchor=tk.W)
 
@@ -653,6 +653,47 @@ class AdvancedTranslateUI:
         # 初始创建当前服务的输入框
         self.create_service_widgets("baidu")
         self.type_service_change()
+    def open_edit_dialog(self):
+        """打开参数编辑对话框"""
+        service_name = self.get_organization_service()
+        if not service_name:
+            messagebox.showwarning("警告", "请先选择一个翻译服务")
+            return
+        
+        # 创建编辑对话框
+        EditParamsDialog(self.root, service_name, self)
+
+    def update_service_display(self, service_name):
+        """更新服务参数显示"""
+        if service_name in self.service_widgets:
+            # 从已加载配置中获取当前值
+            current_config = {}
+            if hasattr(self, 'loaded_config') and service_name in self.loaded_config:
+                current_config = self.loaded_config[service_name]
+            
+            # 更新显示区域内容
+            for param_key, widget in self.service_widgets[service_name].items():
+                value = current_config.get(param_key, "")
+                widget.config(state='normal')
+                widget.delete(0, tk.END)
+                widget.insert(0, value)
+                widget.config(state='readonly')
+
+    def clear_current_service(self):
+        """清空当前服务的配置"""
+        service_name = self.get_organization_service()
+        if not service_name:
+            messagebox.showwarning("警告", "请先选择一个翻译服务")
+            return
+        
+        if service_name in TRANSLATION_SERVICES:
+            # 从已加载配置中移除该服务的配置
+            if hasattr(self, 'loaded_config') and service_name in self.loaded_config:
+                self.loaded_config[service_name] = {}
+            
+            # 更新显示
+            self.update_service_display(service_name)
+            self.log(f"已清空 {service_name} 的配置")
     def type_service_change(self,_=None,__=None,___=None):
         if self.type_service_var.get() == 'custom':
             self.service_frame.pack_forget()
@@ -1417,7 +1458,7 @@ class AdvancedTranslateUI:
             self.create_service_widgets(new_service)
 
     def create_service_widgets(self, service_name):
-        """为指定服务创建参数输入框"""
+        """为指定服务创建参数输入框（只读）"""
         # 清除现有控件
         for widget in self.param_frame.winfo_children():
             widget.destroy()
@@ -1434,11 +1475,11 @@ class AdvancedTranslateUI:
             # 参数标签
             ttk.Label(self.param_frame, text=param["label"] + ":").grid(row=i, column=0, sticky=tk.W, pady=5, padx=5)
             
-            # 参数输入框
+            # 参数输入框 - 设置为只读
             if param["type"] == "password":
-                entry = ttk.Entry(self.param_frame, width=40, show="*")
+                entry = ttk.Entry(self.param_frame, width=40, show="*", state='readonly')
             else:
-                entry = ttk.Entry(self.param_frame, width=40)
+                entry = ttk.Entry(self.param_frame, width=40, state='readonly')
             
             entry.grid(row=i, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
             self.service_widgets[service_name][param["key"]] = entry
@@ -1446,8 +1487,19 @@ class AdvancedTranslateUI:
             # 存储当前值（如果有）
             if hasattr(self, 'loaded_config') and service_name in self.loaded_config:
                 config_value = self.loaded_config[service_name].get(param["key"], "")
+                entry.config(state='normal')
                 entry.delete(0, tk.END)
                 entry.insert(0, config_value)
+                entry.config(state='readonly')
+        
+        # 添加编辑按钮
+        if params:  # 只有有参数时才显示编辑按钮
+            edit_btn = ttk.Button(
+                self.param_frame, 
+                text="编辑参数", 
+                command=self.open_edit_dialog
+            )
+            edit_btn.grid(row=len(params), column=0, columnspan=2, pady=10)
         
         # 配置网格权重使输入框可以扩展
         self.param_frame.columnconfigure(1, weight=1)
@@ -1741,7 +1793,224 @@ class AdvancedTranslateUI:
         else:
             # 如果日志区域尚未创建，打印到控制台
             print(message)
+class EditParamsDialog:
+    """参数编辑对话框"""
     
+    def __init__(self, parent, service_name, main_app):
+        self.parent = parent
+        self.service_name = service_name
+        self.main_app = main_app
+        self.dialog = None
+        self.param_widgets = {}
+        
+        self.create_dialog()
+    
+    def create_dialog(self):
+        """创建编辑对话框"""
+        self.dialog = tk.Toplevel(self.parent)
+        self.dialog.title(f"编辑 {self.service_name} 参数")
+        self.dialog.geometry("600x500")
+        self.dialog.resizable(True, True)
+        self.dialog.transient(self.parent)
+        self.dialog.grab_set()
+        
+        # 居中显示
+        self.dialog.geometry("+%d+%d" % (
+            self.dialog.winfo_screenwidth()/2 - 300,
+            self.dialog.winfo_screenheight()/2 - 250
+        ))
+        
+        # 主框架
+        main_frame = ttk.Frame(self.dialog, padding="15")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 标题
+        ttk.Label(
+            main_frame, 
+            text=f"编辑 {[cn for (cn,id) in services_ if id==self.service_name][0]} 参数",
+            font=('TkDefaultFont', 12, 'bold')
+        ).pack(anchor=tk.W, pady=(0, 10))
+        
+        # 参数编辑区域
+        edit_frame = ttk.LabelFrame(main_frame, text="参数配置", padding="10")
+        edit_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # 创建滚动框架以支持大量参数
+        canvas = tk.Canvas(edit_frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(edit_frame, orient=tk.VERTICAL, command=canvas.yview)
+        self.scrollable_frame = ttk.Frame(canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # 布局滚动区域
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 创建参数输入控件
+        self.create_param_widgets()
+        
+        # 按钮框架
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        ttk.Button(button_frame, text="测试连接", command=self.test_connection).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="保存", command=self.save_params).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="取消", command=self.dialog.destroy).pack(side=tk.LEFT, padx=5)
+        
+        # 绑定鼠标滚轮事件
+        self.bind_mouse_wheel(canvas)
+        
+        # 加载现有配置
+        self.load_current_config()
+    
+    def create_param_widgets(self):
+        """创建参数输入控件"""
+        params = TRANSLATION_SERVICES.get(self.service_name, [])
+        self.param_widgets = {}
+        
+        for i, param in enumerate(params):
+            # 参数标签
+            label = ttk.Label(self.scrollable_frame, text=param["label"] + ":")
+            label.grid(row=i, column=0, sticky=tk.W, pady=8, padx=5)
+            
+            # 参数输入框 - 根据类型选择不同的控件
+            if param.get("multiline", False):
+                # 多行文本输入（用于LLM提示词等）
+                frame = ttk.Frame(self.scrollable_frame)
+                frame.grid(row=i, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
+                
+                # 创建带滚动条的多行文本输入
+                text_widget = scrolledtext.ScrolledText(
+                    frame, 
+                    width=50, 
+                    height=6,
+                    wrap=tk.WORD
+                )
+                text_widget.pack(fill=tk.BOTH, expand=True)
+                
+                if param["type"] == "password":
+                    text_widget.config(show="*")
+                
+                self.param_widgets[param["key"]] = text_widget
+            else:
+                # 单行输入
+                if param["type"] == "password":
+                    entry = ttk.Entry(self.scrollable_frame, width=50, show="*")
+                else:
+                    entry = ttk.Entry(self.scrollable_frame, width=50)
+                
+                entry.grid(row=i, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
+                self.param_widgets[param["key"]] = entry
+            
+            # 参数说明（如果有）
+            if "description" in param:
+                desc_label = ttk.Label(
+                    self.scrollable_frame, 
+                    text=param["description"],
+                    font=('TkDefaultFont', 8),
+                    foreground="gray"
+                )
+                desc_label.grid(row=i, column=2, sticky=tk.W, padx=5, pady=2)
+        
+        # 配置网格权重
+        self.scrollable_frame.columnconfigure(1, weight=1)
+    
+    def bind_mouse_wheel(self, canvas):
+        """绑定鼠标滚轮事件"""
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        def _on_unbind(event):
+            canvas.unbind_all("<MouseWheel>")
+        
+        self.dialog.bind("<Destroy>", _on_unbind)
+    
+    def load_current_config(self):
+        """加载当前配置"""
+        if hasattr(self.main_app, 'loaded_config') and self.service_name in self.main_app.loaded_config:
+            current_config = self.main_app.loaded_config[self.service_name]
+            
+            for param_key, widget in self.param_widgets.items():
+                value = current_config.get(param_key, "")
+                if isinstance(widget, scrolledtext.ScrolledText):
+                    widget.delete(1.0, tk.END)
+                    widget.insert(1.0, value)
+                else:
+                    widget.delete(0, tk.END)
+                    widget.insert(0, value)
+    
+    def get_param_values(self):
+        """获取所有参数值"""
+        values = {}
+        for param_key, widget in self.param_widgets.items():
+            if isinstance(widget, scrolledtext.ScrolledText):
+                values[param_key] = widget.get(1.0, tk.END).strip()
+            else:
+                values[param_key] = widget.get().strip()
+        return values
+    
+    def test_connection(self):
+        """测试API连接"""
+        params = self.get_param_values()
+        
+        if self.service_name not in self.main_app.api_test_functions:
+            messagebox.showerror("错误", f"未找到 {self.service_name} 的测试函数")
+            return
+        
+        # 检查必需参数
+        required_params = TRANSLATION_SERVICES.get(self.service_name, [])
+        for param in required_params:
+            if not params.get(param["key"]):
+                messagebox.showerror("错误", f"请填写 {param['label']}")
+                return
+        
+        try:
+            self.main_app.log(f"开始测试 {self.service_name} API连接...")
+            
+            # 调用测试函数
+            test_function = self.main_app.api_test_functions[self.service_name]
+            success, message = test_function(params)
+            
+            if success:
+                self.main_app.log(f"{self.service_name} API连接测试成功")
+                messagebox.showinfo("成功", f"{self.service_name} API连接测试成功")
+            else:
+                self.main_app.log(f"{self.service_name} API连接测试失败: {message}")
+                messagebox.showerror("错误", f"{self.service_name} API连接测试失败: {message}")
+                
+        except Exception as e:
+            self.main_app.log(f"测试过程中发生错误: {e}")
+            messagebox.showerror("错误", f"测试过程中发生错误: {e}")
+    
+    def save_params(self):
+        """保存参数"""
+        params = self.get_param_values()
+        
+        # 更新主应用的配置
+        if not hasattr(self.main_app, 'loaded_config'):
+            self.main_app.loaded_config = {}
+        
+        if self.service_name not in self.main_app.loaded_config:
+            self.main_app.loaded_config[self.service_name] = {}
+        
+        self.main_app.loaded_config[self.service_name] = params
+        
+        # 更新显示
+        self.main_app.update_service_display(self.service_name)
+        
+        self.main_app.log(f"{self.service_name} 参数已更新")
+        messagebox.showinfo("成功", f"{self.service_name} 参数已更新")
+        
+        # 关闭对话框
+        self.dialog.destroy()
 
 def check_path():
     global game_path

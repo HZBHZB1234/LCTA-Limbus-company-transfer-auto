@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def trans_baidu(params,text):
-    """测试百度翻译API"""
+    """进行百度翻译"""
     try:
         appid = params.get('appid', '')
         secret = params.get('secret', '')
@@ -21,7 +21,7 @@ def trans_baidu(params,text):
         return False, str(e)
 
 def trans_tencent(params,text):
-    """测试腾讯翻译API"""
+    """进行腾讯翻译"""
     try:
         secret_id = params.get('secret_id', '')
         secret_key = params.get('secret_key', '')
@@ -38,7 +38,7 @@ def trans_tencent(params,text):
         return False, str(e)
 
 def trans_caiyun(params,text):
-    """测试彩云翻译API"""
+    """进行彩云翻译"""
     try:
         token = params.get('token', '')
         
@@ -54,7 +54,7 @@ def trans_caiyun(params,text):
         return False, str(e)
 
 def trans_youdao(params,text):
-    """测试有道翻译API"""
+    """进行有道翻译"""
     try:
         app_key = params.get('app_key', '')
         app_secret = params.get('app_secret', '')
@@ -71,7 +71,7 @@ def trans_youdao(params,text):
         return False, str(e)
 
 def trans_xiaoniu(params,text):
-    """测试小牛翻译API"""
+    """进行小牛翻译"""
     try:
         apikey = params.get('apikey', '')
         
@@ -87,7 +87,7 @@ def trans_xiaoniu(params,text):
         return False, str(e)
 
 def trans_aliyun(params,text):
-    """测试阿里云翻译API"""
+    """进行阿里云翻译"""
     try:
         access_key_id = params.get('access_key_id', '')
         access_key_secret = params.get('access_key_secret', '')
@@ -104,7 +104,7 @@ def trans_aliyun(params,text):
         return False, str(e)
 
 def trans_huoshan(params,text):
-    """测试火山翻译API"""
+    """进行火山翻译"""
     try:
         ak = params.get('ak', '')
         sk = params.get('sk', '')
@@ -121,21 +121,21 @@ def trans_huoshan(params,text):
         return False, str(e)
 
 def trans_google(params,text):
-    """测试Google翻译API"""
+    """进行Google翻译"""
     try:
         key = params.get('key', '')
         
         if not key:
             return False, "API密钥不能为空"
         result=None
-        # 这里需要实现Google翻译的测试逻辑
+        # 这里需要实现Google翻译的翻译逻辑
         # 暂时返回成功，需要根据实际的api模块实现
         return True, result
     except Exception as e:
         return False, str(e)
 
 def trans_deepl(params,text):
-    """测试DeepL翻译API"""
+    """进行DeepL翻译"""
     try:
         key = params.get('key', '')
         

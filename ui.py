@@ -55,6 +55,7 @@ class AdvancedTranslateUI:
         
         # 初始显示翻译界面
         self.show_translate_frame()
+        self.refresh_config_frame()
 
         
     def init_test_functions(self):
@@ -1506,10 +1507,22 @@ class AdvancedTranslateUI:
 
     def clear_current_service(self):
         """清空当前服务的配置"""
-        service_name = self.service_var.get()
+        service_name = self.get_organization_service()
+        if not service_name:
+            messagebox.showwarning("警告", "请先选择一个翻译服务")
+            return
+        
+        # 清空界面显示的输入框
         if service_name in self.service_widgets:
             for param_key, widget in self.service_widgets[service_name].items():
+                widget.config(state='normal')  # 先设置为可编辑
                 widget.delete(0, tk.END)
+                widget.config(state='readonly')  # 再设置回只读
+        
+        # 从已加载配置中移除该服务的配置
+        if hasattr(self, 'loaded_config') and service_name in self.loaded_config:
+            self.loaded_config[service_name] = {}
+        
         self.log(f"已清空 {service_name} 的配置")
 
     def save_api_config(self):

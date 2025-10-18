@@ -12,3 +12,4 @@ cp_trans_just_list.py
 demo_translate.py
 check.py
 !api_doc.md
+!inner_api

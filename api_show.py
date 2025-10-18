@@ -29,11 +29,11 @@ def translate_final(from_lang2,to_lang2,intervene2,query2,appids2,appkeys2):
     ran=0
     changing_list={}
     for i in cant_trans_jian:
-        final_input=final_input.replace(i,str(ran))
+        final_input=final_input.replace(i,str(ran),1)
         changing_list['<'+str(ran)+'>']='<'+i+'>'
         ran=ran+1
     for i in cant_trans_fang:
-        final_input=final_input.replace(i,str(ran))
+        final_input=final_input.replace(i,str(ran),1)
         changing_list['['+str(ran)+']']='['+i+']'
         ran=ran+1
     z=translate_net(from_lang2,to_lang2,final_input,intervene2,appids2,appkeys2)

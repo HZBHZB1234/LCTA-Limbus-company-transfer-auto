@@ -54,8 +54,10 @@ SERVICE_DEFINITION = [
         },
         # 指向翻译函数
         "method": your_translation_function,
-        # 测试函数（可选），详见下文
-        "test_function": None
+        # 测试函数(可选)，详见下文
+        "test_function": None,
+        # 初始化函数(可选)，详见下文
+        "init_function": None
     }
 ]
 ```
@@ -180,6 +182,10 @@ SERVICE_DEFINITION = [
             "type": "A",
             "key": ""
         },
+        "context": {
+            "story": True,
+            "might_from": "ishmael"
+        }
         "term": [
             {
                 "original": "",
@@ -260,6 +266,10 @@ def your_translation_function(params, text, logger):
         return False, f"翻译服务错误: {str(e)}"
 ```
 
+### 测试函数 & 初始化函数  
+返回True或False，不举例了  
+TODO: 允许初始化函数传回需要的全局变量
+
 ## 实用工具函数
 
 ### 错误处理模式
@@ -291,16 +301,19 @@ def preprocess_text(text):
     """
     预处理文本，保护特殊格式内容
     """
-    # 保护尖括号内容 <content>
+    # 保护尖括号内容和方括号内容 <content> [content]
     protected_content = {}
-    pattern = r'<(.*?)>'
-    matches = re.findall(pattern, text)
-    
-    for i, match in enumerate(matches):
-        placeholder = f'<{i}>'
-        text = text.replace(f'<{match}>', placeholder)
-        protected_content[placeholder] = f'<{match}>'
-    
+    pattern_jian=re.findall(r'\<(.*?)\>',text)
+    pattern_fang=re.findall(r'\[(.*?)\]',text)
+    change_time=0
+    for i in pattern_jian:
+        text=text.replace(f'<{i}>',f'<{str(ran)}>',1)
+        protected_content[f'<{str(ran)}>']=f'<{i}>'
+        ran=ran+1
+    for i in pattern_fang:
+        text=text.replace(f'[{i}]',f'[{str(ran)}]',1)
+        protected_content[f'[{str(ran)}]']=f'[{i}]'
+        ran=ran+1
     return text, protected_content
 
 def postprocess_text(text, protected_content):
@@ -317,6 +330,8 @@ def postprocess_text(text, protected_content):
 ```python
 import requests
 import json
+import re
+import random
 
 def my_translator(params, text, logger):
     """
@@ -326,10 +341,34 @@ def my_translator(params, text, logger):
         # 获取配置参数
         api_key = params.get('api_key', '')
         api_url = params.get('api_url', '')
+        enable_feature = params.get('enable_feature', False)
         
         # 参数验证
         if not api_key:
             return False, "API密钥不能为空"
+        if not api_url:
+            return False, "API地址不能为空"
+        
+        # 文本预处理 - 保护特殊标记
+        protected_content = {}
+        if isinstance(text, str):
+            processed_text = text
+            # 保护<style=>标签和[buff]标记等内容
+            pattern_style = re.findall(r'\<(.*?)\>', text)
+            pattern_buff = re.findall(r'\[(.*?)\]', text)
+            
+            ran = 0
+            for i in pattern_style:
+                placeholder = f'<{ran}>'
+                processed_text = processed_text.replace(i, placeholder, 1)
+                protected_content[placeholder] = i
+                ran += 1
+                
+            for i in pattern_buff:
+                placeholder = f'[{ran}]'
+                processed_text = processed_text.replace(i, placeholder, 1)
+                protected_content[placeholder] = i
+                ran += 1
         
         # 准备请求
         headers = {
@@ -338,12 +377,14 @@ def my_translator(params, text, logger):
         }
         
         data = {
-            'text': text,
+            'text': processed_text if protected_content else text,
             'source_lang': 'en',
-            'target_lang': 'zh'
+            'target_lang': 'zh',
+            'enable_feature': enable_feature
         }
         
         # 发送请求
+        logger(f"发送翻译请求到: {api_url}")
         response = requests.post(
             api_url, 
             headers=headers, 
@@ -353,16 +394,81 @@ def my_translator(params, text, logger):
         
         # 处理响应
         if response.status_code == 200:
-            result = response.json().get('translation', '')
-            return True, result
+            result_data = response.json()
+            result_text = result_data.get('translation', '')
+            
+            # 文本后处理 - 恢复被保护的内容
+            if protected_content and result_text:
+                for placeholder, original in protected_content.items():
+                    result_text = result_text.replace(placeholder, original)
+            
+            logger(f"翻译成功，处理字符数: {len(text)}")
+            return True, result_text
         else:
-            return False, f"API请求失败: {response.status_code}"
+            error_msg = f"API请求失败: {response.status_code}"
+            if response.text:
+                error_msg += f" - {response.text}"
+            return False, error_msg
             
     except requests.exceptions.Timeout:
         return False, "请求超时"
+    except requests.exceptions.ConnectionError:
+        return False, "连接错误，请检查API地址"
     except Exception as e:
-        logger.error(f"翻译异常: {str(e)}")
+        logger(f"翻译异常: {str(e)}")
         return False, f"翻译服务异常: {str(e)}"
+
+def test_my_translator(params, logger):
+    """
+    测试函数 - 验证服务配置是否正确
+    """
+    try:
+        # 获取配置参数
+        api_key = params.get('api_key', '')
+        api_url = params.get('api_url', '')
+        
+        if not api_key:
+            return False, "API密钥不能为空"
+        if not api_url:
+            return False, "API地址不能为空"
+        
+        # 发送测试请求
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        test_data = {
+            'text': 'Hello, world!',
+            'source_lang': 'en',
+            'target_lang': 'zh'
+        }
+        
+        response = requests.post(
+            api_url, 
+            headers=headers, 
+            data=json.dumps(test_data),
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return True, "测试成功，服务可用"
+        else:
+            return False, f"测试失败: {response.status_code}"
+            
+    except Exception as e:
+        return False, f"测试异常: {str(e)}"
+
+def init_my_translator(params, logger):
+    """
+    初始化函数 - 可选，用于服务初始化
+    """
+    try:
+        logger("初始化我的翻译服务...")
+        # 这里可以添加初始化逻辑，比如验证凭据、建立连接等
+        return True, "初始化成功"
+    except Exception as e:
+        return False, f"初始化失败: {str(e)}"
 
 # 服务定义
 SERVICE_DEFINITION = [
@@ -377,12 +483,18 @@ SERVICE_DEFINITION = [
                 "type": "password"
             },
             {
-                "key": "api_url",
+                "key": "api_url", 
                 "label": "API地址",
                 "type": "entry"
+            },
+            {
+                "key": "enable_feature",
+                "label": "启用特性",
+                "type": "checkbox"
             }
         ],
         "accept": "text",
+        "term": False,
         "layer": {
             "split": [True, "\n"],
             "need_transfer": True,
@@ -391,16 +503,23 @@ SERVICE_DEFINITION = [
             "need_init": False,
             "max_text": {
                 "able": True,
+                "split_file": False,
                 "type": "character",
                 "value": 4000
             },
             "max_requests": {
                 "able": True,
                 "value": 3
+            },
+            "retry_set": {
+                "able": True,
+                "value": 3,
+                "fall_lang": "en"
             }
         },
         "method": my_translator,
-        "test_function": None
+        "test_function": test_my_translator,
+        "init_function": init_my_translator
     }
 ]
 ```

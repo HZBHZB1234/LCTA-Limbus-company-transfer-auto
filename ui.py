@@ -7,6 +7,8 @@ import threading
 import time
 from shutil import rmtree,copytree
 import json
+import sys
+import importlib
 import install,search_result,functions,lighter,get_font,organization,calculate,about
 from get_api_config import *
 print('启动完毕')
@@ -41,8 +43,11 @@ class AdvancedTranslateUI:
         self.current_service = "baidu"  # 当前选中的翻译服务
         self.service_widgets = {}  # 存储每个服务的输入框控件
         self.api_test_functions = {}  # 存储api函数
+        self.inner_services = {}  # 存储内建服务定义
         
-        # 初始化api函数（这些函数需要从其他模块导入）
+        # 加载内建API服务
+        self.load_inner_api()
+        # 初始化api函数
         self.init_test_functions()
         # 创建左右分栏
         self.create_sidebar()
@@ -56,7 +61,43 @@ class AdvancedTranslateUI:
         # 初始显示翻译界面
         self.show_translate_frame()
         self.refresh_config_frame()
-
+    def load_inner_api(self):
+        """加载inner_api文件夹中的翻译服务"""
+        inner_api_path = os.path.join(os.path.dirname(__file__), 'inner_api')
+        if not os.path.exists(inner_api_path):
+            self.log(f"内建API文件夹不存在: {inner_api_path}")
+            return
+        
+        # 将inner_api添加到Python路径
+        if inner_api_path not in sys.path:
+            sys.path.insert(0, inner_api_path)
+        
+        # 遍历inner_api文件夹中的所有.py文件
+        for file_name in os.listdir(inner_api_path):
+            if file_name.endswith('.py') and not file_name.startswith('__'):
+                module_name = file_name[:-3]  # 移除.py后缀
+                try:
+                    # 动态导入模块
+                    spec = importlib.util.spec_from_file_location(module_name, os.path.join(inner_api_path, file_name))
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    
+                    # 检查模块是否有SERVICE_DEFINITION
+                    if hasattr(module, 'SERVICE_DEFINITION'):
+                        for service_def in module.SERVICE_DEFINITION:
+                            service_id = service_def.get('service')
+                            if service_id:
+                                self.inner_services[service_id] = service_def
+                                self.log(f"加载内建服务: {service_def.get('name', service_id)}")
+                    
+                except Exception as e:
+                    self.log(f"加载内建API模块 {file_name} 失败: {str(e)}")
+        
+        # 更新默认服务列表
+        global services_, default_service_list
+        services_ = [(service_def.get('name', service_id), service_id) 
+                    for service_id, service_def in self.inner_services.items()]
+        default_service_list = list(self.inner_services.keys())
         
     def init_test_functions(self):
         """初始化翻译服务的api函数"""
@@ -76,6 +117,12 @@ class AdvancedTranslateUI:
                 "google": api_organ.trans_google,
                 "deepl": api_organ.trans_deepl
             }
+            
+            # 添加内建服务的测试函数
+            for service_id, service_def in self.inner_services.items():
+                if 'test_function' in service_def and service_def['test_function']:
+                    self.api_test_functions[service_id] = service_def['test_function']
+                    
         except ImportError:
             self.log("警告: 未找到api_trans模块，api功能将不可用")
             self.api_test_functions = {}
@@ -606,7 +653,7 @@ class AdvancedTranslateUI:
         self.type_service_var.trace('w',self.type_service_change)
         
         # 默认翻译服务选择
-        self.service_frame = ttk.LabelFrame(parent, text="默认翻译服务", padding="10")
+        self.service_frame = ttk.LabelFrame(parent, text="内建翻译服务", padding="10")
         self.service_frame.pack(fill=tk.X, pady=10)
         
         self.default_service_var = tk.StringVar(value="baidu")
@@ -618,6 +665,7 @@ class AdvancedTranslateUI:
         service_col2 = ttk.Frame(self.service_frame)
         service_col2.pack(side=tk.RIGHT, fill=tk.X, expand=True)
         
+        # 使用动态加载的服务列表
         services = [(text, value, service_col1 if i <= len(services_) // 2 else service_col2) 
                 for i, (text, value) in enumerate(services_)]
         
@@ -1464,11 +1512,22 @@ class AdvancedTranslateUI:
         for widget in self.param_frame.winfo_children():
             widget.destroy()
         
+        # 获取服务定义
+        service_def = None
+        if service_name in self.inner_services:
+            service_def = self.inner_services[service_name]
+        elif service_name in TRANSLATION_SERVICES:
+            service_def = next((s for s in TRANSLATION_SERVICES[service_name] if s.get('service') == service_name), None)
+        
+        if not service_def:
+            ttk.Label(self.param_frame, text="未找到服务配置").pack(pady=10)
+            return
+        
         # 更新标题
-        self.param_frame.configure(text=f"{[cn for (cn,id) in services_ if id==service_name][0]} API参数配置")
+        self.param_frame.configure(text=f"{service_def.get('name', service_name)} API参数配置")
         
         # 获取该服务的参数定义
-        params = TRANSLATION_SERVICES.get(service_name, [])
+        params = service_def.get('api_params', [])
         self.service_widgets[service_name] = {}
         
         # 创建参数输入框
@@ -1504,7 +1563,147 @@ class AdvancedTranslateUI:
         
         # 配置网格权重使输入框可以扩展
         self.param_frame.columnconfigure(1, weight=1)
+    def apply_middle_layer(self, service_id, input_data, params, logger):
+        """应用中间层处理"""
+        if service_id not in self.inner_services:
+            return False, "服务未找到"
+        
+        service_def = self.inner_services[service_id]
+        layer_config = service_def.get('layer', {})
+        method = service_def.get('method')
+        
+        if not method:
+            return False, "服务方法未定义"
+        
+        # 根据accept类型处理输入
+        accept_type = service_def.get('accept', 'text')
+        
+        try:
+            if accept_type == 'json':
+                # JSON格式处理
+                if layer_config.get('need_transfer', False):
+                    # 文本保护处理
+                    processed_data = self.protect_text_in_json(input_data)
+                else:
+                    processed_data = input_data
+                
+                # 调用翻译方法
+                success, result = method(params, processed_data, logger)
+                
+                if success and layer_config.get('need_transfer', False):
+                    # 恢复被保护的文本
+                    result = self.restore_text_in_json(result)
+                
+                return success, result
+                
+            else:  # text格式
+                text = input_data  # 简化处理，实际可能需要从JSON中提取文本
+                
+                if layer_config.get('need_transfer', False):
+                    # 文本保护处理
+                    processed_text, protected_content = self.protect_text(text)
+                else:
+                    processed_text = text
+                    protected_content = {}
+                
+                # 调用翻译方法
+                success, result = method(params, processed_text, logger)
+                
+                if success and layer_config.get('need_transfer', False) and protected_content:
+                    # 恢复被保护的文本
+                    result = self.restore_text(result, protected_content)
+                
+                return success, result
+                
+        except Exception as e:
+            logger(f"中间层处理错误: {str(e)}")
+            return False, f"中间层处理错误: {str(e)}"
 
+    def protect_text(self, text):
+        """保护文本中的特殊标记"""
+        import re
+        protected_content = {}
+        processed_text = text
+        
+        # 保护<style=>标签内容
+        style_pattern = r'<style=([^>]*)>'
+        style_matches = re.findall(style_pattern, text)
+        
+        ran = 0
+        for match in style_matches:
+            placeholder = f'__STYLE_{ran}__'
+            processed_text = processed_text.replace(f'<style={match}>', placeholder)
+            protected_content[placeholder] = f'<style={match}>'
+            ran += 1
+        
+        # 保护[buff]标记内容
+        buff_pattern = r'\[([^\]]*)\]'
+        buff_matches = re.findall(buff_pattern, text)
+        
+        for match in buff_matches:
+            placeholder = f'__BUFF_{ran}__'
+            processed_text = processed_text.replace(f'[{match}]', placeholder)
+            protected_content[placeholder] = f'[{match}]'
+            ran += 1
+        
+        return processed_text, protected_content
+
+    def restore_text(self, text, protected_content):
+        """恢复被保护的文本"""
+        restored_text = text
+        for placeholder, original in protected_content.items():
+            restored_text = restored_text.replace(placeholder, original)
+        return restored_text
+
+    def protect_text_in_json(self, json_data):
+        """在JSON数据中保护文本"""
+        if isinstance(json_data, list):
+            return [self.protect_text_in_json(item) for item in json_data]
+        elif isinstance(json_data, dict):
+            protected_dict = {}
+            for key, value in json_data.items():
+                if key == 'original' and isinstance(value, dict):
+                    # 处理original字段中的多语言文本
+                    protected_dict[key] = {
+                        lang: self.protect_text_in_json(text) 
+                        for lang, text in value.items()
+                    }
+                elif isinstance(value, (dict, list)):
+                    protected_dict[key] = self.protect_text_in_json(value)
+                elif isinstance(value, str):
+                    protected_text, _ = self.protect_text(value)
+                    protected_dict[key] = protected_text
+                else:
+                    protected_dict[key] = value
+            return protected_dict
+        elif isinstance(json_data, str):
+            protected_text, _ = self.protect_text(json_data)
+            return protected_text
+        else:
+            return json_data
+
+    def restore_text_in_json(self, json_data):
+        """在JSON数据中恢复被保护的文本"""
+        if isinstance(json_data, list):
+            return [self.restore_text_in_json(item) for item in json_data]
+        elif isinstance(json_data, dict):
+            restored_dict = {}
+            for key, value in json_data.items():
+                if key == 'trans' and isinstance(value, str):
+                    # 恢复翻译结果中的文本
+                    restored_dict[key] = self.restore_text_in_json(value)
+                elif isinstance(value, (dict, list)):
+                    restored_dict[key] = self.restore_text_in_json(value)
+                elif isinstance(value, str):
+                    restored_dict[key] = self.restore_text_in_json(value)
+                else:
+                    restored_dict[key] = value
+            return restored_dict
+        elif isinstance(json_data, str):
+            # 简化处理，实际可能需要更复杂的恢复逻辑
+            return json_data
+        else:
+            return json_data
     def clear_current_service(self):
         """清空当前服务的配置"""
         service_name = self.get_organization_service()

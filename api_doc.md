@@ -36,7 +36,7 @@ SERVICE_DEFINITION = [
         # 显示名称
         "name": "您的翻译服务名称", 
         # 服务标识符，在调用时的标识，以下标识符为保留字段，不可使用
-        # baidu tencent caiyun youdao xiaoniu aliyun huoshan google deepl custom
+        # baidu tencent caiyun youdao xiaoniu aliyun huoshan google deepl custom error
         "service": "service_id",
         # 服务功能描述，目前没什么用，随便写写注释
         "description": "服务描述",

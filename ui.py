@@ -10,7 +10,7 @@ import json
 import sys
 import importlib
 import install,search_result,functions,lighter,get_font,organization,calculate,about
-from get_api_config import *
+from custom_api_check import check_custom_script
 print('启动完毕')
 
 class AdvancedTranslateUI:
@@ -40,10 +40,12 @@ class AdvancedTranslateUI:
         # 配置网格权重
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
-        self.current_service = "baidu"  # 当前选中的翻译服务
+        self.current_service = None  # 当前选中的翻译服务
         self.service_widgets = {}  # 存储每个服务的输入框控件
         self.api_test_functions = {}  # 存储api函数
         self.inner_services = {}  # 存储内建服务定义
+        self.custom_services = {}  # 存储自定义服务定义
+        self.custom_script_path = ""  # 存储自定义脚本路径
         
         # 加载内建API服务
         self.load_inner_api()
@@ -61,6 +63,7 @@ class AdvancedTranslateUI:
         # 初始显示翻译界面
         self.show_translate_frame()
         self.refresh_config_frame()
+        
     def load_inner_api(self):
         """加载inner_api文件夹中的翻译服务"""
         inner_api_path = os.path.join(os.path.dirname(__file__), 'inner_api')
@@ -94,38 +97,79 @@ class AdvancedTranslateUI:
                     self.log(f"加载内建API模块 {file_name} 失败: {str(e)}")
         
         # 更新默认服务列表
-        global services_, default_service_list
-        services_ = [(service_def.get('name', service_id), service_id) 
-                    for service_id, service_def in self.inner_services.items()]
-        default_service_list = list(self.inner_services.keys())
+        self.default_service_list = list(self.inner_services.keys())
+        self.services_ = [(service_def.get('name', service_id), service_id) 
+                         for service_id, service_def in self.inner_services.items()]
         
+    def load_custom_api(self, script_path):
+        """加载自定义翻译服务"""
+        if not os.path.exists(script_path):
+            self.log(f"自定义翻译服务文件不存在: {script_path}")
+            return False, "文件不存在"
+            
+        file_name = os.path.basename(script_path)
+        if file_name.endswith('.py') and not file_name.startswith('__'):
+            module_name = file_name[:-3]  # 移除.py后缀
+            try:
+                # 动态导入模块
+                spec = importlib.util.spec_from_file_location(module_name, script_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                
+                # 检查自定义脚本
+                useable, msg = check_custom_script(module, self.default_service_list)
+                if not useable:
+                    self.log(f"自定义翻译服务文件 {script_path} 不可用: {msg}")
+                    return False, msg
+                
+                # 检查模块是否有SERVICE_DEFINITION
+                if hasattr(module, 'SERVICE_DEFINITION'):
+                    # 清空之前的自定义服务
+                    self.custom_services.clear()
+                    
+                    for service_def in module.SERVICE_DEFINITION:
+                        service_id = service_def.get('service')
+                        if service_id:
+                            self.custom_services[service_id] = service_def
+                            self.log(f"加载自定义服务: {service_def.get('name', service_id)}")
+                    
+                    # 保存自定义脚本路径
+                    self.custom_script_path = script_path
+                    return True, "加载成功"
+                else:
+                    return False, "未找到服务定义"
+                
+            except Exception as e:
+                self.log(f"加载自定义API模块 {script_path} 失败: {str(e)}")
+                return False, str(e)
+        
+        return False, "不支持的脚本格式"
+
     def init_test_functions(self):
         """初始化翻译服务的api函数"""
         try:
             # 导入api模块
             import api_organ
             
-            # 注册api函数
-            self.api_test_functions = {
-                "baidu": api_organ.trans_baidu,
-                "tencent": api_organ.trans_tencent,
-                "caiyun": api_organ.trans_caiyun,
-                "youdao": api_organ.trans_youdao,
-                "xiaoniu": api_organ.trans_xiaoniu,
-                "aliyun": api_organ.trans_aliyun,
-                "huoshan": api_organ.trans_huoshan,
-                "google": api_organ.trans_google,
-                "deepl": api_organ.trans_deepl
-            }
+            # 注册api函数 - 为内建服务设置测试函数
+            self.api_test_functions = {}
             
-            # 添加内建服务的测试函数
+            # 为内建服务添加测试函数
             for service_id, service_def in self.inner_services.items():
+                if 'test_function' in service_def and service_def['test_function']:
+                    self.api_test_functions[service_id] = service_def['test_function']
+                elif hasattr(api_organ, f'trans_{service_id}'):
+                    self.api_test_functions[service_id] = getattr(api_organ, f'trans_{service_id}')
+                    
+            # 为自定义服务添加测试函数
+            for service_id, service_def in self.custom_services.items():
                 if 'test_function' in service_def and service_def['test_function']:
                     self.api_test_functions[service_id] = service_def['test_function']
                     
         except ImportError:
             self.log("警告: 未找到api_trans模块，api功能将不可用")
             self.api_test_functions = {}
+            
     def create_sidebar(self):
         # 创建左侧边栏
         self.sidebar_frame = ttk.Frame(self.main_frame, width=150)
@@ -147,7 +191,7 @@ class AdvancedTranslateUI:
             "备份原文": self.show_backup_frame,
             '资源管理': self.show_assets_frame,
             "黑影图调色": self.show_lighter_window,
-            "抽卡概率计算":self.show_calculate_window,
+            "抽卡概率计算": self.show_calculate_window,
             "关于": self.show_about_window
         }
         
@@ -188,7 +232,7 @@ class AdvancedTranslateUI:
         self.frames["llc"] = ttk.Frame(self.content_frame)
         self.create_llc_frame(self.frames["llc"])
 
-        self.frames['config']=ttk.Frame(self.content_frame)
+        self.frames['config'] = ttk.Frame(self.content_frame)
         self.create_config_frame(self.frames['config'])
 
         self.frames["search"] = ttk.Frame(self.content_frame)
@@ -197,7 +241,7 @@ class AdvancedTranslateUI:
         self.frames["backup"] = ttk.Frame(self.content_frame)
         self.create_backup_frame(self.frames["backup"])
 
-        self.frames['assets']=ttk.Frame(self.content_frame)
+        self.frames['assets'] = ttk.Frame(self.content_frame)
         self.create_assets_frame(self.frames['assets'])
 
     def create_translate_frame(self, parent):
@@ -361,9 +405,11 @@ class AdvancedTranslateUI:
         
         # 初始刷新列表
         self.refresh_package_list()
+        
     def get_font_(self):
         """从已安装字体中获取文件"""
-        self.get_font_ui=get_font.FontViewer(self.root)
+        self.get_font_ui = get_font.FontViewer(self.root)
+        
     def change_font(self):
         """更换汉化包字体"""
         font_file = filedialog.askopenfilename(title="选择字体文件", filetypes=[("字体文件", "*.ttf")])
@@ -375,7 +421,6 @@ class AdvancedTranslateUI:
         install.set_log_callback(self.log)
         install.change_font(selected_package, font_file)
         self.refresh_package_list()
-
 
     def refresh_package_list(self):
         """刷新可用汉化包列表"""
@@ -426,6 +471,7 @@ class AdvancedTranslateUI:
         if not valid_packages:
             self.package_listbox.insert(tk.END, "未找到可用的汉化包")
             self.log("未找到可用的汉化包")
+            
     def delete_selected_package(self):
         """删除选中的汉化包"""
         selection = self.package_listbox.curselection()
@@ -454,7 +500,7 @@ class AdvancedTranslateUI:
         
         # 设置日志回调
         install.set_log_callback(self.log)
-        if game_path =='skip':
+        if game_path == 'skip':
             messagebox.showinfo("提示", "请选择游戏目录")
             return
         # 调用安装函数
@@ -466,6 +512,7 @@ class AdvancedTranslateUI:
         else:
             self.log(f"安装失败: {message}")
             messagebox.showerror("错误", message)
+            
     def perform_search(self):
         """
         执行搜索操作
@@ -488,7 +535,7 @@ class AdvancedTranslateUI:
             
             ok_list = []
             self.log('正在遍历文件夹...')
-            file_list = functions.walk_all_files(search_path,search_path)
+            file_list = functions.walk_all_files(search_path, search_path)
             self.log(f"遍历完成，共有 {len(file_list)} 个文件")
             
             for i in file_list:
@@ -520,7 +567,6 @@ class AdvancedTranslateUI:
             self.log("请输入搜索内容")
             messagebox.showerror("错误", "请输入搜索内容")
     
-    
     def create_ourplay_frame(self, parent):
         # ourplay下载界面
         ttk.Label(parent, text="从ourplay下载汉化", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
@@ -547,6 +593,7 @@ class AdvancedTranslateUI:
         
         ttk.Button(button_frame, text="开始下载", command=self.start_ourplay_download).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消下载", command=self.cancel_download).pack(side=tk.LEFT, padx=5)
+        
     def create_clean_frame(self, parent):
         # 清除配置界面
         ttk.Label(parent, text="清除本地缓存文件", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
@@ -601,6 +648,7 @@ class AdvancedTranslateUI:
         
         # 存储自定义文件路径的列表
         self.custom_files_to_delete = [] 
+        
     def create_llc_frame(self, parent):
         # 零协下载界面
         ttk.Label(parent, text="从零协下载汉化", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
@@ -629,6 +677,7 @@ class AdvancedTranslateUI:
         
         ttk.Button(button_frame, text="开始下载", command=self.start_llc_download).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消下载", command=self.cancel_download).pack(side=tk.LEFT, padx=5)
+        
     def create_config_frame(self, parent):
         """配置汉化API界面 - 修改后的版本"""
         ttk.Label(parent, text="配置汉化API", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
@@ -645,19 +694,19 @@ class AdvancedTranslateUI:
         service_type_frame = ttk.LabelFrame(parent, text="翻译服务类别", padding="10")
         service_type_frame.pack(fill=tk.X, pady=10)
         
-        self.type_service_var = tk.StringVar(value="default")
+        self.type_service_var = tk.StringVar(value="inner")
         service_type_col = ttk.Frame(service_type_frame)
         service_type_col.pack(fill=tk.X, expand=True)
-        ttk.Radiobutton(service_type_col, text='内建翻译服务', variable=self.type_service_var, value='default').pack(anchor=tk.W)
+        ttk.Radiobutton(service_type_col, text='内建翻译服务', variable=self.type_service_var, value='inner').pack(anchor=tk.W)
         ttk.Radiobutton(service_type_col, text='自定义翻译服务', variable=self.type_service_var, value='custom').pack(anchor=tk.W)
-        self.type_service_var.trace('w',self.type_service_change)
+        self.type_service_var.trace('w', self.type_service_change)
         
-        # 默认翻译服务选择
+        # 内建翻译服务选择
         self.service_frame = ttk.LabelFrame(parent, text="内建翻译服务", padding="10")
         self.service_frame.pack(fill=tk.X, pady=10)
         
-        self.default_service_var = tk.StringVar(value="baidu")
-        self.default_service_var.trace('w',self.on_service_change)
+        self.inner_service_var = tk.StringVar()
+        self.inner_service_var.trace('w', self.on_service_change)
 
         # 创建两列布局以容纳更多选项
         service_col1 = ttk.Frame(self.service_frame)
@@ -666,30 +715,42 @@ class AdvancedTranslateUI:
         service_col2.pack(side=tk.RIGHT, fill=tk.X, expand=True)
         
         # 使用动态加载的服务列表
-        services = [(text, value, service_col1 if i <= len(services_) // 2 else service_col2) 
-                for i, (text, value) in enumerate(services_)]
-        
-        for i, (text, value, frame) in enumerate(services):
-            ttk.Radiobutton(frame, text=text, variable=self.default_service_var, value=value).pack(anchor=tk.W)
+        services = self.services_
+        for i, (text, value) in enumerate(services):
+            frame = service_col1 if i <= len(services) // 2 else service_col2
+            ttk.Radiobutton(frame, text=text, variable=self.inner_service_var, value=value).pack(anchor=tk.W)
         
         # 自定义翻译服务选择
         self.service_frame_custom = ttk.LabelFrame(parent, text="自定义翻译服务", padding="10")
-        self.service_frame_custom.pack(fill=tk.X, pady=10)
         
-        self.custom_service_var = tk.StringVar(value="none")
-        self.custom_service_var.trace('w',self.on_service_change)
-
+        self.custom_service_var = tk.StringVar()
+        self.custom_service_var.trace('w', self.on_service_change)
+        
+        # 自定义脚本选择
+        custom_script_frame = ttk.Frame(self.service_frame_custom)
+        custom_script_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(custom_script_frame, text="自定义脚本:").pack(side=tk.LEFT)
+        self.custom_script_entry = ttk.Entry(custom_script_frame, width=40)
+        self.custom_script_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Button(custom_script_frame, text="浏览...", command=self.browse_custom_script).pack(side=tk.LEFT, padx=2)
+        ttk.Button(custom_script_frame, text="加载", command=self.load_custom_script).pack(side=tk.LEFT, padx=2)
+        
+        # 自定义服务选择
+        custom_service_frame = ttk.Frame(self.service_frame_custom)
+        custom_service_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(custom_service_frame, text="选择服务:").pack(side=tk.LEFT)
+        
         # 创建两列布局以容纳更多选项
-        service_col1_custom = ttk.Frame(self.service_frame_custom)
+        service_col1_custom = ttk.Frame(custom_service_frame)
         service_col1_custom.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        service_col2_custom = ttk.Frame(self.service_frame_custom)
+        service_col2_custom = ttk.Frame(custom_service_frame)
         service_col2_custom.pack(side=tk.RIGHT, fill=tk.X, expand=True)
         
-        services_custom = [(text, value, service_col1_custom if i <= len(custom_) // 2 else service_col2_custom) 
-                for i, (text, value) in enumerate(custom_)]        
-        for i, (text, value, frame) in enumerate(services_custom):
-            ttk.Radiobutton(frame, text=text, variable=self.custom_service_var, value=value).pack(anchor=tk.W)
-
+        # 初始时没有自定义服务
+        self.custom_services_radio = []
+        
         # 按钮框架
         self.service_button_frame = ttk.Frame(parent)
         self.service_button_frame.pack(pady=20)
@@ -698,69 +759,87 @@ class AdvancedTranslateUI:
         ttk.Button(self.service_button_frame, text="测试连接", command=self.test_api_connection).pack(side=tk.LEFT, padx=5)
         ttk.Button(self.service_button_frame, text="刷新页面", command=self.refresh_config_frame).pack(side=tk.LEFT, padx=5)
         ttk.Button(self.service_button_frame, text="清空当前", command=self.clear_current_service).pack(side=tk.LEFT, padx=5)
+        ttk.Button(self.service_button_frame, text="编辑参数", command=self.open_edit_dialog).pack(side=tk.LEFT, padx=5)
         
         # 初始创建当前服务的输入框
-        self.create_service_widgets("baidu")
+        if self.services_:
+            self.inner_service_var.set(self.services_[0][1])
+            self.create_service_widgets(self.services_[0][1])
         self.type_service_change()
-    def open_edit_dialog(self):
-        """打开参数编辑对话框"""
-        service_name = self.get_organization_service()
-        if not service_name:
-            messagebox.showwarning("警告", "请先选择一个翻译服务")
-            return
         
-        # 创建编辑对话框
-        EditParamsDialog(self.root, service_name, self)
-
-    def update_service_display(self, service_name):
-        """更新服务参数显示"""
-        if service_name in self.service_widgets:
-            # 从已加载配置中获取当前值
-            current_config = {}
-            if hasattr(self, 'loaded_config') and service_name in self.loaded_config:
-                current_config = self.loaded_config[service_name]
+    def browse_custom_script(self):
+        """浏览自定义脚本文件"""
+        file_path = filedialog.askopenfilename(
+            title="选择自定义翻译脚本",
+            filetypes=[("Python文件", "*.py"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            self.custom_script_entry.delete(0, tk.END)
+            self.custom_script_entry.insert(0, file_path)
             
-            # 更新显示区域内容
-            for param_key, widget in self.service_widgets[service_name].items():
-                value = current_config.get(param_key, "")
-                widget.config(state='normal')
-                widget.delete(0, tk.END)
-                widget.insert(0, value)
-                widget.config(state='readonly')
-
-    def clear_current_service(self):
-        """清空当前服务的配置"""
-        service_name = self.get_organization_service()
-        if not service_name:
-            messagebox.showwarning("警告", "请先选择一个翻译服务")
+    def load_custom_script(self):
+        """加载自定义脚本"""
+        script_path = self.custom_script_entry.get()
+        if not script_path:
+            messagebox.showerror("错误", "请先选择自定义脚本文件")
             return
-        
-        if service_name in TRANSLATION_SERVICES:
-            # 从已加载配置中移除该服务的配置
-            if hasattr(self, 'loaded_config') and service_name in self.loaded_config:
-                self.loaded_config[service_name] = {}
             
-            # 更新显示
-            self.update_service_display(service_name)
-            self.log(f"已清空 {service_name} 的配置")
-    def type_service_change(self,_=None,__=None,___=None):
+        success, message = self.load_custom_api(script_path)
+        if success:
+            messagebox.showinfo("成功", "自定义脚本加载成功")
+            # 更新自定义服务选择
+            self.update_custom_service_selection()
+            # 刷新配置界面
+            self.refresh_config_frame()
+        else:
+            messagebox.showerror("错误", f"加载自定义脚本失败: {message}")
+            
+    def update_custom_service_selection(self):
+        """更新自定义服务选择"""
+        # 清除现有的自定义服务单选按钮
+        for radio in self.custom_services_radio:
+            radio.destroy()
+        self.custom_services_radio = []
+        
+        # 添加新的自定义服务单选按钮
+        custom_services = [(service_def.get('name', service_id), service_id) 
+                          for service_id, service_def in self.custom_services.items()]
+        
+        # 获取自定义服务选择框架
+        custom_service_frame = self.service_frame_custom.winfo_children()[1]  # 第二个子组件是服务选择框架
+        service_col1_custom = custom_service_frame.winfo_children()[1]  # 第一列
+        service_col2_custom = custom_service_frame.winfo_children()[2]  # 第二列
+        
+        for i, (text, value) in enumerate(custom_services):
+            frame = service_col1_custom if i <= len(custom_services) // 2 else service_col2_custom
+            radio = ttk.Radiobutton(frame, text=text, variable=self.custom_service_var, value=value)
+            radio.pack(anchor=tk.W)
+            self.custom_services_radio.append(radio)
+            
+        # 如果有自定义服务，选择第一个
+        if custom_services:
+            self.custom_service_var.set(custom_services[0][1])
+            
+    def type_service_change(self, _=None, __=None, ___=None):
+        """服务类型切换回调"""
         if self.type_service_var.get() == 'custom':
             self.service_frame.pack_forget()
-            self.service_frame_custom.pack(fill=tk.X, pady=10,before=self.service_button_frame)
-            self.default_service_var.set('none')
+            self.service_frame_custom.pack(fill=tk.X, pady=10, before=self.service_button_frame)
+            self.inner_service_var.set('')
         else:
             self.service_frame_custom.pack_forget()
-            self.service_frame.pack(fill=tk.X, pady=10,before=self.service_button_frame)
-            self.custom_service_var.set('none')
+            self.service_frame.pack(fill=tk.X, pady=10, before=self.service_button_frame)
+            self.custom_service_var.set('')
+            
     def refresh_config_frame(self):
         """
         刷新配置汉化API界面
         重新加载所有配置和服务选项
         """
         # 获取当前选中的服务
-        current_type_service = self.type_service_var.get() if hasattr(self, 'type_service_var') else "defalt"
-        current_default_service = self.default_service_var.get() if hasattr(self, 'default_service_var') else "baidu"
-        current_custom_service = self.custom_service_var.get() if hasattr(self, 'custom_service_var') else "none"
+        current_type_service = self.type_service_var.get() if hasattr(self, 'type_service_var') else "inner"
+        current_inner_service = self.inner_service_var.get() if hasattr(self, 'inner_service_var') else ""
+        current_custom_service = self.custom_service_var.get() if hasattr(self, 'custom_service_var') else ""
         
         # 清除现有的配置框架中的所有内容
         for widget in self.frames['config'].winfo_children():
@@ -771,8 +850,22 @@ class AdvancedTranslateUI:
         
         # 恢复之前的选择状态
         self.type_service_var.set(current_type_service)
-        self.default_service_var.set(current_default_service)
-        self.custom_service_var.set(current_custom_service)
+        if current_inner_service and current_inner_service in [s[1] for s in self.services_]:
+            self.inner_service_var.set(current_inner_service)
+        elif self.services_:
+            self.inner_service_var.set(self.services_[0][1])
+            
+        if current_custom_service and current_custom_service in self.custom_services:
+            self.custom_service_var.set(current_custom_service)
+        elif self.custom_services:
+            self.custom_service_var.set(list(self.custom_services.keys())[0])
+            
+        # 如果已加载自定义脚本，更新自定义脚本路径显示
+        if hasattr(self, 'custom_script_path') and self.custom_script_path:
+            self.custom_script_entry.delete(0, tk.END)
+            self.custom_script_entry.insert(0, self.custom_script_path)
+            # 更新自定义服务选择
+            self.update_custom_service_selection()
         
         # 重新加载配置文件
         self.load_api_config()
@@ -782,6 +875,7 @@ class AdvancedTranslateUI:
         self.type_service_change()
         
         self.log("配置界面已刷新")
+        
     def create_search_frame(self, parent):
         ttk.Label(parent, text="搜索指定文本", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
         
@@ -834,6 +928,7 @@ class AdvancedTranslateUI:
         folder_path = filedialog.askdirectory(title="选择要搜索的文件夹")
         if folder_path:
             self.search_path_var.set(folder_path)
+            
     def create_backup_frame(self, parent):
         # 备份原文界面
         ttk.Label(parent, text="备份原文", font=('TkDefaultFont', 12, 'bold')).pack(pady=10)
@@ -927,6 +1022,7 @@ class AdvancedTranslateUI:
 
         #初始刷新
         self.load_assets_config()
+        
     def using_selected_asset(self):
         """
         应用选中的项目资源链接
@@ -964,7 +1060,7 @@ class AdvancedTranslateUI:
             messagebox.showerror("错误", f"应用项目 '{name}' 的资源链接失败: {str(e)}")
             return
 
-    def cancel_asset_connect(self,use=False):
+    def cancel_asset_connect(self, use=False):
         """
         清空资源链接
         """
@@ -991,6 +1087,7 @@ class AdvancedTranslateUI:
         self.log("已清空资源链接")
         if not use:
             messagebox.showinfo("提示", "已清空资源链接")
+            
     def add_asset_project(self):
         """
         添加新的项目资源
@@ -1150,6 +1247,7 @@ class AdvancedTranslateUI:
         except Exception as e:
             self.log(f"刷新配置失败: {e}")
             messagebox.showerror("错误", f"刷新配置失败: {e}")
+            
     def browse_backup_save_path(self):
         """浏览备份保存路径"""
         folder_path = filedialog.askdirectory(title="选择备份保存路径")
@@ -1180,12 +1278,11 @@ class AdvancedTranslateUI:
         backup_thread.daemon = True
         backup_thread.start()
 
-
     def backup_thread(self, save_path):
         """备份线程函数"""
         try:
             self.log(f"正在备份到: {save_path}")
-            path_for=game_path+r"LimbusCompany_Data\Assets\Resources_moved\Localize"
+            path_for = game_path + r"LimbusCompany_Data\Assets\Resources_moved\Localize"
             if os.path.exists(f'{save_path}\\LCB_backup.zip'):
                 self.log("已存在备份文件")
                 messagebox.showinfo("提示", "已存在备份文件")
@@ -1228,9 +1325,11 @@ class AdvancedTranslateUI:
     def show_config_frame(self):
         self.show_frame("config")
         self.log("切换到配置界面")
+        
     def show_search_frame(self):
         self.show_frame("search")
         self.log("切换到文本搜索")
+        
     def show_backup_frame(self):
         self.show_frame("backup")
         self.log("切换到备份原文")
@@ -1238,12 +1337,15 @@ class AdvancedTranslateUI:
     def show_assets_frame(self):
         self.show_frame("assets")
         self.log("切换到资源管理")
+        
     def show_lighter_window(self):
         self.log("启动图片亮度工具")
         lighter.ImageEnhancementApp(self.root)
+        
     def show_calculate_window(self):
         self.log("启动概率计算工具")
         calculate.GachaCalculator(self.root)
+        
     def show_about_window(self):
         self.log("启动关于窗口")
         about.AboutWindow(self.root)
@@ -1262,7 +1364,6 @@ class AdvancedTranslateUI:
         self.team_trans_var.trace_add('write', self.on_team_trans_change)
         self.backup_var.trace_add('write', self.on_backup_change)
 
-    
     def on_custom_script_change(self, *args):
         self.toggle_custom_script()
     
@@ -1276,6 +1377,7 @@ class AdvancedTranslateUI:
     def on_team_trans_change(self, *args):
         if self.team_trans_var.get():
             self.cache_trans_var.set(False)
+            
     def on_backup_change(self, *args):
         self.toggle_backup()
 
@@ -1283,6 +1385,7 @@ class AdvancedTranslateUI:
         state = "normal" if self.backup_var.get() else "disabled"
         self.backup_path.config(state=state)
         self.browse_backup_btn.config(state=state)
+        
     def toggle_custom_script(self):
         state = "normal" if self.custom_script_var.get() else "disabled"
         self.script_path.config(state=state)
@@ -1301,12 +1404,14 @@ class AdvancedTranslateUI:
         if file_path:
             self.script_path.delete(0, tk.END)
             self.script_path.insert(0, file_path)
+            
     def browse_LLC(self):
         file_path = filedialog.askdirectory(title="选择LLC文件夹")
         
         if file_path:
             self.LLC_path.delete(0, tk.END)
             self.LLC_path.insert(0, file_path)
+            
     def browse_backup(self):
         file_path = filedialog.askopenfilename(
                 title="选择备份文件",
@@ -1315,6 +1420,7 @@ class AdvancedTranslateUI:
         if file_path:
             self.backup_path.delete(0, tk.END)
             self.backup_path.insert(0, file_path)
+            
     def browse_half_trans(self):
         if self.excel_output_var.get():
             file_path = filedialog.askopenfilename(
@@ -1339,7 +1445,7 @@ class AdvancedTranslateUI:
     
     def start_translation(self):
         self.log("开始翻译过程...")
-        if game_path=='skip':
+        if game_path == 'skip':
             messagebox.showinfo("提示", "请选择游戏安装目录")
             return
         # 验证必要的参数
@@ -1356,7 +1462,7 @@ class AdvancedTranslateUI:
             return
         if not self.LLC_path.get():
             if messagebox.askyesno("提示", "未选择LLC路径，是否使用默认路径？"):
-                cache=(fr'{game_path}LimbusCompany_Data\lang\LLC_zh-CN')
+                cache = (fr'{game_path}LimbusCompany_Data\lang\LLC_zh-CN')
                 if os.path.exists(cache):
                     self.LLC_path.delete(0, tk.END)
                     self.LLC_path.insert(0, cache)
@@ -1364,24 +1470,24 @@ class AdvancedTranslateUI:
                     messagebox.showerror("错误", "未找到默认路径")
                     return
             else:
-                if not messagebox.askyesno('LCTA','从零开始进行翻译?'):
+                if not messagebox.askyesno('LCTA', '从零开始进行翻译?'):
                     return
-        config={
-            "custom_script":self.custom_script_var.get(),
-            "cache_trans":self.cache_trans_var.get(),
-            "team_trans":self.team_trans_var.get(),
-            "excel_output":self.excel_output_var.get(),
-            "log_enabled":self.log_enabled_var.get(),
-            "half_trans":self.half_trans_var.get(),
-            "backup_enabled":self.backup_var.get(),
-            "script_path":self.script_path.get(),
-            "half_trans_path":self.half_trans_path.get(),
-            "backup_path":self.backup_path.get(),
-            "game_path":game_path,
-            "LLC_path":self.LLC_path.get(),
-            "formal_language":self.lang_var.get()
+        config = {
+            "custom_script": self.custom_script_var.get(),
+            "cache_trans": self.cache_trans_var.get(),
+            "team_trans": self.team_trans_var.get(),
+            "excel_output": self.excel_output_var.get(),
+            "log_enabled": self.log_enabled_var.get(),
+            "half_trans": self.half_trans_var.get(),
+            "backup_enabled": self.backup_var.get(),
+            "script_path": self.script_path.get(),
+            "half_trans_path": self.half_trans_path.get(),
+            "backup_path": self.backup_path.get(),
+            "game_path": game_path,
+            "LLC_path": self.LLC_path.get(),
+            "formal_language": self.lang_var.get()
         }
-        organization.translate_organize(config,self.log)
+        organization.translate_organize(config, self.log)
         # 这里应该调用实际的翻译函数
         self.log("翻译完成")
     
@@ -1490,18 +1596,21 @@ class AdvancedTranslateUI:
         self.stop_download = True
         self.download_progress.set(0)
         self.log("下载已取消")
+        
     def get_organization_service(self):
-        if self.type_service_var.get()=='default':
-            new_service = self.default_service_var.get()
+        """获取当前选中的服务"""
+        if self.type_service_var.get() == 'inner':
+            service = self.inner_service_var.get()
         else:
-            new_service = self.custom_service_var.get()
-        if new_service in ['none','custom']:
-            return False
-        else:return new_service
-    def on_service_change(self, _=None,__=None,___=None):
+            service = self.custom_service_var.get()
+        return service if service else None
+        
+    def on_service_change(self, _=None, __=None, ___=None):
         """当翻译服务改变时的回调函数"""
         new_service = self.get_organization_service()
-        if not new_service: return
+        if not new_service:
+            return
+            
         if new_service != self.current_service:
             self.current_service = new_service
             self.create_service_widgets(new_service)
@@ -1516,8 +1625,8 @@ class AdvancedTranslateUI:
         service_def = None
         if service_name in self.inner_services:
             service_def = self.inner_services[service_name]
-        elif service_name in TRANSLATION_SERVICES:
-            service_def = next((s for s in TRANSLATION_SERVICES[service_name] if s.get('service') == service_name), None)
+        elif service_name in self.custom_services:
+            service_def = self.custom_services[service_name]
         
         if not service_def:
             ttk.Label(self.param_frame, text="未找到服务配置").pack(pady=10)
@@ -1535,22 +1644,50 @@ class AdvancedTranslateUI:
             # 参数标签
             ttk.Label(self.param_frame, text=param["label"] + ":").grid(row=i, column=0, sticky=tk.W, pady=5, padx=5)
             
-            # 参数输入框 - 设置为只读
-            if param["type"] == "password":
-                entry = ttk.Entry(self.param_frame, width=40, show="*", state='readonly')
+            # 根据参数类型创建不同的只读控件
+            if param.get("type") == "checkbox":
+                # Checkbox类型参数（只读）
+                var = tk.BooleanVar()
+                checkbox = ttk.Checkbutton(
+                    self.param_frame,
+                    variable=var,
+                    state='disabled'  # 只读状态
+                )
+                checkbox.grid(row=i, column=1, sticky=tk.W, pady=5, padx=5)
+                self.service_widgets[service_name][param["key"]] = var
+                
+                # 添加描述文本（如果有）
+                if "description" in param:
+                    desc_label = ttk.Label(
+                        self.param_frame,
+                        text=param["description"],
+                        font=('TkDefaultFont', 8),
+                        foreground="gray"
+                    )
+                    desc_label.grid(row=i, column=2, sticky=tk.W, padx=5, pady=2)
             else:
-                entry = ttk.Entry(self.param_frame, width=40, state='readonly')
-            
-            entry.grid(row=i, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
-            self.service_widgets[service_name][param["key"]] = entry
+                # 普通Entry类型参数
+                if param["type"] == "password":
+                    entry = ttk.Entry(self.param_frame, width=40, show="*", state='readonly')
+                else:
+                    entry = ttk.Entry(self.param_frame, width=40, state='readonly')
+                
+                entry.grid(row=i, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+                self.service_widgets[service_name][param["key"]] = entry
             
             # 存储当前值（如果有）
             if hasattr(self, 'loaded_config') and service_name in self.loaded_config:
                 config_value = self.loaded_config[service_name].get(param["key"], "")
-                entry.config(state='normal')
-                entry.delete(0, tk.END)
-                entry.insert(0, config_value)
-                entry.config(state='readonly')
+                if param.get("type") == "checkbox":
+                    # 对于checkbox类型，设置BooleanVar的值
+                    widget_var = self.service_widgets[service_name][param["key"]]
+                    widget_var.set(bool(config_value))
+                else:
+                    # 对于普通Entry类型，设置文本值
+                    entry.config(state='normal')
+                    entry.delete(0, tk.END)
+                    entry.insert(0, config_value)
+                    entry.config(state='readonly')
         
         # 添加编辑按钮
         if params:  # 只有有参数时才显示编辑按钮
@@ -1563,147 +1700,39 @@ class AdvancedTranslateUI:
         
         # 配置网格权重使输入框可以扩展
         self.param_frame.columnconfigure(1, weight=1)
-    def apply_middle_layer(self, service_id, input_data, params, logger):
-        """应用中间层处理"""
-        if service_id not in self.inner_services:
-            return False, "服务未找到"
         
-        service_def = self.inner_services[service_id]
-        layer_config = service_def.get('layer', {})
-        method = service_def.get('method')
+    def open_edit_dialog(self):
+        """打开参数编辑对话框"""
+        service_name = self.get_organization_service()
+        if not service_name:
+            messagebox.showwarning("警告", "请先选择一个翻译服务")
+            return
         
-        if not method:
-            return False, "服务方法未定义"
-        
-        # 根据accept类型处理输入
-        accept_type = service_def.get('accept', 'text')
-        
-        try:
-            if accept_type == 'json':
-                # JSON格式处理
-                if layer_config.get('need_transfer', False):
-                    # 文本保护处理
-                    processed_data = self.protect_text_in_json(input_data)
-                else:
-                    processed_data = input_data
-                
-                # 调用翻译方法
-                success, result = method(params, processed_data, logger)
-                
-                if success and layer_config.get('need_transfer', False):
-                    # 恢复被保护的文本
-                    result = self.restore_text_in_json(result)
-                
-                return success, result
-                
-            else:  # text格式
-                text = input_data  # 简化处理，实际可能需要从JSON中提取文本
-                
-                if layer_config.get('need_transfer', False):
-                    # 文本保护处理
-                    processed_text, protected_content = self.protect_text(text)
-                else:
-                    processed_text = text
-                    protected_content = {}
-                
-                # 调用翻译方法
-                success, result = method(params, processed_text, logger)
-                
-                if success and layer_config.get('need_transfer', False) and protected_content:
-                    # 恢复被保护的文本
-                    result = self.restore_text(result, protected_content)
-                
-                return success, result
-                
-        except Exception as e:
-            logger(f"中间层处理错误: {str(e)}")
-            return False, f"中间层处理错误: {str(e)}"
+        # 创建编辑对话框
+        EditParamsDialog(self.root, service_name, self)
 
-    def protect_text(self, text):
-        """保护文本中的特殊标记"""
-        import re
-        protected_content = {}
-        processed_text = text
-        
-        # 保护<style=>标签内容
-        style_pattern = r'<style=([^>]*)>'
-        style_matches = re.findall(style_pattern, text)
-        
-        ran = 0
-        for match in style_matches:
-            placeholder = f'__STYLE_{ran}__'
-            processed_text = processed_text.replace(f'<style={match}>', placeholder)
-            protected_content[placeholder] = f'<style={match}>'
-            ran += 1
-        
-        # 保护[buff]标记内容
-        buff_pattern = r'\[([^\]]*)\]'
-        buff_matches = re.findall(buff_pattern, text)
-        
-        for match in buff_matches:
-            placeholder = f'__BUFF_{ran}__'
-            processed_text = processed_text.replace(f'[{match}]', placeholder)
-            protected_content[placeholder] = f'[{match}]'
-            ran += 1
-        
-        return processed_text, protected_content
-
-    def restore_text(self, text, protected_content):
-        """恢复被保护的文本"""
-        restored_text = text
-        for placeholder, original in protected_content.items():
-            restored_text = restored_text.replace(placeholder, original)
-        return restored_text
-
-    def protect_text_in_json(self, json_data):
-        """在JSON数据中保护文本"""
-        if isinstance(json_data, list):
-            return [self.protect_text_in_json(item) for item in json_data]
-        elif isinstance(json_data, dict):
-            protected_dict = {}
-            for key, value in json_data.items():
-                if key == 'original' and isinstance(value, dict):
-                    # 处理original字段中的多语言文本
-                    protected_dict[key] = {
-                        lang: self.protect_text_in_json(text) 
-                        for lang, text in value.items()
-                    }
-                elif isinstance(value, (dict, list)):
-                    protected_dict[key] = self.protect_text_in_json(value)
-                elif isinstance(value, str):
-                    protected_text, _ = self.protect_text(value)
-                    protected_dict[key] = protected_text
+    def update_service_display(self, service_name):
+        """更新服务参数显示"""
+        if service_name in self.service_widgets:
+            # 从已加载配置中获取当前值
+            current_config = {}
+            if hasattr(self, 'loaded_config') and service_name in self.loaded_config:
+                current_config = self.loaded_config[service_name]
+            
+            # 更新显示区域内容
+            for param_key, widget in self.service_widgets[service_name].items():
+                value = current_config.get(param_key, "")
+                # 判断控件类型
+                if isinstance(widget, tk.BooleanVar):
+                    # Checkbox类型
+                    widget.set(bool(value))
                 else:
-                    protected_dict[key] = value
-            return protected_dict
-        elif isinstance(json_data, str):
-            protected_text, _ = self.protect_text(json_data)
-            return protected_text
-        else:
-            return json_data
-
-    def restore_text_in_json(self, json_data):
-        """在JSON数据中恢复被保护的文本"""
-        if isinstance(json_data, list):
-            return [self.restore_text_in_json(item) for item in json_data]
-        elif isinstance(json_data, dict):
-            restored_dict = {}
-            for key, value in json_data.items():
-                if key == 'trans' and isinstance(value, str):
-                    # 恢复翻译结果中的文本
-                    restored_dict[key] = self.restore_text_in_json(value)
-                elif isinstance(value, (dict, list)):
-                    restored_dict[key] = self.restore_text_in_json(value)
-                elif isinstance(value, str):
-                    restored_dict[key] = self.restore_text_in_json(value)
-                else:
-                    restored_dict[key] = value
-            return restored_dict
-        elif isinstance(json_data, str):
-            # 简化处理，实际可能需要更复杂的恢复逻辑
-            return json_data
-        else:
-            return json_data
+                    # 普通Entry类型
+                    widget.config(state='normal')
+                    widget.delete(0, tk.END)
+                    widget.insert(0, str(value))
+                    widget.config(state='readonly')
+                
     def clear_current_service(self):
         """清空当前服务的配置"""
         service_name = self.get_organization_service()
@@ -1726,32 +1755,29 @@ class AdvancedTranslateUI:
 
     def save_api_config(self):
         """保存所有API配置"""
-        default_service_type=False
-        default_service=None
-        if self.default_service_var.get()=='none' and (self.custom_service_var.get() in ('none','custom')):
-            if not messagebox.askyesno("警告", "翻译服务未选择，是否继续？"):
-                self.log('已取消')
-                return
-        else:
-            if self.default_service_var.get()!='none':
-                default_service_type='default'
-                default_service=self.default_service_var.get()
-            else:
-                default_service_type='custom'
-                default_service=self.custom_service_var.get()
+        service_name = self.get_organization_service()
+        if not service_name:
+            messagebox.showwarning("警告", "请先选择一个翻译服务")
+            return
+            
+        # 创建配置数据
         config_data = {
-            'default_service':default_service,
-            'default_service_type':default_service_type
-            }
+            'service_type': self.type_service_var.get(),
+            'service_name': service_name,
+            'custom_script_path': self.custom_script_path,
+            'services': {}
+        }
         
         # 收集所有服务的配置
-        for service_name in default_service_list:
-            config_data[service_name] = {}
+        all_services = {**self.inner_services, **self.custom_services}
+        for service_id in all_services.keys():
+            config_data['services'][service_id] = {}
             
-            if service_name in self.service_widgets:
-                for param_key, widget in self.service_widgets[service_name].items():
-                    config_data[service_name][param_key] = widget.get()
+            if service_id in self.service_widgets:
+                for param_key, widget in self.service_widgets[service_id].items():
+                    config_data['services'][service_id][param_key] = widget.get()
         
+        # 保存到文件
         try:
             with open('api_config.json', 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, ensure_ascii=False, indent=4)
@@ -1768,32 +1794,42 @@ class AdvancedTranslateUI:
                 with open('api_config.json', 'r', encoding='utf-8') as f:
                     self.loaded_config = json.load(f)
                 
-                global custom_
-                custom_=self.loaded_config.get('custom', [])
-                # 设置默认服务
-                if 'default_service' in self.loaded_config:
-                    if self.loaded_config['default_service'] in default_service_list:
-                        self.default_service_var.set(self.loaded_config['default_service'])
-                    else:
-                        self.custom_service_var.set(self.loaded_config['default_service'])
-                # 为每个服务填充配置
-                for service_name in TRANSLATION_SERVICES.keys():
-                    if service_name in self.loaded_config:
-                        # 如果当前显示的是该服务，直接更新界面
-                        if service_name == self.current_service:
-                            self.create_service_widgets(service_name)
-                        # 否则存储配置，在切换到该服务时自动填充
-                        elif service_name in self.service_widgets:
-                            for param_key, widget in self.service_widgets[service_name].items():
-                                if param_key in self.loaded_config[service_name]:
+                # 设置服务类型和名称
+                if 'service_type' in self.loaded_config:
+                    self.type_service_var.set(self.loaded_config['service_type'])
+                if 'service_name' in self.loaded_config:
+                    service_name = self.loaded_config['service_name']
+                    if self.loaded_config['service_type'] == 'inner' and service_name in [s[1] for s in self.services_]:
+                        self.inner_service_var.set(service_name)
+                    elif self.loaded_config['service_type'] == 'custom' and service_name in self.custom_services:
+                        self.custom_service_var.set(service_name)
+                
+                # 加载自定义脚本路径
+                if 'custom_script_path' in self.loaded_config and self.loaded_config['custom_script_path']:
+                    self.custom_script_path = self.loaded_config['custom_script_path']
+                    if os.path.exists(self.custom_script_path):
+                        # 重新加载自定义脚本
+                        success, message = self.load_custom_api(self.custom_script_path)
+                        if success:
+                            self.log("自定义脚本已重新加载")
+                        else:
+                            self.log(f"重新加载自定义脚本失败: {message}")
+                
+                # 加载所有服务的配置
+                if 'services' in self.loaded_config:
+                    for service_id, config in self.loaded_config['services'].items():
+                        if service_id in self.service_widgets:
+                            for param_key, value in config.items():
+                                if param_key in self.service_widgets[service_id]:
+                                    widget = self.service_widgets[service_id][param_key]
+                                    widget.config(state='normal')
                                     widget.delete(0, tk.END)
-                                    widget.insert(0, self.loaded_config[service_name][param_key])
+                                    widget.insert(0, value)
+                                    widget.config(state='readonly')
                 
                 self.log("API配置已加载")
-                #messagebox.showinfo("成功", "API配置已加载")
             else:
                 self.log("未找到配置文件")
-                #messagebox.showinfo("提示", "未找到配置文件")
         except Exception as e:
             self.log(f"加载配置失败: {e}")
             messagebox.showerror("错误", f"加载配置失败: {e}")
@@ -1801,7 +1837,10 @@ class AdvancedTranslateUI:
     def test_api_connection(self):
         """测试当前选中服务的API连接"""
         service_name = self.get_organization_service()
-        
+        if not service_name:
+            messagebox.showwarning("警告", "请先选择一个翻译服务")
+            return
+            
         if service_name not in self.api_test_functions:
             messagebox.showerror("错误", f"未找到 {service_name} 的测试函数")
             return
@@ -1821,7 +1860,7 @@ class AdvancedTranslateUI:
             
             # 调用测试函数
             test_function = self.api_test_functions[service_name]
-            success, message = test_function(test_params)
+            success, message = test_function(test_params, self.log)
             
             if success:
                 self.log(f"{service_name} API连接测试成功")
@@ -1833,6 +1872,7 @@ class AdvancedTranslateUI:
         except Exception as e:
             self.log(f"测试过程中发生错误: {e}")
             messagebox.showerror("错误", f"测试过程中发生错误: {e}")
+            
     def add_custom_file(self):
         """添加自定义文件到删除列表"""
         files = filedialog.askopenfilenames(title="选择要删除的文件")
@@ -1860,6 +1900,7 @@ class AdvancedTranslateUI:
         """清空文件列表"""
         self.custom_files_listbox.delete(0, tk.END)
         self.custom_files_to_delete.clear()
+        
     def clean_config(self):
         result = messagebox.askyesno("确认", "确定要清除所有本地配置和缓存文件吗？此操作不可逆。")
         if not result:
@@ -1868,9 +1909,9 @@ class AdvancedTranslateUI:
         local_low_path = os.path.abspath(local_low_path)
         if self.clean_progress_var.get():
             self.log("清除本地进程文件...")
-            lists=os.listdir(local_low_path+r'\ProjectMoon\LimbusCompany')
-            progress_file=[i for i in lists if 'save' in i][0]
-            path_config=local_low_path+rf'\ProjectMoon\LimbusCompany\{progress_file}'
+            lists = os.listdir(local_low_path + r'\ProjectMoon\LimbusCompany')
+            progress_file = [i for i in lists if 'save' in i][0]
+            path_config = local_low_path + rf'\ProjectMoon\LimbusCompany\{progress_file}'
             if os.path.exists(path_config):
                 os.remove(path_config)
                 self.log("本地进程文件已清除")
@@ -1878,12 +1919,16 @@ class AdvancedTranslateUI:
                 self.log("本地进程文件不存在")
         if self.clean_notice_var.get():
             self.log("清除本地通知文件...")
-            path_notice=local_low_path+r'\ProjectMoon\LimbusCompany\synchronous-data_product.json'
-            path_notice_dir=local_low_path+r'\ProjectMoon\LimbusCompany\notice'
-            try:os.remove(path_notice)    
-            except:None
-            try:rmtree(path_notice_dir)
-            except:None
+            path_notice = local_low_path + r'\ProjectMoon\LimbusCompany\synchronous-data_product.json'
+            path_notice_dir = local_low_path + r'\ProjectMoon\LimbusCompany\notice'
+            try:
+                os.remove(path_notice)    
+            except:
+                None
+            try:
+                rmtree(path_notice_dir)
+            except:
+                None
             self.log("本地通知文件已清除")
         # 清除自定义选择的文件
         self.deleted_count = 0
@@ -1901,17 +1946,18 @@ class AdvancedTranslateUI:
             
             # 清空列表
             self.clear_custom_files()
-    def clear_by_mod(self,mod_path):
+            
+    def clear_by_mod(self, mod_path):
         local_low_path = os.path.join(os.environ['APPDATA'], '..', 'LocalLow')
         local_low_path = os.path.abspath(local_low_path)
         for i in self.check_by_mod(mod_path):
             if not i.endswith('Installation/'):
                 if 'Installation/' in i:
-                    path_del=i.split('/')[-1]
+                    path_del = i.split('/')[-1]
                 else:
-                    path_del=i.split('/')[0]
+                    path_del = i.split('/')[0]
         if path_del:
-            path=local_low_path+fr'\Unity\ProjectMoon_LimbusCompany\{path_del}'
+            path = local_low_path + fr'\Unity\ProjectMoon_LimbusCompany\{path_del}'
             if os.path.isdir(path):
                 try:
                     rmtree(path)
@@ -1921,6 +1967,7 @@ class AdvancedTranslateUI:
                     self.log(f"删除 {path_del} 失败: {str(e)}")
             else:
                 self.log(f"{path_del} 不是一个目录")
+                
     def check_by_mod(self, mod_path):
         try:
             with zipfile.ZipFile(mod_path, 'r') as zip_file:
@@ -1971,6 +2018,7 @@ class AdvancedTranslateUI:
             raise FileNotFoundError("找不到指定的zip文件")
         except Exception as e:
             raise Exception(f"处理zip文件时发生错误: {str(e)}")
+            
     def reset_fields(self):
         # 重置所有变量
         self.custom_script_var.set(False)
@@ -2005,6 +2053,8 @@ class AdvancedTranslateUI:
         else:
             # 如果日志区域尚未创建，打印到控制台
             print(message)
+
+
 class EditParamsDialog:
     """参数编辑对话框"""
     
@@ -2037,9 +2087,17 @@ class EditParamsDialog:
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # 标题
+        service_def = None
+        if self.service_name in self.main_app.inner_services:
+            service_def = self.main_app.inner_services[self.service_name]
+        elif self.service_name in self.main_app.custom_services:
+            service_def = self.main_app.custom_services[self.service_name]
+        
+        service_name_display = service_def.get('name', self.service_name) if service_def else self.service_name
+        
         ttk.Label(
             main_frame, 
-            text=f"编辑 {[cn for (cn,id) in services_ if id==self.service_name][0]} 参数",
+            text=f"编辑 {service_name_display} 参数",
             font=('TkDefaultFont', 12, 'bold')
         ).pack(anchor=tk.W, pady=(0, 10))
         
@@ -2082,8 +2140,19 @@ class EditParamsDialog:
         self.load_current_config()
     
     def create_param_widgets(self):
-        """创建参数输入控件"""
-        params = TRANSLATION_SERVICES.get(self.service_name, [])
+        """创建参数输入控件 - 添加checkbox支持"""
+        # 获取服务定义
+        service_def = None
+        if self.service_name in self.main_app.inner_services:
+            service_def = self.main_app.inner_services[self.service_name]
+        elif self.service_name in self.main_app.custom_services:
+            service_def = self.main_app.custom_services[self.service_name]
+        
+        if not service_def:
+            ttk.Label(self.scrollable_frame, text="未找到服务定义").pack(pady=10)
+            return
+            
+        params = service_def.get('api_params', [])
         self.param_widgets = {}
         
         for i, param in enumerate(params):
@@ -2091,8 +2160,18 @@ class EditParamsDialog:
             label = ttk.Label(self.scrollable_frame, text=param["label"] + ":")
             label.grid(row=i, column=0, sticky=tk.W, pady=8, padx=5)
             
-            # 参数输入框 - 根据类型选择不同的控件
-            if param.get("multiline", False):
+            # 根据参数类型创建不同的控件
+            if param.get("type") == "checkbox":
+                # Checkbox类型参数
+                var = tk.BooleanVar()
+                checkbox = ttk.Checkbutton(
+                    self.scrollable_frame, 
+                    variable=var,
+                    text=param.get("description", "")
+                )
+                checkbox.grid(row=i, column=1, sticky=tk.W, pady=5, padx=5)
+                self.param_widgets[param["key"]] = var
+            elif param.get("multiline", False):
                 # 多行文本输入（用于LLM提示词等）
                 frame = ttk.Frame(self.scrollable_frame)
                 frame.grid(row=i, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
@@ -2106,22 +2185,22 @@ class EditParamsDialog:
                 )
                 text_widget.pack(fill=tk.BOTH, expand=True)
                 
-                if param["type"] == "password":
+                if param.get("type") == "password":
                     text_widget.config(show="*")
                 
                 self.param_widgets[param["key"]] = text_widget
             else:
                 # 单行输入
-                if param["type"] == "password":
+                if param.get("type") == "password":
                     entry = ttk.Entry(self.scrollable_frame, width=50, show="*")
                 else:
                     entry = ttk.Entry(self.scrollable_frame, width=50)
-                
+                    
                 entry.grid(row=i, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
                 self.param_widgets[param["key"]] = entry
             
             # 参数说明（如果有）
-            if "description" in param:
+            if "description" in param and param.get("type") != "checkbox":
                 desc_label = ttk.Label(
                     self.scrollable_frame, 
                     text=param["description"],
@@ -2132,7 +2211,7 @@ class EditParamsDialog:
         
         # 配置网格权重
         self.scrollable_frame.columnconfigure(1, weight=1)
-    
+        
     def bind_mouse_wheel(self, canvas):
         """绑定鼠标滚轮事件"""
         def _on_mousewheel(event):
@@ -2146,26 +2225,36 @@ class EditParamsDialog:
         self.dialog.bind("<Destroy>", _on_unbind)
     
     def load_current_config(self):
-        """加载当前配置"""
+        """加载当前配置 - 添加对checkbox的支持"""
         if hasattr(self.main_app, 'loaded_config') and self.service_name in self.main_app.loaded_config:
-            current_config = self.main_app.loaded_config[self.service_name]
-            
-            for param_key, widget in self.param_widgets.items():
-                value = current_config.get(param_key, "")
-                if isinstance(widget, scrolledtext.ScrolledText):
-                    widget.delete(1.0, tk.END)
-                    widget.insert(1.0, value)
-                else:
-                    widget.delete(0, tk.END)
-                    widget.insert(0, value)
+            config = self.main_app.loaded_config[self.service_name]
+            for param_key, value in config.items():
+                if param_key in self.param_widgets:
+                    widget = self.param_widgets[param_key]
+                    if isinstance(widget, tk.BooleanVar):
+                        # Checkbox类型
+                        widget.set(bool(value))
+                    elif isinstance(widget, scrolledtext.ScrolledText):
+                        # 多行文本类型
+                        widget.delete("1.0", tk.END)
+                        widget.insert("1.0", str(value))
+                    else:
+                        # 普通Entry类型
+                        widget.delete(0, tk.END)
+                        widget.insert(0, str(value))
     
     def get_param_values(self):
-        """获取所有参数值"""
+        """获取参数值 - 添加对checkbox的支持"""
         values = {}
         for param_key, widget in self.param_widgets.items():
-            if isinstance(widget, scrolledtext.ScrolledText):
-                values[param_key] = widget.get(1.0, tk.END).strip()
+            if isinstance(widget, tk.BooleanVar):
+                # Checkbox类型
+                values[param_key] = widget.get()
+            elif isinstance(widget, scrolledtext.ScrolledText):
+                # 多行文本类型
+                values[param_key] = widget.get("1.0", tk.END).rstrip('\n')
             else:
+                # 普通Entry类型
                 values[param_key] = widget.get().strip()
         return values
     
@@ -2178,18 +2267,25 @@ class EditParamsDialog:
             return
         
         # 检查必需参数
-        required_params = TRANSLATION_SERVICES.get(self.service_name, [])
-        for param in required_params:
-            if not params.get(param["key"]):
-                messagebox.showerror("错误", f"请填写 {param['label']}")
-                return
+        service_def = None
+        if self.service_name in self.main_app.inner_services:
+            service_def = self.main_app.inner_services[self.service_name]
+        elif self.service_name in self.main_app.custom_services:
+            service_def = self.main_app.custom_services[self.service_name]
+            
+        if service_def:
+            required_params = service_def.get('api_params', [])
+            for param in required_params:
+                if not params.get(param["key"]):
+                    messagebox.showerror("错误", f"请填写 {param['label']}")
+                    return
         
         try:
             self.main_app.log(f"开始测试 {self.service_name} API连接...")
             
             # 调用测试函数
             test_function = self.main_app.api_test_functions[self.service_name]
-            success, message = test_function(params)
+            success, message = test_function(params, self.main_app.log)
             
             if success:
                 self.main_app.log(f"{self.service_name} API连接测试成功")
@@ -2224,15 +2320,16 @@ class EditParamsDialog:
         # 关闭对话框
         self.dialog.destroy()
 
+
 def check_path():
     global game_path
     if not (os.path.isfile(os.path.expanduser("~")+'\\limbus.txt') and os.path.isfile("path.txt")):
-        path_final=install.find_lcb()
-        if path_final is None or (not messagebox.askyesno('LCTA','这是你的游戏地址吗\n'+path_final)):
-            if not messagebox.askyesno('LCTA',"请指定游戏路径(选择游戏exe文件)(否以强行跳过，可能导致bug)"):
-                path_final='skip'
+        path_final = install.find_lcb()
+        if path_final is None or (not messagebox.askyesno('LCTA', '这是你的游戏地址吗\n'+path_final)):
+            if not messagebox.askyesno('LCTA', "请指定游戏路径(选择游戏exe文件)(否以强行跳过，可能导致bug)"):
+                path_final = 'skip'
             else:
-                path_final=install.has_change()
+                path_final = install.has_change()
         else:
             install.write_path(path_final)
     else:
@@ -2240,18 +2337,18 @@ def check_path():
             data_path = f.readline()
         with open(os.path.expanduser("~")+'\\limbus.txt', "r") as f:
             data_limbus = f.readline()
-        if not data_path==data_limbus:
-            path_final=install.find_lcb()
-            if path_final is None or (not messagebox.askyesno('LCTA','这是你的游戏地址吗\n'+path_final)):
-                if not messagebox.askyesno('LCTA',"请指定游戏路径(选择游戏exe文件)(否以强行跳过，可能导致bug)"):
-                    path_final='skip'
+        if not data_path == data_limbus:
+            path_final = install.find_lcb()
+            if path_final is None or (not messagebox.askyesno('LCTA', '这是你的游戏地址吗\n'+path_final)):
+                if not messagebox.askyesno('LCTA', "请指定游戏路径(选择游戏exe文件)(否以强行跳过，可能导致bug)"):
+                    path_final = 'skip'
                 else:
-                    path_final=install.has_change()
+                    path_final = install.has_change()
             else:
                 install.write_path(path_final)
         else:
-            path_final=data_path
-    game_path=path_final
+            path_final = data_path
+    game_path = path_final
 
 def start():
     root = tk.Tk()

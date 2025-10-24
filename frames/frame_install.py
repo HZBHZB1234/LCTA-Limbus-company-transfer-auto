@@ -76,6 +76,7 @@ class InstallFrame(ttk.Frame):
             return
         selected_package = self.package_listbox.get(tk.ACTIVE)
         install.set_log_callback(self.main_app.log)
+        install.set_error_log_callback(self.main_app.logger.exception)
         install.change_font(selected_package, font_file)
         self.refresh_package_list()
 

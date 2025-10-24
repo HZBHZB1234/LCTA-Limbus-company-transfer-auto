@@ -58,6 +58,7 @@ class LLCFrame(ttk.Frame):
         try:
             # 设置下载回调函数
             functions.set_log_callback(self.main_app.log)
+            functions.set_error_log_callback(self.main_app.log_error)
             def progress_callback(progress):
                 if self.main_app.stop_download:
                     return False
@@ -83,6 +84,7 @@ class LLCFrame(ttk.Frame):
             
         except Exception as e:
             self.main_app.log(f"下载过程中发生错误: {e}")
+            self.main_app.logger.exception(e)
             self.main_app.download_progress.set(0)
             messagebox.showerror("错误", f"下载过程中发生错误: {e}")
     

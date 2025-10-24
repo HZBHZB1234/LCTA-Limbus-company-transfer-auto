@@ -10,11 +10,15 @@ import sys
 from utils.functions import zip_folder
 # 全局变量，用于日志输出
 log_callback = None
-
+log_error_callback = None
 def set_log_callback(callback):
     """设置日志回调函数"""
     global log_callback
     log_callback = callback
+def set_error_log_callback(callback):
+    """设置错误日志回调函数"""
+    global log_error_callback
+    log_error_callback = callback
 
 def log(message):
     """记录日志，如果有回调函数则使用回调，否则打印到控制台"""
@@ -22,6 +26,12 @@ def log(message):
         log_callback(message)
     else:
         print(message)
+def log_error(e):
+    """记录错误日志，如果有回调函数则使用回调"""
+    if log_error_callback:
+        log_error_callback(e)
+    else:
+        None
 def change_font(path,path_font):
     '''修改字体'''
     log(f"开始修改字体为: {path}")
@@ -102,6 +112,7 @@ def final_dir(LCTA_path, path):
             copytree(LCTA_path, target_dir)
             log("汉化文件夹复制成功")
         except Exception as e:
+            log_error(e)
             raise Exception(f"复制汉化文件夹失败: {str(e)}")
         
         # 更新配置文件
@@ -123,11 +134,13 @@ def final_dir(LCTA_path, path):
                 json.dump(config_lang, file, ensure_ascii=False, indent=4)
             log("配置文件更新成功")
         except Exception as e:
+            log_error(e)
             raise Exception(f"写入配置文件失败: {str(e)}")
             
         return True, "汉化安装成功"
         
     except Exception as e:
+        log_error(e)
         return False, f"安装过程中出错: {str(e)}"
 
 def final_not_one(LCTA_path, path):
@@ -151,6 +164,7 @@ def final_not_one(LCTA_path, path):
                 zip_ref.extractall(target_dir)
             log("汉化包解压成功")
         except Exception as e:
+            log_error(e)
             raise Exception(f"解压汉化包失败: {str(e)}")
         
         # 更新配置文件
@@ -172,11 +186,13 @@ def final_not_one(LCTA_path, path):
                 json.dump(config_lang, file, ensure_ascii=False, indent=4)
             log("配置文件更新成功")
         except Exception as e:
+            log_error(e)
             raise Exception(f"写入配置文件失败: {str(e)}")
             
         return True, "汉化安装成功"
         
     except Exception as e:
+        log_error(e)
         return False, f"安装过程中出错: {str(e)}"
 
 def final(LCTA_path, path):
@@ -213,6 +229,7 @@ def final(LCTA_path, path):
                 zip_ref.extractall(target_dir)
             log("汉化包解压成功")
         except Exception as e:
+            log_error(e)
             raise Exception(f"解压汉化包失败: {str(e)}")
         
         # 更新配置文件
@@ -234,11 +251,13 @@ def final(LCTA_path, path):
                 json.dump(config_lang, file, ensure_ascii=False, indent=4)
             log("配置文件更新成功")
         except Exception as e:
+            log_error(e)
             raise Exception(f"写入配置文件失败: {str(e)}")
             
         return True, "汉化安装成功"
         
     except Exception as e:
+        log_error(e)
         return False, f"安装过程中出错: {str(e)}"
 
 def final_correct(LCTA_path, path):
@@ -285,6 +304,8 @@ def final_correct(LCTA_path, path):
             return False, "不支持的文件格式"
             
     except Exception as e:
+        log("安装过程中出错")
+        log_error(e)
         return False, f"安装过程中出错: {str(e)}"
 
 def write_path(path):
@@ -308,6 +329,7 @@ def write_path(path):
             file.write(path)
         return True, "路径保存成功"
     except Exception as e:
+        log_error(e)
         return False, f"保存路径失败: {str(e)}"
 
 def choose_path():
@@ -373,6 +395,7 @@ def find_lcb():
         return None
     except Exception as e:
         log(f"查找游戏路径时出错: {str(e)}")
+        log_error(e)
         return None
 
 def install(LCTA_path, game_path):

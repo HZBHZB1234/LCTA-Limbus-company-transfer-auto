@@ -108,6 +108,7 @@ class AssetsFrame(ttk.Frame):
             messagebox.showinfo("成功", f"已应用项目 '{name}' 的资源链接")
         except Exception as e:
             self.main_app.log(f"应用项目 '{name}' 的资源链接失败: {str(e)}")
+            self.main_app.logger.exception(e)
             messagebox.showerror("错误", f"应用项目 '{name}' 的资源链接失败: {str(e)}")
             return
 
@@ -124,6 +125,7 @@ class AssetsFrame(ttk.Frame):
                     self.main_app.log("已清空ProjectMoon链接")
                 except Exception as e:
                     self.main_app.log(f"清空ProjectMoon链接失败: {str(e)}")
+                    self.main_app.logger.exception(e)
             else:
                 self.main_app.log("ProjectMoon文件夹不是链接")
         if os.path.exists(local_low_path+'\\Unity'):
@@ -133,6 +135,7 @@ class AssetsFrame(ttk.Frame):
                     self.main_app.log("已清空Unity链接")
                 except Exception as e:
                     self.main_app.log(f"清空Unity链接失败: {str(e)}")
+                    self.main_app.logger.exception(e)
             else:
                 self.main_app.log("Unity文件夹不是链接")
         self.main_app.log("已清空资源链接")
@@ -278,6 +281,7 @@ class AssetsFrame(ttk.Frame):
             messagebox.showinfo("成功", "资源配置已保存")
         except Exception as e:
             self.main_app.log(f"保存配置失败: {e}")
+            self.main_app.logger.exception(e)
             messagebox.showerror("错误", f"保存配置失败: {e}")
 
     def load_assets_config(self):
@@ -297,4 +301,5 @@ class AssetsFrame(ttk.Frame):
                 self.main_app.log("未找到配置文件")
         except Exception as e:
             self.main_app.log(f"刷新配置失败: {e}")
+            self.main_app.logger.exception(e)
             messagebox.showerror("错误", f"刷新配置失败: {e}")

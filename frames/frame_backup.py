@@ -60,6 +60,8 @@ class BackupFrame(ttk.Frame):
             try:
                 os.makedirs(save_path)
             except Exception as e:
+                self.main_app.log(f"无法创建备份目录: {e}")
+                self.main_app.logger.exception(e)
                 messagebox.showerror("错误", f"无法创建备份目录: {e}")
                 return
         
@@ -82,4 +84,5 @@ class BackupFrame(ttk.Frame):
             messagebox.showinfo("成功", "原文备份完成")
         except Exception as e:
             self.main_app.log(f"备份失败: {e}")
+            self.main_app.logger.exception(e)
             messagebox.showerror("错误", f"备份失败: {e}")

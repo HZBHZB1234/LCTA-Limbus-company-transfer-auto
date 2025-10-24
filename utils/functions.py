@@ -10,18 +10,27 @@ import shutil
 import py7zr
 import base64
 log_callback = None
-
+log_error_callback = None
 def set_log_callback(callback):
     """设置日志回调函数"""
     global log_callback
     log_callback = callback
-
+def set_error_log_callback(callback):
+    """设置错误日志回调函数"""
+    global log_error_callback
+    log_error_callback = callback
 def log(message):
     """记录日志，如果有回调函数则使用回调，否则打印到控制台"""
     if log_callback:
         log_callback(message)
     else:
         print(message)
+def log_error(e):
+    """记录错误日志，如果有回调函数则使用回调，否则打印到控制台"""
+    if log_error_callback:
+        log_error_callback(e)
+    else:
+        None
 def walk_all_files(path,rel):
     """遍历目录下的所有文件"""
     path_list=[]
@@ -127,6 +136,7 @@ def zip_folder(folder_path, output_path):
                     zipf.write(file_path, os.path.relpath(file_path, folder_path))
     except Exception as e:
         log(f"压缩文件夹失败: {e}")
+        log_error(e)
         return False
 
 def get_true_zip(file_path, font_option="keep"):
@@ -184,6 +194,7 @@ def decompress_7z(file_path,output_dir='.'):
         return True
     except Exception as e:
         log(f"解压失败: {e}")
+        log_error(e)
         return False
 
 def download_with(url, save_path, size=0, chunk_size=1024, progress_callback=None):
@@ -219,6 +230,7 @@ def download_with(url, save_path, size=0, chunk_size=1024, progress_callback=Non
         return True
     except Exception as e:
         log(f"\n下载失败: {e}")
+        log_error(e)
         try:
             os.remove(save_path)
         except:

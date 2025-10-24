@@ -3,7 +3,40 @@ from tkinter import ttk, scrolledtext
 import os
 from ui_main import AdvancedTranslateUI
 import utils.install as install
+import logging
+from logging.handlers import RotatingFileHandler
 
+def setup_logging():
+    """
+    配置日志系统，使用1024KB作为轮换大小
+    """
+    # 创建logs目录（如果不存在）
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+    
+    # 配置日志记录器
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    # 创建轮换文件处理器，最大1024KB，保留5个备份文件
+    handler = RotatingFileHandler(
+        'logs/app.log', 
+        maxBytes=1024*1024,  # 1024KB
+        backupCount=5,       # 保留5个旧日志文件
+        encoding='utf-8'
+    )
+    
+    # 设置日志格式
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    
+    # 添加处理器到记录器
+    logger.addHandler(handler)
+    
+    return logger
 def check_path():
     global game_path
     if not (os.path.isfile(os.path.expanduser("~")+'\\limbus.txt') and os.path.isfile("path.txt")):
@@ -34,7 +67,7 @@ def check_path():
     return path_final
 
 def start():
-    # 设置matplotlib后端
+    # 设置matplotlib后端,防止调试错误，正式版可以删
     import matplotlib
     matplotlib.use('Agg')
     
@@ -54,8 +87,8 @@ def start():
     root.withdraw()
     game_path = check_path()
     root.deiconify()
-    
-    app = AdvancedTranslateUI(root, game_path)
+    logger = setup_logging()
+    app = AdvancedTranslateUI(root, game_path, logger)
     
     # 创建日志区域并放置在主框架下方
     log_frame = ttk.Frame(root, padding="10")

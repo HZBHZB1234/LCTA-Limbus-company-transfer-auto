@@ -242,6 +242,7 @@ class TranslateFrame(ttk.Frame):
             self.main_app.log("翻译完成")
         except Exception as e:
             self.main_app.log(f"翻译过程中发生错误: {e}")
+            self.main_app.logger.exception(e)
     
     def reset_fields(self):
         # 重置所有变量

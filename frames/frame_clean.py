@@ -132,6 +132,7 @@ class CleanFrame(ttk.Frame):
                     self.main_app.log(f"{file_path} 不是一个文件")
             except Exception as e:
                 self.main_app.log(f"删除 {file_path} 失败: {str(e)}")
+                self.main_app.logger.exception(e)
         
         if self.custom_files_to_delete:
             self.main_app.log(f"已删除 {self.deleted_count} 个自定义文件/文件夹")
@@ -157,6 +158,7 @@ class CleanFrame(ttk.Frame):
                     self.main_app.log(f"已删除 {path_del}")
                 except Exception as e:
                     self.main_app.log(f"删除 {path_del} 失败: {str(e)}")
+                    self.main_app.logger.exception(e)
             else:
                 self.main_app.log(f"{path_del} 不是一个目录")
                 
@@ -209,4 +211,6 @@ class CleanFrame(ttk.Frame):
         except FileNotFoundError:
             raise FileNotFoundError("找不到指定的zip文件")
         except Exception as e:
+            self.main_app.log(f"处理zip文件时发生错误: {str(e)}")
+            self.main_app.logger.exception(e)
             raise Exception(f"处理zip文件时发生错误: {str(e)}")

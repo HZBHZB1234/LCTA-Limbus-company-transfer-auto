@@ -3,7 +3,7 @@ from tkinter import ttk
 import importlib
 import sys
 import os
-
+import logging
 # 导入各功能框架
 from frames.frame_translate import TranslateFrame
 from frames.frame_install import InstallFrame
@@ -16,13 +16,15 @@ from frames.frame_backup import BackupFrame
 from frames.frame_assets import AssetsFrame
 
 class AdvancedTranslateUI:
-    def __init__(self, root, game_path):
+    def __init__(self, root, game_path, logger: logging.Logger):
         self.root = root
         self.game_path = game_path
+        self.logger = logger
         self.root.title("LCTA v3.0.0")
         self.root.geometry("900x800")
         
         # 初始化变量
+        logger.debug("初始化")
         self.custom_script_var = tk.BooleanVar(value=False)
         self.cache_trans_var = tk.BooleanVar(value=False)
         self.team_trans_var = tk.BooleanVar(value=False)
@@ -64,6 +66,7 @@ class AdvancedTranslateUI:
         self.default_service_list = []
         self.services_ = []
         
+        self.logger.debug("初始化完成")
         # 加载内建API服务
         self.load_inner_api()
         # 初始化api函数
@@ -78,9 +81,11 @@ class AdvancedTranslateUI:
         
         # 初始显示翻译界面
         self.show_translate_frame()
+        self.logger.debug("UI初始化完成")
         
     def load_inner_api(self):
         """加载inner_api文件夹中的翻译服务"""
+        self.logger.debug("加载内建API服务")
         inner_api_path = os.path.join(os.path.dirname(__file__), 'inner_api')
         if not os.path.exists(inner_api_path):
             self.log(f"内建API文件夹不存在: {inner_api_path}")
@@ -110,6 +115,7 @@ class AdvancedTranslateUI:
                     
                 except Exception as e:
                     self.log(f"加载内建API模块 {file_name} 失败: {str(e)}")
+                    self.logger.exception(e)
         
         # 更新默认服务列表
         self.default_service_list = list(self.services_storage['inner'].keys())
@@ -171,6 +177,7 @@ class AdvancedTranslateUI:
                 
             except Exception as e:
                 self.log(f"加载自定义API模块 {script_path} 失败: {str(e)}")
+                self.logger.exception(e)
                 return False, str(e)
         
         return False, "不支持的脚本格式"
@@ -379,3 +386,5 @@ class AdvancedTranslateUI:
         else:
             # 如果日志区域尚未创建，打印到控制台
             print(message)
+        if hasattr(self, 'logger'):
+            self.logger.info(message)

@@ -243,6 +243,7 @@ class EditParamsDialog:
                 
         except Exception as e:
             self.main_app.log(f"测试过程中发生错误: {e}")
+            self.main_app.logger.exception(e)
             messagebox.showerror("错误", f"测试过程中发生错误: {e}")
     
     def save_params(self):

@@ -366,6 +366,7 @@ class ConfigFrame(ttk.Frame):
         except Exception as e:
             error_msg = f"保存配置失败: {e}"
             self.main_app.log(error_msg)
+            self.main_app.logger.exception(e)
             messagebox.showerror("错误", error_msg)
             return False
 
@@ -431,6 +432,7 @@ class ConfigFrame(ttk.Frame):
         except Exception as e:
             error_msg = f"重载配置失败: {e}"
             self.main_app.log(error_msg)
+            self.main_app.logger.exception(e)
             messagebox.showerror("错误", error_msg)
 
     def refresh_config_display(self):
@@ -501,4 +503,5 @@ class ConfigFrame(ttk.Frame):
                 
         except Exception as e:
             self.main_app.log(f"测试过程中发生错误: {e}")
+            self.main_app.logger.exception(e)
             messagebox.showerror("错误", f"测试过程中发生错误: {e}")

@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import utils.functions as functions
 import os
-import search_result
+import windows.search_result as search_result
 
 class SearchFrame(ttk.Frame):
     def __init__(self, parent, main_app):

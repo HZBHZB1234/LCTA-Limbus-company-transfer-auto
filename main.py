@@ -45,8 +45,8 @@ def start():
     import importlib
     
     # 延迟导入以减少启动时间
-    import utils.install as install, search_result, utils.functions as functions, lighter, get_font, organization, calculate, about
-    from custom_api_check import check_custom_script
+    import utils.install as install, windows.search_result as search_result, utils.functions as functions, windows.lighter as lighter, windows.get_font as get_font, organization, windows.calculate as calculate, windows.about as about
+    from utils.custom_api_check import check_custom_script
     
     print('启动完毕')
     

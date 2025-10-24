@@ -4,7 +4,7 @@ import os
 import zipfile
 from shutil import rmtree
 import utils.install as install
-import get_font
+import windows.get_font as get_font
 
 class InstallFrame(ttk.Frame):
     def __init__(self, parent, main_app):

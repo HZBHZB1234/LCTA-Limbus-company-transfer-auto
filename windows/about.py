@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import webbrowser
 from PIL import Image, ImageTk
-import bonus
+import utils.bonus as bonus
 
 class AboutWindow:
     def __init__(self, parent):

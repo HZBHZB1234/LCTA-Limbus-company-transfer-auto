@@ -132,7 +132,7 @@ class AdvancedTranslateUI:
                 spec.loader.exec_module(module)
                 
                 # 检查自定义脚本
-                from custom_api_check import check_custom_script
+                from utils.custom_api_check import check_custom_script
                 useable, msg = check_custom_script(module, self.default_service_list)
                 if not useable:
                     self.log(f"自定义翻译服务文件 {script_path} 不可用: {msg}")
@@ -308,17 +308,17 @@ class AdvancedTranslateUI:
         
     def show_lighter_window(self):
         self.log("启动图片亮度工具")
-        import lighter
+        import windows.lighter as lighter
         lighter.ImageEnhancementApp(self.root)
         
     def show_calculate_window(self):
         self.log("启动概率计算工具")
-        import calculate
+        import windows.calculate as calculate
         calculate.GachaCalculator(self.root)
         
     def show_about_window(self):
         self.log("启动关于窗口")
-        import about
+        import windows.about as about
         about.AboutWindow(self.root)
 
     def bind_events(self):

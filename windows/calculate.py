@@ -14,7 +14,7 @@ class GachaCalculator:
     def __init__(self, root__):
         self.root = tk.Toplevel(root__)
         self.root.title("边狱公司抽卡概率计算器")
-        self.root.geometry("1000x800")
+        self.root.geometry("1100x850")
         
         # 设置中文字体
         try:
@@ -43,130 +43,181 @@ class GachaCalculator:
     
     def setup_ui(self):
         # 主框架
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        main_frame = ttk.Frame(self.root, padding="15")
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 输入区域
-        input_frame = ttk.LabelFrame(main_frame, text="输入参数", padding="5")
-        input_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        # 创建左右两个主要区域
+        left_frame = ttk.Frame(main_frame)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=(0, 10))
         
+        right_frame = ttk.Frame(main_frame)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        
+        # 输入区域 - 使用Notebook创建选项卡
+        input_notebook = ttk.Notebook(left_frame)
+        input_notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # 基本设置选项卡
+        basic_frame = ttk.Frame(input_notebook, padding="10")
+        input_notebook.add(basic_frame, text="基本设置")
+        
+        # 高级设置选项卡
+        advanced_frame = ttk.Frame(input_notebook, padding="10")
+        input_notebook.add(advanced_frame, text="高级设置")
+        
+        # 基本设置内容
         # 抽取次数
-        ttk.Label(input_frame, text="抽取次数:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        times_frame = ttk.Frame(basic_frame)
+        times_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(times_frame, text="抽取次数:", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
         self.times_var = tk.StringVar(value="100")
-        times_entry = ttk.Entry(input_frame, textvariable=self.times_var, width=10)
-        times_entry.grid(row=0, column=1, sticky=tk.W, pady=2)
+        times_entry = ttk.Entry(times_frame, textvariable=self.times_var, width=12)
+        times_entry.pack(side=tk.RIGHT, padx=(10, 0))
         
-        # 计算目标选择
-        ttk.Label(input_frame, text="图表显示:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        # 计算模式
+        mode_frame = ttk.Frame(basic_frame)
+        mode_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(mode_frame, text="计算模式:", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
+        self.mode_var = tk.StringVar(value="按次数计算")
+        mode_combo = ttk.Combobox(mode_frame, textvariable=self.mode_var, 
+                                 values=["按次数计算", "按目标绘制"], width=12, state="readonly")
+        mode_combo.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        # 图表显示
+        chart_frame = ttk.Frame(basic_frame)
+        chart_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(chart_frame, text="图表显示:", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
         self.chart_target_var = tk.StringVar(value="三级")
-        chart_target_combo = ttk.Combobox(input_frame, textvariable=self.chart_target_var, 
-                                        values=["二级", "三级", "ego", "播报员", "全部"], width=8)
-        chart_target_combo.grid(row=1, column=1, sticky=tk.W, pady=2)
+        chart_target_combo = ttk.Combobox(chart_frame, textvariable=self.chart_target_var, 
+                                        values=["二级", "三级", "ego", "播报员", "全部"], width=10, state="readonly")
+        chart_target_combo.pack(side=tk.RIGHT, padx=(10, 0))
         
-        # up角色数量
-        ttk.Label(input_frame, text="UP角色数量:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        # 分隔线
+        separator1 = ttk.Separator(basic_frame, orient='horizontal')
+        separator1.pack(fill=tk.X, pady=10)
         
-        ttk.Label(input_frame, text="二级UP:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        # 概率信息显示
+        prob_frame = ttk.LabelFrame(basic_frame, text="基础概率", padding="8")
+        prob_frame.pack(fill=tk.X, pady=5)
+        
+        # 创建概率标签
+        prob_text = "一级: {:.1%}\n二级: {:.1%}\n三级: {:.1%}\nEGO: {:.1%}\n播报员: {:.1%}".format(
+            self.p_1st, self.p_2nd, self.p_3rd, self.p_ego, self.p_announcer)
+        prob_label = ttk.Label(prob_frame, text=prob_text, justify=tk.LEFT)
+        prob_label.pack(anchor=tk.W)
+        
+        # 高级设置内容
+        # UP角色数量
+        up_frame = ttk.LabelFrame(advanced_frame, text="UP角色数量", padding="8")
+        up_frame.pack(fill=tk.X, pady=5)
+        
+        # 使用网格布局UP角色数量
+        up_grid_frame = ttk.Frame(up_frame)
+        up_grid_frame.pack(fill=tk.X)
+        
+        ttk.Label(up_grid_frame, text="二级UP:").grid(row=0, column=0, sticky=tk.W, pady=3)
         self.up_2nd_var = tk.StringVar(value="3")
-        up_2nd_entry = ttk.Entry(input_frame, textvariable=self.up_2nd_var, width=5)
-        up_2nd_entry.grid(row=3, column=1, sticky=tk.W, pady=2)
+        up_2nd_entry = ttk.Entry(up_grid_frame, textvariable=self.up_2nd_var, width=8)
+        up_2nd_entry.grid(row=0, column=1, sticky=tk.W, pady=3, padx=(10, 0))
         
-        ttk.Label(input_frame, text="三级UP:").grid(row=4, column=0, sticky=tk.W, pady=2)
+        ttk.Label(up_grid_frame, text="三级UP:").grid(row=1, column=0, sticky=tk.W, pady=3)
         self.up_3rd_var = tk.StringVar(value="2")
-        up_3rd_entry = ttk.Entry(input_frame, textvariable=self.up_3rd_var, width=5)
-        up_3rd_entry.grid(row=4, column=1, sticky=tk.W, pady=2)
+        up_3rd_entry = ttk.Entry(up_grid_frame, textvariable=self.up_3rd_var, width=8)
+        up_3rd_entry.grid(row=1, column=1, sticky=tk.W, pady=3, padx=(10, 0))
         
-        ttk.Label(input_frame, text="ego UP:").grid(row=5, column=0, sticky=tk.W, pady=2)
+        ttk.Label(up_grid_frame, text="EGO UP:").grid(row=2, column=0, sticky=tk.W, pady=3)
         self.up_ego_var = tk.StringVar(value="1")
-        up_ego_entry = ttk.Entry(input_frame, textvariable=self.up_ego_var, width=5)
-        up_ego_entry.grid(row=5, column=1, sticky=tk.W, pady=2)
+        up_ego_entry = ttk.Entry(up_grid_frame, textvariable=self.up_ego_var, width=8)
+        up_ego_entry.grid(row=2, column=1, sticky=tk.W, pady=3, padx=(10, 0))
         
-        ttk.Label(input_frame, text="播报员UP:").grid(row=6, column=0, sticky=tk.W, pady=2)
+        ttk.Label(up_grid_frame, text="播报员UP:").grid(row=3, column=0, sticky=tk.W, pady=3)
         self.up_announcer_var = tk.StringVar(value="1")
-        up_announcer_entry = ttk.Entry(input_frame, textvariable=self.up_announcer_var, width=5)
-        up_announcer_entry.grid(row=6, column=1, sticky=tk.W, pady=2)
+        up_announcer_entry = ttk.Entry(up_grid_frame, textvariable=self.up_announcer_var, width=8)
+        up_announcer_entry.grid(row=3, column=1, sticky=tk.W, pady=3, padx=(10, 0))
         
         # 目标数量设置
-        ttk.Label(input_frame, text="目标数量:").grid(row=7, column=0, sticky=tk.W, pady=2)
+        target_frame = ttk.LabelFrame(advanced_frame, text="目标数量", padding="8")
+        target_frame.pack(fill=tk.X, pady=5)
         
-        ttk.Label(input_frame, text="二级目标:").grid(row=8, column=0, sticky=tk.W, pady=2)
+        # 使用网格布局目标数量
+        target_grid_frame = ttk.Frame(target_frame)
+        target_grid_frame.pack(fill=tk.X)
+        
+        ttk.Label(target_grid_frame, text="二级目标:").grid(row=0, column=0, sticky=tk.W, pady=3)
         self.target_2nd_var = tk.StringVar(value="1")
-        target_2nd_entry = ttk.Entry(input_frame, textvariable=self.target_2nd_var, width=5)
-        target_2nd_entry.grid(row=8, column=1, sticky=tk.W, pady=2)
+        target_2nd_entry = ttk.Entry(target_grid_frame, textvariable=self.target_2nd_var, width=8)
+        target_2nd_entry.grid(row=0, column=1, sticky=tk.W, pady=3, padx=(10, 0))
         
-        ttk.Label(input_frame, text="三级目标:").grid(row=9, column=0, sticky=tk.W, pady=2)
+        ttk.Label(target_grid_frame, text="三级目标:").grid(row=1, column=0, sticky=tk.W, pady=3)
         self.target_3rd_var = tk.StringVar(value="1")
-        target_3rd_entry = ttk.Entry(input_frame, textvariable=self.target_3rd_var, width=5)
-        target_3rd_entry.grid(row=9, column=1, sticky=tk.W, pady=2)
+        target_3rd_entry = ttk.Entry(target_grid_frame, textvariable=self.target_3rd_var, width=8)
+        target_3rd_entry.grid(row=1, column=1, sticky=tk.W, pady=3, padx=(10, 0))
         
-        ttk.Label(input_frame, text="ego目标:").grid(row=10, column=0, sticky=tk.W, pady=2)
+        ttk.Label(target_grid_frame, text="EGO目标:").grid(row=2, column=0, sticky=tk.W, pady=3)
         self.target_ego_var = tk.StringVar(value="1")
-        target_ego_entry = ttk.Entry(input_frame, textvariable=self.target_ego_var, width=5)
-        target_ego_entry.grid(row=10, column=1, sticky=tk.W, pady=2)
+        target_ego_entry = ttk.Entry(target_grid_frame, textvariable=self.target_ego_var, width=8)
+        target_ego_entry.grid(row=2, column=1, sticky=tk.W, pady=3, padx=(10, 0))
         
-        ttk.Label(input_frame, text="播报员目标:").grid(row=11, column=0, sticky=tk.W, pady=2)
+        ttk.Label(target_grid_frame, text="播报员目标:").grid(row=3, column=0, sticky=tk.W, pady=3)
         self.target_announcer_var = tk.StringVar(value="1")
-        target_announcer_entry = ttk.Entry(input_frame, textvariable=self.target_announcer_var, width=5)
-        target_announcer_entry.grid(row=11, column=1, sticky=tk.W, pady=2)
+        target_announcer_entry = ttk.Entry(target_grid_frame, textvariable=self.target_announcer_var, width=8)
+        target_announcer_entry.grid(row=3, column=1, sticky=tk.W, pady=3, padx=(10, 0))
         
         # 选填参数
-        ttk.Label(input_frame, text="选填参数:").grid(row=12, column=0, sticky=tk.W, pady=2)
+        optional_frame = ttk.LabelFrame(advanced_frame, text="选填参数", padding="8")
+        optional_frame.pack(fill=tk.X, pady=5)
         
-        ttk.Label(input_frame, text="已抽取ego百分比:").grid(row=13, column=0, sticky=tk.W, pady=2)
+        ttk.Label(optional_frame, text="已抽取EGO百分比:").pack(side=tk.LEFT)
         self.ego_percent_var = tk.StringVar(value="0")
-        ego_percent_entry = ttk.Entry(input_frame, textvariable=self.ego_percent_var, width=5)
-        ego_percent_entry.grid(row=13, column=1, sticky=tk.W, pady=2)
+        ego_percent_entry = ttk.Entry(optional_frame, textvariable=self.ego_percent_var, width=8)
+        ego_percent_entry.pack(side=tk.RIGHT, padx=(10, 0))
         
-        # 模式选择
-        ttk.Label(input_frame, text="计算模式:").grid(row=14, column=0, sticky=tk.W, pady=2)
-        self.mode_var = tk.StringVar(value="按次数计算")
-        mode_combo = ttk.Combobox(input_frame, textvariable=self.mode_var, 
-                                 values=["按次数计算", "按目标绘制"], width=12)
-        mode_combo.grid(row=14, column=1, sticky=tk.W, pady=2)
+        # 按钮区域
+        button_frame = ttk.Frame(left_frame)
+        button_frame.pack(fill=tk.X, pady=10)
         
-        # 按钮
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=1, column=0, columnspan=2, pady=10)
+        ttk.Button(button_frame, text="计算概率", command=self.start_calculation, width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="清除结果", command=self.clear, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="更新图表", command=self.update_chart, width=10).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(button_frame, text="计算概率", command=self.start_calculation).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="清除结果", command=self.clear).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="更新图表", command=self.update_chart).pack(side=tk.LEFT, padx=5)
+        # 进度条和状态
+        progress_frame = ttk.Frame(left_frame)
+        progress_frame.pack(fill=tk.X, pady=5)
         
-        # 进度条
-        self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
-        self.progress.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
-        self.progress.grid_remove()  # 初始隐藏
+        self.progress = ttk.Progressbar(progress_frame, mode='indeterminate')
+        self.progress.pack(fill=tk.X)
+        self.progress.pack_forget()  # 初始隐藏
         
-        # 状态标签
         self.status_var = tk.StringVar(value="就绪")
-        status_label = ttk.Label(main_frame, textvariable=self.status_var)
-        status_label.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=2)
+        status_label = ttk.Label(progress_frame, textvariable=self.status_var, foreground="blue")
+        status_label.pack(fill=tk.X, pady=2)
         
         # 结果显示区域
-        result_frame = ttk.LabelFrame(main_frame, text="计算结果", padding="5")
-        result_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        result_frame = ttk.LabelFrame(right_frame, text="计算结果", padding="10")
+        result_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
-        self.result_text = tk.Text(result_frame, height=10, width=70)
+        self.result_text = tk.Text(result_frame, height=12, width=60, font=("Consolas", 10))
         scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.result_text.yview)
         self.result_text.configure(yscrollcommand=scrollbar.set)
         self.result_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # 图表区域
+        chart_frame = ttk.LabelFrame(right_frame, text="概率分布图表", padding="10")
+        chart_frame.pack(fill=tk.BOTH, expand=True)
+        
         self.figure = plt.Figure(figsize=(8, 6), dpi=100)
-        self.canvas = FigureCanvasTkAgg(self.figure, master=main_frame)
-        self.canvas.get_tk_widget().grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=chart_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
         # 配置权重使UI元素可扩展
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(4, weight=1)
-        main_frame.rowconfigure(5, weight=1)
         
         # 启动队列检查
         self.check_queue()
     
+    # 以下是原有的计算方法，保持不变
     def log_comb(self, n, k):
         """使用对数计算组合数，避免大数溢出"""
         if k < 0 or k > n:
@@ -310,7 +361,7 @@ class GachaCalculator:
             mode = self.mode_var.get()
             
             # 显示进度条
-            self.progress.grid()
+            self.progress.pack(fill=tk.X, pady=5)
             self.progress.start()
             self.status_var.set("计算中...")
             self.calculation_running = True
@@ -474,7 +525,7 @@ class GachaCalculator:
         # 停止进度条
         if self.calculation_queue.empty() and self.calculation_running:
             self.progress.stop()
-            self.progress.grid_remove()
+            self.progress.pack_forget()
             self.status_var.set("计算完成")
             self.calculation_running = False
             
@@ -500,9 +551,6 @@ class GachaCalculator:
             for i, target in enumerate(targets):
                 if f"{target}_dist" in self.calculation_results:
                     x_vals, y_vals = self.calculation_results[f"{target}_dist"]
-                    # 跳过0个的情况（第一个元素）
-                    #x_vals = x_vals[1:]
-                    #y_vals = y_vals[1:]
                     
                     axes[i].bar(x_vals, y_vals, color=colors[i], alpha=0.7)
                     axes[i].set_xlabel('获得数量')
@@ -526,9 +574,6 @@ class GachaCalculator:
             
             if f"{chart_target}_dist" in self.calculation_results:
                 x_vals, y_vals = self.calculation_results[f"{chart_target}_dist"]
-                # 跳过0个的情况（第一个元素）
-                #x_vals = x_vals[1:]
-                #y_vals = y_vals[1:]
                 
                 bars = ax.bar(x_vals, y_vals, alpha=0.7)
                 ax.set_xlabel('获得数量')

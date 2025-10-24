@@ -3,7 +3,7 @@ from tkinter import ttk, messagebox
 import os
 import zipfile
 from shutil import rmtree
-import install
+import utils.install as install
 import get_font
 
 class InstallFrame(ttk.Frame):

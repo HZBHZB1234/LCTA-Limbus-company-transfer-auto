@@ -7,7 +7,7 @@ import zipfile
 from shutil import rmtree, copytree,copyfile
 import time
 import sys
-from functions import zip_folder
+from utils.functions import zip_folder
 # 全局变量，用于日志输出
 log_callback = None
 

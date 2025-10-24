@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 import os
-import functions
+import utils.functions as functions
 
 class BackupFrame(ttk.Frame):
     def __init__(self, parent, main_app):

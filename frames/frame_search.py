@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import functions
+import utils.functions as functions
 import os
 import search_result
 

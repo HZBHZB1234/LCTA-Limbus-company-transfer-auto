@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext
 import os
 from ui_main import AdvancedTranslateUI
-import install
+import utils.install as install
 
 def check_path():
     global game_path
@@ -45,7 +45,7 @@ def start():
     import importlib
     
     # 延迟导入以减少启动时间
-    import install, search_result, functions, lighter, get_font, organization, calculate, about
+    import utils.install as install, search_result, utils.functions as functions, lighter, get_font, organization, calculate, about
     from custom_api_check import check_custom_script
     
     print('启动完毕')

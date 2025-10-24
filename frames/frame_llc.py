@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
-import functions
+import utils.functions as functions
 
 class LLCFrame(ttk.Frame):
     def __init__(self, parent, main_app):

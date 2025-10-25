@@ -88,6 +88,7 @@ def start():
     game_path = check_path()
     root.deiconify()
     logger = setup_logging()
+    logger.info("logger已创建")
     app = AdvancedTranslateUI(root, game_path, logger)
     
     # 创建日志区域并放置在主框架下方

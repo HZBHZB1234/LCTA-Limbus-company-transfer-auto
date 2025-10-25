@@ -11,6 +11,7 @@ from frames.frame_ourplay import OurPlayFrame
 from frames.frame_clean import CleanFrame
 from frames.frame_llc import LLCFrame
 from frames.frame_config import ConfigFrame
+from frames.frame_proper import ProperNounFrame
 from frames.frame_search import SearchFrame
 from frames.frame_backup import BackupFrame
 from frames.frame_assets import AssetsFrame
@@ -220,6 +221,7 @@ class AdvancedTranslateUI:
             "清除本地缓存": self.show_clean_frame,
             "从零协下载汉化": self.show_llc_frame,
             "配置汉化api": self.show_config_frame,
+            "抓取专有词汇": self.show_proper_frame,
             "进行文本搜索": self.show_search_frame,
             "备份原文": self.show_backup_frame,
             '资源管理': self.show_assets_frame,
@@ -262,6 +264,8 @@ class AdvancedTranslateUI:
 
         self.frames['config'] = ConfigFrame(self.content_frame, self)
 
+        self.frames['proper'] = ProperNounFrame(self.content_frame, self)
+
         self.frames["search"] = SearchFrame(self.content_frame, self)
 
         self.frames["backup"] = BackupFrame(self.content_frame, self)
@@ -301,6 +305,10 @@ class AdvancedTranslateUI:
         self.show_frame("config")
         self.log("切换到配置界面")
         
+    def show_proper_frame(self):
+        self.show_frame("proper")
+        self.log("切换到专有词汇抓取")
+
     def show_search_frame(self):
         self.show_frame("search")
         self.log("切换到文本搜索")

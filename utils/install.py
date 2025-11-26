@@ -1,13 +1,13 @@
 import winreg
 import json
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox
 import zipfile
 from shutil import rmtree, copytree,copyfile
 import time
 import sys
-from utils.functions import zip_folder
+from .functions import zip_folder
+from .gui_utils import choose_path, show_warning, show_error, show_info, ask_yes_no
+
 # 全局变量，用于日志输出
 log_callback = None
 log_error_callback = None
@@ -332,10 +332,6 @@ def write_path(path):
         log_error(e)
         return False, f"保存路径失败: {str(e)}"
 
-def choose_path():
-    """选择文件对话框"""
-    return filedialog.askopenfilename()
-
 def has_change():
     """手动选择游戏路径"""
     try:
@@ -362,13 +358,13 @@ def has_change():
         exe_name = name_list[-1]
         
         if not exe_name == "LimbusCompany.exe":
-            messagebox.showwarning('LCTA', "请选择LimbusCompany.exe文件")
+            show_warning('LCTA', "请选择LimbusCompany.exe文件")
     
     path_little = path_little[:-17]  # 移除"/LimbusCompany.exe"
     
     success, message = write_path(path_little)
     if not success:
-        messagebox.showerror('LCTA', message)
+        show_error('LCTA', message)
         return None
     
     return path_little
@@ -423,6 +419,7 @@ if __name__ == '__main__':
     
     set_log_callback(console_log)
     
+    import tkinter as tk
     root = tk.Tk()
     root.withdraw()
     
@@ -434,32 +431,29 @@ if __name__ == '__main__':
     
     if not game_path or not os.path.exists(game_path):
         game_path = find_lcb()
-        if game_path and messagebox.askyesno('LCTA', f'这是你的游戏地址吗?\n{game_path}'):
+        if game_path and ask_yes_no('LCTA', f'这是你的游戏地址吗?\n{game_path}'):
             write_path(game_path)
         else:
-            messagebox.showinfo('LCTA', "请指定游戏路径(选择游戏exe文件)")
+            show_info('LCTA', "请指定游戏路径(选择游戏exe文件)")
             game_path = has_change()
     
     if not game_path:
-        messagebox.showerror('LCTA', "无法获取游戏路径，安装中止")
+        show_error('LCTA', "无法获取游戏路径，安装中止")
         sys.exit(1)
     
     # 选择汉化包
-    LCTA_path = filedialog.askopenfilename(
-        title="选择汉化包文件",
-        filetypes=[("Zip文件", "*.zip"), ("所有文件", "*.*")]
-    )
+    LCTA_path = choose_path()
     
     if not LCTA_path:
-        messagebox.showinfo('LCTA', "未选择汉化包，安装中止")
+        show_info('LCTA', "未选择汉化包，安装中止")
         sys.exit(0)
     
     # 执行安装
     success, message = install(LCTA_path, game_path)
     
     if success:
-        messagebox.showinfo('LCTA', message)
+        show_info('LCTA', message)
     else:
-        messagebox.showerror('LCTA', message)
+        show_error('LCTA', message)
     
     root.destroy()

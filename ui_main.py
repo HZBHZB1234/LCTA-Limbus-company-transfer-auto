@@ -387,10 +387,14 @@ class AdvancedTranslateUI:
         """记录日志"""
         # 确保日志区域存在
         if hasattr(self, 'log_area'):
-            self.log_area.config(state='normal')
-            self.log_area.insert(tk.END, message + "\n")
-            self.log_area.config(state='disabled')
-            self.log_area.see(tk.END)
+            try:
+                self.log_area.config(state='normal')
+                self.log_area.insert(tk.END, message + "\n")
+                self.log_area.config(state='disabled')
+                self.log_area.see(tk.END)
+            except:
+                # 如果GUI组件不可用，直接打印到控制台
+                print(message)
         else:
             # 如果日志区域尚未创建，打印到控制台
             print(message)

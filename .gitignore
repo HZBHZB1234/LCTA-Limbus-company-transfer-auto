@@ -1,15 +1,15 @@
 *.*
-*\
+*
 !.gitignore
 !*.py
-<<<<<<< HEAD
+!*.html
+!*.js
+!*.css
 !README.md
 old_main.py
-=======
-old_main.py
 cp_trans_just_list.py
->>>>>>> f167a73 (合并了调光照窗口)
 demo_translate.py
 check.py
 !api_doc.md
 !inner_api
+!webui

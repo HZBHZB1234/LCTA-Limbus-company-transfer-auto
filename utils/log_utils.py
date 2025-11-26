@@ -1,17 +1,15 @@
-import tkinter as tk
-from tkinter import scrolledtext
 import datetime
 
 class LogManager:
     """日志管理器"""
     
-    def __init__(self, log_widget=None):
-        self.log_widget = log_widget
+    def __init__(self, log_callback=None):
+        self.log_callback = log_callback
         self.enabled = True
         
-    def set_log_widget(self, log_widget):
-        """设置日志显示控件"""
-        self.log_widget = log_widget
+    def set_log_callback(self, log_callback):
+        """设置日志回调函数"""
+        self.log_callback = log_callback
         
     def log(self, message):
         """记录日志"""
@@ -24,15 +22,12 @@ class LogManager:
         # 输出到控制台
         print(log_message)
         
-        # 输出到日志控件（如果存在）
-        if self.log_widget:
+        # 调用日志回调（如果存在）
+        if self.log_callback:
             try:
-                self.log_widget.config(state='normal')
-                self.log_widget.insert(tk.END, log_message + "\n")
-                self.log_widget.config(state='disabled')
-                self.log_widget.see(tk.END)
-            except tk.TclError:
-                # 控件可能已被销毁
+                self.log_callback(log_message)
+            except Exception:
+                # 回调可能已不可用
                 pass
     
     def enable(self):

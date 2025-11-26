@@ -295,35 +295,70 @@ class LCTA_API:
 
     def search_text(self):
         """搜索文本"""
-        try:
-            keyword = self.window.evaluate_js("document.getElementById('search-keyword').value")
-            search_path = self.window.evaluate_js("document.getElementById('search-path').value")
-            case_sensitive = self.window.evaluate_js("document.getElementById('search-case-sensitive').checked")
-            
-            if not keyword:
-                return {"success": False, "message": "请输入搜索关键词"}
-            
-            if not search_path:
-                search_path = self.get_game_path()  # 使用游戏路径作为默认搜索路径
-            
-            if not os.path.exists(search_path):
-                return {"success": False, "message": "搜索路径不存在"}
-            
-            self.log_callback(f"开始搜索关键词 '{keyword}' 在路径 '{search_path}' 中")
-            
-            # 这里应该实现实际的搜索逻辑
-            # 为了演示，我们返回一些模拟结果
-            results = [
-                {"file": "example1.txt", "line": 10, "content": f"...{keyword}..."},
-                {"file": "example2.txt", "line": 25, "content": f"...{keyword}..."}
-            ]
-            
-            self.log_callback(f"搜索完成，找到 {len(results)} 个结果")
-            return {"success": True, "message": f"找到 {len(results)} 个结果", "results": results}
-        except Exception as e:
-            error_msg = f"搜索文本时出现错误: {str(e)}"
-            self.error_log_callback(error_msg)
-            return {"success": False, "message": error_msg}
+        def search_worker():
+            try:
+                keyword = self.window.evaluate_js("document.getElementById('search-keyword').value")
+                search_path = self.window.evaluate_js("document.getElementById('search-path').value")
+                case_sensitive = self.window.evaluate_js("document.getElementById('search-case-sensitive').checked")
+                
+                if not keyword:
+                    return {"success": False, "message": "请输入搜索关键词"}
+                
+                if not search_path:
+                    search_path = self.get_game_path()  # 使用游戏路径作为默认搜索路径
+                
+                if not os.path.exists(search_path):
+                    return {"success": False, "message": "搜索路径不存在"}
+                
+                self.log_callback(f"开始搜索关键词 '{keyword}' 在路径 '{search_path}' 中")
+                
+                # 实现实际的搜索逻辑
+                results = []
+                count = 0
+                for root, dirs, files in os.walk(search_path):
+                    for file in files:
+                        if file.endswith(('.txt', '.json', '.xml', '.csv', '.yaml', '.yml')):  # 搜索常见文本文件
+                            file_path = os.path.join(root, file)
+                            try:
+                                with open(file_path, 'r', encoding='utf-8') as f:
+                                    for line_num, line in enumerate(f, 1):
+                                        search_line = line if case_sensitive else line.lower()
+                                        search_keyword = keyword if case_sensitive else keyword.lower()
+                                        
+                                        if search_keyword in search_line:
+                                            results.append({
+                                                "file": os.path.relpath(file_path, search_path),
+                                                "line": line_num,
+                                                "content": line.strip()
+                                            })
+                                            count += 1
+                                            
+                                            # 限制结果数量以避免过多结果
+                                            if count >= 100:  # 最多返回100个结果
+                                                self.log_callback("已达到搜索结果上限（100个）")
+                                                break
+                                if count >= 100:
+                                    break
+                            except UnicodeDecodeError:
+                                # 跳过无法解码的文件
+                                continue
+                            except Exception as e:
+                                self.log_callback(f"读取文件 {file_path} 时出错: {str(e)}")
+                                continue
+                
+                self.log_callback(f"搜索完成，找到 {len(results)} 个结果")
+                return {"success": True, "message": f"找到 {len(results)} 个结果", "results": results}
+            except Exception as e:
+                error_msg = f"搜索文本时出现错误: {str(e)}"
+                self.error_log_callback(error_msg)
+                return {"success": False, "message": error_msg}
+        
+        # 启动搜索线程
+        thread = threading.Thread(target=search_worker)
+        thread.daemon = True
+        thread.start()
+        
+        return {"success": True, "message": "搜索任务已启动"}
 
     def backup_text(self):
         """备份原文"""
@@ -399,25 +434,59 @@ class LCTA_API:
 
     def adjust_image(self):
         """调整图片"""
-        try:
-            image_path = self.window.evaluate_js("document.getElementById('image-path').value")
-            brightness = float(self.window.evaluate_js("document.getElementById('brightness').value"))
-            contrast = float(self.window.evaluate_js("document.getElementById('contrast').value"))
-            
-            if not image_path or not os.path.exists(image_path):
-                return {"success": False, "message": "请选择有效的图片文件"}
-            
-            self.log_callback(f"调整图片: {image_path}, 亮度: {brightness}, 对比度: {contrast}")
-            
-            # 这里应该实现实际的图片调整逻辑
-            # 为了演示，我们只记录操作
-            self.log_callback("图片调整功能正在开发中...")
-            
-            return {"success": True, "message": "图片调整功能正在开发中..."}
-        except Exception as e:
-            error_msg = f"调整图片时出现错误: {str(e)}"
-            self.error_log_callback(error_msg)
-            return {"success": False, "message": error_msg}
+        def adjust_worker():
+            try:
+                image_path = self.window.evaluate_js("document.getElementById('image-path').value")
+                brightness = float(self.window.evaluate_js("document.getElementById('brightness').value"))
+                contrast = float(self.window.evaluate_js("document.getElementById('contrast').value"))
+                
+                if not image_path or not os.path.exists(image_path):
+                    return {"success": False, "message": "请选择有效的图片文件"}
+                
+                # 检查是否安装了PIL
+                try:
+                    from PIL import Image, ImageEnhance
+                except ImportError:
+                    return {"success": False, "message": "需要安装PIL库: pip install Pillow"}
+                
+                self.log_callback(f"调整图片: {image_path}, 亮度: {brightness}, 对比度: {contrast}")
+                
+                # 打开图片
+                img = Image.open(image_path)
+                
+                # 调整亮度 (brightness_value: 0.0-2.0, 1.0为原始亮度)
+                brightness_factor = 1.0 + brightness / 100.0
+                if brightness_factor > 0:
+                    enhancer = ImageEnhance.Brightness(img)
+                    img = enhancer.enhance(brightness_factor)
+                
+                # 调整对比度 (contrast_value: 0.0-2.0, 1.0为原始对比度)
+                contrast_factor = 1.0 + contrast / 100.0
+                if contrast_factor > 0:
+                    enhancer = ImageEnhance.Contrast(img)
+                    img = enhancer.enhance(contrast_factor)
+                
+                # 生成输出文件名
+                dir_path = os.path.dirname(image_path)
+                file_name, file_ext = os.path.splitext(os.path.basename(image_path))
+                output_path = os.path.join(dir_path, f"{file_name}_adjusted{file_ext}")
+                
+                # 保存调整后的图片
+                img.save(output_path)
+                
+                self.log_callback(f"图片调整完成，已保存到: {output_path}")
+                return {"success": True, "message": f"图片调整完成，已保存到: {output_path}"}
+            except Exception as e:
+                error_msg = f"调整图片时出现错误: {str(e)}"
+                self.error_log_callback(error_msg)
+                return {"success": False, "message": error_msg}
+        
+        # 启动调整线程
+        thread = threading.Thread(target=adjust_worker)
+        thread.daemon = True
+        thread.start()
+        
+        return {"success": True, "message": "图片调整任务已启动"}
 
     def calculate_gacha(self):
         """计算抽卡概率"""

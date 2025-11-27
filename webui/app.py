@@ -14,9 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from utils.install import find_lcb, write_path, install as install_translation, final_correct
-from utils.functions import set_log_callback, set_error_log_callback, download_and_verify_file, get_true_zip, download_llc
 from utils.proper import make_proper
-from utils.log_utils import LogManager
 
 
 class LCTA_API:
@@ -24,10 +22,6 @@ class LCTA_API:
         self._window = None
         self.game_path = None
 
-        
-        # 设置日志回调
-        set_log_callback(self.log_callback)
-        set_error_log_callback(self.error_log_callback)
 
     def set_window(self, window):
         self._window = window

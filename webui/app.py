@@ -8,7 +8,7 @@ import time
 import logging
 from logging.handlers import RotatingFileHandler
 import shutil
-
+import threading
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -20,8 +20,8 @@ from utils.log_utils import LogManager
 
 
 class LCTA_API:
-    def __init__(self, window):
-        self.window = window
+    def __init__(self):
+        self._window = None
         self.game_path = None
         # 不要将log_manager存储为实例变量，避免循环引用
         # self.log_manager = LogManager()
@@ -30,10 +30,13 @@ class LCTA_API:
         set_log_callback(self.log_callback)
         set_error_log_callback(self.error_log_callback)
 
+    def set_window(self, window):
+        self._window = window
+
     def browse_file(self, input_id):
         """打开文件浏览器"""
-        file_path = webview.windows[0].create_file_dialog(
-            webview.OPEN_DIALOG,
+        file_path = self._window.create_file_dialog(
+            webview.FileDialog.OPEN,
             allow_multiple=False,
             save_filename='选择文件'
         )
@@ -42,22 +45,22 @@ class LCTA_API:
             selected_path = file_path[0]
             # 通过JavaScript更新页面中的输入框
             js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
-            self.window.evaluate_js(js_code)
+            self._window.evaluate_js(js_code)
             self.log_callback(f"已选择文件: {selected_path}")
             return selected_path
         return None
 
     def browse_folder(self, input_id):
         """打开文件夹浏览器"""
-        folder_path = webview.windows[0].create_file_dialog(
-            webview.FOLDER_DIALOG
+        folder_path = self._window.create_file_dialog(
+            webview.FileDialog.FOLDER
         )
         
         if folder_path and len(folder_path) > 0:
             selected_path = folder_path[0]
             # 通过JavaScript更新页面中的输入框
             js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
-            self.window.evaluate_js(js_code)
+            self._window.evaluate_js(js_code)
             self.log_callback(f"已选择文件夹: {selected_path}")
             return selected_path
         return None
@@ -71,20 +74,20 @@ class LCTA_API:
             try:
                 # 获取表单数据
                 # 获取复选框状态
-                custom_script_enabled = self.window.evaluate_js("document.getElementById('custom-script').checked")
-                cache_trans_enabled = self.window.evaluate_js("document.getElementById('cache-trans').checked")
-                team_trans_enabled = self.window.evaluate_js("document.getElementById('team-trans').checked")
-                excel_output_enabled = self.window.evaluate_js("document.getElementById('excel-output').checked")
-                half_trans_enabled = self.window.evaluate_js("document.getElementById('half-trans').checked")
-                backup_enabled = self.window.evaluate_js("document.getElementById('backup').checked")
+                custom_script_enabled = self._window.evaluate_js("document.getElementById('custom-script').checked")
+                cache_trans_enabled = self._window.evaluate_js("document.getElementById('cache-trans').checked")
+                team_trans_enabled = self._window.evaluate_js("document.getElementById('team-trans').checked")
+                excel_output_enabled = self._window.evaluate_js("document.getElementById('excel-output').checked")
+                half_trans_enabled = self._window.evaluate_js("document.getElementById('half-trans').checked")
+                backup_enabled = self._window.evaluate_js("document.getElementById('backup').checked")
                 
                 # 获取相关路径
-                script_path = self.window.evaluate_js("document.getElementById('script-path').value") if custom_script_enabled else None
-                half_trans_path = self.window.evaluate_js("document.getElementById('half-trans-path').value") if half_trans_enabled else None
-                backup_path = self.window.evaluate_js("document.getElementById('backup-path').value") if backup_enabled else None
+                script_path = self._window.evaluate_js("document.getElementById('script-path').value") if custom_script_enabled else None
+                half_trans_path = self._window.evaluate_js("document.getElementById('half-trans-path').value") if half_trans_enabled else None
+                backup_path = self._window.evaluate_js("document.getElementById('backup-path').value") if backup_enabled else None
                 
                 # 获取选择的翻译服务
-                service = self.window.evaluate_js("document.getElementById('translation-service').value")
+                service = self._window.evaluate_js("document.getElementById('translation-service').value")
                 
                 self.log_callback(f"使用翻译服务: {service}")
                 self.log_callback("翻译参数已获取")
@@ -114,8 +117,8 @@ class LCTA_API:
         """安装翻译包"""
         try:
             # 从页面获取路径
-            package_path = self.window.evaluate_js("document.getElementById('install-package').value")
-            install_path = self.window.evaluate_js("document.getElementById('install-path').value")
+            package_path = self._window.evaluate_js("document.getElementById('install-package').value")
+            install_path = self._window.evaluate_js("document.getElementById('install-path').value")
             
             if not package_path:
                 self.log_callback("未选择汉化包文件")
@@ -244,9 +247,9 @@ class LCTA_API:
         def fetch_worker():
             try:
                 # 获取页面设置
-                output_format = self.window.evaluate_js("document.getElementById('proper-output').value")
-                skip_space = self.window.evaluate_js("document.getElementById('proper-skip-space').checked")
-                max_count_str = self.window.evaluate_js("document.getElementById('proper-max-count').value")
+                output_format = self._window.evaluate_js("document.getElementById('proper-output').value")
+                skip_space = self._window.evaluate_js("document.getElementById('proper-skip-space').checked")
+                max_count_str = self._window.evaluate_js("document.getElementById('proper-max-count').value")
                 
                 max_count = None
                 if max_count_str and max_count_str.strip():
@@ -282,8 +285,8 @@ class LCTA_API:
     def save_api_config(self):
         """保存API配置"""
         try:
-            service = self.window.evaluate_js("document.getElementById('api-service').value")
-            api_key = self.window.evaluate_js("document.getElementById('api-key').value")
+            service = self._window.evaluate_js("document.getElementById('api-service').value")
+            api_key = self._window.evaluate_js("document.getElementById('api-key').value")
             
             # 这里应该保存到配置文件，现在只是记录
             self.log_callback(f"API配置已保存: {service}")
@@ -297,9 +300,9 @@ class LCTA_API:
         """搜索文本"""
         def search_worker():
             try:
-                keyword = self.window.evaluate_js("document.getElementById('search-keyword').value")
-                search_path = self.window.evaluate_js("document.getElementById('search-path').value")
-                case_sensitive = self.window.evaluate_js("document.getElementById('search-case-sensitive').checked")
+                keyword = self._window.evaluate_js("document.getElementById('search-keyword').value")
+                search_path = self._window.evaluate_js("document.getElementById('search-path').value")
+                case_sensitive = self._window.evaluate_js("document.getElementById('search-case-sensitive').checked")
                 
                 if not keyword:
                     return {"success": False, "message": "请输入搜索关键词"}
@@ -363,8 +366,8 @@ class LCTA_API:
     def backup_text(self):
         """备份原文"""
         try:
-            source = self.window.evaluate_js("document.getElementById('backup-source').value")
-            destination = self.window.evaluate_js("document.getElementById('backup-destination').value")
+            source = self._window.evaluate_js("document.getElementById('backup-source').value")
+            destination = self._window.evaluate_js("document.getElementById('backup-destination').value")
             
             if not source:
                 return {"success": False, "message": "请选择源文件路径"}
@@ -436,9 +439,9 @@ class LCTA_API:
         """调整图片"""
         def adjust_worker():
             try:
-                image_path = self.window.evaluate_js("document.getElementById('image-path').value")
-                brightness = float(self.window.evaluate_js("document.getElementById('brightness').value"))
-                contrast = float(self.window.evaluate_js("document.getElementById('contrast').value"))
+                image_path = self._window.evaluate_js("document.getElementById('image-path').value")
+                brightness = float(self._window.evaluate_js("document.getElementById('brightness').value"))
+                contrast = float(self._window.evaluate_js("document.getElementById('contrast').value"))
                 
                 if not image_path or not os.path.exists(image_path):
                     return {"success": False, "message": "请选择有效的图片文件"}
@@ -491,9 +494,9 @@ class LCTA_API:
     def calculate_gacha(self):
         """计算抽卡概率"""
         try:
-            total_items = int(self.window.evaluate_js("document.getElementById('total-items').value"))
-            rare_items = int(self.window.evaluate_js("document.getElementById('rare-items').value"))
-            draw_count = int(self.window.evaluate_js("document.getElementById('draw-count').value"))
+            total_items = int(self._window.evaluate_js("document.getElementById('total-items').value"))
+            rare_items = int(self._window.evaluate_js("document.getElementById('rare-items').value"))
+            draw_count = int(self._window.evaluate_js("document.getElementById('draw-count').value"))
             
             if rare_items > total_items:
                 return {"success": False, "message": "稀有物品数不能大于总物品数"}
@@ -527,7 +530,7 @@ class LCTA_API:
         escaped_message = message.replace("'", "\\'")
         js_code = f"addLogMessage('{escaped_message}');"
         try:
-            self.window.evaluate_js(js_code)
+            self._window.evaluate_js(js_code)
         except:
             # 如果窗口不可用则打印到控制台
             print(f"[LOG] {message}")
@@ -552,7 +555,7 @@ class LCTA_API:
         escaped_text = text.replace("'", "\\'")
         js_code = f"updateProgress({percent}, '{escaped_text}');"
         try:
-            self.window.evaluate_js(js_code)
+            self._window.evaluate_js(js_code)
         except:
             pass
 
@@ -598,7 +601,6 @@ def setup_logging():
     
     return logger
 
-
 def main():
     # 获取HTML文件的绝对路径
     html_path = os.path.join(os.path.dirname(__file__), "index.html")
@@ -607,6 +609,9 @@ def main():
     logger = setup_logging()
     logger.info("正在启动LCTA WebUI")
     
+
+    # 创建API实例
+    api = LCTA_API()
     # 创建窗口 - 先创建窗口，不立即绑定API
     window = webview.create_window(
         "LCTA - 边狱公司汉化工具箱",
@@ -615,15 +620,11 @@ def main():
         height=800,
         resizable=True,
         fullscreen=False,
-        text_select=True  # 允许文本选择
+        text_select=True,
+        js_api=api
     )
     
-    # 创建API实例并绑定窗口
-    api = LCTA_API(window)
-    
-    # 设置API
-    window.js_api = api
-    
+    api.set_window(window)
     logger.info("WebUI窗口已创建")
     
     # 启动应用

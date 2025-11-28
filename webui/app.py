@@ -32,6 +32,10 @@ class LCTA_API:
         self.find_lcb=load_util.find_lcb
 
 
+    def set_logger(self):
+        load_util.set_log(self.log_manager)
+
+
     def set_window(self, window):
         self._window = window
 
@@ -260,6 +264,49 @@ class LCTA_API:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
+    # 模态窗口相关API方法
+    def set_modal_status(self, status, modal_id):
+        """设置模态窗口状态"""
+        escaped_status = status.replace("'", "\\'").replace("\n", "\\n")
+        js_code = f"""
+        const modal = modalWindows.find(m => m.id === '{modal_id}');
+        if (modal) {{
+            modal.setStatus('{escaped_status}');
+        }}
+        """
+        try:
+            self._window.evaluate_js(js_code)
+        except Exception as e:
+            self.log_error(f"设置模态窗口状态失败: {e}")
+
+    def add_modal_log(self, message, modal_id):
+        """向模态窗口添加日志"""
+        escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
+        js_code = f"""
+        const modal = modalWindows.find(m => m.id === '{modal_id}');
+        if (modal) {{
+            modal.addLog('{escaped_message}');
+        }}
+        """
+        try:
+            self._window.evaluate_js(js_code)
+        except Exception as e:
+            self.log_error(f"添加模态窗口日志失败: {e}")
+
+    def update_modal_progress(self, percent, text, modal_id):
+        """更新模态窗口进度"""
+        escaped_text = text.replace("'", "\\'").replace("\n", "\\n")
+        js_code = f"""
+        const modal = modalWindows.find(m => m.id === '{modal_id}');
+        if (modal) {{
+            modal.updateProgress({percent}, '{escaped_text}');
+        }}
+        """
+        try:
+            self._window.evaluate_js(js_code)
+        except Exception as e:
+            self.log_error(f"更新模态窗口进度失败: {e}")
+
 
 def setup_logging():
     """
@@ -317,6 +364,13 @@ def main():
     )
     
     api.set_window(window)
+    # 设置模态窗口相关的回调
+    api.log_manager.set_modal_callbacks(
+        status_callback=api.set_modal_status,
+        log_callback=api.add_modal_log,
+        progress_callback=api.update_modal_progress
+    )
+    
     logger.info("WebUI窗口已创建")
     
     # 启动应用

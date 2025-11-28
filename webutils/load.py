@@ -6,7 +6,11 @@ from shutil import rmtree, copytree,copyfile
 import time
 import sys
 
-from webutils.log_h import log, log_error, log_ui
+log=None
+
+def set_log(log_h_logger):
+    global log
+    log = log_h_logger
 def find_lcb():
     """查找游戏安装路径"""
     try:
@@ -25,8 +29,8 @@ def find_lcb():
                 
         return None
     except Exception as e:
-        log(f"查找游戏路径时出错: {str(e)}")
-        log_error(e)
+        log.log(f"查找游戏路径时出错: {str(e)}")
+        log.log_error(e)
         return None
 
 def load_config_types():
@@ -134,9 +138,12 @@ def check_config_type(key_path, value):
         return False, "unknown", type(value).__name__
 
 def load_config():
-    with open('config.json','r',encoding='utf-8') as f:
-        config = json.load(f)
-        return config
+    try:
+        with open('config.json','r',encoding='utf-8') as f:
+            config = json.load(f)
+            return config
+    except FileNotFoundError:
+        return None
 
 def check_game_path(game_path):
-    return os.path.exist(game_path + 'LimbusCompany.exe')
+    return os.path.exists(game_path + 'LimbusCompany.exe')

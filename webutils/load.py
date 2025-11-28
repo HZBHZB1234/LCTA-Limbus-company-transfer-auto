@@ -6,7 +6,7 @@ from shutil import rmtree, copytree,copyfile
 import time
 import sys
 
-from log_h import log, log_error, log_ui
+from webutils.log_h import log, log_error, log_ui
 def find_lcb():
     """查找游戏安装路径"""
     try:

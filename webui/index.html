@@ -21,6 +21,7 @@
         <button id="assets-btn">资源管理</button>
         <button id="lighter-btn">黑影图调色</button>
         <button id="calculate-btn">抽卡概率计算</button>
+        <button id="log-btn">日志</button>
         <button id="about-btn">关于</button>
     </div>
 
@@ -349,14 +350,20 @@
             </div>
         </div>
 
-        <!-- 底部日志区域 -->
-        <div id="log-area" class="log-container">
-            <div class="log-entry">
-                <span class="log-timestamp">[2025-01-01 12:00:00]</span>
-                <span class="log-message">系统已启动，准备就绪</span>
+        <!-- 日志界面 -->
+        <div id="log-section" class="content-section">
+            <h2 class="section-title">日志</h2>
+            <div id="log-display" class="log-container">
+                <div class="log-entry">
+                    <span class="log-timestamp">[2025-01-01 12:00:00]</span>
+                    <span class="log-message">系统已启动，准备就绪</span>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- 模态窗口容器 -->
+    <div id="modal-container"></div>
 
     <script src="script.js"></script>
 </body>

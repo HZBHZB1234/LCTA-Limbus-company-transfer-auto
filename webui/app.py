@@ -66,11 +66,13 @@ class LCTA_API:
             self.log_ui(f"已选择文件夹: {selected_path}")
             return selected_path
         return None
+    
     def log(self,message):
         self.log_manager.log(message)
     
     def log_error(self, e):
         self.log_manager.log_error(e)
+        
     def log_ui(self, message, level=logging.INFO):
         """UI日志方法"""
         # 添加时间戳
@@ -115,6 +117,148 @@ class LCTA_API:
             return True  # 继续操作
         except:
             return True  # 即使出错也继续
+
+    # 以下为新添加的API方法，用于支持模态窗口功能
+    def start_translation(self):
+        """开始翻译"""
+        try:
+            # 这里应该调用实际的翻译逻辑
+            self.log_ui("开始翻译...")
+            time.sleep(2)  # 模拟翻译过程
+            return {"success": True, "message": "翻译完成"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def install_translation(self):
+        """安装翻译"""
+        try:
+            self.log_ui("开始安装汉化包...")
+            time.sleep(1)  # 模拟安装过程
+            return {"success": True, "message": "汉化包安装成功"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def download_ourplay_translation(self):
+        """下载ourplay翻译"""
+        try:
+            self.log_ui("开始下载OurPlay汉化包...")
+            time.sleep(1)  # 模拟下载过程
+            return {"success": True, "message": "OurPlay汉化包下载成功"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def clean_cache(self):
+        """清理缓存"""
+        try:
+            self.log_ui("开始清除缓存...")
+            time.sleep(1)  # 模拟清理过程
+            return {"success": True, "message": "缓存清除成功"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def download_llc_translation(self):
+        """下载LLC翻译"""
+        try:
+            self.log_ui("开始下载零协汉化包...")
+            time.sleep(1)  # 模拟下载过程
+            return {"success": True, "message": "零协汉化包下载成功"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def save_api_config(self):
+        """保存API配置"""
+        try:
+            self.log_ui("正在保存API配置...")
+            time.sleep(1)  # 模拟保存过程
+            return {"success": True, "message": "API配置保存成功"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def fetch_proper_nouns(self):
+        """获取专有词汇"""
+        try:
+            self.log_ui("开始抓取专有词汇...")
+            time.sleep(1)  # 模拟抓取过程
+            return {"success": True, "message": "专有词汇抓取成功"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def search_text(self):
+        """搜索文本"""
+        try:
+            self.log_ui("开始文本搜索...")
+            time.sleep(1)  # 模拟搜索过程
+            return {"success": True, "message": "文本搜索完成", "results": []}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def backup_text(self):
+        """备份文本"""
+        try:
+            self.log_ui("开始备份原文...")
+            time.sleep(1)  # 模拟备份过程
+            return {"success": True, "message": "原文备份成功"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def manage_fonts(self):
+        """管理字体"""
+        try:
+            self.log_ui("开始管理字体...")
+            time.sleep(1)  # 模拟管理过程
+            return {"success": True, "message": "字体管理完成"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def manage_images(self):
+        """管理图片"""
+        try:
+            self.log_ui("开始管理图片...")
+            time.sleep(1)  # 模拟管理过程
+            return {"success": True, "message": "图片管理完成"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def manage_audio(self):
+        """管理音频"""
+        try:
+            self.log_ui("开始管理音频...")
+            time.sleep(1)  # 模拟管理过程
+            return {"success": True, "message": "音频管理完成"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def adjust_image(self):
+        """调整图片"""
+        try:
+            self.log_ui("开始调整图片...")
+            time.sleep(1)  # 模拟调整过程
+            return {"success": True, "message": "图片调整完成"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def calculate_gacha(self):
+        """计算抽卡概率"""
+        try:
+            self.log_ui("开始计算抽卡概率...")
+            time.sleep(1)  # 模拟计算过程
+            return {"success": True, "message": "抽卡概率计算完成"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
 
 
 def setup_logging():

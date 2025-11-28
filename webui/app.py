@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
-from webutils.log_h import LogManager
+from webutils import log_manager
 import webutils.load as load_util
 
 class LCTA_API:
@@ -23,7 +23,7 @@ class LCTA_API:
         self.game_path = None
         # 初始化日志管理器
         self.logger =logger
-        self.log_manager = LogManager()
+        self.log_manager = log_manager
         self.log_manager.set_log_callback(self.logger.info)
         self.log_manager.set_error_callback(self.logger.exception)
         self.log_manager.set_ui_callback(self.log_ui)
@@ -31,9 +31,6 @@ class LCTA_API:
         #设置函数
         self.find_lcb=load_util.find_lcb
 
-
-    def set_logger(self):
-        load_util.set_log(self.log_manager)
 
 
     def set_window(self, window):
@@ -91,10 +88,9 @@ class LCTA_API:
         except:
             # 如果窗口不可用则打印到控制台
             print(f"[UI] {full_message}")
-        
-        # 同时记录到文件和日志管理器
-        self.log_manager.log_ui(message, level)
-        print(f"[UI] {full_message}")
+        finally:
+            self.log(full_message)
+
 
     def get_system_info(self):
         """获取系统信息"""

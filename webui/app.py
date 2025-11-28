@@ -14,24 +14,25 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
-from webutils import log_manager
+import webutils
 import webutils.load as load_util
 
-class LCTA_API:
+class LCTA_API():
     def __init__(self,logger:logging):
         self._window = None
         self.game_path = None
         # 初始化日志管理器
         self.logger =logger
-        self.log_manager = log_manager
+        self.log_manager = webutils.log_manager
         self.log_manager.set_log_callback(self.logger.info)
         self.log_manager.set_error_callback(self.logger.exception)
         self.log_manager.set_ui_callback(self.log_ui)
 
-        #设置函数
-        self.find_lcb=load_util.find_lcb
-
-
+    def set_function(self):
+        self.find_lcb = load_util.find_lcb
+        self.load_config = load_util.load_config
+        self.check_game_path = load_util.check_game_path
+        self.validate_config = load_util.validate_config
 
     def set_window(self, window):
         self._window = window

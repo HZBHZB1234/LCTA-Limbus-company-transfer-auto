@@ -1,6 +1,8 @@
 import logging
 import sys
 from typing import Callable, Optional, Any
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 class LogManager:
     """
@@ -20,6 +22,17 @@ class LogManager:
         self.modal_status_callback: Optional[Callable] = None
         self.modal_log_callback: Optional[Callable] = None
         self.modal_progress_callback: Optional[Callable] = None
+        
+        # 调试模式标志
+        self.debug_mode = False
+        
+        # 创建线程池用于处理UI日志，防止阻塞主线程
+        self.executor = ThreadPoolExecutor(max_workers=2)
+        self.lock = threading.Lock()
+
+    def set_debug_mode(self, enabled: bool):
+        """设置调试模式开关"""
+        self.debug_mode = enabled
 
     def set_log_callback(self, callback: Callable):
         """设置普通日志回调函数"""
@@ -60,6 +73,11 @@ class LogManager:
             # 默认输出到控制台
             print(f"[LOG] {message}")
 
+    def debug(self, message: str, *args, **kwargs):
+        """记录调试日志，仅在调试模式启用时输出"""
+        if self.debug_mode:
+            self.log(f"[DEBUG] {message}", *args, **kwargs)
+
     def log_error(self, error: Any, *args, **kwargs):
         """记录错误日志"""
         error_msg = str(error) if error else "Unknown error"
@@ -76,9 +94,11 @@ class LogManager:
         """记录UI日志"""
         if self.ui_callback:
             try:
-                self.ui_callback(message, level, *args, **kwargs)
-            except Exception:
-                pass  # 忽略回调中的错误
+                self.executor.submit(
+                    self.ui_callback(message, level, *args, **kwargs)
+                )
+            except Exception as e:
+                self.log_error(e)
         else:
             # 默认输出到控制台
             level_name = logging.getLevelName(level)
@@ -89,9 +109,11 @@ class LogManager:
         target_modal_id = modal_id or self.current_modal_id
         if target_modal_id and self.modal_status_callback:
             try:
-                self.modal_status_callback(status, target_modal_id)
-            except Exception:
-                pass  # 忽略回调中的错误
+                self.executor.submit(
+                    self.modal_status_callback(status, target_modal_id)
+                )
+            except Exception as e:
+                self.log_error(e)
         elif self.ui_callback:
             # 如果没有专门的模态状态回调，则使用常规UI日志
             self.log_ui(f"Status: {status}")
@@ -101,21 +123,30 @@ class LogManager:
         target_modal_id = modal_id or self.current_modal_id
         if target_modal_id and self.modal_log_callback:
             try:
-                self.modal_log_callback(message, target_modal_id)
-            except Exception:
-                pass  # 忽略回调中的错误
+                self.executor.submit(
+                    self.modal_log_callback(message, target_modal_id)
+                )
+            except Exception as e:
+                self.log_error(e)
         else:
             # 回退到常规UI日志
             self.log_ui(message)
+
+    def log_modal_process_debug(self, message: str, modal_id: str = None):
+        """向模态窗口添加调试日志，仅在调试模式启用时生效"""
+        if self.debug_mode:
+            self.log_modal_process(f"[DEBUG] {message}", modal_id)
 
     def update_modal_progress(self, percent: int, text: str = "", modal_id: str = None):
         """更新模态窗口进度"""
         target_modal_id = modal_id or self.current_modal_id
         if target_modal_id and self.modal_progress_callback:
             try:
-                self.modal_progress_callback(percent, text, target_modal_id)
-            except Exception:
-                pass  # 忽略回调中的错误
+                self.executor.submit(
+                   self.modal_progress_callback(percent, text, target_modal_id)
+                )
+            except Exception as e:
+                self.log_error(e)
         else:
             # 回退到常规UI日志
             self.log_ui(f"Progress: {percent}% - {text}")

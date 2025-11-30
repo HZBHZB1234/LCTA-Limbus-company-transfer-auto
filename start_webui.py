@@ -1,7 +1,5 @@
 import sys
-import os
 from pathlib import Path
-import utils.install 
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent

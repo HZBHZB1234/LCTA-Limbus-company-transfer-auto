@@ -7,6 +7,8 @@ import time
 import sys
 
 from . import log_manager as log
+
+
 def find_lcb():
     """查找游戏安装路径"""
     try:
@@ -141,5 +143,104 @@ def load_config():
     except FileNotFoundError:
         return None
 
+def load_config_default():
+    try:
+        with open('config_default.json','r',encoding='utf-8') as f:
+            config = json.load(f)
+            return config
+    except FileNotFoundError:
+        return None
+    
 def check_game_path(game_path):
     return os.path.exists(game_path + 'LimbusCompany.exe')
+
+def fix_config(config, config_default=None, config_check=None):
+    """
+    修复配置文件中的错误
+    
+    Args:
+        config (dict): 当前配置
+        config_default (dict): 默认配置，如果为None则自动加载
+        config_check (dict): 配置类型定义，如果为None则自动加载
+    
+    Returns:
+        dict: 修复后的配置
+    """
+    if config_default is None:
+        config_default = load_config_default()
+    
+    if config_check is None:
+        config_check = load_config_types()
+    
+    if config_default is None or config_check is None:
+        # 如果无法加载默认配置或类型定义，则返回原配置
+        log.log("警告: 无法加载默认配置或配置类型定义，跳过配置修复")
+        return config
+    
+    def _fix_recursive(current_config, current_default, current_check, path=""):
+        """
+        递归修复配置
+        """
+        if not isinstance(current_check, dict):
+            return
+        
+        for key, expected_type in current_check.items():
+            current_path = f"{path}.{key}" if path else key
+            
+            # 如果键不存在于当前配置中，从默认配置复制
+            if key not in current_config:
+                if key in current_default:
+                    current_config[key] = current_default[key]
+                    log.log(f"修复配置: 添加缺失的键 '{current_path}' = {current_default[key]}")
+                else:
+                    # 默认配置中也没有此键，根据类型设置默认值
+                    if expected_type == "null":
+                        current_config[key] = None
+                    elif expected_type == "str":
+                        current_config[key] = ""
+                    elif expected_type == "int":
+                        current_config[key] = 0
+                    elif expected_type == "bool":
+                        current_config[key] = False
+                    elif expected_type == "dict":
+                        current_config[key] = {}
+                    elif isinstance(expected_type, list):
+                        current_config[key] = expected_type[0] if expected_type else None
+                    log.log(f"修复配置: 添加缺失的键 '{current_path}' 并设置默认值")
+                continue
+                
+            value = current_config[key]
+            
+            # 如果期望类型是字典且实际值也是字典，则递归检查
+            if isinstance(expected_type, dict) and isinstance(value, dict):
+                # 确保默认配置也有对应的键
+                if key not in current_default or not isinstance(current_default[key], dict):
+                    current_default[key] = {}
+                _fix_recursive(value, current_default[key], expected_type, current_path)
+            else:
+                # 检查基本类型
+                if not validate_config_value(value, expected_type):
+                    # 类型不匹配，尝试从默认配置获取正确的值
+                    if key in current_default and validate_config_value(current_default[key], expected_type):
+                        current_config[key] = current_default[key]
+                        log.log(f"修复配置: 修正键 '{current_path}' 的值为默认值 {current_default[key]}")
+                    else:
+                        # 默认配置中也没有有效值，根据类型设置默认值
+                        if expected_type == "null":
+                            current_config[key] = None
+                        elif expected_type == "str":
+                            current_config[key] = ""
+                        elif expected_type == "int":
+                            current_config[key] = 0
+                        elif expected_type == "bool":
+                            current_config[key] = False
+                        elif expected_type == "dict":
+                            current_config[key] = {}
+                        elif isinstance(expected_type, list):
+                            current_config[key] = expected_type[0] if expected_type else None
+                        log.log(f"修复配置: 重置键 '{current_path}' 为类型相关的默认值")
+    
+    # 创建配置副本以避免修改原始配置
+    fixed_config = json.loads(json.dumps(config))
+    _fix_recursive(fixed_config, config_default, config_check)
+    return fixed_config

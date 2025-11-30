@@ -303,6 +303,63 @@ class ModalWindow {
     }
 }
 
+// 显示简单提示的模态窗口
+function showMessage(title, message, onCloseCallback = () => {
+    pywebview.api.log("用户关闭窗口")
+}) {
+    const modal = new ModalWindow(title);
+    modal.setStatus(message);
+    modal.showProgress(false);
+    
+    // 修改底部按钮为"确定"
+    const cancelButton = document.getElementById(`cancel-btn-${modal.id}`);
+    if (cancelButton) {
+        cancelButton.textContent = '确定';
+        cancelButton.addEventListener('click', () => {
+            modal.close();
+            if (onCloseCallback && typeof onCloseCallback === 'function') {
+                onCloseCallback();
+            }
+        });
+    }
+    
+    return modal;
+}
+
+// 显示带有确认/取消选项的模态窗口
+function showConfirm(title, message, onConfirmCallback, onCancelCallback) {
+    const modal = new ModalWindow(title);
+    modal.setStatus(message);
+    modal.showProgress(false);
+    
+    // 修改底部按钮
+    const modalFooter = modal.element.querySelector('.modal-footer');
+    if (modalFooter) {
+        modalFooter.innerHTML = `
+            <button class="action-btn" id="confirm-btn-${modal.id}">确定</button>
+            <button class="secondary-btn" id="cancel-btn-${modal.id}">取消</button>
+        `;
+        
+        // 绑定确认按钮事件
+        document.getElementById(`confirm-btn-${modal.id}`).addEventListener('click', () => {
+            modal.close();
+            if (onConfirmCallback && typeof onConfirmCallback === 'function') {
+                onConfirmCallback();
+            }
+        });
+        
+        // 绑定取消按钮事件
+        document.getElementById(`cancel-btn-${modal.id}`).addEventListener('click', () => {
+            modal.close();
+            if (onCancelCallback && typeof onCancelCallback === 'function') {
+                onCancelCallback();
+            }
+        });
+    }
+    
+    return modal;
+}
+
 // 各功能函数
 function startTranslation() {
     const modal = new ModalWindow('翻译工具');
@@ -706,4 +763,38 @@ function addLogMessage(message) {
 window.addEventListener('pywebviewready', function() {
     addLogMessage('WebUI已准备就绪');
     console.log('PyWebview API is ready');
+
+    pywebview.api.get_attr("message_list").then(function(message_list) {
+        if (message_list && Array.isArray(message_list)) {
+            for (let i = message_list.length - 1; i >= 0; i--) {
+                const msg = message_list[i];
+                if (Array.isArray(msg) && msg.length >= 2) {
+                    showMessage(msg[0], msg[1]);
+                    message_list.splice(i, 1);
+                }
+            }
+        }
+    });
+
+    pywebview.api.get_attr('config_ok').then(function(config_ok) {
+        console.log(config_ok);
+        if (config_ok === false) { 
+            showConfirm(
+                "警告",
+                "配置项格式错误，是否尝试修复?\n否则将会使用默认配置",
+                () => {
+                    pywebview.api.get_attr("config").then(function(config) {
+                        pywebview.api.fix_config(config).then(function(fixed_config) {
+                            pywebview.api.init_config.set_attr("config", fixed_config);
+                        });
+                    });
+                },
+                () => {
+                    pywebview.api.init_config.use_default();
+                }
+            );
+        }
+    }).catch(function(error) {
+        console.error('Error checking config:', error);
+    });
 });

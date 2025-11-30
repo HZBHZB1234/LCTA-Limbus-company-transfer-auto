@@ -3,7 +3,6 @@ import os
 import sys
 from pathlib import Path
 import json
-import threading
 import time
 import logging
 from logging.handlers import RotatingFileHandler
@@ -27,15 +26,54 @@ class LCTA_API():
         self.log_manager.set_log_callback(self.logger.info)
         self.log_manager.set_error_callback(self.logger.exception)
         self.log_manager.set_ui_callback(self.log_ui)
+        self.message_list = []
+
+        self.set_function()
+        self.init_config()
 
     def set_function(self):
         self.find_lcb = load_util.find_lcb
         self.load_config = load_util.load_config
         self.check_game_path = load_util.check_game_path
         self.validate_config = load_util.validate_config
+        self.load_config_default = load_util.load_config_default
+        self.fix_config = load_util.fix_config
+
+    def init_config(self):
+        def use_default(self):
+            with open("config.json", "w", encoding="utf-8") as f:
+                json.dump(self.config, f, ensure_ascii=False, indent=4)
+        self.config = self.load_config()
+        if self.config is None:
+            self.log("在初始化时未找到配置文件")
+            self.config = self.load_config_default()
+            if self.config is None:
+                self.log("未知致命错误，理应不会触发，无法找到内置默认配置")
+                return False
+            else:
+                try:
+                    use_default()
+                    self.log("已生成默认配置文件")
+                    self.message_list.append(["提示","配置文件不存在，已生成默认配置文件"])
+                except Exception as e:
+                    self.log("生成默认配置文件时出现问题")
+                    self.message_list.append(["错误","生成默认配置文件时出现问题"])
+                    self.log_error(e)
+        self.config_ok, self.config_error = self.validate_config(self.config)
+        if not self.config_ok:
+            self.log("配置文件格式错误")
+            self.log("\n".join(self.config_error))
 
     def set_window(self, window):
         self._window = window
+
+    def get_attr(self, attr_name):
+        if hasattr(self, attr_name):
+            return getattr(self, attr_name)
+
+    def set_attr(self, attr_name, value):
+        if hasattr(self, attr_name):
+            setattr(self, attr_name, value)
 
     def browse_file(self, input_id):
         """打开文件浏览器"""
@@ -348,6 +386,7 @@ def main():
 
     # 创建API实例
     api = LCTA_API(logger)
+    logger.info('API已创建')
     # 创建窗口 - 先创建窗口，不立即绑定API
     window = webview.create_window(
         "LCTA - 边狱公司汉化工具箱",

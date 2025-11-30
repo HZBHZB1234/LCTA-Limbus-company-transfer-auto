@@ -151,6 +151,18 @@ button.secondary-btn:hover {
     background-color: #7f8c8d;
 }
 
+/* 添加缺失的按钮样式规则 */
+.action-btn, .secondary-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
+    color: white;
+    min-width: 80px;
+}
+
 .log-container {
     margin-top: 20px;
     border: 1px solid #ddd;

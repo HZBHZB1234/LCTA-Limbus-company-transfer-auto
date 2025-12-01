@@ -31,6 +31,13 @@ jobs:
       run: |
         pyinstaller --onefile --windowed --icon=favicon.ico --name=LCTA start_webui.py
 
+    - name: create venv
+      run: |
+        python -m venv venv
+        .\venv\Scripts\activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
     - name: Compile C launcher
       run: |
         # 使用gcc编译器编译C启动器
@@ -48,8 +55,8 @@ jobs:
         copy README.md release_assets\
         copy LICENSE release_assets\
         copy favicon.ico release_assets\
-        # 创建venv目录
-        mkdir release_assets\venv
+        # 复制venv目录
+        copy venv release_assets\
 
     - name: Package release
       run: |

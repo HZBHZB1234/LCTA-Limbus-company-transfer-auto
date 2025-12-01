@@ -1,6 +1,5 @@
 requests
 jsonpatch
-scipy
 pywebview
 pyunpack
 py7zr

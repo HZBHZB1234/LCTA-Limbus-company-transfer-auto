@@ -359,6 +359,75 @@ class LCTA_API():
             self.log_error(f"更新模态窗口进度失败: {e}")
 
 
+    def get_game_path(self):
+        """获取游戏路径"""
+        if self.config and "game_path" in self.config:
+            return self.config["game_path"]
+        return ""
+
+    def save_settings(self, game_path, debug_mode):
+        """保存设置"""
+        try:
+            # 更新配置
+            self.config["game_path"] = game_path
+            self.config["debug"] = debug_mode
+            
+            # 保存到文件
+            with open("config.json", "w", encoding="utf-8") as f:
+                json.dump(self.config, f, ensure_ascii=False, indent=4)
+            
+            self.log(f"设置已保存: 游戏路径={game_path}, 调试模式={debug_mode}")
+            return {"success": True, "message": "设置保存成功"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": f"保存设置时出错: {str(e)}"}
+
+    def use_default_config(self):
+        """使用默认配置"""
+        try:
+            default_config = self.load_config_default()
+            if default_config is None:
+                return {"success": False, "message": "无法加载默认配置"}
+            
+            # 更新内存中的配置
+            self.config = default_config
+            
+            # 保存到文件
+            with open("config.json", "w", encoding="utf-8") as f:
+                json.dump(default_config, f, ensure_ascii=False, indent=4)
+            
+            self.log("已重置为默认配置")
+            return {"success": True, "message": "已重置为默认配置"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": f"重置配置时出错: {str(e)}"}
+
+    def reset_config(self):
+        """重置配置"""
+        try:
+            # 删除现有配置文件
+            if os.path.exists("config.json"):
+                os.remove("config.json")
+            
+            # 重新加载默认配置
+            default_config = self.load_config_default()
+            if default_config is None:
+                return {"success": False, "message": "无法加载默认配置"}
+            
+            # 更新内存中的配置
+            self.config = default_config
+            
+            # 保存到文件
+            with open("config.json", "w", encoding="utf-8") as f:
+                json.dump(default_config, f, ensure_ascii=False, indent=4)
+            
+            self.log("配置已重置")
+            return {"success": True, "message": "配置已重置"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": f"重置配置时出错: {str(e)}"}
+
+
 def setup_logging():
     """
     配置日志系统，使5KB作为轮换大小
@@ -424,10 +493,12 @@ def main():
     )
     
     logger.info("WebUI窗口已创建")
-    
+
+    debug_mode = api.config.get("debug", False)
+
     # 启动应用
     webview.start(
-        debug=True,  # 开启调试模式便于开发
+        debug=debug_mode,
         http_server=True  # 使用内置HTTP服务器
     )
 

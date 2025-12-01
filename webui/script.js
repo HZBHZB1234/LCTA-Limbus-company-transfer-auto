@@ -55,6 +55,11 @@ document.querySelectorAll('.sidebar button').forEach(button => {
         const section = document.getElementById(sectionId);
         if (section) {
             section.classList.add('active');
+            
+            // 如果是设置界面，加载设置
+            if (sectionId === 'settings-section') {
+                loadSettings();
+            }
         }
     });
 });
@@ -573,6 +578,92 @@ function saveAPIConfig() {
     });
 }
 
+// 设置界面相关函数
+function loadSettings() {
+    // 从后端获取当前配置并填充到表单
+    pywebview.api.get_attr('config').then(function(config) {
+        if (config && typeof config === 'object') {
+            // 填充游戏路径
+            if (config.game_path !== undefined) {
+                document.getElementById('game-path').value = config.game_path;
+            }
+            
+            // 设置调试模式复选框
+            if (config.debug !== undefined) {
+                document.getElementById('debug-mode').checked = config.debug;
+            }
+        }
+    }).catch(function(error) {
+        console.error('加载设置时出错:', error);
+    });
+}
+
+function saveSettings() {
+    const modal = new ProgressModal('保存设置');
+    
+    // 获取表单数据
+    const gamePath = document.getElementById('game-path').value;
+    const debugMode = document.getElementById('debug-mode').checked;
+    
+    modal.addLog('正在保存设置...');
+    
+    // 调用后端API保存设置
+    pywebview.api.save_settings(gamePath, debugMode).then(function(result) {
+        if (result.success) {
+            modal.complete(true, '设置保存成功: ' + result.message);
+        } else {
+            modal.complete(false, '设置保存失败: ' + result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '保存设置时出现错误: ' + error);
+    });
+}
+
+function useDefaultConfig() {
+    const modal = new ProgressModal('使用默认配置');
+    
+    modal.addLog('正在加载默认配置...');
+    
+    pywebview.api.use_default_config().then(function(result) {
+        if (result.success) {
+            modal.complete(true, result.message);
+            // 重新加载设置到表单
+            setTimeout(loadSettings, 1000);
+        } else {
+            modal.complete(false, '操作失败: ' + result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '操作时出现错误: ' + error);
+    });
+}
+
+function resetConfig() {
+    showConfirm(
+        "确认重置",
+        "确定要重置所有配置吗？这将删除当前配置并恢复为默认设置。",
+        function() {
+            const modal = new ProgressModal('重置配置');
+            
+            modal.addLog('正在重置配置...');
+            
+            pywebview.api.reset_config().then(function(result) {
+                if (result.success) {
+                    modal.complete(true, result.message);
+                    // 重新加载设置到表单
+                    setTimeout(loadSettings, 1000);
+                } else {
+                    modal.complete(false, '操作失败: ' + result.message);
+                }
+            }).catch(function(error) {
+                modal.complete(false, '操作时出现错误: ' + error);
+            });
+        },
+        function() {
+            // 用户取消操作，不做任何事
+        }
+    );
+}
+
 // 更新进度条函数
 function updateProgress(percent, text) {
     document.getElementById('progress-fill').style.width = percent + '%';
@@ -614,6 +705,9 @@ function addLogMessage(message) {
 window.addEventListener('pywebviewready', function() {
     addLogMessage('WebUI已准备就绪');
     console.log('PyWebview API is ready');
+
+    // 加载设置界面的数据
+    loadSettings();
 
     pywebview.api.get_attr("message_list").then(function(message_list) {
         if (message_list && Array.isArray(message_list)) {
@@ -672,6 +766,11 @@ window.addEventListener('pywebviewready', function() {
             });
         }
     }).catch(function(error) {
-        console.error('Error checking config:', error);
+        pywebview.api.log('Error checking config:'+ error);
+    });
+    pywebview.api.get_attr('config').then(function(config) {
+        pywebview.api.log('Config loaded  and close success');
+    }).catch(function(error) {
+        pywebview.api.log('Error getting config:'+ error);
     });
 });

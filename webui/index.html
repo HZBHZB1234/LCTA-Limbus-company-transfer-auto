@@ -23,6 +23,7 @@
         <button id="calculate-btn">抽卡概率计算</button>
         <button id="log-btn">日志</button>
         <button id="about-btn">关于</button>
+        <button id="settings-btn">设置</button>
     </div>
 
     <div class="main-content">
@@ -358,6 +359,32 @@
                     <span class="log-timestamp">[2025-01-01 12:00:00]</span>
                     <span class="log-message">系统已启动，准备就绪</span>
                 </div>
+            </div>
+        </div>
+        
+        <!-- 设置界面 -->
+        <div id="settings-section" class="content-section">
+            <h2 class="section-title">设置</h2>
+            <div class="form-group">
+                <label for="game-path">游戏路径:</label>
+                <div class="file-input-group">
+                    <input type="text" id="game-path" placeholder="选择游戏安装路径">
+                    <button class="action-btn" onclick="browseFolder('game-path')">浏览</button>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="debug-mode"> 启用调试模式
+                </label>
+            </div>
+            
+            <button class="submit-btn" onclick="saveSettings()">保存设置</button>
+            
+            <div class="form-group" style="margin-top: 30px;">
+                <h3>配置文件操作</h3>
+                <button class="action-btn" onclick="useDefaultConfig()">使用默认配置</button>
+                <button class="secondary-btn" onclick="resetConfig()" style="margin-left: 10px;">重置配置</button>
             </div>
         </div>
     </div>

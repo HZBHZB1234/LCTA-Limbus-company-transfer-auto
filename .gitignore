@@ -1,4 +1,5 @@
 *\__pycache__/
+dev_cache/
 *.pyc
 *.pyo
 *.pyd
@@ -9,6 +10,7 @@
 *.json
 !config*.json
 config.json
+!files.json
 .vscode
 .git
 .idea

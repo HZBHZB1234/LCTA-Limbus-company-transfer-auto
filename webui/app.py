@@ -16,6 +16,33 @@ sys.path.insert(0, str(project_root))
 import webutils
 import webutils.load as load_util
 
+def get_app_version():
+    """从version.json获取当前应用版本"""
+    try:
+        import json
+        with open("version.json", 'r', encoding='utf-8') as f:
+            version_data = json.load(f)
+            return version_data.get("version", "v1.0.0")
+    except Exception as e:
+        print(f"读取版本信息失败: {e}")
+        # 默认返回
+        return "v1.0.0"
+
+# 版本信息
+APP_VERSION = get_app_version()
+
+def check_for_updates():
+    """检查更新"""
+    try:
+        # 尝试导入更新模块
+        from utils.update import Updater
+        updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto")
+        has_update = updater.check_and_update(APP_VERSION)
+        return has_update
+    except ImportError:
+        print("更新模块不可用")
+        return False
+
 class LCTA_API():
     def __init__(self,logger:logging):
         self._window = None

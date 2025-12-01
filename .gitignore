@@ -7,6 +7,8 @@
 *.zip
 *.7z
 *.json
+!config*.json
+config.json
 .vscode
 .git
 .idea

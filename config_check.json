@@ -1,0 +1,34 @@
+{
+    "ui_default": {
+        "translator": {},
+        "install": "null",
+        "zero": {
+            "better_download": "bool"
+        },
+        "ourplay": {
+            "decrease_size": "bool",
+            "llc_font": "bool"
+        },
+        "clean": {
+            "remove_cache": "bool"
+        },
+        "proper": {
+            "join_char": "str",
+            "disable_space": "bool",
+            "max_length": "int",
+            "output_type": [
+                "text_one",
+                "text_two",
+                "json"
+            ]
+        },
+        "search": {
+            "divide_size": "bool",
+            "using_re": "bool",
+            "all_same": "bool"
+        },
+        "backup": "null"
+    },
+    "game_path": "str",
+    "debug": "bool"
+}

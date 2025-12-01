@@ -643,7 +643,7 @@ window.addEventListener('pywebviewready', function() {
                     () => {
                         // 点击确认按钮的处理
                         pywebview.api.get_attr("config").then(function(config) {
-                            return pywebview.api.get_attr('fix_config')(config);
+                            return pywebview.api.run_func('fix_config', config);
                         }).then(function(fixed_config) {
                             return pywebview.api.set_attr("config", fixed_config);
                         }).then(function() {
@@ -654,7 +654,7 @@ window.addEventListener('pywebviewready', function() {
                     },
                     () => {
                         // 点击取消按钮的处理
-                        pywebview.api.init_config.use_default().then(function() {
+                        pywebview.api.use_default().then(function() {
                             showMessage("提示", "已使用默认配置，请重新启动程序");
                         }).catch(function(error) {
                             showMessage("错误", "使用默认配置时出错: " + error);
@@ -669,9 +669,9 @@ window.addEventListener('pywebviewready', function() {
                     () => {
                         // 点击确认按钮的处理
                         pywebview.api.get_attr("config").then(function(config) {
-                            return pywebview.api.fix_config(config);
+                            return pywebview.api.run_func('fix_config', config);
                         }).then(function(fixed_config) {
-                            return pywebview.api.init_config.set_attr("config", fixed_config);
+                            return pywebview.api.set_attr("config", fixed_config);
                         }).then(function() {
                             showMessage("提示", "配置已修复，请重新启动程序");
                         }).catch(function(error) {
@@ -680,7 +680,7 @@ window.addEventListener('pywebviewready', function() {
                     },
                     () => {
                         // 点击取消按钮的处理
-                        pywebview.api.init_config.use_default().then(function() {
+                        pywebview.api.use_default().then(function() {
                             showMessage("提示", "已使用默认配置，请重新启动程序");
                         }).catch(function(error) {
                             showMessage("错误", "使用默认配置时出错: " + error);

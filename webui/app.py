@@ -39,10 +39,15 @@ class LCTA_API():
         self.load_config_default = load_util.load_config_default
         self.fix_config = load_util.fix_config
 
+    def run_func(self, func_name, *args):
+        if hasattr(self, func_name):
+            func = getattr(self, func_name)
+            return func(*args)
+        else:
+            self.log(f"函数 {func_name} 不存在")
+            return None
+        
     def init_config(self):
-        def use_default(self):
-            with open("config.json", "w", encoding="utf-8") as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=4)
         self.config = self.load_config()
         if self.config is None:
             self.log("在初始化时未找到配置文件")
@@ -52,7 +57,7 @@ class LCTA_API():
                 return False
             else:
                 try:
-                    use_default()
+                    self.use_default()
                     self.log("已生成默认配置文件")
                     self.message_list.append(["提示","配置文件不存在，已生成默认配置文件"])
                 except Exception as e:
@@ -63,6 +68,11 @@ class LCTA_API():
         if not self.config_ok:
             self.log("配置文件格式错误")
             self.log("\n".join(self.config_error))
+    
+    def use_default(self):
+        """使用默认配置并保存"""
+        with open("config.json", "w", encoding="utf-8") as f:
+            json.dump(self.config, f, ensure_ascii=False, indent=4)
 
     def set_window(self, window):
         self._window = window

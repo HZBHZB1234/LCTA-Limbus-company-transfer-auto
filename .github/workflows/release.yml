@@ -33,9 +33,8 @@ jobs:
 
     - name: Compile C launcher
       run: |
-        # 使用Visual Studio编译器编译C启动器
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-        cl /EHsc launcher.c /Fe:launcher.exe
+        # 使用gcc编译器编译C启动器
+        gcc -o launcher.exe launcher.c -lshlwapi
 
     - name: Create release assets
       run: |

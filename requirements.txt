@@ -1,0 +1,6 @@
+requests
+jsonpatch
+scipy
+webview
+pyunpack
+py7zr

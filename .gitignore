@@ -4,13 +4,10 @@ dev_cache/
 *.pyo
 *.pyd
 *.so
-*.txt
 *.zip
 *.7z
-*.json
-!config*.json
-config.json
-!files.json
+*config.json
+proper.json
 .vscode
 .git
 .idea

@@ -69,11 +69,17 @@ class LCTA_API():
             self.log("配置文件格式错误")
             self.log("\n".join(self.config_error))
     
-    def use_default(self):
+    def use_inner(self):
         """使用默认配置并保存"""
         with open("config.json", "w", encoding="utf-8") as f:
             json.dump(self.config, f, ensure_ascii=False, indent=4)
 
+    def use_default(self):
+        """使用内置默认配置并保存"""
+        with open("config.json", "w", encoding="utf-8") as f:
+            json.dump(self.load_config_default(), f, ensure_ascii=False, indent=4)
+        self.log("已生成内置默认配置文件")
+        
     def set_window(self, window):
         self._window = window
 

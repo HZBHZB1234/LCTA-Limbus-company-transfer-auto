@@ -647,7 +647,10 @@ window.addEventListener('pywebviewready', function() {
                         }).then(function(fixed_config) {
                             return pywebview.api.set_attr("config", fixed_config);
                         }).then(function() {
-                            showMessage("提示", "配置已修复，请重新启动程序");
+                            // 保存修复后的配置到文件
+                            return pywebview.api.use_inner();
+                        }).then(function() {
+                            showMessage("提示", "配置已修复并保存，请重新启动程序");
                         }).catch(function(error) {
                             showMessage("错误", "修复配置时出错: " + error);
                         });
@@ -662,30 +665,9 @@ window.addEventListener('pywebviewready', function() {
                     }
                 );
             }).catch(function(error) {
-                // 即使获取错误信息失败，也要显示基本的错误提示
-                showConfirm(
-                    "警告",
-                    "配置项格式错误，是否尝试修复?\n否则将会使用默认配置",
-                    () => {
-                        // 点击确认按钮的处理
-                        pywebview.api.get_attr("config").then(function(config) {
-                            return pywebview.api.run_func('fix_config', config);
-                        }).then(function(fixed_config) {
-                            return pywebview.api.set_attr("config", fixed_config);
-                        }).then(function() {
-                            showMessage("提示", "配置已修复，请重新启动程序");
-                        }).catch(function(error) {
-                            showMessage("错误", "修复配置时出错: " + error);
-                        });
-                    },
-                    () => {
-                        // 点击取消按钮的处理
-                        pywebview.api.use_default().then(function() {
-                            showMessage("提示", "已使用默认配置，请重新启动程序");
-                        }).catch(function(error) {
-                            showMessage("错误", "使用默认配置时出错: " + error);
-                        });
-                    }
+                showMessage(
+                    "错误",
+                    "未知错误，可能导致未知后果。错误信息:\n" + error
                 );
             });
         }

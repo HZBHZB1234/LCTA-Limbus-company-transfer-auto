@@ -58,7 +58,7 @@ jobs:
         powershell Compress-Archive -Path * -DestinationPath ../LCTA-release.zip
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: LCTA-build-${{ github.sha }}
         path: LCTA-release.zip

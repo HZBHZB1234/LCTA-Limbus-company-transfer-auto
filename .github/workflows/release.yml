@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - '**'
-    tags:
-      - 'v*'  # 当推送以v开头的标签时触发
+  pull_request:
+    branches:
+      - '**'
 
 jobs:
   build:
@@ -14,7 +15,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -56,3 +56,9 @@ jobs:
         # 打包为zip文件
         cd release_assets
         powershell Compress-Archive -Path * -DestinationPath ../LCTA-release.zip
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: LCTA-build-${{ github.sha }}
+        path: LCTA-release.zip

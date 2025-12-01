@@ -34,8 +34,8 @@ jobs:
     - name: create venv
       run: |
         python -m venv venv
-        ./venv/Scripts/pip install --upgrade pip
-        ./venv/Scripts/pip install -r requirements.txt
+        venv\Scripts\python -m pip install --upgrade pip
+        venv\Scripts\pip install -r requirements.txt
 
     - name: Compile C launcher
       run: |
@@ -55,7 +55,7 @@ jobs:
         copy LICENSE release_assets\
         copy favicon.ico release_assets\
         # 复制venv目录
-        copy venv release_assets\
+        move venv release_assets\
 
     - name: Package release
       run: |

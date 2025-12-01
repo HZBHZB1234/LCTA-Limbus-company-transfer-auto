@@ -385,6 +385,61 @@ class LCTA_API():
         except Exception as e:
             self.log_error(f"更新模态窗口进度失败: {e}")
 
+    def check_update(self):
+        """检查更新"""
+        try:
+            self.log_ui("正在检查更新...")
+            from utils.update import Updater, get_app_version
+            
+            # 获取当前版本
+            current_version = get_app_version()
+            self.log_ui(f"当前版本: {current_version}")
+            
+            # 创建更新器实例
+            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto")
+            
+            # 获取最新版本
+            latest_version = updater.get_latest_version()
+            if not latest_version:
+                return {"success": False, "message": "获取最新版本信息失败"}
+            
+            self.log_ui(f"最新版本: {latest_version}")
+            
+            # 比较版本
+            if not updater.compare_versions(current_version, latest_version):
+                return {"success": True, "message": f"当前已是最新版本 ({current_version})"}
+            else:
+                return {"success": True, "has_update": True, "message": f"发现新版本 {latest_version}，当前版本 {current_version}", "latest_version": latest_version}
+                
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": f"检查更新时出错: {str(e)}"}
+
+    def perform_update(self):
+        """执行更新"""
+        try:
+            self.log_ui("开始执行更新...")
+            from utils.update import Updater, get_app_version
+            
+            # 获取当前版本
+            current_version = get_app_version()
+            
+            # 创建更新器实例
+            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto")
+            
+            # 执行更新
+            result = updater.check_and_update(current_version)
+            
+            if result:
+                self.log_ui("更新完成，应用将自动重启...")
+                return {"success": True, "message": "更新完成，应用将自动重启..."}
+            else:
+                self.log_ui("更新失败或已经是最新版本")
+                return {"success": True, "message": "更新失败或已经是最新版本"}
+                
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": f"执行更新时出错: {str(e)}"}
 
     def get_game_path(self):
         """获取游戏路径"""

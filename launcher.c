@@ -27,7 +27,6 @@ int main() {
     
     // 检查Python解释器（优先使用系统Python，备选用虚拟环境）
     const char* python_paths[] = {
-        "python.exe",                    // 系统Python
         ".\\venv\\Scripts\\python.exe",  // 虚拟环境Python
         "..\\venv\\Scripts\\python.exe"  // 上级目录的虚拟环境Python
     };

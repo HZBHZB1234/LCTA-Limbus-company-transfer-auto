@@ -15,6 +15,7 @@ sys.path.insert(0, str(project_root))
 
 import webutils
 import webutils.load as load_util
+from webutils.update import Updater, get_app_version
 
 
 class LCTA_API():
@@ -31,7 +32,6 @@ class LCTA_API():
 
         self.set_function()
         self.init_config()
-        self.perform_update()  # 启动时检查并执行更新
 
     def set_function(self):
         self.find_lcb = load_util.find_lcb
@@ -70,6 +70,7 @@ class LCTA_API():
         if not self.config_ok:
             self.log("配置文件格式错误")
             self.log("\n".join(self.config_error))
+
     
     def use_inner(self):
         """使用默认配置并保存"""
@@ -360,61 +361,6 @@ class LCTA_API():
         except Exception as e:
             self.log_error(f"更新模态窗口进度失败: {e}")
 
-    def check_update(self):
-        """检查更新"""
-        try:
-            self.log_ui("正在检查更新...")
-            from utils.update import Updater, get_app_version
-            
-            # 获取当前版本
-            current_version = get_app_version()
-            self.log_ui(f"当前版本: {current_version}")
-            
-            # 创建更新器实例
-            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto")
-            
-            # 获取最新版本
-            latest_version = updater.get_latest_version()
-            if not latest_version:
-                return {"success": False, "message": "获取最新版本信息失败"}
-            
-            self.log_ui(f"最新版本: {latest_version}")
-            
-            # 比较版本
-            if not updater.compare_versions(current_version, latest_version):
-                return {"success": True, "message": f"当前已是最新版本 ({current_version})"}
-            else:
-                return {"success": True, "has_update": True, "message": f"发现新版本 {latest_version}，当前版本 {current_version}", "latest_version": latest_version}
-                
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": f"检查更新时出错: {str(e)}"}
-
-    def perform_update(self):
-        """执行更新"""
-        try:
-            self.log_ui("开始执行更新...")
-            from utils.update import Updater, get_app_version
-            
-            # 获取当前版本
-            current_version = get_app_version()
-            
-            # 创建更新器实例
-            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto")
-            
-            # 执行更新
-            result = updater.check_and_update(current_version)
-            
-            if result:
-                self.log_ui("更新完成，应用将自动重启...")
-                return {"success": True, "message": "更新完成，应用将自动重启..."}
-            else:
-                self.log_ui("更新失败或已经是最新版本")
-                return {"success": True, "message": "更新失败或已经是最新版本"}
-                
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": f"执行更新时出错: {str(e)}"}
 
     def get_game_path(self):
         """获取游戏路径"""
@@ -484,6 +430,49 @@ class LCTA_API():
             self.log_error(e)
             return {"success": False, "message": f"重置配置时出错: {str(e)}"}
 
+    def auto_check_update(self):
+        """自动检查更新"""
+        try:
+            # 只有在配置允许时才检查更新
+            if not self.config.get("auto_check_update", True):
+                return {"has_update": False}
+                
+            self.current_version = get_app_version()
+            self.log(f"当前版本: {self.current_version}")
+            
+            # 创建更新器实例
+            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", 
+                             self.config.get("delete_updating", True), self.log)
+            
+            update_info = updater.check_for_updates(self.current_version)
+            return update_info
+        except Exception as e:
+            self.log_error(f"检查更新时出错: {e}")
+            return {"has_update": False}
+
+    def perform_update_in_modal(self, modal_id):
+        """在模态窗口中执行更新"""
+        try:
+            self.add_modal_log("开始执行更新...", modal_id)
+            
+            # 创建更新器实例
+            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", 
+                             self.config.get("delete_updating", True), 
+                             lambda msg: self.add_modal_log(msg, modal_id))
+            
+            # 执行更新
+            result = updater.check_and_update(self.current_version)
+            
+            if result:
+                self.add_modal_log("更新完成，即将重启应用...", modal_id)
+            else:
+                self.add_modal_log("更新失败", modal_id)
+                
+            return result
+        except Exception as e:
+            self.add_modal_log(f"更新失败：{e}", modal_id)
+            self.log_error(e)
+            return False
 
 def setup_logging():
     """

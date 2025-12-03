@@ -6,15 +6,17 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 
 class Updater:
-    def __init__(self, repo_owner: str, repo_name: str):
+    def __init__(self, repo_owner: str, repo_name: str, delete_old_files: bool = True, output_func: Callable[[str], None] = print):
         self.repo_owner = repo_owner
         self.repo_name = repo_name
+        self.delete_old_files = delete_old_files
+        self.output_func = output_func
         self.api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/releases/latest"
         self.session = self._create_session()
         
@@ -51,7 +53,7 @@ class Updater:
             data = response.json()
             return data.get('tag_name')
         except Exception as e:
-            print(f"获取最新版本失败: {e}")
+            self.output_func(f"获取最新版本失败: {e}")
             return None
     
     def compare_versions(self, current_version: str, latest_version: str) -> bool:
@@ -85,7 +87,7 @@ class Updater:
                         break
             
             if not download_url:
-                print("未找到源码下载链接")
+                self.output_func("未找到源码下载链接")
                 return None
             
             # 确保缓存目录存在
@@ -93,7 +95,7 @@ class Updater:
             
             # 下载文件
             zip_path = os.path.join(cache_dir, "latest_release.zip")
-            print(f"正在下载: {download_url}")
+            self.output_func(f"正在下载: {download_url}")
             
             response = self.session.get(download_url)
             response.raise_for_status()
@@ -103,7 +105,7 @@ class Updater:
             
             return zip_path
         except Exception as e:
-            print(f"下载最新版本失败: {e}")
+            self.output_func(f"下载最新版本失败: {e}")
             return None
     
     def extract_release(self, zip_path: str, extract_to: str) -> Optional[str]:
@@ -122,29 +124,52 @@ class Updater:
             
             return extract_to
         except Exception as e:
-            print(f"解压文件失败: {e}")
+            self.output_func(f"解压文件失败: {e}")
             return None
     
     def install_requirements(self, source_dir: str) -> bool:
         """根据新的requirements.txt安装依赖"""
         requirements_path = os.path.join(source_dir, "requirements.txt")
         if not os.path.exists(requirements_path):
-            print("未找到requirements.txt文件")
+            self.output_func("未找到requirements.txt文件")
             return False
-        
         try:
-            # 使用当前Python环境安装依赖
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_path])
+            with open('requirements.txt', 'r', encoding='utf-8') as file:
+                requirements_old=file.read().strip().split('\n')
+
+            with open(requirements_path, 'r', encoding='utf-8') as file:
+                requirements_new=file.read().strip().split('\n')
+
+            for i in set(requirements_new) - set(requirements_old):
+                try:
+                    subprocess.check_call([sys.executable, "-m", "pip", "install", i])
+                except subprocess.CalledProcessError as e:
+                    self.output_func(f"安装依赖失败: {e}")
+                    raise
+
+            if not self.delete_old_files:
+                return True
+            
+            for i in set(requirements_old) - set(requirements_new):
+                try:
+                    subprocess.check_call([sys.executable, "-m", "pip", "uninstall", i])
+                except subprocess.CalledProcessError as e:
+                    self.output_func(f"卸载依赖失败: {e}")
             return True
-        except subprocess.CalledProcessError as e:
-            print(f"安装依赖失败: {e}")
-            return False
+        except Exception as e:
+            try:
+                # 使用当前Python环境安装依赖
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_path])
+                return True
+            except subprocess.CalledProcessError as e:
+                self.output_func(f"安装依赖失败: {e}")
+                return False
     
     def update_files(self, source_dir: str) -> bool:
         """根据update_assets/files.json配置更新文件"""
         files_config_path = os.path.join("update_assets", "files.json")
         if not os.path.exists(files_config_path):
-            print("未找到文件配置文件")
+            self.output_func("未找到文件配置文件")
             return False
         
         try:
@@ -159,30 +184,26 @@ class Updater:
                 if os.path.exists(current_file):
                     try:
                         os.remove(current_file)
-                        print(f"删除文件: {current_file}")
+                        self.output_func(f"删除文件: {current_file}")
                     except Exception as e:
-                        print(f"删除文件失败 {current_file}: {e}")
+                        self.output_func(f"删除文件失败 {current_file}: {e}")
             
-            # 移动新文件到对应目录
-            for file_path in files_to_update:
-                source_file = os.path.join(source_dir, file_path)
-                target_file = os.path.join(os.getcwd(), file_path)
-                
-                if os.path.exists(source_file):
-                    try:
-                        # 确保目标目录存在
-                        os.makedirs(os.path.dirname(target_file), exist_ok=True)
-                        
-                        # 复制文件
-                        shutil.copy2(source_file, target_file)
-                        print(f"复制文件: {source_file} -> {target_file}")
-                    except Exception as e:
-                        print(f"复制文件失败 {source_file}: {e}")
-                        continue
+            for files in os.walk(source_dir):
+                for file in files[2]:
+                    rel_dir = os.path.relpath(files[0], source_dir)
+                    rel_file = os.path.join(rel_dir, file) if rel_dir != '.' else file
+                    src_file_path = os.path.join(files[0], file)
+                    dest_file_path = os.path.join(os.getcwd(), rel_file)
+                    
+                    # 确保目标目录存在
+                    os.makedirs(os.path.dirname(dest_file_path), exist_ok=True)
+                    
+                    shutil.copy2(src_file_path, dest_file_path)
+                    self.output_func(f"更新文件: {dest_file_path}")
             
             return True
         except Exception as e:
-            print(f"更新文件失败: {e}")
+            self.output_func(f"更新文件失败: {e}")
             return False
     
     def restart_application(self, script_path: str = "main.py"):
@@ -191,59 +212,141 @@ class Updater:
             # 使用当前Python解释器重新启动应用
             os.execv(sys.executable, [sys.executable, script_path] + sys.argv[1:])
         except Exception as e:
-            print(f"重启应用失败: {e}")
+            self.output_func(f"重启应用失败: {e}")
             # 如果os.execv失败，则尝试使用subprocess
             subprocess.Popen([sys.executable, script_path] + sys.argv[1:])
     
     def check_and_update(self, current_version: str, cache_dir: str = "dev_cache") -> bool:
         """检查并执行更新"""
-        print("开始检查更新...")
+        self.output_func("开始检查更新...")
+
+        try:
+            shutil.rmtree(cache_dir)
+        except FileNotFoundError:
+            pass
         
         latest_version = self.get_latest_version()
         if not latest_version:
-            print("获取最新版本信息失败")
+            self.output_func("获取最新版本信息失败")
             return False
         
-        print(f"当前版本: {current_version}, 最新版本: {latest_version}")
+        self.output_func(f"当前版本: {current_version}, 最新版本: {latest_version}")
         
         if not self.compare_versions(current_version, latest_version):
-            print("当前已是最新版本")
+            self.output_func("当前已是最新版本")
             return False
         
-        print("发现新版本，开始更新...")
+        self.output_func("发现新版本，开始更新...")
         
         # 下载最新版本
         zip_path = self.download_latest_release(cache_dir)
         if not zip_path:
-            print("下载最新版本失败")
+            self.output_func("下载最新版本失败")
             return False
         
         # 解压文件
         extract_to = os.path.join(cache_dir, "extracted")
         source_dir = self.extract_release(zip_path, extract_to)
         if not source_dir:
-            print("解压文件失败")
+            self.output_func("解压文件失败")
             return False
         
         # 安装新依赖
         if not self.install_requirements(source_dir):
-            print("安装新依赖失败")
+            self.output_func("安装新依赖失败")
             return False
         
         # 更新文件
         if not self.update_files(source_dir):
-            print("更新文件失败")
+            self.output_func("更新文件失败")
             return False
         
         # 更新版本文件
-        update_version_file(latest_version)
+        update_version_file(latest_version, self.output_func)
         
-        print("更新完成！正在重启应用...")
+        self.output_func("更新完成！正在重启应用...")
         
         # 重启应用
         self.restart_application()
         
         return True
+
+    def check_for_updates(self, current_version: str) -> dict:
+        """
+        检查是否存在更新，如果存在则返回更新包大小、release标题与详情、发布时间
+        
+        Args:
+            current_version (str): 当前版本号
+            
+        Returns:
+            dict: 包含更新信息的字典
+                {
+                    "has_update": bool,           # 是否有更新
+                    "latest_version": str,        # 最新版本号
+                    "title": str,                 # release标题
+                    "body": str,                  # release详情
+                    "published_at": str,          # 发布时间
+                    "size": int,                  # 更新包大小(字节)
+                    "download_url": str           # 下载链接
+                }
+        """
+        try:
+            response = self.session.get(self.api_url)
+            response.raise_for_status()
+            data = response.json()
+            
+            latest_version = data.get('tag_name', '')
+            
+            # 检查是否有更新
+            has_update = self.compare_versions(current_version, latest_version)
+            
+            # 获取下载信息
+            download_url = data.get('zipball_url') or ''
+            size = 0
+            
+            # 如果有assets，尝试从中获取更准确的大小信息
+            assets = data.get('assets', [])
+            if assets:
+                # 查找zip文件的asset
+                for asset in assets:
+                    if asset.get('name', '').endswith('.zip'):
+                        download_url = asset.get('browser_download_url', download_url)
+                        size = asset.get('size', size)
+                        break
+            
+            # 如果没有从assets获取到大小信息，则使用zipball_url
+            if not size and download_url:
+                # 发送HEAD请求获取文件大小
+                try:
+                    head_response = self.session.head(download_url)
+                    if head_response.status_code == 200:
+                        size_str = head_response.headers.get('Content-Length', '0')
+                        size = int(size_str)
+                except Exception:
+                    pass  # 忽略获取大小失败的情况
+            
+            return {
+                "has_update": has_update,
+                "html_url": self.api_url.replace('api.', '').replace('/repos', ''),
+                "latest_version": latest_version,
+                "title": data.get('name', ''),
+                "body": data.get('body', ''),
+                "published_at": data.get('published_at', ''),
+                "size": size,
+                "download_url": download_url
+            }
+        except Exception as e:
+            self.output_func(f"检查更新失败: {e}")
+            # 返回默认值
+            return {
+                "has_update": False,
+                "latest_version": "",
+                "title": "",
+                "body": "",
+                "published_at": "",
+                "size": 0,
+                "download_url": ""
+            }
 
 
 def get_app_version() -> str:
@@ -261,7 +364,7 @@ def get_app_version() -> str:
     return None
 
 
-def update_version_file(new_version: str):
+def update_version_file(new_version: str, output_func: Callable[[str], None] = print):
     """更新version.json文件中的版本号"""
     try:
         version_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "version.json")
@@ -273,17 +376,17 @@ def update_version_file(new_version: str):
         with open(version_file_path, 'w', encoding='utf-8') as f:
             json.dump(version_data, f, indent=2, ensure_ascii=False)
         
-        print(f"版本文件已更新为: {new_version}")
+        output_func(f"版本文件已更新为: {new_version}")
     except Exception as e:
-        print(f"更新版本文件失败: {e}")
+        output_func(f"更新版本文件失败: {e}")
 
 
-def run_update_check():
+def run_update_check(output_func: Callable[[str], None] = print):
     """运行更新检查"""
-    updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto")
+    updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", output_func=output_func)
     current_version = get_app_version()
     if not current_version:
-        print("无法获取当前版本信息，请检查版本文件或配置文件")
+        output_func("无法获取当前版本信息，请检查版本文件或配置文件")
     return updater.check_and_update(current_version)
 
 

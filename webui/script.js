@@ -768,6 +768,96 @@ window.addEventListener('pywebviewready', function() {
     }).catch(function(error) {
         pywebview.api.log('Error checking config:'+ error);
     });
+    
+    // 检查更新
+    pywebview.api.auto_check_update().then(function(update_info) {
+        if (update_info && update_info.has_update) {
+            // 格式化更新信息
+            let message = `发现新版本: ${update_info.latest_version}\n`;
+            message += `当前版本: ${update_info.current_version || 'unknown'}\n\n`;
+            
+            // 添加发布标题
+            if (update_info.title) {
+                message += `发布标题: ${update_info.title}\n`;
+            }
+            
+            // 添加发布详情（限制长度以保持对话框可读性）
+            if (update_info.body) {
+                let body = update_info.body.trim();
+                // 限制显示长度，但提供完整信息的提示
+                if (body.length > 500) {
+                    message += `更新详情: \n${body.substring(0, 500)}...\n(详情请查看GitHub发布页面)\n\n`;
+                } else {
+                    message += `更新详情: \n${body}\n\n`;
+                }
+            }
+            
+            // 添加发布时间
+            if (update_info.published_at) {
+                // 简化时间显示
+                const publishDate = new Date(update_info.published_at);
+                message += `发布时间: ${publishDate.toLocaleDateString('zh-CN')}\n`;
+            }
+            
+            // 添加发布链接
+            if (update_info.html_url) {
+                message += `发布页面: <a href="${update_info.html_url}" target="_blank" style="color: #4CAF50; text-decoration: underline;">点击这里在浏览器中查看</a>\n\n`;
+            }
+            
+            // 计算文件大小
+            let sizeStr = '';
+            if (update_info.size > 0) {
+                if (update_info.size > 1024 * 1024) {
+                    sizeStr = (update_info.size / (1024 * 1024)).toFixed(2) + ' MB';
+                } else if (update_info.size > 1024) {
+                    sizeStr = (update_info.size / 1024).toFixed(2) + ' KB';
+                } else {
+                    sizeStr = update_info.size + ' bytes';
+                }
+                message += `更新包大小: ${sizeStr}\n\n`;
+            }
+            
+            message += '是否现在更新？';
+            
+            // 使用HTML内容显示方式
+            const modal = showConfirm(
+                '发现新版本',
+                message,
+                function() {
+                    // 用户确认更新
+                    const progressModal = new ProgressModal('更新程序');
+                    progressModal.addLog('开始下载并安装更新...');
+                    
+                    // 执行更新
+                    pywebview.api.perform_update_in_modal(progressModal.id).then(function(result) {
+                        if (result) {
+                            progressModal.complete(true, '更新完成，应用将自动重启');
+                        } else {
+                            progressModal.complete(false, '更新失败，请查看日志');
+                        }
+                    }).catch(function(error) {
+                        progressModal.complete(false, '更新过程中出现错误: ' + error);
+                    });
+                },
+                function() {
+                    // 用户取消更新
+                    addLogMessage('用户取消了更新');
+                }
+            );
+            
+            // 如果消息中包含HTML链接，则使用innerHTML而不是textContent
+            if (message.includes('<a href=')) {
+                const statusElement = document.querySelector(`#${modal.id} .modal-status`);
+                if (statusElement) {
+                    statusElement.innerHTML = message.replace(/\n/g, '<br>');
+                }
+            }
+        }
+    }).catch(function(error) {
+        console.error('检查更新失败:', error);
+        addLogMessage('检查更新失败: ' + error);
+    });
+
     pywebview.api.get_attr('config').then(function(config) {
         pywebview.api.log('Config loaded  and close success');
     }).catch(function(error) {

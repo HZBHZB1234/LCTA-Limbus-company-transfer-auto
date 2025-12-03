@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 class Updater:
@@ -14,11 +16,37 @@ class Updater:
         self.repo_owner = repo_owner
         self.repo_name = repo_name
         self.api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/releases/latest"
+        self.session = self._create_session()
+        
+    def _create_session(self):
+        """创建一个带有重试策略的会话"""
+        session = requests.Session()
+        
+        # 定义重试策略
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        
+        # 创建适配器并挂载到会话
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        # 禁用SSL验证以避免证书问题
+        session.verify = False
+        
+        # 禁用警告信息
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        return session
         
     def get_latest_version(self) -> Optional[str]:
         """获取最新版本号"""
         try:
-            response = requests.get(self.api_url)
+            response = self.session.get(self.api_url)
             response.raise_for_status()
             data = response.json()
             return data.get('tag_name')
@@ -42,7 +70,7 @@ class Updater:
         """下载最新版本源码"""
         try:
             # 获取最新发布信息
-            response = requests.get(self.api_url)
+            response = self.session.get(self.api_url)
             response.raise_for_status()
             data = response.json()
             
@@ -67,7 +95,7 @@ class Updater:
             zip_path = os.path.join(cache_dir, "latest_release.zip")
             print(f"正在下载: {download_url}")
             
-            response = requests.get(download_url)
+            response = self.session.get(download_url)
             response.raise_for_status()
             
             with open(zip_path, 'wb') as f:
@@ -225,25 +253,12 @@ def get_app_version() -> str:
         version_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "version.json")
         with open(version_file_path, 'r', encoding='utf-8') as f:
             version_data = json.load(f)
-            return version_data.get("version", "v1.0.0")
+            return version_data.get("version", None)
     except Exception as e:
         print(f"读取版本信息失败: {e}")
     
-    # 备用方案：尝试从main.py中获取版本
-    try:
-        main_py_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(main_py_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            # 查找APP_VERSION定义
-            import re
-            match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)', content)
-            if match:
-                return match.group(1)
-    except Exception as e:
-        print(f"从main.py读取版本信息失败: {e}")
-    
     # 默认返回
-    return "v1.0.0"
+    return None
 
 
 def update_version_file(new_version: str):
@@ -267,6 +282,8 @@ def run_update_check():
     """运行更新检查"""
     updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto")
     current_version = get_app_version()
+    if not current_version:
+        print("无法获取当前版本信息，请检查版本文件或配置文件")
     return updater.check_and_update(current_version)
 
 

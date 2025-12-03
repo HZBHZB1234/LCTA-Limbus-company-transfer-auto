@@ -1,70 +1,142 @@
-name: Build and Test
+name: Build and Release Portable Application
 
 on:
   push:
-    branches:
-      - '**'
+    branches: [main]
+    tags:
+      - 'v*'
   pull_request:
-    branches:
-      - '**'
+    branches: [main]
+
+env:
+  PYTHON_VERSION: 3.9.6  # 使用嵌入式Python版本
+  APP_NAME: "LCTA"
 
 jobs:
   build:
-    runs-on: windows-2019 # Windows Server 2019相当于Windows 10
-
+    runs-on: windows-latest
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    
+    - name: Setup MSYS2 and MinGW (for C compilation)
+      uses: msys2/setup-msys2@v2
       with:
-        python-version: '3.8'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
-
-    - name: Build executable with PyInstaller
-      run: |
-        pyinstaller --onefile --icon=favicon.ico --name=LCTA start_webui.py
-
-    - name: create venv
-      run: |
-        python -m venv venv
-        venv\Scripts\python -m pip install --upgrade pip
-        venv\Scripts\pip install -r requirements.txt
-
+        update: true
+        install: >-
+          mingw-w64-x86_64-toolchain
+          git
+          make
+    
     - name: Compile C launcher
+      shell: msys2 {0}
       run: |
-        # 使用gcc编译器编译C启动器
-        gcc -o launcher.exe launcher.c -lshlwapi
-
-    - name: Create release assets
+        # 编译C启动器
+        gcc -O2 -o launcher.exe launcher.c -lshlwapi
+        strip launcher.exe
+    
+    - name: Setup embedded Python environment
+      shell: powershell
       run: |
-        # 创建发布资产目录
-        mkdir release_assets
-        # 复制可执行文件
-        copy dist\LCTA.exe release_assets\
-        copy launcher.exe release_assets\
-        # 复制必要文件
-        copy requirements.txt release_assets\
-        copy README.md release_assets\
-        copy LICENSE release_assets\
-        copy favicon.ico release_assets\
-        # 复制venv目录
-        move venv release_assets\
-
-    - name: Package release
+        # 创建目录结构
+        mkdir -p release\${{ env.APP_NAME }}
+        mkdir -p release\${{ env.APP_NAME }}\code
+        
+        # 下载嵌入式Python
+        Write-Host "Downloading embedded Python ${{ env.PYTHON_VERSION }}..."
+        $pythonUrl = "https://www.python.org/ftp/python/${{ env.PYTHON_VERSION }}/python-${{ env.PYTHON_VERSION }}-embed-amd64.zip"
+        Invoke-WebRequest -Uri $pythonUrl -OutFile python-embed.zip
+        
+        # 解压到code/venv/Bins目录
+        mkdir -p release\${{ env.APP_NAME }}\code\venv\Bins
+        Expand-Archive -Path python-embed.zip -DestinationPath release\${{ env.APP_NAME }}\code\venv\Bins -Force
+        
+        # 修改python._pth文件以支持site-packages
+        $pthFiles = Get-ChildItem -Path release\${{ env.APP_NAME }}\code\venv\Bins -Filter "*.pth" -Recurse
+        foreach ($pthFile in $pthFiles) {
+            # 移除原有的import site注释
+            $content = Get-Content $pthFile.FullName | Where-Object { $_ -notmatch "^#import site" }
+            # 添加import site
+            $content += "import site"
+            Set-Content -Path $pthFile.FullName -Value $content -Force
+        }
+        
+        # 添加site-packages目录路径到.pth文件
+        $pthFile = Get-ChildItem -Path release\${{ env.APP_NAME }}\code\venv\Bins -Filter "*._pth" | Select-Object -First 1
+        if ($pthFile) {
+            Add-Content -Path $pthFile.FullName -Value "`n..\..\Lib\site-packages"
+        }
+    
+    - name: Install Python dependencies
+      shell: powershell
       run: |
-        # 打包为zip文件
-        cd release_assets
-        powershell Compress-Archive -Path * -DestinationPath ../LCTA-release.zip
+        # 进入发布目录
+        cd release\${{ env.APP_NAME }}
+        
+        # 安装pip到嵌入式Python
+        Write-Host "Installing pip for embedded Python..."
+        $pipUrl = "https://bootstrap.pypa.io/get-pip.py"
+        Invoke-WebRequest -Uri $pipUrl -OutFile get-pip.py
+        & ".\code\venv\Bins\python.exe" get-pip.py
+        
+        # 创建site-packages目录
+        mkdir -p ".\code\venv\Lib\site-packages"
+        
+        # 使用嵌入式Python安装依赖到site-packages
+        Write-Host "Installing Python dependencies..."
+        & ".\code\venv\Bins\python.exe" -m pip install `
+          --target=".\code\venv\Lib\site-packages" `
+          --no-input `
+          --disable-pip-version-check `
+          -r ..\..\requirements.txt
+        
+        # 清理pip缓存
+        & ".\code\venv\Bins\python.exe" -m pip cache purge
+        
+        # 删除临时文件
+        Remove-Item get-pip.py -ErrorAction SilentlyContinue
+    
+    - name: Copy application files
+      shell: powershell
+      run: |
+        # 复制启动器
+        Copy-Item ..\..\launcher.exe release\${{ env.APP_NAME }}\
 
-    - name: Upload artifacts
+        # 复制其他必要文件
+        Copy-Item ..\..\README.md release\${{ env.APP_NAME }}\ -ErrorAction SilentlyContinue
+        Copy-Item ..\..\LICENSE release\${{ env.APP_NAME }}\ -ErrorAction SilentlyContinue
+        Copy-Item ..\..\favicon.ico release\${{ env.APP_NAME }}\ -ErrorAction SilentlyContinue
+
+        
+
+    - name: Create final package
+      shell: powershell
+      run: |
+        # 进入发布目录
+        cd release\${{ env.APP_NAME }}
+        
+        # 创建压缩包
+        $version = "v1.0.0"
+        if ($env:GITHUB_REF -match "refs/tags/(v\d+\.\d+\.\d+)") {
+            $version = $matches[1]
+        }
+        
+        $zipName = "${{ env.APP_NAME }}-$version-windows-amd64.zip"
+        Compress-Archive -Path * -DestinationPath ..\$zipName -Force
+        
+        # 将压缩包移动到根目录
+        Move-Item ..\$zipName ..\..\$zipName -Force
+        
+        # 输出文件信息
+        Write-Host "Created package: $zipName"
+        Write-Host "Package size: $((Get-Item ..\..\$zipName).Length / 1MB) MB"
+    
+    - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: LCTA-build-${{ github.sha }}
-        path: LCTA-release.zip
+        name: ${{ env.APP_NAME }}-windows-portable
+        path: |
+          ${{ env.APP_NAME }}-*.zip
+        retention-days: 7
+    

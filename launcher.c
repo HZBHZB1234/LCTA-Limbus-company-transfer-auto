@@ -1,81 +1,256 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <direct.h>
-#include <process.h>
 #include <windows.h>
+#include <direct.h>
+#include <shlwapi.h>
+
+// 函数声明
+int setup_environment();
+int find_python_executable(char* python_path, size_t buffer_size);
+int verify_python_environment(const char* python_path);
+int run_python_script(const char* python_path, const char* script_path);
+void show_error_message(const char* title, const char* message);
 
 int main() {
-    // 设置运行目录到应用所在目录
-    char exe_path[MAX_PATH];
-    GetModuleFileName(NULL, exe_path, MAX_PATH);
-    char* last_slash = strrchr(exe_path, '\\');
-    if (last_slash != NULL) {
-        *last_slash = '\0';
-        chdir(exe_path);
-    }
+    printf("Starting LCTA Launcher...\n");
     
-    // 检测文件完整性
-    // 检查必要的文件是否存在
-    FILE *f = fopen("code\\start_webui.py", "r");
-    if (f == NULL) {
-        printf("Error: code\\start_webui.py not found!\n");
-        MessageBox(NULL, "Error: code\\start_webui.py not found!", "Startup Error", MB_OK | MB_ICONERROR);
+    // 1. 设置工作目录到应用所在目录
+    if (!setup_environment()) {
         return 1;
     }
-    fclose(f);
     
+    // 2. 查找Python可执行文件
+    char python_path[MAX_PATH];
+    if (!find_python_executable(python_path, sizeof(python_path))) {
+        show_error_message("Python Not Found", 
+            "Cannot find Python interpreter.\n\n"
+            "Please ensure the application files are complete.\n"
+            "Try re-downloading the application.");
+        return 1;
+    }
+    
+    printf("Python found at: %s\n", python_path);
+    
+    // 3. 验证Python环境
+    if (!verify_python_environment(python_path)) {
+        show_error_message("Python Environment Error",
+            "Python environment verification failed.\n\n"
+            "The embedded Python may be corrupted.\n"
+            "Try re-downloading the application.");
+        return 1;
+    }
+    
+    // 4. 设置环境变量
+    char exe_dir[MAX_PATH];
+    GetModuleFileName(NULL, exe_dir, MAX_PATH);
+    PathRemoveFileSpec(exe_dir);
+    
+    // 设置PYTHONPATH
+    char pythonpath[MAX_PATH * 2];
+    snprintf(pythonpath, sizeof(pythonpath), 
+             "%s\\code\\venv\\Lib\\site-packages;%s\\code", 
+             exe_dir, exe_dir);
+    
+    if (!SetEnvironmentVariable("PYTHONPATH", pythonpath)) {
+        printf("Warning: Failed to set PYTHONPATH environment variable\n");
+    }
+    
+    // 设置其他有用的环境变量
+    SetEnvironmentVariable("PYTHONUNBUFFERED", "1");
+    SetEnvironmentVariable("PYTHONIOENCODING", "utf-8");
+    
+    // 5. 构建脚本路径
+    char script_path[MAX_PATH];
+    snprintf(script_path, sizeof(script_path), 
+             "%s\\code\\start_webui.py", exe_dir);
+    
+    // 6. 检查脚本是否存在
+    if (GetFileAttributes(script_path) == INVALID_FILE_ATTRIBUTES) {
+        char error_msg[512];
+        snprintf(error_msg, sizeof(error_msg),
+                 "Main script not found:\n%s\n\n"
+                 "Please ensure all application files are present.",
+                 script_path);
+        show_error_message("File Missing", error_msg);
+        return 1;
+    }
+    
+    printf("Script path: %s\n", script_path);
+    printf("PYTHONPATH: %s\n", pythonpath);
+    
+    // 7. 运行Python脚本
+    printf("Launching application...\n");
+    if (!run_python_script(python_path, script_path)) {
+        show_error_message("Application Error",
+            "Failed to start the application.\n\n"
+            "Possible causes:\n"
+            "1. Python script has errors\n"
+            "2. Missing dependencies\n"
+            "3. Permission issues\n\n"
+            "Check the console output for details.");
+        return 1;
+    }
+    
+    return 0;
+}
+
+// 设置工作环境
+int setup_environment() {
+    char exe_path[MAX_PATH];
+    
+    // 获取当前可执行文件路径
+    if (!GetModuleFileName(NULL, exe_path, MAX_PATH)) {
+        show_error_message("System Error", "Cannot determine executable location.");
+        return 0;
+    }
+    
+    // 移除文件名部分，只保留目录
+    PathRemoveFileSpec(exe_path);
+    
+    printf("Executable directory: %s\n", exe_path);
+    
+    // 切换到应用目录
+    if (!SetCurrentDirectory(exe_path)) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg),
+                 "Cannot change to application directory:\n%s", exe_path);
+        show_error_message("Directory Error", error_msg);
+        return 0;
+    }
+    
+    return 1;
+}
+
+// 查找Python可执行文件
+int find_python_executable(char* python_path, size_t buffer_size) {
+    // 可能的Python路径列表（按优先级排序）
     const char* python_paths[] = {
-        ".\\code\\venv\\Scripts\\python.exe",  // 虚拟环境Python
+        ".\\code\\venv\\Bins\\python.exe",    // 嵌入式Python（新结构）
+        ".\\venv\\Bins\\python.exe",          // 备用位置
+        ".\\code\\venv\\Scripts\\python.exe", // 传统虚拟环境
+        ".\\venv\\Scripts\\python.exe",       // 传统备用位置
+        "python.exe",                         // 系统PATH中的Python
+        NULL
     };
     
-    int num_paths = sizeof(python_paths) / sizeof(python_paths[0]);
-    char python_cmd[MAX_PATH];
-    int python_found = 0;
+    printf("Searching for Python interpreter...\n");
     
-    for (int i = 0; i < num_paths; i++) {
-        f = fopen(python_paths[i], "r");
-        if (f != NULL) {
-            fclose(f);
-            strcpy(python_cmd, python_paths[i]);
-            python_found = 1;
-            break;
+    for (int i = 0; python_paths[i] != NULL; i++) {
+        printf("  Checking: %s\n", python_paths[i]);
+        
+        if (GetFileAttributes(python_paths[i]) != INVALID_FILE_ATTRIBUTES) {
+            // 获取完整路径
+            char full_path[MAX_PATH];
+            if (GetFullPathName(python_paths[i], MAX_PATH, full_path, NULL)) {
+                strncpy(python_path, full_path, buffer_size - 1);
+                python_path[buffer_size - 1] = '\0';
+                return 1;
+            }
         }
     }
     
-    if (!python_found) {
-        printf("Error: Python interpreter not found!\n");
-        MessageBox(NULL, "Error: Python interpreter not found!", "Startup Error", MB_OK | MB_ICONERROR);
-        return 1;
+    // 如果没找到，尝试使用where命令查找系统Python
+    printf("Checking system PATH for Python...\n");
+    
+    // 使用where命令查找python.exe
+    system("where python.exe > python_location.txt 2>nul");
+    
+    FILE* fp = fopen("python_location.txt", "r");
+    if (fp) {
+        if (fgets(python_path, buffer_size, fp)) {
+            // 去除换行符
+            python_path[strcspn(python_path, "\r\n")] = '\0';
+            
+            // 检查文件是否存在
+            if (GetFileAttributes(python_path) != INVALID_FILE_ATTRIBUTES) {
+                fclose(fp);
+                remove("python_location.txt");
+                return 1;
+            }
+        }
+        fclose(fp);
+        remove("python_location.txt");
     }
     
-    // 使用找到的Python解释器启动应用，隐藏控制台窗口
-    char command[500];
-    snprintf(command, sizeof(command), "%s code\\start_webui.py", python_cmd);
+    return 0;
+}
+
+// 验证Python环境
+int verify_python_environment(const char* python_path) {
+    printf("Verifying Python environment...\n");
     
-    // 使用CreateProcess替代system以隐藏控制台窗口
+    // 构建验证命令
+    char verify_cmd[512];
+    snprintf(verify_cmd, sizeof(verify_cmd),
+             "\"%s\" -c \"import sys; print('Python', sys.version); import site; print('Site packages:', site.getsitepackages())\"",
+             python_path);
+    
+    // 执行验证命令
+    printf("Running Python verification...\n");
+    int result = system(verify_cmd);
+    
+    if (result != 0) {
+        printf("Python verification failed with code: %d\n", result);
+        return 0;
+    }
+    
+    return 1;
+}
+
+// 运行Python脚本
+int run_python_script(const char* python_path, const char* script_path) {
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
+    
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE; // 隐藏窗口
+    si.wShowWindow = SW_HIDE;  // 隐藏控制台窗口
     
     ZeroMemory(&pi, sizeof(pi));
     
+    // 构建命令行
+    char command_line[1024];
+    snprintf(command_line, sizeof(command_line),
+             "\"%s\" \"%s\"",
+             python_path, script_path);
+    
+    printf("Command line: %s\n", command_line);
+    
     // 创建进程
-    if (!CreateProcess(NULL, command, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-        printf("Failed to create process!\n");
-        MessageBox(NULL, "Failed to create process!", "Startup Error", MB_OK | MB_ICONERROR);
-        return 1;
+    if (!CreateProcess(NULL,           // 不使用模块名
+                       command_line,   // 命令行
+                       NULL,           // 进程句柄不可继承
+                       NULL,           // 线程句柄不可继承
+                       FALSE,          // 不继承句柄
+                       CREATE_NO_WINDOW, // 创建无窗口进程
+                       NULL,           // 使用父进程环境
+                       NULL,           // 使用父进程目录
+                       &si,            // 启动信息
+                       &pi)) {         // 进程信息
+        printf("CreateProcess failed (%lu)\n", GetLastError());
+        return 0;
     }
     
-    // 等待进程结束
-    WaitForSingleObject(pi.hProcess, INFINITE);
+    printf("Application started (PID: %lu)\n", pi.dwProcessId);
     
-    // 关闭进程和线程句柄
+    // 等待进程结束（可选）
+    // WaitForSingleObject(pi.hProcess, INFINITE);
+    
+    // 关闭句柄
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
     
-    return 0;
+    return 1;
+}
+
+// 显示错误消息对话框
+void show_error_message(const char* title, const char* message) {
+    // 也在控制台输出错误
+    printf("ERROR: %s\n", title);
+    printf("%s\n", message);
+    
+    // 显示消息框
+    MessageBox(NULL, message, title, MB_OK | MB_ICONERROR);
 }

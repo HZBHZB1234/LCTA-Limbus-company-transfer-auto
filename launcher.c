@@ -17,18 +17,16 @@ int main() {
     
     // 检测文件完整性
     // 检查必要的文件是否存在
-    FILE *f = fopen("start_webui.py", "r");
+    FILE *f = fopen("code\\start_webui.py", "r");
     if (f == NULL) {
-        printf("Error: start_webui.py not found!\n");
-        MessageBox(NULL, "Error: start_webui.py not found!", "Startup Error", MB_OK | MB_ICONERROR);
+        printf("Error: code\\start_webui.py not found!\n");
+        MessageBox(NULL, "Error: code\\start_webui.py not found!", "Startup Error", MB_OK | MB_ICONERROR);
         return 1;
     }
     fclose(f);
     
-    // 检查Python解释器（优先使用系统Python，备选用虚拟环境）
     const char* python_paths[] = {
-        ".\\venv\\Scripts\\python.exe",  // 虚拟环境Python
-        "..\\venv\\Scripts\\python.exe"  // 上级目录的虚拟环境Python
+        ".\\code\\venv\\Scripts\\python.exe",  // 虚拟环境Python
     };
     
     int num_paths = sizeof(python_paths) / sizeof(python_paths[0]);
@@ -51,16 +49,33 @@ int main() {
         return 1;
     }
     
-    // 使用找到的Python解释器启动应用
+    // 使用找到的Python解释器启动应用，隐藏控制台窗口
     char command[500];
-    snprintf(command, sizeof(command), "%s start_webui.py", python_cmd);
+    snprintf(command, sizeof(command), "%s code\\start_webui.py", python_cmd);
     
-    // 执行命令
-    int result = system(command);
+    // 使用CreateProcess替代system以隐藏控制台窗口
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE; // 隐藏窗口
     
-    if (result != 0) {
-        printf("Application exited with error code: %d\n", result);
+    ZeroMemory(&pi, sizeof(pi));
+    
+    // 创建进程
+    if (!CreateProcess(NULL, command, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        printf("Failed to create process!\n");
+        MessageBox(NULL, "Failed to create process!", "Startup Error", MB_OK | MB_ICONERROR);
+        return 1;
     }
     
-    return result;
+    // 等待进程结束
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    
+    // 关闭进程和线程句柄
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    
+    return 0;
 }

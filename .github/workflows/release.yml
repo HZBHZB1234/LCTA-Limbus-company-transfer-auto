@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2019 # Windows Server 2019相当于Windows 10
 
     steps:
     - name: Checkout code
@@ -19,7 +19,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.8'
 
     - name: Install dependencies
       run: |
@@ -29,7 +29,7 @@ jobs:
 
     - name: Build executable with PyInstaller
       run: |
-        pyinstaller --onefile --windowed --icon=favicon.ico --name=LCTA start_webui.py
+        pyinstaller --onefile --icon=favicon.ico --name=LCTA start_webui.py
 
     - name: create venv
       run: |

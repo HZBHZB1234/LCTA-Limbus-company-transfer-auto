@@ -35,7 +35,7 @@ def load_config_types():
     """
     加载配置类型定义
     """
-    config_types_path = "config_check.json"
+    config_types_path = os.getenv('path_') + "config_check.json"
     with open(config_types_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
@@ -145,7 +145,7 @@ def load_config():
 
 def load_config_default():
     try:
-        with open('config_default.json','r',encoding='utf-8') as f:
+        with open( os.getenv('path_') + 'config_default.json','r',encoding='utf-8') as f:
             config = json.load(f)
             return config
     except FileNotFoundError:

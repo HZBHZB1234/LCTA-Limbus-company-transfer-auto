@@ -508,7 +508,7 @@ def setup_logging():
 
 def main():
     # 获取HTML文件的绝对路径
-    html_path = os.path.join(os.path.dirname(__file__), "index.html")
+    html_path = os.path.join(os.getenv('path_'), "webui\\index.html")
     
     # 设置日志
     logger = setup_logging()

@@ -124,53 +124,20 @@ int setup_environment() {
 
 // 查找Python可执行文件
 int find_python_executable(char* python_path, size_t buffer_size) {
-    // 可能的Python路径列表（按优先级排序）
-    const char* python_paths[] = {
-        ".\\code\\venv\\Bins\\python.exe",    // 嵌入式Python（新结构）
-        ".\\venv\\Bins\\python.exe",          // 备用位置
-        ".\\code\\venv\\Scripts\\python.exe", // 传统虚拟环境
-        ".\\venv\\Scripts\\python.exe",       // 传统备用位置
-        "python.exe",                         // 系统PATH中的Python
-        NULL
-    };
+    // 只检查一个路径就足够了
+    const char* python_exe = ".\\code\\venv\\Bins\\python.exe";
     
     printf("Searching for Python interpreter...\n");
+    printf("  Checking: %s\n", python_exe);
     
-    for (int i = 0; python_paths[i] != NULL; i++) {
-        printf("  Checking: %s\n", python_paths[i]);
-        
-        if (GetFileAttributes(python_paths[i]) != INVALID_FILE_ATTRIBUTES) {
-            // 获取完整路径
-            char full_path[MAX_PATH];
-            if (GetFullPathName(python_paths[i], MAX_PATH, full_path, NULL)) {
-                strncpy(python_path, full_path, buffer_size - 1);
-                python_path[buffer_size - 1] = '\0';
-                return 1;
-            }
+    if (GetFileAttributes(python_exe) != INVALID_FILE_ATTRIBUTES) {
+        // 获取完整路径
+        char full_path[MAX_PATH];
+        if (GetFullPathName(python_exe, MAX_PATH, full_path, NULL)) {
+            strncpy(python_path, full_path, buffer_size - 1);
+            python_path[buffer_size - 1] = '\0';
+            return 1;
         }
-    }
-    
-    // 如果没找到，尝试使用where命令查找系统Python
-    printf("Checking system PATH for Python...\n");
-    
-    // 使用where命令查找python.exe
-    system("where python.exe > python_location.txt 2>nul");
-    
-    FILE* fp = fopen("python_location.txt", "r");
-    if (fp) {
-        if (fgets(python_path, buffer_size, fp)) {
-            // 去除换行符
-            python_path[strcspn(python_path, "\r\n")] = '\0';
-            
-            // 检查文件是否存在
-            if (GetFileAttributes(python_path) != INVALID_FILE_ATTRIBUTES) {
-                fclose(fp);
-                remove("python_location.txt");
-                return 1;
-            }
-        }
-        fclose(fp);
-        remove("python_location.txt");
     }
     
     return 0;

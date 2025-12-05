@@ -27,16 +27,17 @@ jobs:
         Copy-Item -Path .\LCTA -Destination .\LCTA_backup -Recurse
         mkdir release
         mkdir release/${{ env.APP_NAME }}
+        mkdir release/${{ env.APP_NAME }}/code
 
     - name: create with pyinstaller
       run: |
         python -m pip install --upgrade pip
         python -m pip install pyinstaller
         python -m pip install -r LCTA/requirements.txt
-        pyinstaller --onefile -w --name ${{ env.APP_NAME }}_OneFile LCTA_backup/start_web.py
-        pyinstaller --onefile --name ${{ env.APP_NAME }}_OneFile_Debug LCTA_backup/start_web.py
-        pyinstaller --w --name ${{ env.APP_NAME }}_Folder LCTA_backup/start_web.py
-        pyinstaller --name ${{ env.APP_NAME }}_Folder_Debug LCTA_backup/start_web.py
+        pyinstaller --onefile -w --name ${{ env.APP_NAME }}_OneFile .\LCTA_backup/start_webui.py
+        pyinstaller --onefile --name ${{ env.APP_NAME }}_OneFile_Debug .\LCTA_backup/start_webui.py
+        pyinstaller -w --name ${{ env.APP_NAME }}_Folder .\LCTA_backup/start_webui.py
+        pyinstaller --name ${{ env.APP_NAME }}_Folder_Debug .\LCTA_backup/start_webui.py
         mv dist/* release/
     
     - name: Setup MSYS2 and MinGW (for C compilation)
@@ -49,10 +50,9 @@ jobs:
           make
     
     - name: Compile C launcher
-      shell: msys2 {0}
       run: |
         # 编译C启动器
-        copy .\LCTA\launcher.c .
+        Copy-Item .\LCTA\launcher.c .\
         gcc -O2 -o launcher.exe launcher.c -lshlwapi
         strip launcher.exe
         mv launcher.exe release\${{ env.APP_NAME }}\launcher.exe
@@ -71,8 +71,10 @@ jobs:
     
     - name: copy files
       run: |
-        copy LCTA\* release\${{ env.APP_NAME }}\code\ -Recurse
-        copy venv release\${{ env.APP_NAME }}\code\venv -Recurse
+        dir LCTA -Recurse
+        dir release -Recurse
+        Copy-Item LCTA\* release\${{ env.APP_NAME }}\code\ -Recurse -Force
+        Copy-Item venv release\${{ env.APP_NAME }}\code\venv -Recurse
 
 
     - name: Upload build artifacts

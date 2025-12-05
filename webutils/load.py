@@ -35,7 +35,7 @@ def load_config_types():
     """
     加载配置类型定义
     """
-    config_types_path = os.path.join(os.path.dirname(__file__), '..', 'config_check.json')
+    config_types_path = "config_check.json"
     with open(config_types_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 

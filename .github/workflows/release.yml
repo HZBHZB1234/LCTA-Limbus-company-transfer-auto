@@ -24,7 +24,7 @@ jobs:
 
     - name: setup-path
       run: |
-        copy .\LCTA .\LCTA_backup /E /I /Y
+        copy .\LCTA .\LCTA_backup
         mkdir release
         mkdir release/${{ env.APP_NAME }}
 

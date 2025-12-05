@@ -180,18 +180,52 @@ int find_python_executable(char* python_path, size_t buffer_size) {
 int verify_python_environment(const char* python_path) {
     printf("Verifying Python environment...\n");
     
-    // 构建验证命令
-    char verify_cmd[512];
-    snprintf(verify_cmd, sizeof(verify_cmd),
-             "\"%s\" -c \"import sys; print('Python', sys.version); import site; print('Site packages:', site.getsitepackages())\"",
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;  // 隐藏控制台窗口
+    
+    ZeroMemory(&pi, sizeof(pi));
+    
+    // 构建命令行 - 使用临时文件来捕获输出
+    char command_line[1024];
+    snprintf(command_line, sizeof(command_line),
+             "\"%s\" -c \"import sys; print('Python', sys.version); import site; print('Site packages:', site.getsitepackages());\"",
              python_path);
     
-    // 执行验证命令
-    printf("Running Python verification...\n");
-    int result = system(verify_cmd);
+    printf("Verification command line: %s\n", command_line);
     
-    if (result != 0) {
-        printf("Python verification failed with code: %d\n", result);
+    // 创建进程进行验证
+    if (!CreateProcess(NULL,           // 不使用模块名
+                       command_line,   // 命令行
+                       NULL,           // 进程句柄不可继承
+                       NULL,           // 线程句柄不可继承
+                       FALSE,          // 不继承句柄
+                       CREATE_NO_WINDOW, // 创建无窗口进程
+                       NULL,           // 使用父进程环境
+                       NULL,           // 使用父进程目录
+                       &si,            // 启动信息
+                       &pi)) {         // 进程信息
+        printf("CreateProcess failed (%lu)\n", GetLastError());
+        return 0;
+    }
+    
+    // 等待进程结束
+    WaitForSingleObject(pi.hProcess, 10000); // 等待最多10秒
+    
+    // 获取退出代码
+    DWORD exit_code;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    
+    // 关闭句柄
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    
+    if (exit_code != 0) {
+        printf("Python verification failed with code: %lu\n", exit_code);
         return 0;
     }
     

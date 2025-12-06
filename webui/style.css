@@ -4,54 +4,115 @@
     box-sizing: border-box;
 }
 
-body {
-    font-family: 'Microsoft YaHei', Arial, sans-serif;
-    background-color: #f0f0f0;
-    height: 100vh;
-    display: flex;
+:root {
+    --primary-color: #3498db;
+    --primary-dark: #2980b9;
+    --secondary-color: #2ecc71;
+    --secondary-dark: #27ae60;
+    --accent-color: #f39c12;
+    --danger-color: #e74c3c;
+    --dark-color: #2c3e50;
+    --light-color: #ecf0f1;
+    --gray-color: #95a5a6;
+    --light-gray: #f8f9fa;
+    --border-color: #ddd;
+    --shadow: 0 2px 10px rgba(0,0,0,0.1);
+    --shadow-hover: 0 5px 15px rgba(0,0,0,0.15);
+    --transition: all 0.3s ease;
 }
 
+body {
+    font-family: 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif;
+    background-color: #f5f7fa;
+    height: 100vh;
+    display: flex;
+    color: var(--dark-color);
+    overflow: hidden;
+}
+
+/* 侧边栏样式 */
 .sidebar {
-    width: 220px;
-    background-color: #2c3e50;
+    width: 240px;
+    background-color: var(--dark-color);
     color: white;
-    padding: 20px 0;
     display: flex;
     flex-direction: column;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    z-index: 10;
+    transition: var(--transition);
+}
+
+.sidebar-header {
+    padding: 25px 20px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar-header h2 {
+    font-size: 1.4rem;
+    margin-bottom: 8px;
+}
+
+.version {
+    font-size: 0.8rem;
+    color: var(--gray-color);
+}
+
+.sidebar-desc {
+    font-size: 0.9rem;
+    color: var(--gray-color);
+}
+
+.sidebar-menu {
+    flex: 1;
+    padding-top: 15px;
     overflow-y: auto;
 }
 
-.sidebar h2 {
-    text-align: center;
-    margin-bottom: 30px;
-    padding: 0 10px;
-    font-size: 18px;
-}
-
-.sidebar button {
+.menu-item {
     background: none;
     border: none;
-    color: white;
-    padding: 12px 20px;
+    color: var(--light-color);
+    padding: 14px 20px;
     text-align: left;
     cursor: pointer;
     font-size: 14px;
-    transition: background-color 0.3s;
-    border-left: 4px solid transparent;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    transition: var(--transition);
+    border-left: 3px solid transparent;
 }
 
-.sidebar button:hover {
-    background-color: #34495e;
+.menu-item i {
+    margin-right: 10px;
+    width: 20px;
+    text-align: center;
 }
 
-.sidebar button.active {
-    background-color: #3498db;
-    border-left: 4px solid #2980b9;
+.menu-item:hover {
+    background-color: rgba(255,255,255,0.1);
+    padding-left: 22px;
 }
 
+.menu-item.active {
+    background-color: rgba(52, 152, 219, 0.15);
+    border-left-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.sidebar-footer {
+    padding: 15px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--gray-color);
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+/* 主内容区样式 */
 .main-content {
     flex: 1;
-    padding: 20px;
+    padding: 25px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -59,11 +120,17 @@ body {
 
 .content-section {
     display: none;
-    flex: 1;
     background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border-radius: 10px;
+    padding: 25px;
+    box-shadow: var(--shadow);
+    height: 100%;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .content-section.active {
@@ -71,52 +138,59 @@ body {
 }
 
 .section-title {
-    font-size: 24px;
-    margin-bottom: 20px;
-    color: #2c3e50;
-    padding-bottom: 10px;
-    border-bottom: 2px solid #ecf0f1;
-}
-
-.form-group {
-    margin-bottom: 15px;
-}
-
-.form-row {
+    font-size: 1.6rem;
+    margin-bottom: 25px;
+    color: var(--dark-color);
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--light-color);
     display: flex;
-    gap: 15px;
-    margin-bottom: 15px;
+    align-items: center;
 }
 
-.form-row .form-group {
+.section-title::after {
+    content: '';
     flex: 1;
-    margin-bottom: 0;
+    height: 2px;
+    background-color: var(--primary-color);
+    margin-left: 15px;
+    width: 60px;
 }
 
-label {
+/* 表单样式 */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
     display: block;
-    margin-bottom: 5px;
-    font-weight: bold;
-    color: #34495e;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--dark-color);
+}
+
+.form-control {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+    transition: var(--transition);
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
 }
 
 .checkbox-label {
     display: flex;
     align-items: center;
-    font-weight: normal;
+    cursor: pointer;
 }
 
 .checkbox-label input {
-    width: auto;
     margin-right: 8px;
-}
-
-input, select, textarea {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
 }
 
 .file-input-group {
@@ -128,70 +202,101 @@ input, select, textarea {
     flex: 1;
 }
 
-button.submit-btn, button.action-btn {
-    background-color: #3498db;
-    color: white;
+/* 按钮样式 */
+.form-actions {
+    margin-top: 30px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.primary-btn, .action-btn, .secondary-btn {
     padding: 10px 20px;
+    border-radius: 6px;
     border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 16px;
-    transition: background-color 0.3s;
-}
-
-button.submit-btn:hover, button.action-btn:hover {
-    background-color: #2980b9;
-}
-
-button.secondary-btn {
-    background-color: #95a5a6;
-}
-
-button.secondary-btn:hover {
-    background-color: #7f8c8d;
-}
-
-/* 添加缺失的按钮样式规则 */
-.action-btn, .secondary-btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
-    transition: background-color 0.3s;
-    color: white;
-    min-width: 80px;
+    font-weight: 500;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
+.primary-btn {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.primary-btn:hover {
+    background-color: var(--primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+}
+
+.primary-btn:active {
+    transform: translateY(0);
+}
+
+.action-btn {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+.action-btn:hover {
+    background-color: var(--secondary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(46, 204, 113, 0.3);
+}
+
+.action-btn:active {
+    transform: translateY(0);
+}
+
+.secondary-btn {
+    background-color: var(--light-color);
+    color: var(--dark-color);
+}
+
+.secondary-btn:hover {
+    background-color: var(--gray-color);
+    color: white;
+    transform: translateY(-2px);
+}
+
+.secondary-btn:active {
+    transform: translateY(0);
+}
+
+/* 日志样式 */
 .log-container {
-    margin-top: 20px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background-color: #f8f9fa;
+    background-color: var(--light-gray);
     padding: 15px;
     height: 200px;
     overflow-y: auto;
     font-family: monospace;
     font-size: 13px;
-    flex: 1;
-    min-height: 200px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
 }
 
 .log-entry {
-    margin-bottom: 5px;
-    padding: 2px 0;
-    border-bottom: 1px solid #eee;
+    margin-bottom: 6px;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(221, 221, 221, 0.5);
 }
 
 .log-timestamp {
-    color: #7f8c8d;
+    color: var(--gray-color);
     font-size: 0.9em;
 }
 
 .log-message {
-    color: #2c3e50;
+    color: var(--dark-color);
+    margin-left: 5px;
 }
 
+/* 进度条样式 */
 .progress-container {
     margin: 20px 0;
     display: none;
@@ -199,29 +304,26 @@ button.secondary-btn:hover {
 
 .progress-bar {
     width: 100%;
-    height: 20px;
-    background-color: #ecf0f1;
-    border-radius: 10px;
+    height: 8px;
+    background-color: var(--light-color);
+    border-radius: 4px;
     overflow: hidden;
 }
 
 .progress-bar-fill {
     height: 100%;
-    background-color: #2ecc71;
+    background-color: var(--secondary-color);
     width: 0%;
-    transition: width 0.3s;
+    transition: width 0.3s ease;
 }
 
 .progress-text {
     text-align: center;
-    margin-top: 5px;
-    font-weight: bold;
+    margin-top: 8px;
+    font-weight: 500;
 }
 
-.hidden {
-    display: none;
-}
-
+/* 网格和卡片样式 */
 .grid-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -232,15 +334,34 @@ button.secondary-btn:hover {
 .card {
     background: white;
     border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    padding: 20px;
+    box-shadow: var(--shadow);
+    transition: var(--transition);
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-hover);
 }
 
 .card h3 {
     margin-top: 0;
-    color: #2c3e50;
-    border-bottom: 1px solid #ecf0f1;
+    color: var(--dark-color);
+    border-bottom: 1px solid var(--light-color);
     padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.about-card {
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 30px;
+}
+
+.about-logo {
+    color: var(--primary-color);
+    margin-bottom: 20px;
 }
 
 /* 模态窗口样式 */
@@ -255,18 +376,32 @@ button.secondary-btn:hover {
     justify-content: center;
     align-items: center;
     z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
 }
 
 .modal-window {
     background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     width: 600px;
     max-width: 90%;
     max-height: 90%;
     display: flex;
     flex-direction: column;
     z-index: 1001;
+    transform: translateY(-20px);
+    transition: transform 0.3s ease;
+}
+
+.modal-overlay.active .modal-window {
+    transform: translateY(0);
 }
 
 .modal-header {
@@ -274,13 +409,15 @@ button.secondary-btn:hover {
     justify-content: space-between;
     align-items: center;
     padding: 15px 20px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--light-gray);
+    border-radius: 10px 10px 0 0;
 }
 
 .modal-title {
     font-size: 18px;
-    font-weight: bold;
-    color: #2c3e50;
+    font-weight: 600;
+    color: var(--dark-color);
 }
 
 .modal-controls {
@@ -292,21 +429,21 @@ button.secondary-btn:hover {
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 16px;
-    width: 30px;
-    height: 30px;
+    font-size: 18px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.2s;
-    color: #7f8c8d;
+    transition: var(--transition);
+    color: var(--gray-color);
     font-weight: bold;
 }
 
 .modal-button:hover {
-    background-color: #f0f0f0;
-    color: #2c3e50;
+    background-color: rgba(0,0,0,0.1);
+    color: var(--dark-color);
 }
 
 .modal-body {
@@ -317,21 +454,22 @@ button.secondary-btn:hover {
 
 .modal-status {
     margin-bottom: 15px;
-    padding: 10px;
-    background-color: #f8f9fa;
-    border-radius: 4px;
-    font-weight: bold;
+    padding: 12px;
+    background-color: var(--light-gray);
+    border-radius: 6px;
+    font-weight: 500;
+    line-height: 1.6;
 }
 
 .modal-log {
     height: 200px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background-color: #f8f9fa;
-    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background-color: var(--light-gray);
+    padding: 12px;
     overflow-y: auto;
     font-family: monospace;
-    font-size: 12px;
+    font-size: 13px;
     margin-bottom: 15px;
 }
 
@@ -341,25 +479,38 @@ button.secondary-btn:hover {
 
 .modal-progress-bar {
     width: 100%;
-    height: 20px;
-    background-color: #ecf0f1;
-    border-radius: 10px;
+    height: 8px;
+    background-color: var(--light-color);
+    border-radius: 4px;
     overflow: hidden;
 }
 
 .modal-progress-fill {
     height: 100%;
-    background-color: #3498db;
+    background-color: var(--primary-color);
     width: 0%;
-    transition: width 0.3s;
+    transition: width 0.3s ease;
 }
 
 .modal-footer {
     padding: 15px 20px;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border-color);
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+    background-color: var(--light-gray);
+    border-radius: 0 0 10px 10px;
+}
+
+/* 最小化窗口样式 */
+#minimized-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 900;
 }
 
 .minimized-modal {
@@ -371,12 +522,8 @@ button.secondary-btn:hover {
     flex-direction: column;
     cursor: pointer;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
-    margin-top: 10px;
-    width: 280px; /* 固定宽度确保每行准确显示三个 */
-}
-
-.minimized-modal:first-child {
-    margin-top: 0;
+    width: 300px;
+    overflow: hidden;
 }
 
 .minimized-modal:hover {
@@ -389,13 +536,14 @@ button.secondary-btn:hover {
     justify-content: space-between;
     align-items: center;
     padding: 10px 15px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--light-gray);
 }
 
 .minimized-title {
     font-size: 14px;
-    font-weight: bold;
-    color: #2c3e50;
+    font-weight: 600;
+    color: var(--dark-color);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -403,7 +551,7 @@ button.secondary-btn:hover {
 
 .minimized-status {
     font-size: 12px;
-    color: #7f8c8d;
+    color: var(--gray-color);
     white-space: nowrap;
 }
 
@@ -413,15 +561,65 @@ button.secondary-btn:hover {
 
 .minimized-progress-bar {
     width: 100%;
-    height: 8px;
-    background-color: #ecf0f1;
-    border-radius: 4px;
+    height: 6px;
+    background-color: var(--light-color);
+    border-radius: 3px;
     overflow: hidden;
 }
 
 .minimized-progress-fill {
     height: 100%;
-    background-color: #3498db;
+    background-color: var(--primary-color);
     width: 0%;
     transition: width 0.3s ease;
+}
+
+/* 工具提示样式 */
+.tooltip {
+    position: relative;
+}
+
+.tooltip:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--dark-color);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 100;
+    margin-bottom: 5px;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: auto;
+    }
+    
+    .sidebar-menu {
+        display: flex;
+        overflow-x: auto;
+    }
+    
+    .menu-item {
+        flex: 0 0 auto;
+    }
+    
+    .main-content {
+        padding: 15px;
+    }
+}
+
+.hidden {
+    display: none !important;
 }

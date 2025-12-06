@@ -5,25 +5,66 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LCTA - 边狱公司汉化工具箱</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
     <div class="sidebar">
-        <h2>LCTA v3.1.0</h2>
-        <button id="translate-btn" class="active">翻译工具</button>
-        <button id="install-btn">安装已有汉化</button>
-        <button id="ourplay-btn">从ourplay下载汉化</button>
-        <button id="clean-btn">清除本地缓存</button>
-        <button id="llc-btn">从零协下载汉化</button>
-        <button id="config-btn">配置汉化api</button>
-        <button id="proper-btn">抓取专有词汇</button>
-        <button id="search-btn">进行文本搜索</button>
-        <button id="backup-btn">备份原文</button>
-        <button id="assets-btn">资源管理</button>
-        <button id="lighter-btn">黑影图调色</button>
-        <button id="calculate-btn">抽卡概率计算</button>
-        <button id="log-btn">日志</button>
-        <button id="about-btn">关于</button>
-        <button id="settings-btn">设置</button>
+        <div class="sidebar-header">
+            <h2>LCTA <span class="version">v3.1.0</span></h2>
+            <p class="sidebar-desc">边狱公司汉化工具箱</p>
+        </div>
+        
+        <div class="sidebar-menu">
+            <button id="translate-btn" class="menu-item active" data-section="translate-section">
+                <i class="fas fa-language"></i> 翻译工具
+            </button>
+            <button id="install-btn" class="menu-item" data-section="install-section">
+                <i class="fas fa-download"></i> 安装已有汉化
+            </button>
+            <button id="ourplay-btn" class="menu-item" data-section="ourplay-section">
+                <i class="fas fa-cloud-download-alt"></i> 从ourplay下载
+            </button>
+            <button id="clean-btn" class="menu-item" data-section="clean-section">
+                <i class="fas fa-broom"></i> 清除本地缓存
+            </button>
+            <button id="llc-btn" class="menu-item" data-section="llc-section">
+                <i class="fas fa-globe-asia"></i> 从零协下载
+            </button>
+            <button id="config-btn" class="menu-item" data-section="config-section">
+                <i class="fas fa-cog"></i> 配置汉化api
+            </button>
+            <button id="proper-btn" class="menu-item" data-section="proper-section">
+                <i class="fas fa-book"></i> 抓取专有词汇
+            </button>
+            <button id="search-btn" class="menu-item" data-section="search-section">
+                <i class="fas fa-search"></i> 文本搜索
+            </button>
+            <button id="backup-btn" class="menu-item" data-section="backup-section">
+                <i class="fas fa-save"></i> 备份原文
+            </button>
+            <button id="assets-btn" class="menu-item" data-section="assets-section">
+                <i class="fas fa-box"></i> 资源管理
+            </button>
+            <button id="lighter-btn" class="menu-item" data-section="lighter-section">
+                <i class="fas fa-adjust"></i> 黑影图调色
+            </button>
+            <button id="calculate-btn" class="menu-item" data-section="calculate-section">
+                <i class="fas fa-calculator"></i> 抽卡概率计算
+            </button>
+            <button id="log-btn" class="menu-item" data-section="log-section">
+                <i class="fas fa-file-alt"></i> 日志
+            </button>
+            <button id="about-btn" class="menu-item" data-section="about-section">
+                <i class="fas fa-info-circle"></i> 关于
+            </button>
+            <button id="settings-btn" class="menu-item" data-section="settings-section">
+                <i class="fas fa-sliders-h"></i> 设置
+            </button>
+        </div>
+        
+        <div class="sidebar-footer">
+            <p>© 2025 LCTA 工具箱</p>
+        </div>
     </div>
 
     <div class="main-content">
@@ -63,179 +104,108 @@
                 </label>
             </div>
             
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="log-enabled" checked> 启用日志
-                </label>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="half-trans"> 使用翻译至一半的项目
-                </label>
-            </div>
-            
-            <div class="form-group" id="half-trans-path-group" style="display: none;">
-                <label for="half-trans-path">项目路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="half-trans-path" placeholder="选择半翻译项目路径">
-                    <button class="action-btn" onclick="browseFile('half-trans-path')">浏览</button>
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="backup"> 使用上版本备份原文
-                </label>
-            </div>
-            
-            <div class="form-group" id="backup-path-group" style="display: none;">
-                <label for="backup-path">备份路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="backup-path" placeholder="选择备份文件路径">
-                    <button class="action-btn" onclick="browseFile('backup-path')">浏览</button>
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label for="translation-service">翻译服务:</label>
-                <select id="translation-service">
-                    <option value="baidu">百度翻译</option>
-                    <option value="tencent">腾讯翻译</option>
-                    <option value="youdao">有道翻译</option>
-                    <option value="caiyun">彩云翻译</option>
-                    <option value="xiaoniu">小牛翻译</option>
-                    <option value="aliyun">阿里云翻译</option>
-                    <option value="huoshan">火山翻译</option>
-                    <option value="chatgpt">ChatGPT翻译</option>
-                </select>
-            </div>
-            
-            <button class="submit-btn" onclick="startTranslation()">开始翻译</button>
-            
-            <div class="progress-container" id="translation-progress">
-                <div class="progress-bar">
-                    <div class="progress-bar-fill" id="progress-fill"></div>
-                </div>
-                <div class="progress-text" id="progress-text">0%</div>
+            <div class="form-actions">
+                <button class="primary-btn" onclick="startTranslation()">开始翻译</button>
             </div>
         </div>
 
-        <!-- 安装汉化界面 -->
+        <!-- 其他功能界面省略，保持原有结构 -->
         <div id="install-section" class="content-section">
             <h2 class="section-title">安装已有汉化</h2>
+            <p>安装已下载的汉化包到游戏中</p>
             <div class="form-group">
-                <label for="install-package">汉化包文件:</label>
+                <label for="install-path">汉化包路径:</label>
                 <div class="file-input-group">
-                    <input type="text" id="install-package" placeholder="选择汉化包文件 (.zip)">
-                    <button class="action-btn" onclick="browseFile('install-package')">浏览</button>
+                    <input type="text" id="install-path" placeholder="选择汉化包文件">
+                    <button class="action-btn" onclick="browseFile('install-path')">浏览</button>
                 </div>
             </div>
-            <div class="form-group">
-                <label for="install-path">游戏路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="install-path" placeholder="游戏安装路径">
-                    <button class="action-btn" onclick="browseFolder('install-path')">浏览</button>
-                </div>
-            </div>
-            <button class="submit-btn" onclick="installTranslation()">安装汉化</button>
+            <button class="primary-btn" onclick="installTranslation()">安装汉化</button>
         </div>
 
-        <!-- OurPlay下载界面 -->
+        <!-- 从ourplay下载汉化界面 -->
         <div id="ourplay-section" class="content-section">
             <h2 class="section-title">从ourplay下载汉化</h2>
-            <p>点击下方按钮开始从OurPlay下载最新的汉化包。</p>
-            <button class="submit-btn" onclick="downloadOurplay()">下载OurPlay汉化包</button>
+            <p>从ourplay平台下载最新的汉化包</p>
+            <button class="primary-btn" onclick="downloadOurPlay()">开始下载</button>
         </div>
 
-        <!-- 清除缓存界面 -->
+        <!-- 清除本地缓存界面 -->
         <div id="clean-section" class="content-section">
             <h2 class="section-title">清除本地缓存</h2>
-            <p>此功能将清除本地的翻译缓存文件，释放磁盘空间。</p>
-            <button class="submit-btn secondary-btn" onclick="cleanCache()">清除缓存</button>
+            <p>清除已缓存的翻译结果和临时文件</p>
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="clean-all"> 同时清除配置文件
+                </label>
+            </div>
+            <button class="primary-btn" onclick="cleanCache()">清除缓存</button>
         </div>
 
-        <!-- 零协下载界面 -->
+        <!-- 从零协下载汉化界面 -->
         <div id="llc-section" class="content-section">
             <h2 class="section-title">从零协下载汉化</h2>
-            <p>下载零协汉化组提供的汉化包。</p>
-            <button class="submit-btn" onclick="downloadLLC()">下载零协汉化包</button>
+            <p>从零协社区下载最新的汉化包</p>
+            <button class="primary-btn" onclick="downloadLLC()">开始下载</button>
         </div>
 
-        <!-- 配置API界面 -->
+        <!-- 配置汉化api界面 -->
         <div id="config-section" class="content-section">
             <h2 class="section-title">配置汉化API</h2>
             <div class="form-group">
-                <label for="api-service">选择翻译服务:</label>
-                <select id="api-service">
+                <label for="api-type">API类型:</label>
+                <select id="api-type" class="form-control">
                     <option value="baidu">百度翻译</option>
                     <option value="tencent">腾讯翻译</option>
                     <option value="youdao">有道翻译</option>
-                    <option value="caiyun">彩云翻译</option>
-                    <option value="xiaoniu">小牛翻译</option>
-                    <option value="aliyun">阿里云翻译</option>
-                    <option value="huoshan">火山翻译</option>
-                    <option value="chatgpt">ChatGPT翻译</option>
+                    <option value="custom">自定义API</option>
                 </select>
             </div>
             <div class="form-group">
                 <label for="api-key">API密钥:</label>
-                <input type="password" id="api-key" placeholder="输入API密钥">
+                <input type="text" id="api-key" class="form-control" placeholder="输入API密钥">
             </div>
             <div class="form-group">
-                <label for="api-secret">密钥密文 (如需要):</label>
-                <input type="password" id="api-secret" placeholder="输入密钥密文">
+                <label for="api-secret">API密钥Secret:</label>
+                <input type="text" id="api-secret" class="form-control" placeholder="输入API密钥Secret">
             </div>
-            <button class="submit-btn" onclick="saveAPIConfig()">保存配置</button>
+            <button class="primary-btn" onclick="saveAPIConfig()">保存配置</button>
         </div>
 
-        <!-- 专有词汇界面 -->
+        <!-- 抓取专有词汇界面 -->
         <div id="proper-section" class="content-section">
             <h2 class="section-title">抓取专有词汇</h2>
+            <p>从游戏文件中抓取专有名词和术语</p>
             <div class="form-group">
-                <label for="proper-output">输出格式:</label>
-                <select id="proper-output">
-                    <option value="json">JSON格式</option>
-                    <option value="single">单文件格式</option>
-                    <option value="double">双文件格式</option>
-                </select>
+                <label for="vocab-output">保存路径:</label>
+                <div class="file-input-group">
+                    <input type="text" id="vocab-output" placeholder="选择保存位置">
+                    <button class="action-btn" onclick="browseFile('vocab-output')">浏览</button>
+                </div>
             </div>
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="proper-skip-space"> 跳过含空格的词汇
-                </label>
-            </div>
-            <div class="form-group">
-                <label for="proper-max-count">最大词汇数量 (留空表示无限制):</label>
-                <input type="number" id="proper-max-count" placeholder="例如：100">
-            </div>
-            <button class="submit-btn" onclick="fetchProperNouns()">抓取专有词汇</button>
+            <button class="primary-btn" onclick="grabVocabulary()">开始抓取</button>
         </div>
 
         <!-- 文本搜索界面 -->
         <div id="search-section" class="content-section">
-            <h2 class="section-title">进行文本搜索</h2>
+            <h2 class="section-title">文本搜索</h2>
+            <p>在游戏文件中搜索特定文本</p>
             <div class="form-group">
-                <label for="search-keyword">搜索关键词:</label>
-                <input type="text" id="search-keyword" placeholder="输入要搜索的文本">
+                <label for="search-text">搜索文本:</label>
+                <input type="text" id="search-text" class="form-control" placeholder="输入要搜索的文本">
             </div>
             <div class="form-group">
                 <label for="search-path">搜索路径:</label>
                 <div class="file-input-group">
-                    <input type="text" id="search-path" placeholder="留空则搜索整个游戏目录">
+                    <input type="text" id="search-path" placeholder="选择搜索路径">
                     <button class="action-btn" onclick="browseFolder('search-path')">浏览</button>
                 </div>
             </div>
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="search-case-sensitive"> 区分大小写
-                </label>
-            </div>
-            <button class="submit-btn" onclick="searchText()">开始搜索</button>
+            <button class="primary-btn" onclick="searchText()">开始搜索</button>
             
-            <div id="search-results" class="log-container" style="margin-top: 20px; height: 300px;">
+            <div id="search-results" class="log-container" style="margin-top: 20px; height: 200px;">
                 <div class="log-entry">
-                    <span class="log-timestamp">[提示]</span>
+                    <span class="log-timestamp">[结果]</span>
                     <span class="log-message">搜索结果将显示在这里</span>
                 </div>
             </div>
@@ -258,7 +228,7 @@
                     <button class="action-btn" onclick="browseFolder('backup-destination')">浏览</button>
                 </div>
             </div>
-            <button class="submit-btn" onclick="backupText()">开始备份</button>
+            <button class="primary-btn" onclick="backupText()">开始备份</button>
         </div>
 
         <!-- 资源管理界面 -->
@@ -303,7 +273,7 @@
                 <label for="contrast">对比度: <span id="contrast-value">0</span></label>
                 <input type="range" id="contrast" min="-100" max="100" value="0" oninput="updateValue('contrast')">
             </div>
-            <button class="submit-btn" onclick="adjustImage()">调整图片</button>
+            <button class="primary-btn" onclick="adjustImage()">调整图片</button>
         </div>
 
         <!-- 抽卡概率计算界面 -->
@@ -312,42 +282,23 @@
             <p>计算游戏抽卡系统相关概率</p>
             <div class="form-group">
                 <label for="total-items">总物品数:</label>
-                <input type="number" id="total-items" value="100" min="1">
+                <input type="number" id="total-items" value="100" min="1" class="form-control">
             </div>
             <div class="form-group">
                 <label for="rare-items">稀有物品数:</label>
-                <input type="number" id="rare-items" value="5" min="1">
+                <input type="number" id="rare-items" value="5" min="1" class="form-control">
             </div>
             <div class="form-group">
                 <label for="draw-count">抽取次数:</label>
-                <input type="number" id="draw-count" value="10" min="1">
+                <input type="number" id="draw-count" value="10" min="1" class="form-control">
             </div>
-            <button class="submit-btn" onclick="calculateGacha()">计算概率</button>
+            <button class="primary-btn" onclick="calculateGacha()">计算概率</button>
             
             <div id="calculation-results" class="log-container" style="margin-top: 20px; height: 200px;">
                 <div class="log-entry">
                     <span class="log-timestamp">[结果]</span>
                     <span class="log-message">计算结果将显示在这里</span>
                 </div>
-            </div>
-        </div>
-
-        <!-- 关于界面 -->
-        <div id="about-section" class="content-section">
-            <h2 class="section-title">关于 LCTA</h2>
-            <div class="card">
-                <h3>LCTA - 边狱公司汉化工具箱</h3>
-                <p><strong>版本:</strong> 3.1.0</p>
-                <p><strong>描述:</strong> 一个用于自动翻译《边狱公司》游戏内容的工具，支持多种翻译API和汉化包管理。</p>
-                <p><strong>功能:</strong></p>
-                <ul style="margin-left: 20px; margin-top: 10px;">
-                    <li>自动翻译游戏文本</li>
-                    <li>支持多种翻译API</li>
-                    <li>汉化包安装与管理</li>
-                    <li>从多个来源下载汉化</li>
-                    <li>文本搜索与备份</li>
-                    <li>丰富的辅助工具</li>
-                </ul>
             </div>
         </div>
 
@@ -368,7 +319,7 @@
             <div class="form-group">
                 <label for="game-path">游戏路径:</label>
                 <div class="file-input-group">
-                    <input type="text" id="game-path" placeholder="选择游戏安装路径">
+                    <input type="text" id="game-path" placeholder="选择游戏安装路径" class="form-control">
                     <button class="action-btn" onclick="browseFolder('game-path')">浏览</button>
                 </div>
             </div>
@@ -379,18 +330,45 @@
                 </label>
             </div>
             
-            <button class="submit-btn" onclick="saveSettings()">保存设置</button>
-            
-            <div class="form-group" style="margin-top: 30px;">
-                <h3>配置文件操作</h3>
+            <div class="form-actions">
+                <button class="primary-btn" onclick="saveSettings()">保存设置</button>
                 <button class="action-btn" onclick="useDefaultConfig()">使用默认配置</button>
                 <button class="secondary-btn" onclick="resetConfig()" style="margin-left: 10px;">重置配置</button>
             </div>
+            
+            <div class="form-group" style="margin-top: 30px;">
+                <h3>配置文件操作</h3>
+            </div>
         </div>
-    </div>
 
-    <!-- 模态窗口容器 -->
-    <div id="modal-container"></div>
+        <!-- 关于界面 -->
+        <div id="about-section" class="content-section">
+            <h2 class="section-title">关于 LCTA</h2>
+            <div class="card about-card">
+                <div class="about-logo">
+                    <i class="fas fa-language fa-4x"></i>
+                </div>
+                <h3>LCTA - 边狱公司汉化工具箱</h3>
+                <p><strong>版本:</strong> 3.1.0</p>
+                <p><strong>描述:</strong> 一个用于自动翻译《边狱公司》游戏内容的工具，支持多种翻译API和汉化包管理。</p>
+                <p><strong>功能:</strong></p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>自动翻译游戏文本</li>
+                    <li>支持多种翻译API</li>
+                    <li>汉化包安装与管理</li>
+                    <li>从多个来源下载汉化</li>
+                    <li>文本搜索与备份</li>
+                    <li>丰富的辅助工具</li>
+                </ul>
+                <button class="action-btn" style="margin-top: 20px;" onclick="checkForUpdates()">检查更新</button>
+            </div>
+        </div>
+
+        <!-- 模态窗口容器 -->
+        <div id="modal-container"></div>
+        <!-- 最小化窗口容器 -->
+        <div id="minimized-container"></div>
+    </div>
 
     <script src="script.js"></script>
 </body>

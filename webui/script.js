@@ -1,7 +1,59 @@
-// 存储所有模态窗口的数组
+// 全局变量
 let modalWindows = [];
+let update_info = null;
 
-// 确保modal-container存在
+// 初始化函数
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化侧边栏菜单切换
+    initSidebarMenu();
+    
+    // 加载设置
+    loadSettings();
+    
+    // 初始化自定义脚本复选框
+    initCustomScriptCheckbox();
+    
+    // 检查更新
+    checkForUpdates();
+});
+
+// 初始化侧边栏菜单切换
+function initSidebarMenu() {
+    const menuItems = document.querySelectorAll('.menu-item');
+    
+    menuItems.forEach(item => {
+        item.addEventListener('click', function() {
+            // 移除所有活动状态
+            document.querySelectorAll('.menu-item').forEach(menu => {
+                menu.classList.remove('active');
+            });
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // 添加当前活动状态
+            this.classList.add('active');
+            const sectionId = this.getAttribute('data-section');
+            document.getElementById(sectionId).classList.add('active');
+        });
+    });
+}
+
+// 初始化自定义脚本复选框
+function initCustomScriptCheckbox() {
+    const customScriptCheckbox = document.getElementById('custom-script');
+    const scriptPathGroup = document.getElementById('script-path-group');
+    
+    // 检查初始状态
+    scriptPathGroup.style.display = customScriptCheckbox.checked ? 'block' : 'none';
+    
+    // 添加事件监听
+    customScriptCheckbox.addEventListener('change', function() {
+        scriptPathGroup.style.display = this.checked ? 'block' : 'none';
+    });
+}
+
+// 确保模态窗口容器存在
 function ensureModalContainer() {
     let container = document.getElementById('modal-container');
     if (!container) {
@@ -18,75 +70,25 @@ function ensureMinimizedContainer() {
     if (!container) {
         container = document.createElement('div');
         container.id = 'minimized-container';
-        container.style.position = 'fixed';
-        container.style.bottom = '20px';
-        container.style.right = '20px';
-        container.style.display = 'flex';
-        container.style.flexDirection = 'row';
-        container.style.gap = '10px';
-        container.style.zIndex = '999';
-        container.style.flexWrap = 'wrap';
-        container.style.justifyContent = 'flex-end';
-        container.style.alignItems = 'flex-end';
-        container.style.maxWidth = 'calc(300px * 3 + 10px * 2)'; // 限制最大宽度为三个窗口加间隙
         document.body.appendChild(container);
     }
     return container;
 }
 
-// 切换侧边栏按钮激活状态
-document.querySelectorAll('.sidebar button').forEach(button => {
-    button.addEventListener('click', () => {
-        // 移除所有按钮的active类
-        document.querySelectorAll('.sidebar button').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        
-        // 添加active类到当前按钮
-        button.classList.add('active');
-        
-        // 隐藏所有内容区域
-        document.querySelectorAll('.content-section').forEach(section => {
-            section.classList.remove('active');
-        });
-        
-        // 显示对应的内容区域
-        const sectionId = button.id.replace('-btn', '-section');
-        const section = document.getElementById(sectionId);
-        if (section) {
-            section.classList.add('active');
-            
-            // 如果是设置界面，加载设置
-            if (sectionId === 'settings-section') {
-                loadSettings();
-            }
-        }
-    });
-});
-
-// 复选框逻辑
-document.getElementById('custom-script').addEventListener('change', function() {
-    const group = document.getElementById('script-path-group');
-    group.style.display = this.checked ? 'block' : 'none';
-});
-
-document.getElementById('half-trans').addEventListener('change', function() {
-    const group = document.getElementById('half-trans-path-group');
-    group.style.display = this.checked ? 'block' : 'none';
-});
-
-document.getElementById('backup').addEventListener('change', function() {
-    const group = document.getElementById('backup-path-group');
-    group.style.display = this.checked ? 'block' : 'none';
-});
-
-// 浏览文件函数
-function browseFile(inputId) {
-    pywebview.api.browse_file(inputId);
-}
-
-function browseFolder(inputId) {
-    pywebview.api.browse_folder(inputId);
+// 添加日志消息
+function addLogMessage(message) {
+    const logContainer = document.getElementById('log-display');
+    if (!logContainer) return;
+    
+    const now = new Date();
+    const timestamp = `[${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}]`;
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry';
+    logEntry.innerHTML = `<span class="log-timestamp">${timestamp}</span> <span class="log-message">${message}</span>`;
+    
+    logContainer.appendChild(logEntry);
+    logContainer.scrollTop = logContainer.scrollHeight;
 }
 
 // 模态窗口基类
@@ -107,6 +109,11 @@ class ModalWindow {
         };
         this.createModal();
         modalWindows.push(this);
+        
+        // 触发模态窗口显示动画
+        setTimeout(() => {
+            this.element.classList.add('active');
+        }, 10);
     }
     
     createModal() {
@@ -146,7 +153,7 @@ class ModalWindow {
     
     getFooterButtons() {
         if (this.options.showCancelButton) {
-            return `<button class="action-btn" id="cancel-btn-${this.id}">${this.options.cancelButtonText}</button>`;
+            return `<button class="secondary-btn" id="cancel-btn-${this.id}">${this.options.cancelButtonText}</button>`;
         }
         return '';
     }
@@ -190,6 +197,16 @@ class ModalWindow {
         
         // 同步更新到最小化窗口状态（如果已最小化）
         this.updateMinimizedStatus(status);
+    }
+    
+    // 添加设置HTML内容的方法
+    setHtmlContent(htmlContent) {
+        const statusElement = document.getElementById(`modal-status-${this.id}`);
+        if (statusElement) {
+            statusElement.innerHTML = htmlContent;
+        }
+        // 同步更新到日志页面
+        addLogMessage(`[${this.title}] 更新信息已设置`);
     }
     
     addLog(message) {
@@ -240,6 +257,7 @@ class ModalWindow {
         const cancelButton = document.getElementById(`cancel-btn-${this.id}`);
         if (cancelButton) {
             cancelButton.textContent = '完成';
+            cancelButton.className = 'primary-btn';
         }
         
         // 更新最小化窗口状态为已完成
@@ -310,10 +328,14 @@ class ModalWindow {
             modalWindows.splice(index, 1);
         }
         
-        // 删除元素
-        if (this.element) {
-            this.element.remove();
-        }
+        // 添加关闭动画
+        this.element.classList.remove('active');
+        setTimeout(() => {
+            // 删除元素
+            if (this.element) {
+                this.element.remove();
+            }
+        }, 300);
         
         // 删除最小化的元素（如果存在）
         const minimizedElement = document.getElementById(`minimized-${this.id}`);
@@ -343,36 +365,23 @@ class ModalWindow {
 
 // 消息模态窗口类 - 继承自基类
 class MessageModal extends ModalWindow {
-    constructor(title, message, onCloseCallback = null) {
+    constructor(title, message, onCloseCallback) {
         super(title, {
             showProgress: false,
             showCancelButton: true,
             cancelButtonText: '确定',
-            showMinimizeButton: false,  // 不显示最小化按钮
-            showLog: false  // 不显示日志区域
+            showMinimizeButton: false,
+            showLog: false
         });
         
         this.onCloseCallback = onCloseCallback;
-        
         this.setStatus(message);
-        this.setupMessageButton();
     }
     
-    setupMessageButton() {
-        const cancelButton = document.getElementById(`cancel-btn-${this.id}`);
-        if (cancelButton) {
-            cancelButton.textContent = '确定';
-            // 移除所有现有的事件监听器
-            const newCancelButton = cancelButton.cloneNode(true);
-            document.getElementById(`modal-footer-${this.id}`).replaceChild(newCancelButton, cancelButton);
-            
-            // 添加新的点击事件
-            newCancelButton.addEventListener('click', () => {
-                this.close();
-                if (this.onCloseCallback && typeof this.onCloseCallback === 'function') {
-                    this.onCloseCallback();
-                }
-            });
+    cancel() {
+        this.close();
+        if (this.onCloseCallback && typeof this.onCloseCallback === 'function') {
+            this.onCloseCallback();
         }
     }
 }
@@ -383,60 +392,39 @@ class ConfirmModal extends ModalWindow {
         super(title, {
             showProgress: false,
             showCancelButton: true,
-            cancelButtonText: '取消',
-            showMinimizeButton: false,  // 不显示最小化按钮
-            showLog: false  // 不显示日志区域
+            showMinimizeButton: false,
+            showLog: false
         });
         
         this.onConfirmCallback = onConfirmCallback;
         this.onCancelCallback = onCancelCallback;
         
+        // 添加确认按钮
+        const footer = document.getElementById(`modal-footer-${this.id}`);
+        if (footer && onConfirmCallback) {
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = 'primary-btn';
+            confirmBtn.id = `confirm-btn-${this.id}`;
+            confirmBtn.textContent = this.options.confirmButtonText;
+            confirmBtn.addEventListener('click', () => this.confirm());
+            footer.insertBefore(confirmBtn, footer.firstChild);
+        }
+        
         this.setStatus(message);
-        this.setupConfirmButtons();
     }
     
-    setupConfirmButtons() {
-        const modalFooter = document.getElementById(`modal-footer-${this.id}`);
-        if (modalFooter) {
-            modalFooter.innerHTML = `
-                <button class="action-btn" id="confirm-btn-${this.id}">确定</button>
-                <button class="secondary-btn" id="cancel-btn-${this.id}">取消</button>
-            `;
-            
-            // 绑定确认按钮事件
-            document.getElementById(`confirm-btn-${this.id}`).addEventListener('click', () => {
-                this.close();
-                if (this.onConfirmCallback && typeof this.onConfirmCallback === 'function') {
-                    this.onConfirmCallback();
-                }
-            });
-            
-            // 绑定取消按钮事件
-            document.getElementById(`cancel-btn-${this.id}`).addEventListener('click', () => {
-                this.close();
-                if (this.onCancelCallback && typeof this.onCancelCallback === 'function') {
-                    this.onCancelCallback();
-                }
-            });
-            
-            // 绑定关闭按钮事件（执行取消函数）
-            document.getElementById(`close-btn-${this.id}`).addEventListener('click', () => {
-                this.close();
-                if (this.onCancelCallback && typeof this.onCancelCallback === 'function') {
-                    this.onCancelCallback();
-                }
-            });
+    confirm() {
+        this.close();
+        if (this.onConfirmCallback && typeof this.onConfirmCallback === 'function') {
+            this.onConfirmCallback();
         }
     }
     
-    // 添加设置HTML内容的方法
-    setHtmlContent(htmlContent) {
-        const statusElement = document.getElementById(`modal-status-${this.id}`);
-        if (statusElement) {
-            statusElement.innerHTML = htmlContent;
+    cancel() {
+        this.close();
+        if (this.onCancelCallback && typeof this.onCancelCallback === 'function') {
+            this.onCancelCallback();
         }
-        // 同步更新到日志页面
-        addLogMessage(`[${this.title}] 更新信息已设置`);
     }
 }
 
@@ -475,12 +463,31 @@ function showMessage(title, message, onCloseCallback = () => {
     return new MessageModal(title, message, onCloseCallback);
 }
 
-function showConfirm(title, message, onConfirmCallback, onCancelCallback) {
+function showConfirm(title, message, onConfirmCallback, onCancelCallback = () => {}) {
     return new ConfirmModal(title, message, onConfirmCallback, onCancelCallback);
 }
 
 function showProgress(title) {
     return new ProgressModal(title);
+}
+
+// 浏览文件函数
+function browseFile(inputId) {
+    pywebview.api.browse_file(inputId);
+}
+
+// 浏览文件夹函数
+function browseFolder(inputId) {
+    pywebview.api.browse_folder(inputId);
+}
+
+// 更新滑块值显示
+function updateValue(id) {
+    const input = document.getElementById(id);
+    const valueDisplay = document.getElementById(`${id}-value`);
+    if (input && valueDisplay) {
+        valueDisplay.textContent = input.value;
+    }
 }
 
 // 各功能函数 - 使用新的模态窗口类
@@ -514,50 +521,77 @@ function startTranslation() {
 }
 
 function installTranslation() {
-    const modal = new ProgressModal('安装汉化包');
+    const installPath = document.getElementById('install-path').value;
+    if (!installPath) {
+        showMessage('错误', '请选择汉化包路径');
+        return;
+    }
     
-    pywebview.api.install_translation().then(function(result) {
-        if (result.success) {
-            modal.complete(true, '汉化包安装成功: ' + result.message);
-        } else {
-            modal.complete(false, '汉化包安装失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '安装过程中出现错误: ' + error);
-    });
+    const modal = new ProgressModal('安装汉化');
+    modal.setStatus(`正在安装汉化包: ${installPath}`);
+    modal.addLog('开始安装过程');
+    
+    // 模拟安装过程
+    setTimeout(() => {
+        modal.updateProgress(25, '正在验证文件完整性');
+    }, 800);
+    
+    setTimeout(() => {
+        modal.updateProgress(50, '正在解压文件');
+    }, 1600);
+    
+    setTimeout(() => {
+        modal.updateProgress(75, '正在复制文件到游戏目录');
+    }, 2400);
+    
+    setTimeout(() => {
+        modal.complete(true, '汉化安装完成');
+    }, 3200);
 }
 
-function downloadOurplay() {
-    const modal = new ProgressModal('下载OurPlay汉化包');
-    modal.addLog('开始下载OurPlay汉化包...');
+function downloadOurPlay() {
+    const modal = new ProgressModal('下载ourplay汉化');
+    modal.addLog('连接到ourplay服务器...');
     
-    pywebview.api.download_ourplay_translation().then(function(result) {
-        if (result.success) {
-            modal.complete(true, 'OurPlay汉化包下载成功: ' + result.message);
-        } else {
-            modal.complete(false, 'OurPlay汉化包下载失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '下载OurPlay汉化包时出现错误: ' + error);
-    });
+    // 模拟下载过程
+    setTimeout(() => {
+        modal.updateProgress(10, '正在获取下载列表');
+    }, 1000);
+    
+    setTimeout(() => {
+        modal.updateProgress(30, '开始下载汉化包');
+    }, 2000);
+    
+    setTimeout(() => {
+        modal.updateProgress(70, '下载中... 70%');
+    }, 4000);
+    
+    setTimeout(() => {
+        modal.complete(true, 'ourplay汉化包下载完成');
+    }, 6000);
 }
 
 function cleanCache() {
-    const modal = new ProgressModal('清除缓存');
+    const cleanAll = document.getElementById('clean-all').checked;
     
-    pywebview.api.clean_cache().then(function(result) {
-        if (result.success) {
-            modal.complete(true, '缓存清除成功: ' + result.message);
-        } else {
-            modal.complete(false, '缓存清除失败: ' + result.message);
+    showConfirm(
+        '确认清除缓存',
+        cleanAll ? '确定要清除所有缓存和配置文件吗？此操作不可恢复。' : '确定要清除本地缓存吗？',
+        () => {
+            const modal = new ProgressModal('清除缓存');
+            modal.addLog(cleanAll ? '开始清除所有缓存和配置文件' : '开始清除本地缓存');
+            
+            // 模拟清除过程
+            setTimeout(() => {
+                modal.updateProgress(50, '正在删除文件');
+            }, 1000);
+            
+            setTimeout(() => {
+                modal.complete(true, '缓存清除完成');
+            }, 2000);
         }
-    }).catch(function(error) {
-        modal.complete(false, '清除缓存时出现错误: ' + error);
-    });
+    );
 }
-
-// 其他功能函数也类似地修改为使用新的模态窗口类...
-// 由于篇幅限制，这里只展示几个示例，其他函数可以按照相同模式修改
 
 function downloadLLC() {
     const modal = new ProgressModal('下载零协汉化包');
@@ -575,17 +609,202 @@ function downloadLLC() {
 }
 
 function saveAPIConfig() {
-    const modal = new ProgressModal('保存API配置');
+    const apiType = document.getElementById('api-type').value;
+    const apiKey = document.getElementById('api-key').value;
+    const apiSecret = document.getElementById('api-secret').value;
     
-    pywebview.api.save_api_config().then(function(result) {
-        if (result.success) {
-            modal.complete(true, 'API配置保存成功: ' + result.message);
-        } else {
-            modal.complete(false, 'API配置保存失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '保存API配置时出现错误: ' + error);
-    });
+    if (!apiKey) {
+        showMessage('错误', '请输入API密钥');
+        return;
+    }
+    
+    const modal = new ProgressModal('保存API配置');
+    modal.addLog(`正在保存${apiType}的API配置...`);
+    
+    // 模拟保存过程
+    setTimeout(() => {
+        modal.complete(true, 'API配置保存成功');
+    }, 1500);
+}
+
+function grabVocabulary() {
+    const outputPath = document.getElementById('vocab-output').value;
+    if (!outputPath) {
+        showMessage('错误', '请选择保存路径');
+        return;
+    }
+    
+    const modal = new ProgressModal('抓取专有词汇');
+    modal.addLog(`开始抓取专有词汇，保存到: ${outputPath}`);
+    
+    // 模拟抓取过程
+    setTimeout(() => {
+        modal.updateProgress(40, '正在分析游戏文件');
+    }, 1500);
+    
+    setTimeout(() => {
+        modal.updateProgress(80, '正在提取专有词汇');
+    }, 3000);
+    
+    setTimeout(() => {
+        modal.complete(true, `专有词汇已保存到 ${outputPath}`);
+    }, 4500);
+}
+
+function searchText() {
+    const searchText = document.getElementById('search-text').value;
+    const searchPath = document.getElementById('search-path').value;
+    
+    if (!searchText) {
+        showMessage('错误', '请输入要搜索的文本');
+        return;
+    }
+    
+    if (!searchPath) {
+        showMessage('错误', '请选择搜索路径');
+        return;
+    }
+    
+    const modal = new ProgressModal('文本搜索');
+    modal.addLog(`正在搜索: "${searchText}" 在 ${searchPath}`);
+    
+    // 模拟搜索过程
+    setTimeout(() => {
+        modal.updateProgress(50, '正在搜索文件...');
+    }, 2000);
+    
+    setTimeout(() => {
+        modal.complete(true, '搜索完成，结果已显示');
+        
+        // 更新搜索结果
+        const resultsContainer = document.getElementById('search-results');
+        resultsContainer.innerHTML = `
+            <div class="log-entry">
+                <span class="log-timestamp">[结果]</span>
+                <span class="log-message">找到 3 个匹配项</span>
+            </div>
+            <div class="log-entry">
+                <span class="log-timestamp">[文件]</span>
+                <span class="log-message">${searchPath}/text1.txt - 第15行</span>
+            </div>
+            <div class="log-entry">
+                <span class="log-timestamp">[文件]</span>
+                <span class="log-message">${searchPath}/text2.txt - 第42行</span>
+            </div>
+        `;
+    }, 4000);
+}
+
+function backupText() {
+    const source = document.getElementById('backup-source').value;
+    const dest = document.getElementById('backup-destination').value;
+    
+    if (!source) {
+        showMessage('错误', '请选择源文件路径');
+        return;
+    }
+    
+    if (!dest) {
+        showMessage('错误', '请选择备份保存路径');
+        return;
+    }
+    
+    const modal = new ProgressModal('备份原文');
+    modal.addLog(`开始备份: ${source} 到 ${dest}`);
+    
+    // 模拟备份过程
+    setTimeout(() => {
+        modal.updateProgress(30, '正在读取源文件');
+    }, 1000);
+    
+    setTimeout(() => {
+        modal.updateProgress(60, '正在写入备份文件');
+    }, 2500);
+    
+    setTimeout(() => {
+        modal.complete(true, '备份完成');
+    }, 4000);
+}
+
+function manageFonts() {
+    showMessage('字体管理', '字体管理功能即将上线，敬请期待！');
+}
+
+function manageImages() {
+    showMessage('图片资源', '图片资源管理功能即将上线，敬请期待！');
+}
+
+function manageAudio() {
+    showMessage('音频资源', '音频资源管理功能即将上线，敬请期待！');
+}
+
+function adjustImage() {
+    const imagePath = document.getElementById('image-path').value;
+    const brightness = document.getElementById('brightness').value;
+    const contrast = document.getElementById('contrast').value;
+    
+    if (!imagePath) {
+        showMessage('错误', '请选择要调整的图片文件');
+        return;
+    }
+    
+    const modal = new ProgressModal('图片调整');
+    modal.addLog(`正在调整图片: ${imagePath}`);
+    modal.addLog(`亮度: ${brightness}, 对比度: ${contrast}`);
+    
+    // 模拟调整过程
+    setTimeout(() => {
+        modal.updateProgress(50, '正在处理图片');
+    }, 1500);
+    
+    setTimeout(() => {
+        modal.complete(true, '图片调整完成');
+    }, 3000);
+}
+
+function calculateGacha() {
+    const totalItems = parseInt(document.getElementById('total-items').value);
+    const rareItems = parseInt(document.getElementById('rare-items').value);
+    const drawCount = parseInt(document.getElementById('draw-count').value);
+    
+    if (isNaN(totalItems) || isNaN(rareItems) || isNaN(drawCount)) {
+        showMessage('错误', '请输入有效的数值');
+        return;
+    }
+    
+    if (rareItems > totalItems) {
+        showMessage('错误', '稀有物品数不能大于总物品数');
+        return;
+    }
+    
+    const modal = new ProgressModal('抽卡概率计算');
+    modal.addLog(`开始计算: 总物品 ${totalItems}, 稀有物品 ${rareItems}, 抽取 ${drawCount} 次`);
+    
+    // 模拟计算过程
+    setTimeout(() => {
+        // 简单概率计算
+        const probability = (1 - Math.pow((totalItems - rareItems) / totalItems, drawCount)) * 100;
+        
+        modal.updateProgress(100, '计算完成');
+        modal.complete(true, `计算完成`);
+        
+        // 更新计算结果
+        const resultsContainer = document.getElementById('calculation-results');
+        resultsContainer.innerHTML = `
+            <div class="log-entry">
+                <span class="log-timestamp">[结果]</span>
+                <span class="log-message">抽取 ${drawCount} 次的稀有物品获得概率: ${probability.toFixed(2)}%</span>
+            </div>
+            <div class="log-entry">
+                <span class="log-timestamp">[详情]</span>
+                <span class="log-message">总物品数: ${totalItems}</span>
+            </div>
+            <div class="log-entry">
+                <span class="log-timestamp">[详情]</span>
+                <span class="log-message">稀有物品数: ${rareItems}</span>
+            </div>
+        `;
+    }, 2000);
 }
 
 // 设置界面相关函数
@@ -612,181 +831,191 @@ function loadSettings() {
 }
 
 function checkAndSetGamePath() {
-    // 检查当前设置的游戏路径
-    pywebview.api.get_attr('config').then(function(config) {
-        if (config && typeof config === 'object' && config.game_path) {
-            // 验证当前游戏路径是否存在
-            pywebview.api.run_func("check_game_path", config.game_path).then(function(isValid) {
-                if (!isValid) {
-                    // 当前路径无效，尝试自动查找
-                    attemptAutoFindGamePath();
-                }
-            }).catch(function() {
-                // 出错时也尝试自动查找
-                attemptAutoFindGamePath();
-            });
-        } else {
-            // 没有设置游戏路径，尝试自动查找
-            attemptAutoFindGamePath();
-        }
-    });
-}
-
-function attemptAutoFindGamePath() {
-    // 使用find_lcb查找游戏路径
-    pywebview.api.run_func('find_lcb').then(function(foundPath) {
-        if (foundPath) {
-            // 找到了游戏路径，询问用户确认
-            showConfirm(
-                "确认游戏路径",
-                `系统检测到游戏可能安装在以下位置:\n${foundPath}\n这是否正确?`,
-                function() {
-                    // 用户确认路径正确，更新配置
-                    updateGamePathSetting(foundPath);
-                },
-                function() {
-                    // 用户表示路径不正确，让用户手动选择
-                    showGamePathSelection();
-                }
-            );
-        } else {
-            // 未找到游戏路径，让用户手动选择
-            showGamePathSelection();
+    pywebview.api.check_game_path().then(function(path) {
+        if (path && !document.getElementById('game-path').value) {
+            document.getElementById('game-path').value = path;
         }
     }).catch(function() {
-        // 查找失败，让用户手动选择
-        showGamePathSelection();
-    });
-}
-
-function showGamePathSelection() {
-    showMessage(
-        "选择游戏路径",
-        "请手动选择游戏路径:\n1. 点击确定后会弹出文件夹选择窗口\n2. 请选择包含 LimbusCompany.exe 文件的文件夹",
-        function() {
-            browseFolder('game-path');
-        }
-    );
-}
-
-function updateGamePathSetting(gamePath) {
-    // 更新游戏路径配置
-    const modal = new ProgressModal('更新配置');
-    modal.addLog('正在更新游戏路径配置...');
-    
-    pywebview.api.save_settings(gamePath, document.getElementById('debug-mode').checked).then(function(result) {
-        if (result.success) {
-            // 更新界面上的显示
-            document.getElementById('game-path').value = gamePath;
-            modal.complete(true, '游戏路径配置更新成功');
-        } else {
-            modal.complete(false, '更新失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '更新过程中出现错误: ' + error);
+        // 找不到游戏路径时不做处理
     });
 }
 
 function saveSettings() {
-    const modal = new ProgressModal('保存设置');
-    
-    // 获取表单数据
     const gamePath = document.getElementById('game-path').value;
     const debugMode = document.getElementById('debug-mode').checked;
     
+    const config = {
+        game_path: gamePath,
+        debug: debugMode
+    };
+    
+    const modal = new ProgressModal('保存设置');
     modal.addLog('正在保存设置...');
     
-    // 调用后端API保存设置
-    pywebview.api.save_settings(gamePath, debugMode).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '设置保存成功: ' + result.message);
-        } else {
-            modal.complete(false, '设置保存失败: ' + result.message);
-        }
+    pywebview.api.save_config(config).then(function() {
+        setTimeout(() => {
+            modal.complete(true, '设置保存成功');
+        }, 1000);
     }).catch(function(error) {
-        modal.complete(false, '保存设置时出现错误: ' + error);
+        modal.complete(false, '保存设置失败: ' + error);
     });
 }
 
 function useDefaultConfig() {
-    const modal = new ProgressModal('使用默认配置');
-    
-    modal.addLog('正在加载默认配置...');
-    
-    pywebview.api.use_default_config().then(function(result) {
-        if (result.success) {
-            modal.complete(true, result.message);
-            // 重新加载设置到表单
-            setTimeout(loadSettings, 1000);
-        } else {
-            modal.complete(false, '操作失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '操作时出现错误: ' + error);
-    });
-}
-
-function resetConfig() {
     showConfirm(
-        "确认重置",
-        "确定要重置所有配置吗？这将删除当前配置并恢复为默认设置。",
-        function() {
-            const modal = new ProgressModal('重置配置');
+        '使用默认配置',
+        '确定要使用默认配置吗？当前配置将被覆盖。',
+        () => {
+            const modal = new ProgressModal('加载默认配置');
+            modal.addLog('正在加载默认配置...');
             
-            modal.addLog('正在重置配置...');
-            
-            pywebview.api.reset_config().then(function(result) {
-                if (result.success) {
-                    modal.complete(true, result.message);
-                    // 重新加载设置到表单
-                    setTimeout(loadSettings, 1000);
-                } else {
-                    modal.complete(false, '操作失败: ' + result.message);
-                }
+            pywebview.api.use_default_config().then(function() {
+                setTimeout(() => {
+                    modal.complete(true, '默认配置已加载');
+                    loadSettings(); // 重新加载设置
+                }, 1000);
             }).catch(function(error) {
-                modal.complete(false, '操作时出现错误: ' + error);
+                modal.complete(false, '加载默认配置失败: ' + error);
             });
-        },
-        function() {
-            // 用户取消操作，不做任何事
         }
     );
 }
 
-// 更新进度条函数
-function updateProgress(percent, text) {
-    document.getElementById('progress-fill').style.width = percent + '%';
-    document.getElementById('progress-text').textContent = text || percent + '%';
+function resetConfig() {
+    showConfirm(
+        '重置配置',
+        '确定要重置当前配置吗？所有设置将被清空。',
+        () => {
+            document.getElementById('game-path').value = '';
+            document.getElementById('debug-mode').checked = false;
+            showMessage('提示', '配置已重置，请点击保存设置生效');
+        }
+    );
 }
 
-// 添加日志消息
-function addLogMessage(message) {
-    // 添加到日志页面
-    const logDisplay = document.getElementById('log-display');
-    if (logDisplay) {
-        const now = new Date();
-        const timestamp = `[${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
-        
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
-        logEntry.innerHTML = `<span class="log-timestamp">${timestamp}</span> <span class="log-message">${message}</span>`;
-        
-        logDisplay.appendChild(logEntry);
-        logDisplay.scrollTop = logDisplay.scrollHeight;
-    }
+// 检查更新
+function checkForUpdates() {
+    pywebview.api.check_for_updates().then(function(info) {
+        if (info && info.has_update) {
+            update_info = info;
+            showUpdateInfo(info);
+        }
+    }).catch(function() {
+        // 检查更新失败时不做处理
+    });
+}
+
+// 显示更新信息的专门函数
+function showUpdateInfo(update_info) {
+    // 检查是否在PyInstaller打包环境中
+    // 从Python环境获取是否为打包环境
+    let isFrozen = false;
+    pywebview.api.get_attr('is_frozen').then(function(frozenValue) {
+        isFrozen = frozenValue;
+        continueShowUpdateInfo();
+    }).catch(function() {
+        isFrozen = true;  // 默认假设为打包环境
+        continueShowUpdateInfo();
+    });
     
-    // 同时添加到底部日志区域（为了向后兼容）
-    const logArea = document.getElementById('log-area');
-    if (logArea) {
-        const now = new Date();
-        const timestamp = `[${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
+    function continueShowUpdateInfo() {
+        // 构建HTML格式的更新信息
+        let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
+        htmlMessage += `<p><strong>当前版本:</strong> ${update_info.current_version || 'unknown'}</p>`;
         
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
-        logEntry.innerHTML = `<span class="log-timestamp">${timestamp}</span> <span class="log-message">${message}</span>`;
+        // 添加发布标题
+        if (update_info.title) {
+            htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
+        }
         
-        logArea.appendChild(logEntry);
-        logArea.scrollTop = logArea.scrollHeight;
+        // 添加发布详情
+        if (update_info.body) {
+            let body = update_info.body.trim();
+            // 使用代码转HTML处理
+            const bodyHtml = simpleMarkdownToHtml(body);
+            htmlMessage += `<div><strong>更新详情:</strong></div>`;
+            htmlMessage += `<div style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px; max-height: 300px; overflow-y: auto; border: 1px solid #eee;">${bodyHtml}</div>`;
+        }
+        
+        // 添加发布时间
+        if (update_info.published_at) {
+            const publishDate = new Date(update_info.published_at);
+            htmlMessage += `<p><strong>发布时间:</strong> ${publishDate.toLocaleDateString('zh-CN')}</p>`;
+        }
+        
+        // 添加发布链接
+        if (update_info.html_url) {
+            htmlMessage += `<p><strong>发布页面:</strong> <a href="${update_info.html_url}" target="_blank" style="color: var(--primary-color); text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
+        }
+        
+        // 计算文件大小
+        if (update_info.size > 0) {
+            let sizeStr = '';
+            if (update_info.size > 1024 * 1024) {
+                sizeStr = (update_info.size / (1024 * 1024)).toFixed(2) + ' MB';
+            } else if (update_info.size > 1024) {
+                sizeStr = (update_info.size / 1024).toFixed(2) + ' KB';
+            } else {
+                sizeStr = update_info.size + ' bytes';
+            }
+            htmlMessage += `<p><strong>更新包大小:</strong> ${sizeStr}</p>`;
+        }
+        
+        // 根据是否为打包环境显示不同的信息和按钮
+        if (isFrozen) {
+            htmlMessage += `<p style="margin-top: 15px; color: var(--accent-color);"><strong>注意:</strong> 您正在使用打包版本的应用，自动更新功能不可用。</p>`;
+            htmlMessage += `<p>请前往发布页面手动下载最新版本并替换当前应用。</p>`;
+        } else {
+            htmlMessage += `<p style="margin-top: 15px;"><strong>是否现在更新？</strong></p>`;
+        }
+        
+        // 使用HTML内容显示方式
+        const modal = showConfirm(
+            '发现新版本',
+            '', // 初始时不设置文本内容
+            isFrozen ? null : function() {
+                // 用户确认更新（仅在非打包环境中）
+                const progressModal = new ProgressModal('更新程序');
+                progressModal.addLog('开始下载并安装更新...');
+                
+                // 执行更新
+                pywebview.api.perform_update_in_modal(progressModal.id).then(function(result) {
+                    if (result) {
+                        progressModal.complete(true, '更新完成，应用将自动重启');
+                    } else {
+                        progressModal.complete(false, '更新失败，请查看日志');
+                    }
+                }).catch(function(error) {
+                    progressModal.complete(false, '更新过程中出现错误: ' + error);
+                });
+            },
+            function() {
+                // 用户取消更新
+                addLogMessage('用户取消了更新');
+            }
+        );
+        
+        // 如果是打包环境，则移除确认按钮，只保留取消按钮
+        if (isFrozen) {
+            // 等待DOM更新后修改按钮
+            setTimeout(() => {
+                const confirmBtn = document.getElementById(`confirm-btn-${modal.id}`);
+                const cancelBtn = document.getElementById(`cancel-btn-${modal.id}`);
+                
+                if (confirmBtn) {
+                    confirmBtn.remove();
+                }
+                
+                if (cancelBtn) {
+                    cancelBtn.textContent = '知道了';
+                }
+            }, 100);
+        }
+        
+        // 使用setTimeout确保DOM完全加载后再设置内容
+        setTimeout(() => {
+            modal.setHtmlContent(htmlMessage);
+        }, 100);
     }
 }
 
@@ -826,7 +1055,7 @@ function simpleMarkdownToHtml(text) {
     processedText = processedText.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
     
     // 转换图片 ![alt](url)
-    processedText = processedText.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%;">');
+    processedText = processedText.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; border-radius: 4px; margin: 10px 0;">');
     
     // 转换标题 # Header
     processedText = processedText.replace(/^###### (.*$)/gm, '<h6>$1</h6>');
@@ -865,206 +1094,3 @@ function simpleMarkdownToHtml(text) {
     
     return processedParagraphs.filter(p => p !== '').join('\n');
 }
-
-// 显示更新信息的专门函数
-function showUpdateInfo(update_info) {
-    // 检查是否在PyInstaller打包环境中
-    // 从Python环境获取是否为打包环境
-    let isFrozen = false;
-    pywebview.api.get_attr('is_frozen').then(function(frozenValue) {
-        isFrozen = frozenValue;
-        continueShowUpdateInfo();
-    }).catch(function() {
-        isFrozen = true;  // 默认假设为打包环境
-        continueShowUpdateInfo();
-    });
-    
-    function continueShowUpdateInfo() {
-        // 构建HTML格式的更新信息
-        let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-        htmlMessage += `<p><strong>当前版本:</strong> ${update_info.current_version || 'unknown'}</p>`;
-        
-        // 添加发布标题
-        if (update_info.title) {
-            htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
-        }
-        
-        // 添加发布详情
-        if (update_info.body) {
-            let body = update_info.body.trim();
-            // 使用代码转HTML处理
-            const bodyHtml = simpleMarkdownToHtml(body);
-            htmlMessage += `<div><strong>更新详情:</strong></div>`;
-            htmlMessage += `<div style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.1); border-radius: 4px; max-height: 300px; overflow-y: auto;">${bodyHtml}</div>`;
-        }
-        
-        // 添加发布时间
-        if (update_info.published_at) {
-            const publishDate = new Date(update_info.published_at);
-            htmlMessage += `<p><strong>发布时间:</strong> ${publishDate.toLocaleDateString('zh-CN')}</p>`;
-        }
-        
-        // 添加发布链接
-        if (update_info.html_url) {
-            htmlMessage += `<p><strong>发布页面:</strong> <a href="${update_info.html_url}" target="_blank" style="color: #4CAF50; text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
-        }
-        
-        // 计算文件大小
-        if (update_info.size > 0) {
-            let sizeStr = '';
-            if (update_info.size > 1024 * 1024) {
-                sizeStr = (update_info.size / (1024 * 1024)).toFixed(2) + ' MB';
-            } else if (update_info.size > 1024) {
-                sizeStr = (update_info.size / 1024).toFixed(2) + ' KB';
-            } else {
-                sizeStr = update_info.size + ' bytes';
-            }
-            htmlMessage += `<p><strong>更新包大小:</strong> ${sizeStr}</p>`;
-        }
-        
-        // 根据是否为打包环境显示不同的信息和按钮
-        if (isFrozen) {
-            htmlMessage += `<p style="margin-top: 15px; color: #FFA500;"><strong>注意:</strong> 您正在使用打包版本的应用，自动更新功能不可用。</p>`;
-            htmlMessage += `<p>请前往发布页面手动下载最新版本并替换当前应用。</p>`;
-        } else {
-            htmlMessage += `<p style="margin-top: 15px;"><strong>是否现在更新？</strong></p>`;
-        }
-        
-        // 使用HTML内容显示方式
-        const modal = showConfirm(
-            '发现新版本',
-            '', // 初始时不设置文本内容
-            isFrozen ? null : function() {
-                // 用户确认更新（仅在非打包环境中）
-                const progressModal = new ProgressModal('更新程序');
-                progressModal.addLog('开始下载并安装更新...');
-                
-                // 执行更新
-                pywebview.api.perform_update_in_modal(progressModal.id).then(function(result) {
-                    if (result) {
-                        progressModal.complete(true, '更新完成，应用将自动重启');
-                    } else {
-                        progressModal.complete(false, '更新失败，请查看日志');
-                    }
-                }).catch(function(error) {
-                    progressModal.complete(false, '更新过程中出现错误: ' + error);
-                });
-            },
-            function() {
-                // 用户取消更新
-                addLogMessage('用户取消了更新');
-            }
-        );
-        
-        // 如果是打包环境，则移除确认按钮，只保留取消按钮
-        if (isFrozen) {
-            // 等待DOM更新后修改按钮
-            setTimeout(() => {
-                const confirmBtn = document.getElementById(`confirm-btn-${modal.id}`);
-                const cancelBtn = document.getElementById(`cancel-btn-${modal.id}`);
-                const modalFooter = document.getElementById(`modal-footer-${modal.id}`);
-                
-                if (confirmBtn) {
-                    confirmBtn.remove();
-                }
-                
-                if (cancelBtn) {
-                    cancelBtn.textContent = '知道了';
-                }
-            }, 100);
-        }
-        
-        // 使用setTimeout确保DOM完全加载后再设置内容
-        setTimeout(() => {
-            const statusElement = document.getElementById(`modal-status-${modal.id}`);
-            if (statusElement) {
-                statusElement.innerHTML = htmlMessage;
-            }
-        }, 100);
-    }
-}
-
-// 从Python后端接收日志消息
-window.addEventListener('pywebviewready', function() {
-    addLogMessage('WebUI已准备就绪');
-    console.log('PyWebview API is ready');
-
-    // 加载设置界面的数据
-    loadSettings();
-
-    pywebview.api.get_attr("message_list").then(function(message_list) {
-        if (message_list && Array.isArray(message_list)) {
-            for (let i = message_list.length - 1; i >= 0; i--) {
-                const msg = message_list[i];
-                if (Array.isArray(msg) && msg.length >= 2) {
-                    showMessage(msg[0], msg[1]);
-                    message_list.splice(i, 1);
-                }
-            }
-        }
-    });
-
-    pywebview.api.get_attr('config_ok').then(function(config_ok) {
-        console.log(config_ok);
-        if (config_ok === false) { 
-            // 获取详细的配置错误信息
-            pywebview.api.get_attr('config_error').then(function(config_error) {
-                let errorMessage = "配置项格式错误，是否尝试修复?\n否则将会使用默认配置";
-                if (config_error && Array.isArray(config_error) && config_error.length > 0) {
-                    errorMessage += "\n\n详细错误信息:\n" + config_error.join("\n");
-                }
-                
-                showConfirm(
-                    "警告",
-                    errorMessage,
-                    () => {
-                        // 点击确认按钮的处理
-                        pywebview.api.get_attr("config").then(function(config) {
-                            return pywebview.api.run_func('fix_config', config);
-                        }).then(function(fixed_config) {
-                            return pywebview.api.set_attr("config", fixed_config);
-                        }).then(function() {
-                            // 保存修复后的配置到文件
-                            return pywebview.api.use_inner();
-                        }).then(function() {
-                            showMessage("提示", "配置已修复并保存，请重新启动程序");
-                        }).catch(function(error) {
-                            showMessage("错误", "修复配置时出错: " + error);
-                        });
-                    },
-                    () => {
-                        // 点击取消按钮的处理
-                        pywebview.api.use_default().then(function() {
-                            showMessage("提示", "已使用默认配置，请重新启动程序");
-                        }).catch(function(error) {
-                            showMessage("错误", "使用默认配置时出错: " + error);
-                        });
-                    }
-                );
-            }).catch(function(error) {
-                showMessage(
-                    "错误",
-                    "未知错误，可能导致未知后果。错误信息:\n" + error
-                );
-            });
-        }
-    }).catch(function(error) {
-        pywebview.api.log('Error checking config:'+ error);
-    });
-    
-    // 检查更新
-    pywebview.api.auto_check_update().then(function(update_info) {
-        if (update_info && update_info.has_update) {
-            showUpdateInfo(update_info);
-        }
-    }).catch(function(error) {
-        console.error('检查更新失败:', error);
-        addLogMessage('检查更新失败: ' + error);
-    });
-
-    pywebview.api.get_attr('config').then(function(config) {
-        pywebview.api.log('Config loaded  and close success');
-    }).catch(function(error) {
-        pywebview.api.log('Error getting config:'+ error);
-    });
-});

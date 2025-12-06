@@ -606,6 +606,85 @@ function loadSettings() {
     }).catch(function(error) {
         console.error('加载设置时出错:', error);
     });
+    
+    // 检查游戏路径是否存在，如果不存在则尝试自动查找
+    checkAndSetGamePath();
+}
+
+function checkAndSetGamePath() {
+    // 检查当前设置的游戏路径
+    pywebview.api.get_attr('config').then(function(config) {
+        if (config && typeof config === 'object' && config.game_path) {
+            // 验证当前游戏路径是否存在
+            pywebview.api.run_func("check_game_path", config.game_path).then(function(isValid) {
+                if (!isValid) {
+                    // 当前路径无效，尝试自动查找
+                    attemptAutoFindGamePath();
+                }
+            }).catch(function() {
+                // 出错时也尝试自动查找
+                attemptAutoFindGamePath();
+            });
+        } else {
+            // 没有设置游戏路径，尝试自动查找
+            attemptAutoFindGamePath();
+        }
+    });
+}
+
+function attemptAutoFindGamePath() {
+    // 使用find_lcb查找游戏路径
+    pywebview.api.run_func('find_lcb').then(function(foundPath) {
+        if (foundPath) {
+            // 找到了游戏路径，询问用户确认
+            showConfirm(
+                "确认游戏路径",
+                `系统检测到游戏可能安装在以下位置:\n${foundPath}\n这是否正确?`,
+                function() {
+                    // 用户确认路径正确，更新配置
+                    updateGamePathSetting(foundPath);
+                },
+                function() {
+                    // 用户表示路径不正确，让用户手动选择
+                    showGamePathSelection();
+                }
+            );
+        } else {
+            // 未找到游戏路径，让用户手动选择
+            showGamePathSelection();
+        }
+    }).catch(function() {
+        // 查找失败，让用户手动选择
+        showGamePathSelection();
+    });
+}
+
+function showGamePathSelection() {
+    showMessage(
+        "选择游戏路径",
+        "请手动选择游戏路径:\n1. 点击确定后会弹出文件夹选择窗口\n2. 请选择包含 LimbusCompany.exe 文件的文件夹",
+        function() {
+            browseFolder('game-path');
+        }
+    );
+}
+
+function updateGamePathSetting(gamePath) {
+    // 更新游戏路径配置
+    const modal = new ProgressModal('更新配置');
+    modal.addLog('正在更新游戏路径配置...');
+    
+    pywebview.api.save_settings(gamePath, document.getElementById('debug-mode').checked).then(function(result) {
+        if (result.success) {
+            // 更新界面上的显示
+            document.getElementById('game-path').value = gamePath;
+            modal.complete(true, '游戏路径配置更新成功');
+        } else {
+            modal.complete(false, '更新失败: ' + result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '更新过程中出现错误: ' + error);
+    });
 }
 
 function saveSettings() {

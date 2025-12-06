@@ -25,7 +25,10 @@ def start_webui():
     try:
         # 将资源路径添加到环境变量，供app.py使用
         import os
-        os.environ['path_'] = get_resource_path('')
+        os.environ['path_'] = str(get_resource_path())
+        # 判断是否为打包环境
+        is_frozen = hasattr(sys, 'frozen') or hasattr(sys, '_MEIPASS')
+        os.environ['is_frozen'] = str(is_frozen).lower()
         
         from webui.app import main
         print("正在启动LCTA WebUI...")

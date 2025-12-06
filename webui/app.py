@@ -30,6 +30,9 @@ class LCTA_API():
         self.log_manager.set_ui_callback(self.log_ui)
         self.message_list = []
 
+        # 判断是否为打包环境
+        self.is_frozen = os.getenv('is_frozen', 'false').lower() == 'true'
+
         self.set_function()
         self.init_config()
 
@@ -455,6 +458,10 @@ class LCTA_API():
         try:
             self.add_modal_log("开始执行更新...", modal_id)
             
+            if os.getenv('update') == False:
+                self.add_modal_log("当前处于打包环境，跳过更新", modal_id)
+                return 
+    
             # 创建更新器实例
             updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", 
                              self.config.get("delete_updating", True), 

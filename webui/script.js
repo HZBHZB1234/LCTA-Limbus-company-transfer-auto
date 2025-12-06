@@ -711,7 +711,7 @@ function addLogMessage(message) {
     }
 }
 
-// 简单的markdown转HTML函数
+// 简单的代码转HTML函数
 function simpleMarkdownToHtml(text) {
     if (!text) return '';
     
@@ -789,83 +789,120 @@ function simpleMarkdownToHtml(text) {
 
 // 显示更新信息的专门函数
 function showUpdateInfo(update_info) {
-    // 构建HTML格式的更新信息
-    let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-    htmlMessage += `<p><strong>当前版本:</strong> ${update_info.current_version || 'unknown'}</p>`;
+    // 检查是否在PyInstaller打包环境中
+    // 从Python环境获取是否为打包环境
+    let isFrozen = false;
+    pywebview.api.get_attr('is_frozen').then(function(frozenValue) {
+        isFrozen = frozenValue;
+        continueShowUpdateInfo();
+    }).catch(function() {
+        isFrozen = true;  // 默认假设为打包环境
+        continueShowUpdateInfo();
+    });
     
-    // 添加发布标题
-    if (update_info.title) {
-        htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
-    }
-    
-    // 添加发布详情
-    if (update_info.body) {
-        let body = update_info.body.trim();
-        // 使用markdown转HTML处理
-        const bodyHtml = simpleMarkdownToHtml(body);
-        htmlMessage += `<div><strong>更新详情:</strong></div>`;
-        htmlMessage += `<div style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.1); border-radius: 4px; max-height: 300px; overflow-y: auto;">${bodyHtml}</div>`;
-    }
-    
-    // 添加发布时间
-    if (update_info.published_at) {
-        const publishDate = new Date(update_info.published_at);
-        htmlMessage += `<p><strong>发布时间:</strong> ${publishDate.toLocaleDateString('zh-CN')}</p>`;
-    }
-    
-    // 添加发布链接
-    if (update_info.html_url) {
-        htmlMessage += `<p><strong>发布页面:</strong> <a href="${update_info.html_url}" target="_blank" style="color: #4CAF50; text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
-    }
-    
-    // 计算文件大小
-    if (update_info.size > 0) {
-        let sizeStr = '';
-        if (update_info.size > 1024 * 1024) {
-            sizeStr = (update_info.size / (1024 * 1024)).toFixed(2) + ' MB';
-        } else if (update_info.size > 1024) {
-            sizeStr = (update_info.size / 1024).toFixed(2) + ' KB';
+    function continueShowUpdateInfo() {
+        // 构建HTML格式的更新信息
+        let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
+        htmlMessage += `<p><strong>当前版本:</strong> ${update_info.current_version || 'unknown'}</p>`;
+        
+        // 添加发布标题
+        if (update_info.title) {
+            htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
+        }
+        
+        // 添加发布详情
+        if (update_info.body) {
+            let body = update_info.body.trim();
+            // 使用代码转HTML处理
+            const bodyHtml = simpleMarkdownToHtml(body);
+            htmlMessage += `<div><strong>更新详情:</strong></div>`;
+            htmlMessage += `<div style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.1); border-radius: 4px; max-height: 300px; overflow-y: auto;">${bodyHtml}</div>`;
+        }
+        
+        // 添加发布时间
+        if (update_info.published_at) {
+            const publishDate = new Date(update_info.published_at);
+            htmlMessage += `<p><strong>发布时间:</strong> ${publishDate.toLocaleDateString('zh-CN')}</p>`;
+        }
+        
+        // 添加发布链接
+        if (update_info.html_url) {
+            htmlMessage += `<p><strong>发布页面:</strong> <a href="${update_info.html_url}" target="_blank" style="color: #4CAF50; text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
+        }
+        
+        // 计算文件大小
+        if (update_info.size > 0) {
+            let sizeStr = '';
+            if (update_info.size > 1024 * 1024) {
+                sizeStr = (update_info.size / (1024 * 1024)).toFixed(2) + ' MB';
+            } else if (update_info.size > 1024) {
+                sizeStr = (update_info.size / 1024).toFixed(2) + ' KB';
+            } else {
+                sizeStr = update_info.size + ' bytes';
+            }
+            htmlMessage += `<p><strong>更新包大小:</strong> ${sizeStr}</p>`;
+        }
+        
+        // 根据是否为打包环境显示不同的信息和按钮
+        if (isFrozen) {
+            htmlMessage += `<p style="margin-top: 15px; color: #FFA500;"><strong>注意:</strong> 您正在使用打包版本的应用，自动更新功能不可用。</p>`;
+            htmlMessage += `<p>请前往发布页面手动下载最新版本并替换当前应用。</p>`;
         } else {
-            sizeStr = update_info.size + ' bytes';
+            htmlMessage += `<p style="margin-top: 15px;"><strong>是否现在更新？</strong></p>`;
         }
-        htmlMessage += `<p><strong>更新包大小:</strong> ${sizeStr}</p>`;
-    }
-    
-    htmlMessage += `<p style="margin-top: 15px;"><strong>是否现在更新？</strong></p>`;
-    
-    // 使用HTML内容显示方式
-    const modal = showConfirm(
-        '发现新版本',
-        '', // 初始时不设置文本内容
-        function() {
-            // 用户确认更新
-            const progressModal = new ProgressModal('更新程序');
-            progressModal.addLog('开始下载并安装更新...');
-            
-            // 执行更新
-            pywebview.api.perform_update_in_modal(progressModal.id).then(function(result) {
-                if (result) {
-                    progressModal.complete(true, '更新完成，应用将自动重启');
-                } else {
-                    progressModal.complete(false, '更新失败，请查看日志');
+        
+        // 使用HTML内容显示方式
+        const modal = showConfirm(
+            '发现新版本',
+            '', // 初始时不设置文本内容
+            isFrozen ? null : function() {
+                // 用户确认更新（仅在非打包环境中）
+                const progressModal = new ProgressModal('更新程序');
+                progressModal.addLog('开始下载并安装更新...');
+                
+                // 执行更新
+                pywebview.api.perform_update_in_modal(progressModal.id).then(function(result) {
+                    if (result) {
+                        progressModal.complete(true, '更新完成，应用将自动重启');
+                    } else {
+                        progressModal.complete(false, '更新失败，请查看日志');
+                    }
+                }).catch(function(error) {
+                    progressModal.complete(false, '更新过程中出现错误: ' + error);
+                });
+            },
+            function() {
+                // 用户取消更新
+                addLogMessage('用户取消了更新');
+            }
+        );
+        
+        // 如果是打包环境，则移除确认按钮，只保留取消按钮
+        if (isFrozen) {
+            // 等待DOM更新后修改按钮
+            setTimeout(() => {
+                const confirmBtn = document.getElementById(`confirm-btn-${modal.id}`);
+                const cancelBtn = document.getElementById(`cancel-btn-${modal.id}`);
+                const modalFooter = document.getElementById(`modal-footer-${modal.id}`);
+                
+                if (confirmBtn) {
+                    confirmBtn.remove();
                 }
-            }).catch(function(error) {
-                progressModal.complete(false, '更新过程中出现错误: ' + error);
-            });
-        },
-        function() {
-            // 用户取消更新
-            addLogMessage('用户取消了更新');
+                
+                if (cancelBtn) {
+                    cancelBtn.textContent = '知道了';
+                }
+            }, 100);
         }
-    );
-    
-    // 使用setTimeout确保DOM完全加载后再设置内容
-    setTimeout(() => {
-        const statusElement = document.getElementById(`modal-status-${modal.id}`);
-        if (statusElement) {
-            statusElement.innerHTML = htmlMessage;
-        }
-    }, 100);
+        
+        // 使用setTimeout确保DOM完全加载后再设置内容
+        setTimeout(() => {
+            const statusElement = document.getElementById(`modal-status-${modal.id}`);
+            if (statusElement) {
+                statusElement.innerHTML = htmlMessage;
+            }
+        }, 100);
+    }
 }
 
 // 从Python后端接收日志消息

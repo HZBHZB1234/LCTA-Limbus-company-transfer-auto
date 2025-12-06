@@ -353,7 +353,7 @@ def get_app_version() -> str:
     """从version.json或其他配置文件中获取当前应用版本"""
     try:
         # 尝试从version.json中获取版本
-        version_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "version.json")
+        version_file_path = os.path.join(os.getenv('path_'), os.path.dirname(os.path.dirname(__file__)), "version.json")
         with open(version_file_path, 'r', encoding='utf-8') as f:
             version_data = json.load(f)
             return version_data.get("version", None)

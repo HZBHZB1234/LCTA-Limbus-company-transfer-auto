@@ -32,6 +32,8 @@ class LCTA_API():
 
         # 判断是否为打包环境
         self.is_frozen = os.getenv('is_frozen', 'false').lower() == 'true'
+        self.log(f"当前运行环境: {'打包环境' if self.is_frozen else '开发环境'}")
+        self.log(f"当前运行目录：{ os.getenv('path_') }")
 
         self.set_function()
         self.init_config()

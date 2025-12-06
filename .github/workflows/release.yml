@@ -34,10 +34,10 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install pyinstaller
         python -m pip install -r LCTA/requirements.txt
-        pyinstaller --onefile -w --name ${{ env.APP_NAME }}_OneFile .\LCTA_backup/start_webui.py
-        pyinstaller --onefile --name ${{ env.APP_NAME }}_OneFile_Debug .\LCTA_backup/start_webui.py
-        pyinstaller -w --name ${{ env.APP_NAME }}_Folder .\LCTA_backup/start_webui.py
-        pyinstaller --name ${{ env.APP_NAME }}_Folder_Debug .\LCTA_backup/start_webui.py
+        pyinstaller --onefile -w --name ${{ env.APP_NAME }}_OneFile --add-data "LCTA_backup/version.json;." --add-data "LCTA_backup/config_default.json;." --add-data "LCTA_backup/config_check.json;." --add-data "LCTA_backup/webui;webui" .\LCTA_backup/start_webui.py
+        pyinstaller --onefile --name ${{ env.APP_NAME }}_OneFile_Debug --add-data "LCTA_backup/version.json;." --add-data "LCTA_backup/config_default.json;." --add-data "LCTA_backup/config_check.json;." --add-data "LCTA_backup/webui;webui" .\LCTA_backup/start_webui.py
+        pyinstaller -w --name ${{ env.APP_NAME }}_Folder --add-data "LCTA_backup/version.json;." --add-data "LCTA_backup/config_default.json;." --add-data "LCTA_backup/config_check.json;." --add-data "LCTA_backup/webui;webui" .\LCTA_backup/start_webui.py
+        pyinstaller --name ${{ env.APP_NAME }}_Folder_Debug --add-data "LCTA_backup/version.json;." --add-data "LCTA_backup/config_default.json;." --add-data "LCTA_backup/config_check.json;." --add-data "LCTA_backup/webui;webui" .\LCTA_backup/start_webui.py
         mv dist/* release/
     
     - name: Setup MSYS2 and MinGW (for C compilation)

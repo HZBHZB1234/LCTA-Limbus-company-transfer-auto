@@ -56,7 +56,10 @@ jobs:
         gcc -O2 -o launcher.exe launcher.c -lshlwapi
         strip launcher.exe
         mv launcher.exe release\${{ env.APP_NAME }}\launcher.exe
-    
+        Copy-Item .\LCTA\launcher_debug.c .\
+        gcc -O2 -o launcher_debug.exe launcher_debug.c -lshlwapi
+        strip launcher_debug.exe
+        mv launcher_debug.exe release\${{ env.APP_NAME }}\launcher_debug.exe
     - name: Install Dependencies
       run: |
         python -m venv venv

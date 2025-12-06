@@ -14,6 +14,9 @@ void show_error_message(const char* title, const char* message);
 
 int main() {
     printf("Starting LCTA Launcher...\n");
+
+    HWND console = GetConsoleWindow();
+    ShowWindow(console, SW_HIDE);
     
     // 1. 设置工作目录到应用所在目录
     if (!setup_environment()) {
@@ -153,7 +156,7 @@ int verify_python_environment(const char* python_path) {
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;  // 隐藏控制台窗口
+    si.wShowWindow = SW_SHOW;  // 修改为显示控制台窗口
     
     ZeroMemory(&pi, sizeof(pi));
     
@@ -171,7 +174,7 @@ int verify_python_environment(const char* python_path) {
                        NULL,           // 进程句柄不可继承
                        NULL,           // 线程句柄不可继承
                        FALSE,          // 不继承句柄
-                       CREATE_NO_WINDOW, // 创建无窗口进程
+                       0,              // 移除CREATE_NO_WINDOW标志
                        NULL,           // 使用父进程环境
                        NULL,           // 使用父进程目录
                        &si,            // 启动信息
@@ -207,7 +210,7 @@ int run_python_script(const char* python_path, const char* script_path) {
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;  // 隐藏控制台窗口
+    si.wShowWindow = SW_SHOW;  // 修改为显示控制台窗口
     
     ZeroMemory(&pi, sizeof(pi));
     
@@ -225,7 +228,7 @@ int run_python_script(const char* python_path, const char* script_path) {
                        NULL,           // 进程句柄不可继承
                        NULL,           // 线程句柄不可继承
                        FALSE,          // 不继承句柄
-                       CREATE_NO_WINDOW, // 创建无窗口进程
+                       0,              // 移除CREATE_NO_WINDOW标志
                        NULL,           // 使用父进程环境
                        NULL,           // 使用父进程目录
                        &si,            // 启动信息
@@ -237,7 +240,7 @@ int run_python_script(const char* python_path, const char* script_path) {
     printf("Application started (PID: %lu)\n", pi.dwProcessId);
     
     // 等待进程结束（可选）
-    // WaitForSingleObject(pi.hProcess, INFINITE);
+    WaitForSingleObject(pi.hProcess, INFINITE);
     
     // 关闭句柄
     CloseHandle(pi.hProcess);

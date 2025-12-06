@@ -142,9 +142,11 @@ class Updater:
 
             for i in set(requirements_new) - set(requirements_old):
                 try:
+                    self.output_func(f"执行安装 {i}")
                     subprocess.check_call([sys.executable, "-m", "pip", "install", i])
                 except subprocess.CalledProcessError as e:
-                    self.output_func(f"安装依赖失败: {e}")
+                    self.output_func(f"安装依赖错误: {e}")
+                    self.output_func(f"退出码: {e.returncode}，错误输出{e.stderr}")
                     raise
 
             if not self.delete_old_files:
@@ -152,17 +154,20 @@ class Updater:
             
             for i in set(requirements_old) - set(requirements_new):
                 try:
+                    self.output_func(f"执行卸载 {i}")
                     subprocess.check_call([sys.executable, "-m", "pip", "uninstall", i])
                 except subprocess.CalledProcessError as e:
-                    self.output_func(f"卸载依赖失败: {e}")
-            return True
+                    self.output_func(f"安装依赖错误: {e}")
+                    self.output_func(f"退出码: {e.returncode}，错误输出{e.stderr}")
+                return True
         except Exception as e:
             try:
                 # 使用当前Python环境安装依赖
                 subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_path])
                 return True
             except subprocess.CalledProcessError as e:
-                self.output_func(f"安装依赖失败: {e}")
+                self.output_func(f"安装依赖错误: {e}")
+                self.output_func(f"退出码: {e.returncode}，错误输出{e.stderr}")
                 return False
     
     def update_files(self, source_dir: str) -> bool:

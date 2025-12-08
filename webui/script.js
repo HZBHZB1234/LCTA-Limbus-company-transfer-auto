@@ -611,6 +611,179 @@ function loadSettings() {
     checkAndSetGamePath();
 }
 
+// 从后端加载配置并填充到UI
+function loadConfigToUI() {
+    // 从后端获取当前配置
+    pywebview.api.get_attr('config').then(function(config) {
+        if (config && typeof config === 'object') {
+            // 填充游戏路径设置
+            if (config.game_path !== undefined) {
+                const gamePathInput = document.getElementById('game-path');
+                if (gamePathInput) {
+                    gamePathInput.value = config.game_path;
+                }
+            }
+            
+            // 设置调试模式复选框
+            if (config.debug !== undefined) {
+                const debugModeCheckbox = document.getElementById('debug-mode');
+                if (debugModeCheckbox) {
+                    debugModeCheckbox.checked = config.debug;
+                }
+            }
+            
+            // 根据ui_default配置填充其他界面元素
+            if (config.ui_default && typeof config.ui_default === 'object') {
+                // 翻译工具界面配置
+                if (config.ui_default.translator && typeof config.ui_default.translator === 'object') {
+                    // 可以根据需要填充翻译工具相关配置
+                }
+                
+                // 安装界面配置
+                if (config.ui_default.install !== undefined) {
+                    // 可以根据需要填充安装相关配置
+                }
+                
+                // 零协下载界面配置
+                if (config.ui_default.zero && typeof config.ui_default.zero === 'object') {
+                    if (config.ui_default.zero.better_download !== undefined) {
+                        const betterDownloadCheckbox = document.getElementById('better-download');
+                        if (betterDownloadCheckbox) {
+                            betterDownloadCheckbox.checked = config.ui_default.zero.better_download;
+                        }
+                    }
+                }
+                
+                // OurPlay下载界面配置
+                if (config.ui_default.ourplay && typeof config.ui_default.ourplay === 'object') {
+                    if (config.ui_default.ourplay.decrease_size !== undefined) {
+                        const decreaseSizeCheckbox = document.getElementById('decrease-size');
+                        if (decreaseSizeCheckbox) {
+                            decreaseSizeCheckbox.checked = config.ui_default.ourplay.decrease_size;
+                        }
+                    }
+                    
+                    if (config.ui_default.ourplay.llc_font !== undefined) {
+                        const llcFontCheckbox = document.getElementById('llc-font');
+                        if (llcFontCheckbox) {
+                            llcFontCheckbox.checked = config.ui_default.ourplay.llc_font;
+                        }
+                    }
+                }
+                
+                // 清理界面配置
+                if (config.ui_default.clean && typeof config.ui_default.clean === 'object') {
+                    if (config.ui_default.clean.remove_cache !== undefined) {
+                        const removeCacheCheckbox = document.getElementById('remove-cache');
+                        if (removeCacheCheckbox) {
+                            removeCacheCheckbox.checked = config.ui_default.clean.remove_cache;
+                        }
+                    }
+                }
+                
+                // 专有词汇界面配置
+                if (config.ui_default.proper && typeof config.ui_default.proper === 'object') {
+                    if (config.ui_default.proper.join_char !== undefined) {
+                        const joinCharInput = document.getElementById('join-char');
+                        if (joinCharInput) {
+                            joinCharInput.value = config.ui_default.proper.join_char;
+                        }
+                    }
+                    
+                    if (config.ui_default.proper.disable_space !== undefined) {
+                        const disableSpaceCheckbox = document.getElementById('disable-space');
+                        if (disableSpaceCheckbox) {
+                            disableSpaceCheckbox.checked = config.ui_default.proper.disable_space;
+                        }
+                    }
+                    
+                    if (config.ui_default.proper.max_length !== undefined) {
+                        const maxLengthInput = document.getElementById('max-length');
+                        if (maxLengthInput) {
+                            maxLengthInput.value = config.ui_default.proper.max_length;
+                        }
+                    }
+                    
+                    if (config.ui_default.proper.output_type !== undefined) {
+                        const outputTypeSelect = document.getElementById('output-type');
+                        if (outputTypeSelect) {
+                            outputTypeSelect.value = config.ui_default.proper.output_type;
+                        }
+                    }
+                }
+                
+                // 搜索界面配置
+                if (config.ui_default.search && typeof config.ui_default.search === 'object') {
+                    if (config.ui_default.search.divide_size !== undefined) {
+                        const divideSizeCheckbox = document.getElementById('divide-size');
+                        if (divideSizeCheckbox) {
+                            divideSizeCheckbox.checked = config.ui_default.search.divide_size;
+                        }
+                    }
+                    
+                    if (config.ui_default.search.using_re !== undefined) {
+                        const usingReCheckbox = document.getElementById('using-re');
+                        if (usingReCheckbox) {
+                            usingReCheckbox.checked = config.ui_default.search.using_re;
+                        }
+                    }
+                    
+                    if (config.ui_default.search.all_same !== undefined) {
+                        const allSameCheckbox = document.getElementById('all-same');
+                        if (allSameCheckbox) {
+                            allSameCheckbox.checked = config.ui_default.search.all_same;
+                        }
+                    }
+                }
+            }
+        }
+    }).catch(function(error) {
+        console.error('加载配置到UI时出错:', error);
+    });
+}
+
+// 保存配置值到后端
+function saveConfigValue(keyPath, value) {
+    // 创建模态窗口显示保存进度
+    const modal = new ProgressModal('保存配置');
+    modal.addLog(`正在保存配置项: ${keyPath}`);
+    
+    // 调用后端API更新配置值
+    pywebview.api.update_config_value(keyPath, value).then(function(result) {
+        if (result.success) {
+            modal.complete(true, `配置项 ${keyPath} 保存成功`);
+            // 重新加载设置到UI
+            loadConfigToUI();
+        } else {
+            modal.complete(false, `配置项 ${keyPath} 保存失败: ${result.message}`);
+        }
+    }).catch(function(error) {
+        modal.complete(false, `保存配置项 ${keyPath} 时出现错误: ${error}`);
+    });
+}
+
+// 保存设置的通用函数
+function saveSettings() {
+    const modal = new ProgressModal('保存设置');
+    
+    // 获取表单数据
+    const gamePath = document.getElementById('game-path').value;
+    const debugMode = document.getElementById('debug-mode').checked;
+    
+    modal.addLog('正在保存设置...');
+    
+    // 调用后端API保存设置
+    pywebview.api.save_settings(gamePath, debugMode).then(function(result) {
+        if (result.success) {
+            modal.complete(true, '设置保存成功: ' + result.message);
+        } else {
+            modal.complete(false, '设置保存失败: ' + result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '保存设置时出现错误: ' + error);
+    });
+}
+
 function checkAndSetGamePath() {
     // 检查当前设置的游戏路径
     pywebview.api.get_attr('config').then(function(config) {
@@ -991,6 +1164,9 @@ window.addEventListener('pywebviewready', function() {
 
     // 加载设置界面的数据
     loadSettings();
+    
+    // 从配置加载UI设置
+    loadConfigToUI();
 
     pywebview.api.get_attr("message_list").then(function(message_list) {
         if (message_list && Array.isArray(message_list)) {

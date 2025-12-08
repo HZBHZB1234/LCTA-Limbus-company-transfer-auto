@@ -373,6 +373,72 @@ class LCTA_API():
             return self.config["game_path"]
         return ""
 
+    def save_config_to_file(self):
+        """将当前配置保存到文件"""
+        try:
+            with open("config.json", "w", encoding="utf-8") as f:
+                json.dump(self.config, f, ensure_ascii=False, indent=4)
+            return True
+        except Exception as e:
+            self.log_error(e)
+            return False
+    
+    def update_config_value(self, key_path, value, create_missing=True):
+        """
+        更新配置中的特定值
+        :param key_path: 配置键路径，例如 "ui_default.game_path" 
+        :param value: 要设置的值
+        :param create_missing: 是否创建缺失的键路径
+        :return: 更新是否成功
+        """
+        try:
+            keys = key_path.split('.')
+            current = self.config
+            
+            # 遍历到倒数第二个键
+            for key in keys[:-1]:
+                if key not in current:
+                    if create_missing:
+                        current[key] = {}
+                    else:
+                        return False
+                current = current[key]
+                
+                # 如果中间某个值不是字典，无法继续
+                if not isinstance(current, dict):
+                    self.log(f"无法设置配置值: {key_path} - 中间路径不是字典")
+                    return False
+            
+            # 设置最终值
+            final_key = keys[-1]
+            current[final_key] = value
+            return True
+        except Exception as e:
+            self.log_error(f"更新配置值时出错: {key_path} = {value}, 错误: {e}")
+            return False
+
+    def get_config_value(self, key_path, default_value=None):
+        """
+        获取配置中的特定值
+        :param key_path: 配置键路径，例如 "ui_default.game_path"
+        :param default_value: 默认值
+        :return: 配置值或默认值
+        """
+        try:
+            keys = key_path.split('.')
+            current = self.config
+            
+            for key in keys:
+                if isinstance(current, dict) and key in current:
+                    current = current[key]
+                else:
+                    return default_value
+                    
+            return current
+        except Exception as e:
+            self.log_error(f"获取配置值时出错: {key_path}, 错误: {e}")
+            return default_value
+
     def save_settings(self, game_path, debug_mode):
         """保存设置"""
         try:
@@ -381,8 +447,9 @@ class LCTA_API():
             self.config["debug"] = debug_mode
             
             # 保存到文件
-            with open("config.json", "w", encoding="utf-8") as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=4)
+            success = self.save_config_to_file()
+            if not success:
+                return {"success": False, "message": "保存配置文件失败"}
             
             self.log(f"设置已保存: 游戏路径={game_path}, 调试模式={debug_mode}")
             return {"success": True, "message": "设置保存成功"}
@@ -401,8 +468,9 @@ class LCTA_API():
             self.config = default_config
             
             # 保存到文件
-            with open("config.json", "w", encoding="utf-8") as f:
-                json.dump(default_config, f, ensure_ascii=False, indent=4)
+            success = self.save_config_to_file()
+            if not success:
+                return {"success": False, "message": "保存配置文件失败"}
             
             self.log("已重置为默认配置")
             return {"success": True, "message": "已重置为默认配置"}
@@ -426,8 +494,9 @@ class LCTA_API():
             self.config = default_config
             
             # 保存到文件
-            with open("config.json", "w", encoding="utf-8") as f:
-                json.dump(default_config, f, ensure_ascii=False, indent=4)
+            success = self.save_config_to_file()
+            if not success:
+                return {"success": False, "message": "保存配置文件失败"}
             
             self.log("配置已重置")
             return {"success": True, "message": "配置已重置"}

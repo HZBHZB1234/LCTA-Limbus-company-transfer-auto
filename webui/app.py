@@ -182,142 +182,156 @@ class LCTA_API():
             return True  # 即使出错也继续
 
     # 以下为新添加的API方法，用于支持模态窗口功能
-    def start_translation(self):
+    def start_translation(self, modal_id= "false"):
         """开始翻译"""
         try:
             # 这里应该调用实际的翻译逻辑
-            self.log_ui("开始翻译...")
+            self.add_modal_log("开始翻译...", modal_id)
             time.sleep(2)  # 模拟翻译过程
+            self.add_modal_log("翻译完成", modal_id)
             return {"success": True, "message": "翻译完成"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def install_translation(self):
+    def install_translation(self, modal_id= "false"):
         """安装翻译"""
         try:
-            self.log_ui("开始安装汉化包...")
+            self.add_modal_log("开始安装汉化包...", modal_id)
             time.sleep(1)  # 模拟安装过程
+            self.add_modal_log("汉化包安装成功", modal_id)
             return {"success": True, "message": "汉化包安装成功"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def download_ourplay_translation(self):
+    def download_ourplay_translation(self, modal_id= "false"):
         """下载ourplay翻译"""
         try:
-            self.log_ui("开始下载OurPlay汉化包...")
+            self.add_modal_log("开始下载OurPlay汉化包...", modal_id)
             time.sleep(1)  # 模拟下载过程
+            self.add_modal_log("OurPlay汉化包下载成功", modal_id)
             return {"success": True, "message": "OurPlay汉化包下载成功"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def clean_cache(self):
+    def clean_cache(self, modal_id= "false"):
         """清理缓存"""
         try:
-            self.log_ui("开始清除缓存...")
+            self.add_modal_log("开始清除缓存...", modal_id)
             time.sleep(1)  # 模拟清理过程
+            self.add_modal_log("缓存清除成功", modal_id)
             return {"success": True, "message": "缓存清除成功"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def download_llc_translation(self):
+    def download_llc_translation(self, modal_id= "false"):
         """下载LLC翻译"""
         try:
-            self.log_ui("开始下载零协汉化包...")
+            self.add_modal_log("开始下载零协汉化包...", modal_id)
             time.sleep(1)  # 模拟下载过程
+            self.add_modal_log("零协汉化包下载成功", modal_id)
             return {"success": True, "message": "零协汉化包下载成功"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def save_api_config(self):
+    def save_api_config(self, modal_id= "false"):
         """保存API配置"""
         try:
-            self.log_ui("正在保存API配置...")
+            self.add_modal_log("正在保存API配置...", modal_id)
             time.sleep(1)  # 模拟保存过程
+            self.add_modal_log("API配置保存成功", modal_id)
             return {"success": True, "message": "API配置保存成功"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def fetch_proper_nouns(self):
+    def fetch_proper_nouns(self, modal_id= "false"):
         """获取专有词汇"""
         try:
-            self.log_ui("开始抓取专有词汇...")
+            self.add_modal_log("开始抓取专有词汇...", modal_id)
             time.sleep(1)  # 模拟抓取过程
+            self.add_modal_log("专有词汇抓取成功", modal_id)
             return {"success": True, "message": "专有词汇抓取成功"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def search_text(self):
+    def search_text(self, modal_id= "false"):
         """搜索文本"""
         try:
-            self.log_ui("开始文本搜索...")
+            self.add_modal_log("开始文本搜索...", modal_id)
             time.sleep(1)  # 模拟搜索过程
+            self.add_modal_log("文本搜索完成", modal_id)
             return {"success": True, "message": "文本搜索完成", "results": []}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def backup_text(self):
+    def backup_text(self, modal_id= "false"):
         """备份文本"""
         try:
-            self.log_ui("开始备份原文...")
+            self.add_modal_log("开始备份原文...", modal_id)
             time.sleep(1)  # 模拟备份过程
+            self.add_modal_log("原文备份成功", modal_id)
             return {"success": True, "message": "原文备份成功"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def manage_fonts(self):
+    def manage_fonts(self, modal_id= "false"):
         """管理字体"""
         try:
-            self.log_ui("开始管理字体...")
+            self.add_modal_log("开始管理字体...", modal_id)
             time.sleep(1)  # 模拟管理过程
+            self.add_modal_log("字体管理完成", modal_id)
             return {"success": True, "message": "字体管理完成"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def manage_images(self):
+    def manage_images(self, modal_id= "false"):
         """管理图片"""
         try:
-            self.log_ui("开始管理图片...")
+            self.add_modal_log("开始管理图片...", modal_id)
             time.sleep(1)  # 模拟管理过程
+            self.add_modal_log("图片管理完成", modal_id)
             return {"success": True, "message": "图片管理完成"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def manage_audio(self):
+    def manage_audio(self, modal_id= "false"):
         """管理音频"""
         try:
-            self.log_ui("开始管理音频...")
+            self.add_modal_log("开始管理音频...", modal_id)
             time.sleep(1)  # 模拟管理过程
+            self.add_modal_log("音频管理完成", modal_id)
             return {"success": True, "message": "音频管理完成"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def adjust_image(self):
+    def adjust_image(self, modal_id):
         """调整图片"""
         try:
-            self.log_ui("开始调整图片...")
+            self.add_modal_log("开始调整图片...", modal_id)
             time.sleep(1)  # 模拟调整过程
+            self.add_modal_log("图片调整完成", modal_id)
             return {"success": True, "message": "图片调整完成"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def calculate_gacha(self):
+    def calculate_gacha(self, modal_id= "false"):
         """计算抽卡概率"""
         try:
-            self.log_ui("开始计算抽卡概率...")
+            self.add_modal_log("开始计算抽卡概率...", modal_id)
             time.sleep(1)  # 模拟计算过程
+            self.add_modal_log("抽卡概率计算完成", modal_id)
             return {"success": True, "message": "抽卡概率计算完成"}
         except Exception as e:
             self.log_error(e)
@@ -341,6 +355,9 @@ class LCTA_API():
     def add_modal_log(self, message, modal_id):
         """向模态窗口添加日志"""
         escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
+        if modal_id == "false":
+            self.log_ui(escaped_message)
+            return
         js_code = f"""
         const modal = modalWindows.find(m => m.id === '{modal_id}');
         if (modal) {{

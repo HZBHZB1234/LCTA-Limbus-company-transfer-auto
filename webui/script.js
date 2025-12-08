@@ -516,7 +516,7 @@ function startTranslation() {
 function installTranslation() {
     const modal = new ProgressModal('安装汉化包');
     
-    pywebview.api.install_translation().then(function(result) {
+    pywebview.api.install_translation(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, '汉化包安装成功: ' + result.message);
         } else {
@@ -531,7 +531,7 @@ function downloadOurplay() {
     const modal = new ProgressModal('下载OurPlay汉化包');
     modal.addLog('开始下载OurPlay汉化包...');
     
-    pywebview.api.download_ourplay_translation().then(function(result) {
+    pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, 'OurPlay汉化包下载成功: ' + result.message);
         } else {
@@ -545,7 +545,7 @@ function downloadOurplay() {
 function cleanCache() {
     const modal = new ProgressModal('清除缓存');
     
-    pywebview.api.clean_cache().then(function(result) {
+    pywebview.api.clean_cache(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, '缓存清除成功: ' + result.message);
         } else {
@@ -563,7 +563,7 @@ function downloadLLC() {
     const modal = new ProgressModal('下载零协汉化包');
     modal.addLog('开始下载零协汉化包...');
     
-    pywebview.api.download_llc_translation().then(function(result) {
+    pywebview.api.download_llc_translation(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, '零协汉化包下载成功: ' + result.message);
         } else {
@@ -577,7 +577,7 @@ function downloadLLC() {
 function saveAPIConfig() {
     const modal = new ProgressModal('保存API配置');
     
-    pywebview.api.save_api_config().then(function(result) {
+    pywebview.api.save_api_config(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, 'API配置保存成功: ' + result.message);
         } else {
@@ -773,7 +773,7 @@ function saveSettings() {
     modal.addLog('正在保存设置...');
     
     // 调用后端API保存设置
-    pywebview.api.save_settings(gamePath, debugMode).then(function(result) {
+    pywebview.api.save_settings(gamePath, debugMode, modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, '设置保存成功: ' + result.message);
         } else {
@@ -860,33 +860,12 @@ function updateGamePathSetting(gamePath) {
     });
 }
 
-function saveSettings() {
-    const modal = new ProgressModal('保存设置');
-    
-    // 获取表单数据
-    const gamePath = document.getElementById('game-path').value;
-    const debugMode = document.getElementById('debug-mode').checked;
-    
-    modal.addLog('正在保存设置...');
-    
-    // 调用后端API保存设置
-    pywebview.api.save_settings(gamePath, debugMode).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '设置保存成功: ' + result.message);
-        } else {
-            modal.complete(false, '设置保存失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '保存设置时出现错误: ' + error);
-    });
-}
-
 function useDefaultConfig() {
     const modal = new ProgressModal('使用默认配置');
     
     modal.addLog('正在加载默认配置...');
     
-    pywebview.api.use_default_config().then(function(result) {
+    pywebview.api.use_default_config(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, result.message);
             // 重新加载设置到表单
@@ -908,7 +887,7 @@ function resetConfig() {
             
             modal.addLog('正在重置配置...');
             
-            pywebview.api.reset_config().then(function(result) {
+            pywebview.api.reset_config(modal.id).then(function(result) {
                 if (result.success) {
                     modal.complete(true, result.message);
                     // 重新加载设置到表单

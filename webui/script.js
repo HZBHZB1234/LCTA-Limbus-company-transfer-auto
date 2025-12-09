@@ -96,14 +96,20 @@ class ModalWindow {
         this.title = title;
         this.isMinimized = false;
         this.isCompleted = false;
+        this.isPaused = false;  // 添加暂停状态
         this.options = {
             showProgress: false,
             showCancelButton: true,
+            showPauseButton: false,  // 添加暂停按钮选项
             cancelButtonText: '取消',
+            pauseButtonText: '暂停',  // 添加暂停按钮文本
+            resumeButtonText: '继续', // 添加恢复按钮文本
             confirmButtonText: '确定',
             showMinimizeButton: true,  // 默认显示最小化按钮
             showLog: true,  // 默认显示日志区域
             onCancel: null,  // 添加取消回调函数
+            onPause: null,   // 添加暂停回调函数
+            onResume: null,  // 添加恢复回调函数
             ...options
         };
         this.createModal();
@@ -146,10 +152,16 @@ class ModalWindow {
     }
     
     getFooterButtons() {
-        if (this.options.showCancelButton) {
-            return `<button class="action-btn" id="cancel-btn-${this.id}">${this.options.cancelButtonText}</button>`;
+        let buttons = '';
+        // 添加暂停按钮（如果启用）
+        if (this.options.showPauseButton) {
+            buttons += `<button class="action-btn" id="pause-btn-${this.id}">${this.options.pauseButtonText}</button>`;
         }
-        return '';
+        // 添加取消/完成按钮（如果启用）
+        if (this.options.showCancelButton) {
+            buttons += `<button class="action-btn" id="cancel-btn-${this.id}">${this.options.cancelButtonText}</button>`;
+        }
+        return buttons;
     }
     
     bindEvents() {
@@ -165,6 +177,18 @@ class ModalWindow {
             });
         }
         
+        // 绑定暂停按钮事件（如果启用）
+        if (this.options.showPauseButton) {
+            document.getElementById(`pause-btn-${this.id}`).addEventListener('click', () => {
+                if (this.isPaused) {
+                    this.resume();
+                } else {
+                    this.pause();
+                }
+            });
+        }
+        
+        // 绑定取消/完成按钮事件
         if (this.options.showCancelButton) {
             document.getElementById(`cancel-btn-${this.id}`).addEventListener('click', () => {
                 if (this.isCompleted) {
@@ -243,8 +267,52 @@ class ModalWindow {
             cancelButton.textContent = '完成';
         }
         
+        // 如果当前是暂停状态，则恢复按钮为"完成"
+        const pauseButton = document.getElementById(`pause-btn-${this.id}`);
+        if (pauseButton) {
+            pauseButton.textContent = '完成';
+        }
+        
         // 更新最小化窗口状态为已完成
         this.updateMinimizedStatus('已完成');
+    }
+    
+    // 添加暂停方法
+    pause() {
+        if (this.isCompleted) return;
+        
+        this.isPaused = true;
+        const pauseButton = document.getElementById(`pause-btn-${this.id}`);
+        if (pauseButton) {
+            pauseButton.textContent = this.options.resumeButtonText;
+        }
+        
+        this.setStatus('已暂停');
+        this.addLog('操作已暂停');
+        
+        // 调用暂停回调函数（如果提供）
+        if (this.options.onPause && typeof this.options.onPause === 'function') {
+            this.options.onPause(this.id);
+        }
+    }
+    
+    // 添加恢复方法
+    resume() {
+        if (this.isCompleted) return;
+        
+        this.isPaused = false;
+        const pauseButton = document.getElementById(`pause-btn-${this.id}`);
+        if (pauseButton) {
+            pauseButton.textContent = this.options.pauseButtonText;
+        }
+        
+        this.setStatus('正在恢复...');
+        this.addLog('操作已恢复');
+        
+        // 调用恢复回调函数（如果提供）
+        if (this.options.onResume && typeof this.options.onResume === 'function') {
+            this.options.onResume(this.id);
+        }
     }
     
     cancel() {
@@ -451,7 +519,10 @@ class ProgressModal extends ModalWindow {
         super(title, {
             showProgress: true,
             showCancelButton: true,
-            cancelButtonText: '取消'
+            showPauseButton: true,  // 启用暂停按钮
+            cancelButtonText: '取消',
+            pauseButtonText: '暂停',
+            resumeButtonText: '继续'
         });
         
         this.setStatus('正在初始化...');
@@ -570,6 +641,12 @@ function downloadLLC() {
     pywebview.api.add_modal_list(modal.id)
     modal.options.onCancel = function(modal_id){
         pywebview.api.set_modal_running(modal_id, "cancel")
+    };
+    modal.options.onPause = function(modal_id){
+        pywebview.api.set_modal_running(modal_id, "pause")
+    };
+    modal.options.onResume = function(modal_id){
+        pywebview.api.set_modal_running(modal_id, "running")
     };
     pywebview.api.download_llc_translation(modal.id).then(function(result) {
         if (result.success) {

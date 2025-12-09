@@ -201,8 +201,11 @@ class LCTA_API():
                 break
 
     def check_modal_running(self, modal_id):
-        if self._check_modal_running(self, modal_id) =="cancel":
+        status = self._check_modal_running(self, modal_id)
+        if status == "cancel":
             raise CancelRunning
+        elif status == "pause":
+            self._wait_continue(self, modal_id)
     def set_modal_running(self, modal_id, types="cancel"):
         for i in self.modal_list:
             if i["modal_id"] == modal_id:
@@ -268,6 +271,10 @@ class LCTA_API():
             time.sleep(1)  # 模拟下载过程
             self.add_modal_log("零协汉化包下载成功", modal_id)
             return {"success": True, "message": "零协汉化包下载成功"}
+        except CancelRunning:
+            self.log("llc下载任务已取消")
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已暂停"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}

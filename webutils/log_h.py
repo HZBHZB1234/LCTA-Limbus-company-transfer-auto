@@ -27,7 +27,7 @@ class LogManager:
         self.debug_mode = False
         
         # 创建线程池用于处理UI日志，防止阻塞主线程
-        self.executor = ThreadPoolExecutor(max_workers=2)
+        self.executor = ThreadPoolExecutor(max_workers=1)
         self.lock = threading.Lock()
 
     def set_debug_mode(self, enabled: bool):
@@ -48,11 +48,13 @@ class LogManager:
     
     def set_modal_callbacks(self, status_callback: Callable = None, 
                            log_callback: Callable = None, 
-                           progress_callback: Callable = None):
+                           progress_callback: Callable = None,
+                           check_running: Callable = None):
         """设置模态窗口相关回调函数"""
         self.modal_status_callback = status_callback
         self.modal_log_callback = log_callback
         self.modal_progress_callback = progress_callback
+        self.check_running = check_running
 
     def set_current_modal(self, modal_id: str):
         """设置当前活动的模态窗口ID"""
@@ -74,9 +76,7 @@ class LogManager:
             print(f"[LOG] {message}")
 
     def debug(self, message: str, *args, **kwargs):
-        """记录调试日志，仅在调试模式启用时输出"""
-        if self.debug_mode:
-            self.log(f"[DEBUG] {message}", *args, **kwargs)
+        self.log(f"[DEBUG] {message}", *args, **kwargs)
 
     def log_error(self, error: Any, *args, **kwargs):
         """记录错误日志"""

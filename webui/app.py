@@ -16,6 +16,7 @@ sys.path.insert(0, str(project_root))
 import webutils
 import webutils.load as load_util
 from webutils.update import Updater, get_app_version
+from webutils import function_llc_main
 
 class CancelRunning(Exception):
     pass
@@ -158,14 +159,6 @@ class LCTA_API():
             self.log(full_message)
 
 
-    def get_system_info(self):
-        """获取系统信息"""
-        game_path = self.get_game_path()
-        return {
-            'game_path': game_path if game_path else '未找到',
-            'status': '就绪' if game_path else '游戏路径未设置'
-        }
-
     def update_progress(self, percent, text):
         """更新进度"""
         escaped_text = text.replace("'", "\\'")
@@ -268,7 +261,7 @@ class LCTA_API():
         """下载LLC翻译"""
         try:
             self.add_modal_log("开始下载零协汉化包...", modal_id)
-            time.sleep(1)  # 模拟下载过程
+            function_llc_main(modal_id, self.log_manager)
             self.add_modal_log("零协汉化包下载成功", modal_id)
             return {"success": True, "message": "零协汉化包下载成功"}
         except CancelRunning:
@@ -381,6 +374,9 @@ class LCTA_API():
     # 模态窗口相关API方法
     def set_modal_status(self, status, modal_id):
         """设置模态窗口状态"""
+        try:
+            self.log(f"{modal_id} 状态变更{status}")
+        except Exception:pass
         escaped_status = status.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == 'false':
             return
@@ -397,6 +393,9 @@ class LCTA_API():
 
     def add_modal_log(self, message, modal_id):
         """向模态窗口添加日志"""
+        try:
+            self.log(f"{modal_id} {message}")
+        except Exception:pass
         escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == "false":
             self.log_ui(escaped_message)
@@ -414,6 +413,9 @@ class LCTA_API():
 
     def update_modal_progress(self, percent, text, modal_id):
         """更新模态窗口进度"""
+        try:
+            self.log(f"{modal_id} 进度变更{percent}% 消息{text}")
+        except Exception:pass
         escaped_text = text.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == "false":
             return
@@ -626,11 +628,11 @@ def setup_logging():
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     
-    # 创建轮转文件处理器，最大5KB，保留5个备份文件
+    # 创建轮转文件处理器，最大50KB，保留5个备份文件
     handler = RotatingFileHandler(
         'logs/app.log', 
-        maxBytes=1024*5,  # 5kb
-        backupCount=5,       # 保留5个旧日志文件
+        maxBytes=1024*50,  # 50kb
+        backupCount=10,       # 保留5个旧日志文件
         encoding='utf-8'
     )
     
@@ -675,7 +677,8 @@ def main():
     api.log_manager.set_modal_callbacks(
         status_callback=api.set_modal_status,
         log_callback=api.add_modal_log,
-        progress_callback=api.update_modal_progress
+        progress_callback=api.update_modal_progress,
+        check_running=api.check_modal_running
     )
     
     logger.info("WebUI窗口已创建")

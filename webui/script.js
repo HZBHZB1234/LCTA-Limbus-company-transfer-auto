@@ -103,6 +103,7 @@ class ModalWindow {
             confirmButtonText: '确定',
             showMinimizeButton: true,  // 默认显示最小化按钮
             showLog: true,  // 默认显示日志区域
+            onCancel: null,  // 添加取消回调函数
             ...options
         };
         this.createModal();
@@ -247,6 +248,10 @@ class ModalWindow {
     }
     
     cancel() {
+        // 如果提供了取消回调函数，则执行它
+        if (this.options.onCancel && typeof this.options.onCancel === 'function') {
+            this.options.onCancel(this.id);
+        }
         // 取消操作的逻辑可以在具体的实现中定义
         this.close();
     }
@@ -562,7 +567,10 @@ function cleanCache() {
 function downloadLLC() {
     const modal = new ProgressModal('下载零协汉化包');
     modal.addLog('开始下载零协汉化包...');
-    
+    pywebview.api.add_modal_list(modal.id)
+    modal.options.onCancel = function(modal_id){
+        pywebview.api.set_modal_running(modal_id, "cancel")
+    };
     pywebview.api.download_llc_translation(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, '零协汉化包下载成功: ' + result.message);

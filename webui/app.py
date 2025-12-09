@@ -17,6 +17,8 @@ import webutils
 import webutils.load as load_util
 from webutils.update import Updater, get_app_version
 
+class CancelRunning(Exception):
+    pass
 
 class LCTA_API():
     def __init__(self,logger:logging):
@@ -29,6 +31,7 @@ class LCTA_API():
         self.log_manager.set_error_callback(self.logger.exception)
         self.log_manager.set_ui_callback(self.log_ui)
         self.message_list = []
+        self.modal_list = []
 
         # 判断是否为打包环境
         self.is_frozen = os.getenv('is_frozen', 'false').lower() == 'true'
@@ -180,6 +183,37 @@ class LCTA_API():
             return True  # 继续操作
         except:
             return True  # 即使出错也继续
+
+    def add_modal_id(self, modal_id):
+        self.modal_list.append({
+            "modal_id": modal_id,
+            "running": "running"})
+        return True
+
+    def _check_modal_running(self, modal_id):
+        return [i["running"] for i in self.modal_list if i["modal_id"] == modal_id][0]
+
+    def _wait_continue(self, modal_id):
+        while True:
+            if self._check_modal_running(self, modal_id)=="pause":
+                time.sleep(1)
+            else:
+                break
+
+    def check_modal_running(self, modal_id):
+        if self._check_modal_running(self, modal_id) =="cancel":
+            raise CancelRunning
+    def set_modal_running(self, modal_id, types="cancel"):
+        for i in self.modal_list:
+            if i["modal_id"] == modal_id:
+                i["running"] = str(types)
+                break
+
+    def del_modal_list(self, modal_id):
+        for times, i in enumerate(self.modal_list):
+            if i["modal_id"] == modal_id:
+                del self.modal_list[times]
+                break
 
     # 以下为新添加的API方法，用于支持模态窗口功能
     def start_translation(self, modal_id= "false"):
@@ -341,6 +375,8 @@ class LCTA_API():
     def set_modal_status(self, status, modal_id):
         """设置模态窗口状态"""
         escaped_status = status.replace("'", "\\'").replace("\n", "\\n")
+        if modal_id == 'false':
+            return
         js_code = f"""
         const modal = modalWindows.find(m => m.id === '{modal_id}');
         if (modal) {{
@@ -372,6 +408,8 @@ class LCTA_API():
     def update_modal_progress(self, percent, text, modal_id):
         """更新模态窗口进度"""
         escaped_text = text.replace("'", "\\'").replace("\n", "\\n")
+        if modal_id == "false":
+            return
         js_code = f"""
         const modal = modalWindows.find(m => m.id === '{modal_id}');
         if (modal) {{

@@ -18,11 +18,13 @@ def zip_folder(folder_path, output_path, logger_:LogManager=None):
                 # 添加空文件夹到zip
                 for dir in dirs:
                     dir_path = os.path.join(root, dir)
-                    zipf.write(dir_path, os.path.relpath(dir_path, folder_path))
+                    arc_path = os.path.relpath(dir_path, os.path.dirname(folder_path))
+                    zipf.write(dir_path, arc_path)
                 # 添加文件到zip
                 for file in files:
                     file_path = os.path.join(root, file)
-                    zipf.write(file_path, os.path.relpath(file_path, folder_path))
+                    arc_path = os.path.relpath(file_path, os.path.dirname(folder_path))
+                    zipf.write(file_path, arc_path)
         return True
     except Exception as e:
         logger_.log(f"压缩文件夹失败: {e}")
@@ -72,7 +74,7 @@ def download_with(url, save_path, size=0, chunk_size=1024*100, logger_: LogManag
                     f.write(chunk)
                     
                     downloaded_chunk += 1
-                    logger_.log_modal_process(
+                    logger_.update_modal_progress(
                         progress_[0] + (progress_[1]-progress_[0]) * downloaded_chunk / chunk_len,
                         f"已下载 {downloaded_chunk * chunk_size // 1024} KB / {total_size // 1024} KB",
                         modal_id

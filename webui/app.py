@@ -191,16 +191,16 @@ class LCTA_API():
 
     def _wait_continue(self, modal_id):
         while True:
-            if self._check_modal_running(self, modal_id)=="pause":
+            if self._check_modal_running(modal_id)=="pause":
                 time.sleep(1)
             else:
                 break
 
     def check_modal_running(self, modal_id):
         self.log(f"检查模态窗口ID: {modal_id}")
-        status = self._check_modal_running(self, modal_id)
+        status = self._check_modal_running(modal_id)
         if status == "pause":
-            self._wait_continue(self, modal_id)
+            self._wait_continue(modal_id)
         elif status == "cancel":
             raise CancelRunning
     def set_modal_running(self, modal_id, types="cancel"):
@@ -267,7 +267,7 @@ class LCTA_API():
         """下载LLC翻译"""
         try:
             self.add_modal_log("开始下载零协汉化包...", modal_id)
-            function_llc_main(modal_id, self.log_manager)
+            function_llc_main(modal_id, self.log_manager, check_hash=True, dump_default=False)
             self.add_modal_log("零协汉化包下载成功", modal_id)
             return {"success": True, "message": "零协汉化包下载成功"}
         except CancelRunning:
@@ -381,7 +381,7 @@ class LCTA_API():
     def set_modal_status(self, status, modal_id):
         """设置模态窗口状态"""
         try:
-            self.log(f"{modal_id} 状态变更{status}")
+            self.log(f"[{modal_id}] 状态变更{status}")
         except Exception:pass
         escaped_status = status.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == 'false':
@@ -401,7 +401,7 @@ class LCTA_API():
     def add_modal_log(self, message, modal_id):
         """向模态窗口添加日志"""
         try:
-            self.log(f"{modal_id} {message}")
+            self.log(f"[{modal_id}] {message}")
         except Exception:pass
         escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == "false":
@@ -422,7 +422,7 @@ class LCTA_API():
     def update_modal_progress(self, percent, text, modal_id):
         """更新模态窗口进度"""
         try:
-            self.log(f"{modal_id} 进度变更{percent}% 消息{text}")
+            self.log(f"[{modal_id}] 进度变更{percent}% 消息{text}")
         except Exception:pass
         escaped_text = text.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == "false":
@@ -640,10 +640,10 @@ def setup_logging():
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     
-    # 创建轮转文件处理器，最大50KB，保留5个备份文件
+    # 创建轮转文件处理器，最大25KB，保留10个备份文件
     handler = RotatingFileHandler(
         'logs/app.log', 
-        maxBytes=1024*50,  # 50kb
+        maxBytes=1024*25,  # 25kb
         backupCount=10,       # 保留5个旧日志文件
         encoding='utf-8'
     )

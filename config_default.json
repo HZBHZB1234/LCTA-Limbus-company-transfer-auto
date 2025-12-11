@@ -4,7 +4,9 @@
         },
         "install":null,
         "zero":{
-            "better_download":true
+            "better_download":true,
+            "check_hash": true,
+            "dump_default": false
         },
         "ourplay":{
             "decrease_size":true,

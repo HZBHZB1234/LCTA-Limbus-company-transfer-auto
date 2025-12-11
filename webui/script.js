@@ -636,6 +636,14 @@ function cleanCache() {
 // 由于篇幅限制，这里只展示几个示例，其他函数可以按照相同模式修改
 
 function downloadLLC() {
+    // 保存当前的配置到后端
+    const checkHash = document.getElementById('llc-check-hash').checked;
+    const dumpDefault = document.getElementById('llc-dump-default').checked;
+    
+    // 更新配置
+    pywebview.api.update_config_value('ui_default.zero.check_hash', checkHash);
+    pywebview.api.update_config_value('ui_default.zero.dump_default', dumpDefault);
+    
     const modal = new ProgressModal('下载零协汉化包');
     modal.addLog('开始下载零协汉化包...');
     pywebview.api.add_modal_id(modal.id).then(function(result) { 
@@ -736,6 +744,21 @@ function loadConfigToUI() {
                         const betterDownloadCheckbox = document.getElementById('better-download');
                         if (betterDownloadCheckbox) {
                             betterDownloadCheckbox.checked = config.ui_default.zero.better_download;
+                        }
+                    }
+                    
+                    // 添加check_hash和dump_default配置
+                    if (config.ui_default.zero.check_hash !== undefined) {
+                        const checkHashCheckbox = document.getElementById('llc-check-hash');
+                        if (checkHashCheckbox) {
+                            checkHashCheckbox.checked = config.ui_default.zero.check_hash;
+                        }
+                    }
+                    
+                    if (config.ui_default.zero.dump_default !== undefined) {
+                        const dumpDefaultCheckbox = document.getElementById('llc-dump-default');
+                        if (dumpDefaultCheckbox) {
+                            dumpDefaultCheckbox.checked = config.ui_default.zero.dump_default;
                         }
                     }
                 }

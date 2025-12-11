@@ -113,7 +113,7 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
 
             hash_256_text = calculate_sha256(save_path_text)
             hash_256_font = calculate_sha256(save_path_font)
-            logger_.log(f"字体文件哈希 {hash_256_font}")
+
             if hash_256_text:
                 logger_.log(f"文本文件哈希 {hash_256_text}")
                 if not hash_256_text == hash_.get("main_hash"):
@@ -121,12 +121,20 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
                     logger_.log("文本文件哈希校验失败")
                     logger_.log_modal_process(
                         f"[warn] 文本文件哈希校验失败,期望值{hash_.get('main_hash')},实际值{hash_256_text}")
-
+            else:
+                hash_ok_text = False
+                logger_.log("文本文件哈希计算失败")
+            
+            if hash_256_font:
+                logger_.log(f"字体文件哈希 {hash_256_font}")
                 if not hash_256_font == hash_.get("font_hash"):
                     hash_ok_font = False
                     logger_.log("字体文件哈希校验失败")
                     logger_.log_modal_process(
                         f"[warn] 字体文件哈希校验失败,期望值{hash_.get('font_hash')},实际值{hash_256_font}")
+            else:
+                hash_ok_font = False
+                logger_.log("字体文件哈希计算失败")
         else:
             logger_.log_modal_process("跳过哈希校验", modal_id)
 

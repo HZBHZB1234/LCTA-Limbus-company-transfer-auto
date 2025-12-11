@@ -1,9 +1,11 @@
 {
     "ui_default": {
-        "translator": {},
+        "translator": "dict",
         "install": "null",
         "zero": {
-            "better_download": "bool"
+            "better_download": "bool",
+            "check_hash": "bool",
+            "dump_default": "bool"
         },
         "ourplay": {
             "decrease_size": "bool",
@@ -16,11 +18,7 @@
             "join_char": "str",
             "disable_space": "bool",
             "max_length": "int",
-            "output_type": [
-                "text_one",
-                "text_two",
-                "json"
-            ]
+            "output_type": "str"
         },
         "search": {
             "divide_size": "bool",

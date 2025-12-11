@@ -268,15 +268,21 @@ class LCTA_API():
         """下载LLC翻译"""
         try:
             self.add_modal_log("开始下载零协汉化包...", modal_id)
-            function_llc_main(modal_id, self.log_manager, check_hash=True, dump_default=False)
+            # 从配置中读取check_hash和dump_default参数
+            check_hash = self.config.get("ui_default", {}).get("zero", {}).get("check_hash", True)
+            dump_default = self.config.get("ui_default", {}).get("zero", {}).get("dump_default", False)
+            function_llc_main(modal_id, self.log_manager, check_hash=check_hash, dump_default=dump_default)
             self.add_modal_log("零协汉化包下载成功", modal_id)
             return {"success": True, "message": "零协汉化包下载成功"}
         except CancelRunning:
             self.log("llc下载任务已取消")
             self.del_modal_list(modal_id)
-            return {"success": False, "message": "已暂停"}
+            return {"success": False, "message": "已取消"}
         except Exception as e:
+            self.add_modal_log(f"出现错误{e}，下载失败", modal_id)
             self.log_error(e)
+            self.logger.update_modal_progress(0, "下载失败", modal_id)
+            self.logger.log_modal_status("下载失败", modal_id)
             return {"success": False, "message": str(e)}
 
     def save_api_config(self, modal_id= "false"):

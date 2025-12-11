@@ -95,7 +95,7 @@ class LogManager:
         if self.ui_callback:
             try:
                 self.executor.submit(
-                    self.ui_callback(message, level, *args, **kwargs)
+                    self.ui_callback, message, level, *args, **kwargs
                 )
             except Exception as e:
                 self.log_error(e)
@@ -110,7 +110,7 @@ class LogManager:
         if target_modal_id and self.modal_status_callback:
             try:
                 self.executor.submit(
-                    self.modal_status_callback(status, target_modal_id)
+                    self.modal_status_callback, status, target_modal_id
                 )
             except Exception as e:
                 self.log_error(e)
@@ -124,7 +124,7 @@ class LogManager:
         if target_modal_id and self.modal_log_callback:
             try:
                 self.executor.submit(
-                    self.modal_log_callback(message, target_modal_id)
+                    self.modal_log_callback, message, target_modal_id
                 )
             except Exception as e:
                 self.log_error(e)
@@ -143,7 +143,7 @@ class LogManager:
         if target_modal_id and self.modal_progress_callback:
             try:
                 self.executor.submit(
-                   self.modal_progress_callback(percent, text, target_modal_id)
+                   self.modal_progress_callback, percent, text, target_modal_id
                 )
             except Exception as e:
                 self.log_error(e)

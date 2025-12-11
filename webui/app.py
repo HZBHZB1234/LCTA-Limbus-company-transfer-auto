@@ -391,7 +391,8 @@ class LCTA_API():
         try:
             self._window.evaluate_js(js_code)
         except Exception as e:
-            self.log_error(f"设置模态窗口状态失败: {e}")
+            self.log(f"设置模态窗口状态失败: {e}")
+            self.log_error(e)
 
     def add_modal_log(self, message, modal_id):
         """向模态窗口添加日志"""
@@ -411,7 +412,8 @@ class LCTA_API():
         try:
             self._window.evaluate_js(js_code)
         except Exception as e:
-            self.log_error(f"添加模态窗口日志失败: {e}")
+            self.log(f"添加模态窗口日志失败: {e}")
+            self.log_error(e)
 
     def update_modal_progress(self, percent, text, modal_id):
         """更新模态窗口进度"""
@@ -430,7 +432,8 @@ class LCTA_API():
         try:
             self._window.evaluate_js(js_code)
         except Exception as e:
-            self.log_error(f"更新模态窗口进度失败: {e}")
+            self.log(f"更新模态窗口进度失败: {e}")
+            self.log_error(e)
 
 
     def get_game_path(self):
@@ -480,7 +483,8 @@ class LCTA_API():
             current[final_key] = value
             return True
         except Exception as e:
-            self.log_error(f"更新配置值时出错: {key_path} = {value}, 错误: {e}")
+            self.log(f"更新配置值时出错: {key_path} = {value}, 错误: {e}")
+            self.log_error(e)
             return False
 
     def get_config_value(self, key_path, default_value=None):
@@ -502,7 +506,8 @@ class LCTA_API():
                     
             return current
         except Exception as e:
-            self.log_error(f"获取配置值时出错: {key_path}, 错误: {e}")
+            self.log(f"获取配置值时出错: {key_path}, 错误: {e}")
+            self.log_error(e)
             return default_value
 
     def save_settings(self, game_path, debug_mode):
@@ -587,7 +592,8 @@ class LCTA_API():
             update_info = updater.check_for_updates(self.current_version)
             return update_info
         except Exception as e:
-            self.log_error(f"检查更新时出错: {e}")
+            self.log(f"检查更新时出错: {e}")
+            self.log_error(e)
             return {"has_update": False}
 
     def perform_update_in_modal(self, modal_id):

@@ -22,13 +22,13 @@ class LogManager:
         self.modal_status_callback: Optional[Callable] = None
         self.modal_log_callback: Optional[Callable] = None
         self.modal_progress_callback: Optional[Callable] = None
+        self.check_running: Optional[Callable] = None
         
         # 调试模式标志
         self.debug_mode = False
         
         # 创建线程池用于处理UI日志，防止阻塞主线程
         self.executor = ThreadPoolExecutor(max_workers=1)
-        self.lock = threading.Lock()
 
     def set_debug_mode(self, enabled: bool):
         """设置调试模式开关"""

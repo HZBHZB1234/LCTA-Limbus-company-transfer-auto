@@ -638,7 +638,8 @@ function cleanCache() {
 function downloadLLC() {
     const modal = new ProgressModal('下载零协汉化包');
     modal.addLog('开始下载零协汉化包...');
-    pywebview.api.add_modal_list(modal.id)
+    pywebview.api.add_modal_id(modal.id).then(function(result) { 
+    });
     modal.options.onCancel = function(modal_id){
         pywebview.api.set_modal_running(modal_id, "cancel")
     };

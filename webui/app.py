@@ -180,6 +180,7 @@ class LCTA_API():
             return True  # 即使出错也继续
 
     def add_modal_id(self, modal_id):
+        self.log(f"添加模态窗口ID: {modal_id}")
         self.modal_list.append({
             "modal_id": modal_id,
             "running": "running"})
@@ -196,18 +197,21 @@ class LCTA_API():
                 break
 
     def check_modal_running(self, modal_id):
+        self.log(f"检查模态窗口ID: {modal_id}")
         status = self._check_modal_running(self, modal_id)
-        if status == "cancel":
-            raise CancelRunning
-        elif status == "pause":
+        if status == "pause":
             self._wait_continue(self, modal_id)
+        elif status == "cancel":
+            raise CancelRunning
     def set_modal_running(self, modal_id, types="cancel"):
+        self.log(f"设置模态窗口ID: {modal_id} 状态为 {types}")
         for i in self.modal_list:
             if i["modal_id"] == modal_id:
                 i["running"] = str(types)
                 break
 
     def del_modal_list(self, modal_id):
+        self.log(f"删除模态窗口ID: {modal_id}")
         for times, i in enumerate(self.modal_list):
             if i["modal_id"] == modal_id:
                 del self.modal_list[times]

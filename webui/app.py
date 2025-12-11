@@ -14,6 +14,7 @@ sys.path.insert(0, str(project_root))
 
 
 import webutils
+from webutils.log_h import LogManager
 import webutils.load as load_util
 from webutils.update import Updater, get_app_version
 from webutils import function_llc_main
@@ -27,7 +28,7 @@ class LCTA_API():
         self.game_path = None
         # 初始化日志管理器
         self.logger =logger
-        self.log_manager = webutils.log_manager
+        self.log_manager = LogManager()
         self.log_manager.set_log_callback(self.logger.info)
         self.log_manager.set_error_callback(self.logger.exception)
         self.log_manager.set_ui_callback(self.log_ui)
@@ -43,6 +44,7 @@ class LCTA_API():
         self.init_config()
 
     def set_function(self):
+        load_util.set_logger(self.log_manager)
         self.find_lcb = load_util.find_lcb
         self.load_config = load_util.load_config
         self.check_game_path = load_util.check_game_path

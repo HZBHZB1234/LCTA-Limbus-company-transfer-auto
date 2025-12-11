@@ -137,13 +137,13 @@ class LogManager:
         if self.debug_mode:
             self.log_modal_process(f"[DEBUG] {message}", modal_id)
 
-    def update_modal_progress(self, percent: int, text: str = "", modal_id: str = None):
+    def update_modal_progress(self, percent: int, text: str = "", modal_id: str = None, log: bool = True):
         """更新模态窗口进度"""
         target_modal_id = modal_id or self.current_modal_id
         if target_modal_id and self.modal_progress_callback:
             try:
                 self.executor.submit(
-                   self.modal_progress_callback, percent, text, target_modal_id
+                   self.modal_progress_callback, percent, text, target_modal_id, log
                 )
             except Exception as e:
                 self.log_error(e)

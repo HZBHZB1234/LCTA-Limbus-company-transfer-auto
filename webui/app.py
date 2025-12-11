@@ -196,8 +196,9 @@ class LCTA_API():
             else:
                 break
 
-    def check_modal_running(self, modal_id):
-        self.log(f"检查模态窗口ID: {modal_id}")
+    def check_modal_running(self, modal_id, log=True):
+        if log:
+            self.log(f"检查模态窗口ID: {modal_id}")
         status = self._check_modal_running(modal_id)
         if status == "pause":
             self._wait_continue(modal_id)
@@ -419,10 +420,11 @@ class LCTA_API():
             self.log(f"添加模态窗口日志失败: {e}")
             self.log_error(e)
 
-    def update_modal_progress(self, percent, text, modal_id):
+    def update_modal_progress(self, percent, text, modal_id,log=True):
         """更新模态窗口进度"""
         try:
-            self.log(f"[{modal_id}] 进度变更{percent}% 消息{text}")
+            if log:
+                self.log(f"[{modal_id}] 进度变更至{percent}% 消息内容[{text}]")
         except Exception:pass
         escaped_text = text.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == "false":

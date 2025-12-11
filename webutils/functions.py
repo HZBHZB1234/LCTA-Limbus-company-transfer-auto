@@ -70,14 +70,14 @@ def download_with(url, save_path, size=0, chunk_size=1024*100, logger_: LogManag
             with open(save_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=chunk_size):
                     if modal_id:
-                        logger_.check_running(modal_id)
+                        logger_.check_running(modal_id, log=False)
                     f.write(chunk)
                     
                     downloaded_chunk += 1
                     logger_.update_modal_progress(
                         progress_[0] + (progress_[1]-progress_[0]) * downloaded_chunk / chunk_len,
                         f"已下载 {downloaded_chunk * chunk_size // 1024} KB / {total_size // 1024} KB",
-                        modal_id
+                        modal_id, log=False
                     )
             
             logger_.log("\n下载完成")

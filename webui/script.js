@@ -604,8 +604,27 @@ function installTranslation() {
 }
 
 function downloadOurplay() {
+    // 保存当前的配置到后端
+    const fontOption = document.getElementById('ourplay-font-option').value;
+    const checkHash = document.getElementById('ourplay-check-hash').checked;
+    
+    // 更新配置
+    pywebview.api.update_config_value('ui_default.ourplay.font_option', fontOption);
+    pywebview.api.update_config_value('ui_default.ourplay.check_hash', checkHash);
+    
     const modal = new ProgressModal('下载OurPlay汉化包');
     modal.addLog('开始下载OurPlay汉化包...');
+    pywebview.api.add_modal_id(modal.id).then(function(result) { 
+    });
+    modal.options.onCancel = function(modal_id){
+        pywebview.api.set_modal_running(modal_id, "cancel")
+    };
+    modal.options.onPause = function(modal_id){
+        pywebview.api.set_modal_running(modal_id, "pause")
+    };
+    modal.options.onResume = function(modal_id){
+        pywebview.api.set_modal_running(modal_id, "running")
+    };
     
     pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
         if (result.success) {
@@ -773,17 +792,17 @@ function loadConfigToUI() {
                 
                 // OurPlay下载界面配置
                 if (config.ui_default.ourplay && typeof config.ui_default.ourplay === 'object') {
-                    if (config.ui_default.ourplay.decrease_size !== undefined) {
-                        const decreaseSizeCheckbox = document.getElementById('decrease-size');
-                        if (decreaseSizeCheckbox) {
-                            decreaseSizeCheckbox.checked = config.ui_default.ourplay.decrease_size;
+                    if (config.ui_default.ourplay.font_option !== undefined) {
+                        const fontOptionSelect = document.getElementById('ourplay-font-option');
+                        if (fontOptionSelect) {
+                            fontOptionSelect.value = config.ui_default.ourplay.font_option;
                         }
                     }
                     
-                    if (config.ui_default.ourplay.llc_font !== undefined) {
-                        const llcFontCheckbox = document.getElementById('llc-font');
-                        if (llcFontCheckbox) {
-                            llcFontCheckbox.checked = config.ui_default.ourplay.llc_font;
+                    if (config.ui_default.ourplay.check_hash !== undefined) {
+                        const checkHashCheckbox = document.getElementById('ourplay-check-hash');
+                        if (checkHashCheckbox) {
+                            checkHashCheckbox.checked = config.ui_default.ourplay.check_hash;
                         }
                     }
                 }

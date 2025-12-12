@@ -145,6 +145,22 @@
         <div id="ourplay-section" class="content-section">
             <h2 class="section-title">从ourplay下载汉化</h2>
             <p>点击下方按钮开始从OurPlay下载最新的汉化包。</p>
+            
+            <div class="form-group">
+                <label for="ourplay-font-option">字体处理选项:</label>
+                <select id="ourplay-font-option">
+                    <option value="keep">保留原字体</option>
+                    <option value="simplify">精简字体</option>
+                    <option value="llc">从零协下载字体</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="ourplay-check-hash" checked> 启用哈希校验
+                </label>
+            </div>
+            
             <button class="submit-btn" onclick="downloadOurplay()">下载OurPlay汉化包</button>
         </div>
 

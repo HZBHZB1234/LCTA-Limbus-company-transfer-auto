@@ -17,7 +17,7 @@ import webutils
 from webutils.log_h import LogManager
 import webutils.load as load_util
 from webutils.update import Updater, get_app_version
-from webutils import function_llc_main
+from webutils import function_llc_main, function_ourplay_main
 
 class CancelRunning(Exception):
     pass
@@ -246,11 +246,23 @@ class LCTA_API():
         """下载ourplay翻译"""
         try:
             self.add_modal_log("开始下载OurPlay汉化包...", modal_id)
-            time.sleep(1)  # 模拟下载过程
+            
+            # 从配置中读取字体处理选项
+            font_option = self.config.get("ui_default", {}).get("ourplay", {}).get("font_option", "keep")
+            check_hash = self.config.get("ui_default", {}).get("ourplay", {}).get("check_hash", True)
+            function_ourplay_main(modal_id, self.log_manager, font_option=font_option, check_hash=check_hash)
+            
             self.add_modal_log("OurPlay汉化包下载成功", modal_id)
             return {"success": True, "message": "OurPlay汉化包下载成功"}
+        except CancelRunning:
+            self.log("ourplay下载任务已取消")
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
         except Exception as e:
+            self.add_modal_log(f"出现错误{e}，下载失败", modal_id)
             self.log_error(e)
+            self.log_manager.update_modal_progress(0, "下载失败", modal_id)
+            self.log_manager.log_modal_status("下载失败", modal_id)
             return {"success": False, "message": str(e)}
 
     def clean_cache(self, modal_id= "false"):

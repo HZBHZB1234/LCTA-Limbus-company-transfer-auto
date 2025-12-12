@@ -8,7 +8,8 @@
         },
         "ourplay": {
             "decrease_size": "bool",
-            "llc_font": "bool"
+            "llc_font": "bool",
+            "check_hash": "bool"
         },
         "clean": {
             "remove_cache": "bool"

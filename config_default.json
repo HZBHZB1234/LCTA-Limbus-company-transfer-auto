@@ -9,7 +9,8 @@
         },
         "ourplay":{
             "decrease_size":true,
-            "llc_font":true
+            "llc_font":true,
+            "check_hash": true
         },
         "clean":{
             "remove_cache":true

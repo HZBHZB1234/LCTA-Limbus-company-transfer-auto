@@ -4,7 +4,6 @@
         },
         "install":null,
         "zero":{
-            "better_download":true,
             "check_hash": true,
             "dump_default": false
         },
@@ -29,5 +28,6 @@
         "backup":null
     },
     "game_path":"",
-    "debug":false
+    "debug":false,
+    "auto_check_update": true
 }

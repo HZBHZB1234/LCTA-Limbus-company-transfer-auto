@@ -522,12 +522,13 @@ class LCTA_API():
             self.log_error(e)
             return default_value
 
-    def save_settings(self, game_path, debug_mode):
+    def save_settings(self, game_path, debug_mode, auto_update):
         """保存设置"""
         try:
             # 更新配置
             self.config["game_path"] = game_path
             self.config["debug"] = debug_mode
+            self.config["auto_check_update"] = auto_update
             
             # 保存到文件
             success = self.save_config_to_file()
@@ -594,6 +595,23 @@ class LCTA_API():
             if not self.config.get("auto_check_update", True):
                 return {"has_update": False}
                 
+            self.current_version = get_app_version()
+            self.log(f"当前版本: {self.current_version}")
+            
+            # 创建更新器实例
+            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", 
+                             self.config.get("delete_updating", True), self.log)
+            
+            update_info = updater.check_for_updates(self.current_version)
+            return update_info
+        except Exception as e:
+            self.log(f"检查更新时出错: {e}")
+            self.log_error(e)
+            return {"has_update": False}
+
+    def manual_check_update(self):
+        """手动检查更新"""
+        try:                
             self.current_version = get_app_version()
             self.log(f"当前版本: {self.current_version}")
             

@@ -3,7 +3,6 @@
         "translator": "dict",
         "install": "null",
         "zero": {
-            "better_download": "bool",
             "check_hash": "bool",
             "dump_default": "bool"
         },
@@ -28,5 +27,6 @@
         "backup": "null"
     },
     "game_path": "str",
-    "debug": "bool"
+    "debug": "bool",
+    "auto_check_update": "bool"
 }

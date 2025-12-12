@@ -726,6 +726,14 @@ function loadConfigToUI() {
                 }
             }
             
+            // 设置自动检查更新复选框
+            if (config.auto_check_update !== undefined) {
+                const autoCheckUpdateCheckbox = document.getElementById('auto-check-update');
+                if (autoCheckUpdateCheckbox) {
+                    autoCheckUpdateCheckbox.checked = config.auto_check_update;
+                }
+            }
+            
             // 根据ui_default配置填充其他界面元素
             if (config.ui_default && typeof config.ui_default === 'object') {
                 // 翻译工具界面配置
@@ -878,11 +886,12 @@ function saveSettings() {
     // 获取表单数据
     const gamePath = document.getElementById('game-path').value;
     const debugMode = document.getElementById('debug-mode').checked;
+    const autoCheckUpdate = document.getElementById('auto-check-update').checked;
     
     modal.addLog('正在保存设置...');
     
     // 调用后端API保存设置
-    pywebview.api.save_settings(gamePath, debugMode, modal.id).then(function(result) {
+    pywebview.api.save_settings(gamePath, debugMode, autoCheckUpdate).then(function(result) {
         if (result.success) {
             modal.complete(true, '设置保存成功: ' + result.message);
         } else {
@@ -1012,6 +1021,44 @@ function resetConfig() {
             // 用户取消操作，不做任何事
         }
     );
+}
+
+function checkForUpdates() {
+    // 检查更新
+    pywebview.api.auto_check_update().then(function(update_info) {
+        if (update_info && update_info.has_update) {
+            showUpdateInfo(update_info);
+        }
+    }).catch(function(error) {
+        console.error('检查更新失败:', error);
+        addLogMessage('检查更新失败: ' + error);
+    });
+}
+
+function manualCheckUpdates() {
+    // 创建检查更新的模态窗口
+    const modal = new ProgressModal('检查更新');
+    modal.addLog('正在检查是否有可用更新...');
+    
+    // 检查更新
+    pywebview.api.manual_check_update().then(function(update_info) {
+        if (update_info && update_info.has_update) {
+            modal.close(); // 关闭检查更新的模态窗口
+            showUpdateInfo(update_info);
+        } else {
+            modal.complete(true, '当前已是最新版本');
+            // 3秒后自动关闭模态窗口
+            setTimeout(() => {
+                if (!modal.isMinimized) {
+                    modal.close();
+                }
+            }, 3000);
+        }
+    }).catch(function(error) {
+        console.error('检查更新失败:', error);
+        modal.complete(false, '检查更新失败: ' + error);
+        addLogMessage('检查更新失败: ' + error);
+    });
 }
 
 // 更新进度条函数
@@ -1316,15 +1363,7 @@ window.addEventListener('pywebviewready', function() {
         pywebview.api.log('Error checking config:'+ error);
     });
     
-    // 检查更新
-    pywebview.api.auto_check_update().then(function(update_info) {
-        if (update_info && update_info.has_update) {
-            showUpdateInfo(update_info);
-        }
-    }).catch(function(error) {
-        console.error('检查更新失败:', error);
-        addLogMessage('检查更新失败: ' + error);
-    });
+    checkForUpdates()
 
     pywebview.api.get_attr('config').then(function(config) {
         pywebview.api.log('Config loaded  and close success');

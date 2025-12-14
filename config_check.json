@@ -1,7 +1,9 @@
 {
     "ui_default": {
         "translator": "dict",
-        "install": "null",
+        "install":{
+            "package_directory": "str"
+        },
         "zero": {
             "check_hash": "bool",
             "dump_default": "bool"

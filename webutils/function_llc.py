@@ -44,10 +44,10 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
         logger_.log_modal_process("开始下载翻译文件", modal_id)
         logger_.log_modal_status("正在初始化链接", modal_id)
 
-        api_url = [i['endpoint'] for i in APINode if i["id"] == kwargs.get("api_node", "local_api")][0]
+        api_url = any(i['endpoint'] for i in APINode if i["id"] == kwargs.get("api_node", "local_api"))
         api_version = api_url.format('v2/resource/get_version')
         api_hash = api_url.format("v2/hash/get_hash")
-        node_url = [i['endpoint'] for i in NodeList if i["id"] == kwargs.get("file_node", "auto")][0]
+        node_url = any(i['endpoint'] for i in NodeList if i["id"] == kwargs.get("file_node", "auto"))
         
         logger_.log(f"api_url {api_url}")
         logger_.log(f"api_version {api_version}")

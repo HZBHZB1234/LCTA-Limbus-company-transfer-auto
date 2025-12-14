@@ -89,6 +89,32 @@ function browseFolder(inputId) {
     pywebview.api.browse_folder(inputId);
 }
 
+// 添加一个新的函数用于浏览汉化包目录
+function browsePackageDirectory() {
+    pywebview.api.browse_folder('package-directory').then(function(result) {
+        // 更新配置
+        const packageDirInput = document.getElementById('package-directory');
+        if (packageDirInput && packageDirInput.value) {
+            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value);
+            // 刷新汉化包列表
+            refreshPackageList();
+        }
+    });
+}
+
+// 添加一个新的函数用于浏览安装界面的汉化包目录
+function browseInstallPackageDirectory() {
+    pywebview.api.browse_folder('install-package-directory').then(function(result) {
+        // 更新配置
+        const packageDirInput = document.getElementById('install-package-directory');
+        if (packageDirInput && packageDirInput.value) {
+            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value);
+            // 刷新汉化包列表
+            refreshInstallPackageList();
+        }
+    });
+}
+
 // 模态窗口基类
 class ModalWindow {
     constructor(title, options = {}) {
@@ -589,6 +615,332 @@ function startTranslation() {
     }, 4000);
 }
 
+function refreshPackageList() {
+    pywebview.api.get_translation_packages().then(function(result) {
+        const packageList = document.getElementById('package-list');
+        packageList.innerHTML = '';
+        
+        if (result.packages && result.packages.length > 0) {
+            result.packages.forEach(function(pkg) {
+                const option = document.createElement('option');
+                option.value = pkg;
+                option.textContent = pkg;
+                packageList.appendChild(option);
+            });
+        } else {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = '未找到可用的汉化包';
+            packageList.appendChild(option);
+        }
+    }).catch(function(error) {
+        console.error('获取汉化包列表失败:', error);
+        const packageList = document.getElementById('package-list');
+        packageList.innerHTML = '';
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '获取列表失败: ' + error;
+        packageList.appendChild(option);
+        
+        // 显示错误消息
+        showMessage('错误', '获取汉化包列表失败: ' + error);
+    });
+}
+
+function refreshInstallPackageList() {
+    pywebview.api.get_translation_packages().then(function(result) {
+        const packageList = document.getElementById('install-package-list');
+        packageList.innerHTML = '';
+        
+        if (result.packages && result.packages.length > 0) {
+            result.packages.forEach(function(pkg) {
+                const option = document.createElement('option');
+                option.value = pkg;
+                option.textContent = pkg;
+                packageList.appendChild(option);
+            });
+        } else {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = '未找到可用的汉化包';
+            packageList.appendChild(option);
+        }
+    }).catch(function(error) {
+        console.error('获取汉化包列表失败:', error);
+        const packageList = document.getElementById('install-package-list');
+        packageList.innerHTML = '';
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '获取列表失败: ' + error;
+        packageList.appendChild(option);
+        
+        // 显示错误消息
+        showMessage('错误', '获取汉化包列表失败: ' + error);
+    });
+}
+
+function installSelectedPackage() {
+    const packageList = document.getElementById('install-package-list');
+    const selectedPackage = packageList.value;
+    
+    if (!selectedPackage || selectedPackage === '') {
+        showMessage('错误', '请先选择一个汉化包');
+        return;
+    }
+    
+    const modal = new ProgressModal('安装汉化包');
+    modal.addLog('开始安装汉化包: ' + selectedPackage);
+    
+    pywebview.api.install_translation(selectedPackage, modal.id).then(function(result) {
+        if (result.success) {
+            modal.complete(true, '汉化包安装成功: ' + result.message);
+        } else {
+            modal.complete(false, '汉化包安装失败: ' + result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '安装过程中出现错误: ' + error);
+    });
+}
+
+function deleteSelectedPackage() {
+    const packageList = document.getElementById('install-package-list');
+    const selectedPackage = packageList.value;
+    
+    if (!selectedPackage) {
+        showMessage('错误', '请先选择一个汉化包');
+        return;
+    }
+    
+    showConfirm('确认删除', `确定要删除汉化包 "${selectedPackage}" 吗？此操作不可撤销。`, 
+        function() {
+            pywebview.api.run_func('delete_translation_package',selectedPackage).then(function(result) {
+                if (result.success) {
+                    showMessage('成功', result.message);
+                    refreshInstallPackageList(); // 刷新列表
+                } else {
+                    showMessage('错误', result.message);
+                }
+            }).catch(function(error) {
+                showMessage('错误', '删除失败: ' + error);
+            });
+        },
+        function() {
+            // 取消操作
+        }
+    );
+}
+
+function changeFontForPackage() {
+    const packageList = document.getElementById('install-package-list');
+    const selectedPackage = packageList.value;
+    
+    if (!selectedPackage) {
+        showMessage('错误', '请先选择一个汉化包');
+        return;
+    }
+    
+    // 创建一个隐藏的文件输入框来选择字体文件
+    const fontInput = document.createElement('input');
+    fontInput.type = 'file';
+    fontInput.accept = '.ttf,.otf,.ttc';
+    fontInput.onchange = function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        // 使用pywebview的文件对话框功能来获取路径
+        // 创建临时输入框用于保存路径
+        const tempInput = document.createElement('input');
+        tempInput.type = 'hidden';
+        tempInput.id = 'temp-font-path';
+        tempInput.value = file.path || '';
+        document.body.appendChild(tempInput);
+        
+        // 稍后移除临时输入框并处理字体更改
+        setTimeout(function() {
+            const fontPath = tempInput.value;
+            if (!fontPath) {
+                // 如果无法直接获取路径，提示用户使用pywebview对话框
+                showMessage('提示', '请选择字体文件', function() {
+                    // 打开文件选择对话框
+                    pywebview.api.browse_file('temp-font-path').then(function() {
+                        const fontPath = document.getElementById('temp-font-path').value;
+                        if (!fontPath) {
+                            showMessage('提示', '未选择字体文件');
+                            document.body.removeChild(tempInput);
+                            return;
+                        }
+                        
+                        performFontChange(selectedPackage, fontPath, tempInput);
+                    });
+                });
+            } else {
+                performFontChange(selectedPackage, fontPath, tempInput);
+            }
+        }, 100);
+    };
+    
+    fontInput.click();
+}
+
+function performFontChange(selectedPackage, fontPath, tempInput) {
+    const modal = new ProgressModal('更换字体');
+    modal.addLog(`开始为 "${selectedPackage}" 更换字体...`);
+    
+    pywebview.api.change_font_for_package(selectedPackage, fontPath, modal.id).then(function(result) {
+        if (result.success) {
+            modal.complete(true, result.message);
+            refreshPackageList(); // 刷新列表
+        } else {
+            modal.complete(false, result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '更换字体时出现错误: ' + error);
+    });
+    
+    if (tempInput && document.body.contains(tempInput)) {
+        document.body.removeChild(tempInput);
+    }
+}
+
+function getFontFromInstalled() {
+    const modal = new ModalWindow('字体选择', {
+        showProgress: false,
+        showCancelButton: true,
+        cancelButtonText: '关闭',
+        showMinimizeButton: true,
+        showLog: false
+    });
+    
+    // 设置模态窗口内容
+    modal.element.querySelector('.modal-body').innerHTML = `
+        <div class="font-selector">
+            <div class="form-group">
+                <label for="font-search-${modal.id}">搜索字体:</label>
+                <input type="text" id="font-search-${modal.id}" placeholder="输入字体名称搜索..." style="width: 100%;">
+            </div>
+            <div class="form-group">
+                <label>已安装字体:</label>
+                <div class="list-container">
+                    <select id="font-list-${modal.id}" size="10" style="width: 100%; height: 300px;">
+                        <option value="">加载中...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>预览:</label>
+                <div id="font-preview-${modal.id}" style="border: 1px solid #ddd; padding: 10px; min-height: 60px; background-color: #f8f9fa;">
+                    选择字体以预览
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 获取系统字体列表
+    pywebview.api.get_system_fonts().then(function(result) {
+        const fontList = document.getElementById(`font-list-${modal.id}`);
+        fontList.innerHTML = '';
+        
+        if (result.success && result.fonts) {
+            result.fonts.forEach(function(font) {
+                const option = document.createElement('option');
+                option.value = font;
+                option.textContent = font;
+                fontList.appendChild(option);
+            });
+        } else {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = '获取字体列表失败';
+            fontList.appendChild(option);
+        }
+    }).catch(function(error) {
+        const fontList = document.getElementById(`font-list-${modal.id}`);
+        fontList.innerHTML = '';
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '获取字体列表失败: ' + error;
+        fontList.appendChild(option);
+    });
+    
+    // 绑定搜索功能
+    const searchInput = document.getElementById(`font-search-${modal.id}`);
+    searchInput.addEventListener('input', function() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const options = fontList.options;
+        for (let i = 0; i < options.length; i++) {
+            const option = options[i];
+            if (searchTerm === '' || option.text.toLowerCase().includes(searchTerm)) {
+                option.style.display = '';
+            } else {
+                option.style.display = 'none';
+            }
+        }
+    });
+    
+    // 绑定字体选择事件
+    const fontList = document.getElementById(`font-list-${modal.id}`);
+    fontList.addEventListener('change', function() {
+        const selectedFont = fontList.value;
+        if (selectedFont) {
+            const previewDiv = document.getElementById(`font-preview-${modal.id}`);
+            previewDiv.textContent = `${selectedFont}\n\n中文示例文本\nABCDEFGabcdefg\n1234567890`;
+            previewDiv.style.fontFamily = selectedFont;
+        }
+    });
+    
+    // 添加导出按钮
+    const footer = modal.element.querySelector('.modal-footer');
+    footer.innerHTML = `
+        <button class="action-btn" id="export-font-btn-${modal.id}">导出选中字体</button>
+        <button class="secondary-btn" id="close-font-modal-btn-${modal.id}">关闭</button>
+    `;
+    
+    document.getElementById(`export-font-btn-${modal.id}`).addEventListener('click', function() {
+        const selectedFont = fontList.value;
+        if (!selectedFont) {
+            showMessage('提示', '请先选择一个字体');
+            return;
+        }
+        
+        // 通过文件对话框让用户选择保存位置
+        const tempInput = document.createElement('input');
+        tempInput.type = 'hidden';
+        tempInput.id = `temp-font-path-${modal.id}`;
+        document.body.appendChild(tempInput);
+        
+        // 延迟执行以确保元素已创建
+        setTimeout(function() {
+            pywebview.api.browse_file(`temp-font-path-${modal.id}`).then(function() {
+                const savePath = document.getElementById(`temp-font-path-${modal.id}`).value;
+                if (!savePath) {
+                    showMessage('提示', '未选择保存位置');
+                    document.body.removeChild(tempInput);
+                    return;
+                }
+                
+                // 调用后端API导出字体文件
+                pywebview.api.export_system_font(selectedFont, savePath).then(function(result) {
+                    if (result.success) {
+                        showMessage('成功', result.message);
+                    } else {
+                        showMessage('错误', result.message);
+                    }
+                }).catch(function(error) {
+                    showMessage('错误', '导出字体时出现错误: ' + error);
+                });
+                
+                document.body.removeChild(tempInput);
+            });
+        }, 100);
+    });
+    
+    document.getElementById(`close-font-modal-btn-${modal.id}`).addEventListener('click', function() {
+        modal.close();
+    });
+    
+    modal.setStatus('已加载字体列表');
+}
+
 function installTranslation() {
     const modal = new ProgressModal('安装汉化包');
     
@@ -757,7 +1109,21 @@ function loadConfigToUI() {
             if (config.ui_default && typeof config.ui_default === 'object') {
                 // 翻译工具界面配置
                 if (config.ui_default.translator && typeof config.ui_default.translator === 'object') {
-                    // 可以根据需要填充翻译工具相关配置
+                    // 填充汉化包目录设置
+                    if (config.ui_default.install && config.ui_default.install.package_directory !== undefined) {
+                        const packageDirInput = document.getElementById('package-directory');
+                        if (packageDirInput) {
+                            packageDirInput.value = config.ui_default.install.package_directory;
+                        }
+                    }
+                }
+                
+                // 更新配置
+                const packageDirInput = document.getElementById('package-directory');
+                if (packageDirInput) {
+                    pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value);
+                    // 更新配置
+                    pywebview.api.update_config_value('ui_default.translator.package_directory', packageDirInput.value);
                 }
                 
                 // 安装界面配置

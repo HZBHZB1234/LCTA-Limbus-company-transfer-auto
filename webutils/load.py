@@ -216,6 +216,12 @@ def fix_config(config, config_default=None, config_check=None):
                 
             value = current_config[key]
             
+            # 如果期望类型是字典但实际值是None，则用空字典替换
+            if isinstance(expected_type, dict) and value is None:
+                current_config[key] = {}
+                value = current_config[key]
+                log.log(f"修复配置: 将None值的键 '{current_path}' 修正为空字典")
+            
             # 如果期望类型是字典且实际值也是字典，则递归检查
             if isinstance(expected_type, dict) and isinstance(value, dict):
                 # 确保默认配置也有对应的键

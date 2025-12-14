@@ -31,6 +31,67 @@ def zip_folder(folder_path, output_path, logger_:LogManager=None):
         logger_.log_error(e)
         return False
     
+def extract_zip_smartly(zip_path, target_dir):
+    """
+    智能解压ZIP文件
+    
+    如果压缩包根目录只有一个文件夹，则直接解压该文件夹内容到目标目录；
+    如果压缩包根目录有多个文件或文件夹，则在目标目录下创建以压缩包名称命名的文件夹，
+    然后将内容解压到该文件夹中。
+    
+    Args:
+        zip_path (str): ZIP文件路径
+        target_dir (str): 目标解压目录
+    """
+    # 确保目标目录存在
+    os.makedirs(target_dir, exist_ok=True)
+    
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        # 获取所有文件列表
+        file_list = zip_ref.namelist()
+        
+        # 过滤出不在根目录的文件（即路径中包含'/'的）
+        root_items = set()
+        for file_path in file_list:
+            # 移除末尾的斜杠（文件夹标识）
+            clean_path = file_path.rstrip('/')
+            # 获取根目录下的项目
+            root_item = clean_path.split('/')[0]
+            root_items.add(root_item)
+        
+        # 判断根目录是否只有一个文件夹
+        if len(root_items) == 1:
+            single_item = list(root_items)[0]
+            # 检查这个项目是否是文件夹（通过检查是否有以它开头的路径）
+            is_folder = any(f.startswith(single_item + '/') for f in file_list if f != single_item + '/')
+            
+            if is_folder:
+                # 只有一个根文件夹，提取其内容
+                for member in file_list:
+                    if member.startswith(single_item + '/'):
+                        # 去掉前缀，直接解压内容
+                        target_path = os.path.join(target_dir, member[len(single_item)+1:])
+                        # 创建目标目录
+                        if member.endswith('/'):
+                            os.makedirs(target_path, exist_ok=True)
+                        else:
+                            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                            # 解压文件
+                            with zip_ref.open(member) as source, open(target_path, 'wb') as target:
+                                target.write(source.read())
+                return single_item
+            else:
+                # 只有一个文件，直接解压
+                zip_ref.extractall(target_dir)
+                return None
+        else:
+            # 有多个根项目，在目标目录下创建以zip文件名为名的文件夹
+            zip_name = os.path.splitext(os.path.basename(zip_path))[0]
+            extract_dir = os.path.join(target_dir, zip_name)
+            os.makedirs(extract_dir, exist_ok=True)
+            zip_ref.extractall(extract_dir)
+            return zip_name
+
 def decompress_7z(file_path, output_dir='.', logger_: LogManager=None):
     if not os.path.exists(file_path):
         logger_.log(f"压缩文件不存在: {file_path}")

@@ -27,9 +27,8 @@
     </div>
 
     <div class="main-content">
-        <!-- 翻译工具界面 -->
-        <div id="translate-section" class="content-section active">
-            <h2 class="section-title">翻译工具</h2>
+        <div class="content-section active" id="translate-section">
+            <h2>翻译工具</h2>
             
             <div class="form-group">
                 <label class="checkbox-label">
@@ -124,21 +123,32 @@
         <!-- 安装汉化界面 -->
         <div id="install-section" class="content-section">
             <h2 class="section-title">安装已有汉化</h2>
+            
             <div class="form-group">
-                <label for="install-package">汉化包文件:</label>
-                <div class="file-input-group">
-                    <input type="text" id="install-package" placeholder="选择汉化包文件 (.zip)">
-                    <button class="action-btn" onclick="browseFile('install-package')">浏览</button>
+                <label for="install-package-directory">汉化包目录:</label>
+                <div class="input-group">
+                    <input type="text" id="install-package-directory" placeholder="留空则使用程序所在目录">
+                    <button type="button" class="browse-btn" onclick="browseInstallPackageDirectory()">浏览</button>
+                </div>
+                <small>选择存放汉化包的目录，留空则使用程序所在目录</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="install-package-list">可用汉化包:</label>
+                <div class="list-container">
+                    <select id="install-package-list" size="10" style="width: 100%; height: 200px;">
+                        <option value="">未找到可用的汉化包</option>
+                    </select>
                 </div>
             </div>
-            <div class="form-group">
-                <label for="install-path">游戏路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="install-path" placeholder="游戏安装路径">
-                    <button class="action-btn" onclick="browseFolder('install-path')">浏览</button>
-                </div>
+            
+            <div class="form-group" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="action-btn" onclick="refreshInstallPackageList()">刷新列表</button>
+                <button class="action-btn" onclick="installSelectedPackage()">安装选中汉化包</button>
+                <button class="action-btn secondary-btn" onclick="deleteSelectedPackage()">删除选中汉化包</button>
+                <button class="action-btn" onclick="changeFontForPackage()">更换选中汉化包字体</button>
+                <button class="action-btn" onclick="getFontFromInstalled()">从已安装字体中获取文件</button>
             </div>
-            <button class="submit-btn" onclick="installTranslation()">安装汉化</button>
         </div>
 
         <!-- OurPlay下载界面 -->

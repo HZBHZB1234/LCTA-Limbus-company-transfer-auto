@@ -128,6 +128,23 @@ input, select, textarea {
     flex: 1;
 }
 
+.list-container {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    overflow: hidden;
+}
+
+.list-container select {
+    width: 100%;
+    height: 200px;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    padding: 5px;
+    background-color: white;
+}
+
 button.submit-btn, button.action-btn {
     background-color: #3498db;
     color: white;

@@ -2,7 +2,9 @@
     "ui_default":{
         "translator":{
         },
-        "install":null,
+        "install":{
+            "package_directory": ""
+        },
         "zero":{
             "check_hash": true,
             "dump_default": false

@@ -60,8 +60,6 @@ class LCTA_API():
         self.validate_config = load_util.validate_config
         self.load_config_default = load_util.load_config_default
         self.fix_config = load_util.fix_config
-        self.delete_translation_package = lambda name,target_dir :delete_translation_package(
-            name, target_dir, self.logger)
 
     def run_func(self, func_name, *args):
         if hasattr(self, func_name):
@@ -291,9 +289,7 @@ class LCTA_API():
         try:
             if package_name is None:
                 self.log("开始安装翻译包")
-                # 这里应该从前端获取实际参数
-                # 暂时返回成功，实际实现需要从前端获取参数
-                return {"success": True, "message": "功能待实现"}
+                return {"success": False, "message": "传参错误"}
             
             # 获取游戏路径
             game_path = self.config.get("game_path", "")

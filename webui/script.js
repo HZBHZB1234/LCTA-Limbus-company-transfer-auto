@@ -951,11 +951,19 @@ function refreshInstallPackageList() {
                             <span>${pkg}</span>
                         </div>
                         <div class="list-item-actions">
-                            <button class="list-action-btn" title="选择" onclick="selectPackage('${pkg}')">
+                            <button class="list-action-btn" title="选择">
                                 <i class="fas fa-check"></i>
                             </button>
                         </div>
                     `;
+                    
+                    // 使用addEventListener替代onclick属性，避免潜在的表单提交问题
+                    const selectButton = packageItem.querySelector('.list-action-btn');
+                    selectButton.addEventListener('click', function(e) {
+                        e.preventDefault(); // 阻止任何可能的默认行为
+                        selectPackage(pkg);
+                    });
+                    
                     packageList.appendChild(packageItem);
                 });
             } else {
@@ -2025,8 +2033,18 @@ function simpleMarkdownToHtml(text) {
     return processedParagraphs.filter(p => p !== '').join('\n');
 }
 
+// 添加一个变量来跟踪是否已经显示了更新窗口
+let updateModalShown = false;
+
 // 显示更新信息
 function showUpdateInfo(update_info) {
+    // 防止重复创建更新窗口
+    if (updateModalShown) {
+        return;
+    }
+    
+    updateModalShown = true;
+    
     let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
     htmlMessage += `<p><strong>当前版本:</strong> ${update_info.current_version || 'unknown'}</p>`;
     
@@ -2061,8 +2079,16 @@ function showUpdateInfo(update_info) {
         function() {
             // 用户取消更新
             addLogMessage('用户取消了更新');
+            updateModalShown = false;
         }
     );
+    
+    // 当窗口关闭时，重置标志
+    const originalClose = modal.close;
+    modal.close = function() {
+        updateModalShown = false;
+        originalClose.call(this);
+    };
     
     setTimeout(() => {
         const statusElement = document.getElementById(`modal-status-${modal.id}`);
@@ -2157,6 +2183,9 @@ window.addEventListener('pywebviewready', function() {
             addLogMessage('检查配置时出错: ' + error, 'error');
         });
     
-    // 检查更新
-autoCheckUpdates();
+    // 检查更新 - 只在这里检查一次，避免重复创建窗口
+    const autoCheckUpdate = localStorage.getItem('lcta-auto-check-update') !== 'false';
+    if (autoCheckUpdate) {
+        autoCheckUpdates();
+    }
 });

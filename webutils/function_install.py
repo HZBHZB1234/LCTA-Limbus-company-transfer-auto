@@ -199,12 +199,15 @@ def change_font_for_package(path, path_font, logger_: LogManager = None, modal_i
 def install_translation_package(package_path, game_path, logger_: LogManager = None, modal_id: str = None):    
     logger_.log_modal_process(f"准备安装汉化包: {package_path}", modal_id)
     if os.path.isfile(package_path):
+        logger_.log_modal_process("检测到为压缩包，开始解压...", modal_id)
         package_name = extract_zip_smartly(package_path, game_path)
     else:
+        logger_.log_modal_process("检测到为文件夹，开始复制...", modal_id)
         package_name = os.path.basename(package_path)
         shutil.copytree(package_path, os.path.join(game_path, package_name))
     lang_path = os.path.join(game_path, 'LimbusCompany_Data', 'lang')
     config_path = os.path.join(lang_path, 'config.json')
+    logger_.log_modal_process("正在写入配置文件...", modal_id)
     with open(config_path, 'w', encoding='utf-8') as file:
         json.dump({
             "lang": package_name,

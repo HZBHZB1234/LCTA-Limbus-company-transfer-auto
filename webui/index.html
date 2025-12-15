@@ -5,442 +5,1047 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LCTA - 边狱公司汉化工具箱</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body>
+<body class="theme-light">
+    <div class="theme-toggle">
+        <button class="theme-btn active" data-theme="light" title="亮色主题">
+            <i class="fas fa-sun"></i>
+        </button>
+        <button class="theme-btn" data-theme="dark" title="暗色主题">
+            <i class="fas fa-moon"></i>
+        </button>
+        <button class="theme-btn" data-theme="purple" title="蓝紫色主题">
+            <i class="fas fa-palette"></i>
+        </button>
+    </div>
+
     <div class="sidebar">
-        <h2>LCTA v3.1.0</h2>
-        <button id="translate-btn" class="active">翻译工具</button>
-        <button id="install-btn">安装已有汉化</button>
-        <button id="ourplay-btn">从ourplay下载汉化</button>
-        <button id="clean-btn">清除本地缓存</button>
-        <button id="llc-btn">从零协下载汉化</button>
-        <button id="config-btn">配置汉化api</button>
-        <button id="proper-btn">抓取专有词汇</button>
-        <button id="search-btn">进行文本搜索</button>
-        <button id="backup-btn">备份原文</button>
-        <button id="assets-btn">资源管理</button>
-        <button id="lighter-btn">黑影图调色</button>
-        <button id="calculate-btn">抽卡概率计算</button>
-        <button id="log-btn">日志</button>
-        <button id="about-btn">关于</button>
-        <button id="settings-btn">设置</button>
+        <div class="sidebar-header">
+            <div class="logo">
+                <i class="fas fa-language"></i>
+                <h2>LCTA <span class="version">v3.1.0</span></h2>
+            </div>
+            <p class="subtitle">边狱公司汉化工具箱</p>
+        </div>
+
+        <div class="sidebar-menu">
+            <button id="translate-btn" class="nav-btn active">
+                <i class="fas fa-language"></i>
+                <span>翻译工具</span>
+                <div class="nav-indicator"></div>
+            </button>
+            
+            <button id="install-btn" class="nav-btn">
+                <i class="fas fa-download"></i>
+                <span>安装已有汉化</span>
+            </button>
+            
+            <button id="ourplay-btn" class="nav-btn">
+                <i class="fab fa-google-play"></i>
+                <span>从ourplay下载汉化</span>
+            </button>
+            
+            <button id="clean-btn" class="nav-btn">
+                <i class="fas fa-broom"></i>
+                <span>清除本地缓存</span>
+            </button>
+            
+            <button id="llc-btn" class="nav-btn">
+                <i class="fas fa-users"></i>
+                <span>从零协下载汉化</span>
+            </button>
+            
+            <button id="config-btn" class="nav-btn">
+                <i class="fas fa-cog"></i>
+                <span>配置汉化api</span>
+            </button>
+            
+            <button id="proper-btn" class="nav-btn">
+                <i class="fas fa-book"></i>
+                <span>抓取专有词汇</span>
+            </button>
+            
+            <button id="search-btn" class="nav-btn">
+                <i class="fas fa-search"></i>
+                <span>进行文本搜索</span>
+            </button>
+            
+            <button id="backup-btn" class="nav-btn">
+                <i class="fas fa-save"></i>
+                <span>备份原文</span>
+            </button>
+            
+            <button id="assets-btn" class="nav-btn">
+                <i class="fas fa-folder"></i>
+                <span>资源管理</span>
+            </button>
+            
+            <button id="lighter-btn" class="nav-btn">
+                <i class="fas fa-adjust"></i>
+                <span>黑影图调色</span>
+            </button>
+            
+            <button id="calculate-btn" class="nav-btn">
+                <i class="fas fa-calculator"></i>
+                <span>抽卡概率计算</span>
+            </button>
+            
+            <button id="log-btn" class="nav-btn">
+                <i class="fas fa-clipboard-list"></i>
+                <span>日志</span>
+            </button>
+            
+            <button id="about-btn" class="nav-btn">
+                <i class="fas fa-info-circle"></i>
+                <span>关于</span>
+            </button>
+            
+            <button id="settings-btn" class="nav-btn">
+                <i class="fas fa-sliders-h"></i>
+                <span>设置</span>
+            </button>
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="status-indicator">
+                <div class="status-dot connected"></div>
+                <span>已连接</span>
+            </div>
+        </div>
     </div>
 
     <div class="main-content">
+        <!-- 翻译工具界面 -->
         <div class="content-section active" id="translate-section">
-            <h2>翻译工具</h2>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="custom-script"> 使用自定义翻译脚本
-                </label>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-language"></i>
+                    翻译工具
+                </h2>
+                <p class="section-subtitle">使用多种翻译服务自动翻译游戏文本</p>
             </div>
             
-            <div class="form-group" id="script-path-group" style="display: none;">
-                <label for="script-path">脚本路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="script-path" placeholder="选择自定义脚本文件">
-                    <button class="action-btn" onclick="browseFile('script-path')">浏览</button>
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">翻译选项</h3>
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="custom-script">
+                            <span class="checkmark"></span>
+                            使用自定义翻译脚本
+                        </label>
+                    </div>
+                    
+                    <div class="form-group" id="script-path-group" style="display: none;">
+                        <label for="script-path">脚本路径:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="script-path" placeholder="选择自定义脚本文件">
+                            <button class="action-btn secondary" onclick="browseFile('script-path')">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="cache-trans">
+                            <span class="checkmark"></span>
+                            启用翻译缓存
+                        </label>
+                        <small class="form-hint">启用后可加快重复翻译速度</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="team-trans">
+                            <span class="checkmark"></span>
+                            团队翻译模式
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="excel-output">
+                            <span class="checkmark"></span>
+                            输出至Excel文件
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="log-enabled" checked>
+                            <span class="checkmark"></span>
+                            启用日志
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">翻译服务配置</h3>
+                    <div class="form-group">
+                        <label for="translation-service">翻译服务:</label>
+                        <div class="select-wrapper">
+                            <select id="translation-service">
+                                <option value="baidu">百度翻译</option>
+                                <option value="tencent">腾讯翻译</option>
+                                <option value="youdao">有道翻译</option>
+                                <option value="caiyun">彩云翻译</option>
+                                <option value="xiaoniu">小牛翻译</option>
+                                <option value="aliyun">阿里云翻译</option>
+                                <option value="huoshan">火山翻译</option>
+                                <option value="chatgpt">ChatGPT翻译</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="half-trans">
+                            <span class="checkmark"></span>
+                            使用翻译至一半的项目
+                        </label>
+                    </div>
+                    
+                    <div class="form-group" id="half-trans-path-group" style="display: none;">
+                        <label for="half-trans-path">项目路径:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="half-trans-path" placeholder="选择半翻译项目路径">
+                            <button class="action-btn secondary" onclick="browseFile('half-trans-path')">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="backup">
+                            <span class="checkmark"></span>
+                            使用上版本备份原文
+                        </label>
+                    </div>
+                    
+                    <div class="form-group" id="backup-path-group" style="display: none;">
+                        <label for="backup-path">备份路径:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="backup-path" placeholder="选择备份文件路径">
+                            <button class="action-btn secondary" onclick="browseFile('backup-path')">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="cache-trans"> 启用翻译缓存
-                </label>
+            <div class="action-area">
+                <button class="primary-btn" onclick="startTranslation()">
+                    <i class="fas fa-play"></i>
+                    开始翻译
+                </button>
             </div>
             
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="team-trans"> 团队翻译模式
-                </label>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="excel-output"> 输出至Excel文件
-                </label>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="log-enabled" checked> 启用日志
-                </label>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="half-trans"> 使用翻译至一半的项目
-                </label>
-            </div>
-            
-            <div class="form-group" id="half-trans-path-group" style="display: none;">
-                <label for="half-trans-path">项目路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="half-trans-path" placeholder="选择半翻译项目路径">
-                    <button class="action-btn" onclick="browseFile('half-trans-path')">浏览</button>
+            <div class="progress-container" id="translation-progress" style="display: none;">
+                <div class="progress-info">
+                    <div class="progress-text" id="progress-text">准备开始...</div>
+                    <div class="progress-percent" id="progress-percent">0%</div>
                 </div>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="backup"> 使用上版本备份原文
-                </label>
-            </div>
-            
-            <div class="form-group" id="backup-path-group" style="display: none;">
-                <label for="backup-path">备份路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="backup-path" placeholder="选择备份文件路径">
-                    <button class="action-btn" onclick="browseFile('backup-path')">浏览</button>
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label for="translation-service">翻译服务:</label>
-                <select id="translation-service">
-                    <option value="baidu">百度翻译</option>
-                    <option value="tencent">腾讯翻译</option>
-                    <option value="youdao">有道翻译</option>
-                    <option value="caiyun">彩云翻译</option>
-                    <option value="xiaoniu">小牛翻译</option>
-                    <option value="aliyun">阿里云翻译</option>
-                    <option value="huoshan">火山翻译</option>
-                    <option value="chatgpt">ChatGPT翻译</option>
-                </select>
-            </div>
-            
-            <button class="submit-btn" onclick="startTranslation()">开始翻译</button>
-            
-            <div class="progress-container" id="translation-progress">
                 <div class="progress-bar">
                     <div class="progress-bar-fill" id="progress-fill"></div>
+                    <div class="progress-bar-pulse"></div>
                 </div>
-                <div class="progress-text" id="progress-text">0%</div>
             </div>
         </div>
 
         <!-- 安装汉化界面 -->
         <div id="install-section" class="content-section">
-            <h2 class="section-title">安装已有汉化</h2>
-            
-            <div class="form-group">
-                <label for="install-package-directory">汉化包目录:</label>
-                <div class="input-group">
-                    <input type="text" id="install-package-directory" placeholder="留空则使用程序所在目录">
-                    <button type="button" class="browse-btn" onclick="browseInstallPackageDirectory()">浏览</button>
-                </div>
-                <small>选择存放汉化包的目录，留空则使用程序所在目录</small>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-download"></i>
+                    安装已有汉化
+                </h2>
+                <p class="section-subtitle">选择并安装本地汉化包</p>
             </div>
             
-            <div class="form-group">
-                <label for="install-package-list">可用汉化包:</label>
-                <div class="list-container">
-                    <select id="install-package-list" size="10" style="width: 100%; height: 200px;">
-                        <option value="">未找到可用的汉化包</option>
-                    </select>
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">汉化包目录</h3>
+                    <div class="form-group">
+                        <label for="install-package-directory">汉化包目录:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="install-package-directory" placeholder="留空则使用程序所在目录">
+                            <button type="button" class="action-btn secondary" onclick="browseInstallPackageDirectory()">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                        <small class="form-hint">选择存放汉化包的目录，留空则使用程序所在目录</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="install-package-list">可用汉化包:</label>
+                        <div class="list-container">
+                            <div class="list-header">
+                                <span>包名称</span>
+                                <span>操作</span>
+                            </div>
+                            <div class="list-content" id="install-package-list">
+                                <div class="list-empty">
+                                    <i class="fas fa-box-open"></i>
+                                    <p>未找到可用的汉化包</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button class="action-btn" onclick="refreshInstallPackageList()">
+                            <i class="fas fa-sync-alt"></i> 刷新列表
+                        </button>
+                        <button class="action-btn success" onclick="installSelectedPackage()">
+                            <i class="fas fa-check-circle"></i> 安装选中汉化包
+                        </button>
+                        <button class="action-btn danger" onclick="deleteSelectedPackage()">
+                            <i class="fas fa-trash"></i> 删除选中汉化包
+                        </button>
+                    </div>
                 </div>
-            </div>
-            
-            <div class="form-group" style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button class="action-btn" onclick="refreshInstallPackageList()">刷新列表</button>
-                <button class="action-btn" onclick="installSelectedPackage()">安装选中汉化包</button>
-                <button class="action-btn secondary-btn" onclick="deleteSelectedPackage()">删除选中汉化包</button>
-                <button class="action-btn" onclick="changeFontForPackage()">更换选中汉化包字体</button>
-                <button class="action-btn" onclick="getFontFromInstalled()">从已安装字体中获取文件</button>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">字体管理</h3>
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-font"></i>
+                            </div>
+                            <h4>更换字体</h4>
+                            <p>为选中的汉化包更换字体</p>
+                            <button class="feature-btn" onclick="changeFontForPackage()">
+                                更换字体
+                            </button>
+                        </div>
+                        
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-file-export"></i>
+                            </div>
+                            <h4>导出字体</h4>
+                            <p>从已安装字体中获取文件</p>
+                            <button class="feature-btn" onclick="getFontFromInstalled()">
+                                导出字体
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- OurPlay下载界面 -->
         <div id="ourplay-section" class="content-section">
-            <h2 class="section-title">从ourplay下载汉化</h2>
-            <p>点击下方按钮开始从OurPlay下载最新的汉化包。</p>
-            
-            <div class="form-group">
-                <label for="ourplay-font-option">字体处理选项:</label>
-                <select id="ourplay-font-option">
-                    <option value="keep">保留原字体</option>
-                    <option value="simplify">精简字体</option>
-                    <option value="llc">从零协下载字体</option>
-                </select>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fab fa-google-play"></i>
+                    从ourplay下载汉化
+                </h2>
+                <p class="section-subtitle">下载OurPlay提供的最新汉化包</p>
             </div>
             
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="ourplay-check-hash" checked> 启用哈希校验
-                </label>
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">下载配置</h3>
+                    <div class="form-group">
+                        <label for="ourplay-font-option">字体处理选项:</label>
+                        <div class="select-wrapper">
+                            <select id="ourplay-font-option">
+                                <option value="keep">保留原字体</option>
+                                <option value="simplify">精简字体</option>
+                                <option value="llc">从零协下载字体</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="ourplay-check-hash" checked>
+                            <span class="checkmark"></span>
+                            启用哈希校验
+                        </label>
+                        <small class="form-hint">确保下载文件的完整性</small>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="downloadOurplay()">
+                            <i class="fas fa-download"></i>
+                            下载OurPlay汉化包
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">下载信息</h3>
+                    <div class="info-card">
+                        <div class="info-item">
+                            <i class="fas fa-info-circle"></i>
+                            <div>
+                                <h4>说明</h4>
+                                <p>从OurPlay平台下载最新的汉化包文件</p>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-shield-alt"></i>
+                            <div>
+                                <h4>安全提示</h4>
+                                <p>建议启用哈希校验以确保文件完整性</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            
-            <button class="submit-btn" onclick="downloadOurplay()">下载OurPlay汉化包</button>
         </div>
 
         <!-- 清除缓存界面 -->
         <div id="clean-section" class="content-section">
-            <h2 class="section-title">清除本地缓存</h2>
-            <p>此功能将清除本地的翻译缓存文件，释放磁盘空间。</p>
-            <button class="submit-btn secondary-btn" onclick="cleanCache()">清除缓存</button>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-broom"></i>
+                    清除本地缓存
+                </h2>
+                <p class="section-subtitle">清理临时文件，释放磁盘空间</p>
+            </div>
+            
+            <div class="settings-grid">
+                <div class="setting-card warning">
+                    <div class="warning-header">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>警告</h3>
+                    </div>
+                    <p>此操作将清除本地的翻译缓存文件和临时数据，释放磁盘空间。清除后，下次翻译可能需要重新下载部分数据。</p>
+                    
+                    <div class="action-area">
+                        <button class="danger-btn" onclick="cleanCache()">
+                            <i class="fas fa-trash-alt"></i>
+                            清除缓存
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- 零协下载界面 -->
         <div id="llc-section" class="content-section">
-            <h2 class="section-title">从零协下载汉化</h2>
-            <p>下载零协汉化组提供的汉化包。</p>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="llc-check-hash" checked> 启用哈希校验
-                </label>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-users"></i>
+                    从零协下载汉化
+                </h2>
+                <p class="section-subtitle">下载零协汉化组提供的汉化包</p>
             </div>
             
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="llc-dump-default"> 保存原始文件而不打包
-                </label>
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">下载配置</h3>
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="llc-check-hash" checked>
+                            <span class="checkmark"></span>
+                            启用哈希校验
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="llc-dump-default">
+                            <span class="checkmark"></span>
+                            保存原始文件而不打包
+                        </label>
+                        <small class="form-hint">保存解压后的原始文件而非打包格式</small>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="downloadLLC()">
+                            <i class="fas fa-download"></i>
+                            下载零协汉化包
+                        </button>
+                    </div>
+                </div>
             </div>
-            
-            <button class="submit-btn" onclick="downloadLLC()">下载零协汉化包</button>
         </div>
 
         <!-- 配置API界面 -->
         <div id="config-section" class="content-section">
-            <h2 class="section-title">配置汉化API</h2>
-            <div class="form-group">
-                <label for="api-service">选择翻译服务:</label>
-                <select id="api-service">
-                    <option value="baidu">百度翻译</option>
-                    <option value="tencent">腾讯翻译</option>
-                    <option value="youdao">有道翻译</option>
-                    <option value="caiyun">彩云翻译</option>
-                    <option value="xiaoniu">小牛翻译</option>
-                    <option value="aliyun">阿里云翻译</option>
-                    <option value="huoshan">火山翻译</option>
-                    <option value="chatgpt">ChatGPT翻译</option>
-                </select>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-cog"></i>
+                    配置汉化API
+                </h2>
+                <p class="section-subtitle">配置翻译服务API密钥</p>
             </div>
-            <div class="form-group">
-                <label for="api-key">API密钥:</label>
-                <input type="password" id="api-key" placeholder="输入API密钥">
+            
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">API配置</h3>
+                    <div class="form-group">
+                        <label for="api-service">选择翻译服务:</label>
+                        <div class="select-wrapper">
+                            <select id="api-service">
+                                <option value="baidu">百度翻译</option>
+                                <option value="tencent">腾讯翻译</option>
+                                <option value="youdao">有道翻译</option>
+                                <option value="caiyun">彩云翻译</option>
+                                <option value="xiaoniu">小牛翻译</option>
+                                <option value="aliyun">阿里云翻译</option>
+                                <option value="huoshan">火山翻译</option>
+                                <option value="chatgpt">ChatGPT翻译</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="api-key">API密钥:</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-key"></i>
+                            <input type="password" id="api-key" placeholder="输入API密钥">
+                            <button class="toggle-password" type="button">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="api-secret">密钥密文 (如需要):</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="api-secret" placeholder="输入密钥密文">
+                            <button class="toggle-password" type="button">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="saveAPIConfig()">
+                            <i class="fas fa-save"></i>
+                            保存配置
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">服务状态</h3>
+                    <div class="api-status-grid">
+                        <div class="api-status-item active">
+                            <div class="api-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="api-info">
+                                <h4>百度翻译</h4>
+                                <p>状态正常</p>
+                            </div>
+                        </div>
+                        
+                        <div class="api-status-item">
+                            <div class="api-icon">
+                                <i class="fas fa-circle"></i>
+                            </div>
+                            <div class="api-info">
+                                <h4>腾讯翻译</h4>
+                                <p>未配置</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="api-secret">密钥密文 (如需要):</label>
-                <input type="password" id="api-secret" placeholder="输入密钥密文">
-            </div>
-            <button class="submit-btn" onclick="saveAPIConfig()">保存配置</button>
         </div>
 
         <!-- 专有词汇界面 -->
         <div id="proper-section" class="content-section">
-            <h2 class="section-title">抓取专有词汇</h2>
-            <div class="form-group">
-                <label for="proper-output">输出格式:</label>
-                <select id="proper-output">
-                    <option value="json">JSON格式</option>
-                    <option value="single">单文件格式</option>
-                    <option value="double">双文件格式</option>
-                </select>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-book"></i>
+                    抓取专有词汇
+                </h2>
+                <p class="section-subtitle">从文本中提取专有名词和术语</p>
             </div>
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="proper-skip-space"> 跳过含空格的词汇
-                </label>
+            
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">抓取配置</h3>
+                    <div class="form-group">
+                        <label for="proper-output">输出格式:</label>
+                        <div class="select-wrapper">
+                            <select id="proper-output">
+                                <option value="json">JSON格式</option>
+                                <option value="single">单文件格式</option>
+                                <option value="double">双文件格式</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="proper-skip-space">
+                            <span class="checkmark"></span>
+                            跳过含空格的词汇
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="proper-max-count">最大词汇数量:</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-hashtag"></i>
+                            <input type="number" id="proper-max-count" placeholder="例如：100">
+                        </div>
+                        <small class="form-hint">留空表示无限制</small>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="fetchProperNouns()">
+                            <i class="fas fa-search"></i>
+                            抓取专有词汇
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="proper-max-count">最大词汇数量 (留空表示无限制):</label>
-                <input type="number" id="proper-max-count" placeholder="例如：100">
-            </div>
-            <button class="submit-btn" onclick="fetchProperNouns()">抓取专有词汇</button>
         </div>
 
         <!-- 文本搜索界面 -->
         <div id="search-section" class="content-section">
-            <h2 class="section-title">进行文本搜索</h2>
-            <div class="form-group">
-                <label for="search-keyword">搜索关键词:</label>
-                <input type="text" id="search-keyword" placeholder="输入要搜索的文本">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-search"></i>
+                    进行文本搜索
+                </h2>
+                <p class="section-subtitle">在游戏文件中搜索指定文本</p>
             </div>
-            <div class="form-group">
-                <label for="search-path">搜索路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="search-path" placeholder="留空则搜索整个游戏目录">
-                    <button class="action-btn" onclick="browseFolder('search-path')">浏览</button>
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="search-case-sensitive"> 区分大小写
-                </label>
-            </div>
-            <button class="submit-btn" onclick="searchText()">开始搜索</button>
             
-            <div id="search-results" class="log-container" style="margin-top: 20px; height: 300px;">
-                <div class="log-entry">
-                    <span class="log-timestamp">[提示]</span>
-                    <span class="log-message">搜索结果将显示在这里</span>
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">搜索设置</h3>
+                    <div class="form-group">
+                        <label for="search-keyword">搜索关键词:</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="search-keyword" placeholder="输入要搜索的文本">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="search-path">搜索路径:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="search-path" placeholder="留空则搜索整个游戏目录">
+                            <button class="action-btn secondary" onclick="browseFolder('search-path')">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="search-case-sensitive">
+                            <span class="checkmark"></span>
+                            区分大小写
+                        </label>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="searchText()">
+                            <i class="fas fa-search"></i>
+                            开始搜索
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">搜索结果</h3>
+                    <div class="search-results" id="search-results">
+                        <div class="results-placeholder">
+                            <i class="fas fa-search"></i>
+                            <p>搜索结果将显示在这里</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- 备份原文界面 -->
         <div id="backup-section" class="content-section">
-            <h2 class="section-title">备份原文</h2>
-            <div class="form-group">
-                <label for="backup-source">源文件路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="backup-source" placeholder="选择要备份的原文文件或目录">
-                    <button class="action-btn" onclick="browseFile('backup-source')">浏览</button>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-save"></i>
+                    备份原文
+                </h2>
+                <p class="section-subtitle">备份游戏原始文件</p>
+            </div>
+            
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">备份设置</h3>
+                    <div class="form-group">
+                        <label for="backup-source">源文件路径:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="backup-source" placeholder="选择要备份的原文文件或目录">
+                            <button class="action-btn secondary" onclick="browseFile('backup-source')">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="backup-destination">备份保存路径:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="backup-destination" placeholder="选择备份保存位置">
+                            <button class="action-btn secondary" onclick="browseFolder('backup-destination')">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="backupText()">
+                            <i class="fas fa-save"></i>
+                            开始备份
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="form-group">
-                <label for="backup-destination">备份保存路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="backup-destination" placeholder="选择备份保存位置">
-                    <button class="action-btn" onclick="browseFolder('backup-destination')">浏览</button>
-                </div>
-            </div>
-            <button class="submit-btn" onclick="backupText()">开始备份</button>
         </div>
 
         <!-- 资源管理界面 -->
         <div id="assets-section" class="content-section">
-            <h2 class="section-title">资源管理</h2>
-            <p>管理游戏资源文件</p>
-            <div class="grid-container">
-                <div class="card">
-                    <h3>字体管理</h3>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-folder"></i>
+                    资源管理
+                </h2>
+                <p class="section-subtitle">管理游戏资源文件</p>
+            </div>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-font"></i>
+                    </div>
+                    <h4>字体管理</h4>
                     <p>管理游戏字体资源</p>
-                    <button class="action-btn" onclick="manageFonts()">管理字体</button>
+                    <button class="feature-btn" onclick="manageFonts()">
+                        <i class="fas fa-cog"></i> 管理字体
+                    </button>
                 </div>
-                <div class="card">
-                    <h3>图片资源</h3>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-image"></i>
+                    </div>
+                    <h4>图片资源</h4>
                     <p>管理游戏图片资源</p>
-                    <button class="action-btn" onclick="manageImages()">管理图片</button>
+                    <button class="feature-btn" onclick="manageImages()">
+                        <i class="fas fa-cog"></i> 管理图片
+                    </button>
                 </div>
-                <div class="card">
-                    <h3>音频资源</h3>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-music"></i>
+                    </div>
+                    <h4>音频资源</h4>
                     <p>管理游戏音频资源</p>
-                    <button class="action-btn" onclick="manageAudio()">管理音频</button>
+                    <button class="feature-btn" onclick="manageAudio()">
+                        <i class="fas fa-cog"></i> 管理音频
+                    </button>
                 </div>
             </div>
         </div>
 
         <!-- 黑影图调色界面 -->
         <div id="lighter-section" class="content-section">
-            <h2 class="section-title">黑影图调色</h2>
-            <p>调整游戏图片亮度和对比度</p>
-            <div class="form-group">
-                <label for="image-path">选择图片:</label>
-                <div class="file-input-group">
-                    <input type="text" id="image-path" placeholder="选择要调整的图片文件">
-                    <button class="action-btn" onclick="browseFile('image-path')">浏览</button>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-adjust"></i>
+                    黑影图调色
+                </h2>
+                <p class="section-subtitle">调整游戏图片亮度和对比度</p>
+            </div>
+            
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">图片选择</h3>
+                    <div class="form-group">
+                        <label for="image-path">选择图片:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="image-path" placeholder="选择要调整的图片文件">
+                            <button class="action-btn secondary" onclick="browseFile('image-path')">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="image-preview" id="image-preview">
+                        <div class="preview-placeholder">
+                            <i class="fas fa-image"></i>
+                            <p>选择图片后预览将显示在这里</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">调整参数</h3>
+                    <div class="form-group">
+                        <label for="brightness">亮度: <span id="brightness-value">0</span></label>
+                        <div class="slider-container">
+                            <input type="range" id="brightness" min="-100" max="100" value="0" oninput="updateValue('brightness')">
+                            <div class="slider-ticks">
+                                <span>-100</span>
+                                <span>0</span>
+                                <span>100</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="contrast">对比度: <span id="contrast-value">0</span></label>
+                        <div class="slider-container">
+                            <input type="range" id="contrast" min="-100" max="100" value="0" oninput="updateValue('contrast')">
+                            <div class="slider-ticks">
+                                <span>-100</span>
+                                <span>0</span>
+                                <span>100</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="adjustImage()">
+                            <i class="fas fa-magic"></i>
+                            调整图片
+                        </button>
+                        <button class="secondary-btn">
+                            <i class="fas fa-undo"></i>
+                            重置
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="form-group">
-                <label for="brightness">亮度: <span id="brightness-value">0</span></label>
-                <input type="range" id="brightness" min="-100" max="100" value="0" oninput="updateValue('brightness')">
-            </div>
-            <div class="form-group">
-                <label for="contrast">对比度: <span id="contrast-value">0</span></label>
-                <input type="range" id="contrast" min="-100" max="100" value="0" oninput="updateValue('contrast')">
-            </div>
-            <button class="submit-btn" onclick="adjustImage()">调整图片</button>
         </div>
 
         <!-- 抽卡概率计算界面 -->
         <div id="calculate-section" class="content-section">
-            <h2 class="section-title">抽卡概率计算</h2>
-            <p>计算游戏抽卡系统相关概率</p>
-            <div class="form-group">
-                <label for="total-items">总物品数:</label>
-                <input type="number" id="total-items" value="100" min="1">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-calculator"></i>
+                    抽卡概率计算
+                </h2>
+                <p class="section-subtitle">计算游戏抽卡系统相关概率</p>
             </div>
-            <div class="form-group">
-                <label for="rare-items">稀有物品数:</label>
-                <input type="number" id="rare-items" value="5" min="1">
-            </div>
-            <div class="form-group">
-                <label for="draw-count">抽取次数:</label>
-                <input type="number" id="draw-count" value="10" min="1">
-            </div>
-            <button class="submit-btn" onclick="calculateGacha()">计算概率</button>
             
-            <div id="calculation-results" class="log-container" style="margin-top: 20px; height: 200px;">
-                <div class="log-entry">
-                    <span class="log-timestamp">[结果]</span>
-                    <span class="log-message">计算结果将显示在这里</span>
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">计算参数</h3>
+                    <div class="form-group">
+                        <label for="total-items">总物品数:</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-boxes"></i>
+                            <input type="number" id="total-items" value="100" min="1">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="rare-items">稀有物品数:</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-gem"></i>
+                            <input type="number" id="rare-items" value="5" min="1">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="draw-count">抽取次数:</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-redo"></i>
+                            <input type="number" id="draw-count" value="10" min="1">
+                        </div>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="calculateGacha()">
+                            <i class="fas fa-calculator"></i>
+                            计算概率
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">计算结果</h3>
+                    <div class="calculation-results" id="calculation-results">
+                        <div class="results-placeholder">
+                            <i class="fas fa-chart-pie"></i>
+                            <p>点击计算后结果将显示在这里</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- 关于界面 -->
         <div id="about-section" class="content-section">
-            <h2 class="section-title">关于 LCTA</h2>
-            <div class="card">
-                <h3>LCTA - 边狱公司汉化工具箱</h3>
-                <p><strong>版本:</strong> 3.1.0</p>
-                <p><strong>描述:</strong> 一个用于自动翻译《边狱公司》游戏内容的工具，支持多种翻译API和汉化包管理。</p>
-                <p><strong>功能:</strong></p>
-                <ul style="margin-left: 20px; margin-top: 10px;">
-                    <li>自动翻译游戏文本</li>
-                    <li>支持多种翻译API</li>
-                    <li>汉化包安装与管理</li>
-                    <li>从多个来源下载汉化</li>
-                    <li>文本搜索与备份</li>
-                    <li>丰富的辅助工具</li>
-                </ul>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-info-circle"></i>
+                    关于 LCTA
+                </h2>
+                <p class="section-subtitle">边狱公司汉化工具箱</p>
+            </div>
+            
+            <div class="about-container">
+                <div class="about-card">
+                    <div class="about-header">
+                        <div class="about-logo">
+                            <i class="fas fa-language"></i>
+                        </div>
+                        <div class="about-title">
+                            <h3>LCTA - 边狱公司汉化工具箱</h3>
+                            <p class="version-badge">版本 3.1.0</p>
+                        </div>
+                    </div>
+                    
+                    <div class="about-content">
+                        <p class="description">一个用于自动翻译《边狱公司》游戏内容的工具，支持多种翻译API和汉化包管理。</p>
+                        
+                        <div class="feature-list">
+                            <h4>主要功能</h4>
+                            <ul>
+                                <li><i class="fas fa-check"></i> 自动翻译游戏文本</li>
+                                <li><i class="fas fa-check"></i> 支持多种翻译API</li>
+                                <li><i class="fas fa-check"></i> 汉化包安装与管理</li>
+                                <li><i class="fas fa-check"></i> 从多个来源下载汉化</li>
+                                <li><i class="fas fa-check"></i> 文本搜索与备份</li>
+                                <li><i class="fas fa-check"></i> 丰富的辅助工具</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="about-footer">
+                            <div class="contact-info">
+                                <h4>联系信息</h4>
+                                <p><i class="fas fa-envelope"></i> 邮箱: support@example.com</p>
+                                <p><i class="fas fa-globe"></i> 网站: https://example.com</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- 日志界面 -->
         <div id="log-section" class="content-section">
-            <h2 class="section-title">日志</h2>
-            <div id="log-display" class="log-container">
-                <div class="log-entry">
-                    <span class="log-timestamp">[2025-01-01 12:00:00]</span>
-                    <span class="log-message">系统已启动，准备就绪</span>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-clipboard-list"></i>
+                    日志
+                </h2>
+                <p class="section-subtitle">查看系统运行日志</p>
+            </div>
+            
+            <div class="log-container">
+                <div class="log-controls">
+                    <button class="log-control-btn active">全部</button>
+                    <button class="log-control-btn">信息</button>
+                    <button class="log-control-btn">警告</button>
+                    <button class="log-control-btn">错误</button>
+                    <div class="log-control-spacer"></div>
+                    <button class="log-control-btn">
+                        <i class="fas fa-trash-alt"></i> 清空
+                    </button>
+                    <button class="log-control-btn">
+                        <i class="fas fa-download"></i> 导出
+                    </button>
+                </div>
+                
+                <div class="log-display" id="log-display">
+                    <div class="log-entry info">
+                        <div class="log-timestamp">[2025-01-01 12:00:00]</div>
+                        <div class="log-level">[INFO]</div>
+                        <div class="log-message">系统已启动，准备就绪</div>
+                    </div>
                 </div>
             </div>
         </div>
         
         <!-- 设置界面 -->
         <div id="settings-section" class="content-section">
-            <h2 class="section-title">设置</h2>
-            <div class="form-group">
-                <label for="game-path">游戏路径:</label>
-                <div class="file-input-group">
-                    <input type="text" id="game-path" placeholder="选择游戏安装路径">
-                    <button class="action-btn" onclick="browseFolder('game-path')">浏览</button>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-sliders-h"></i>
+                    设置
+                </h2>
+                <p class="section-subtitle">程序配置与选项</p>
+            </div>
+            
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">程序设置</h3>
+                    <div class="form-group">
+                        <label for="game-path">游戏路径:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="game-path" placeholder="选择游戏安装路径">
+                            <button class="action-btn secondary" onclick="browseFolder('game-path')">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="debug-mode">
+                            <span class="checkmark"></span>
+                            启用调试模式
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="auto-check-update" checked>
+                            <span class="checkmark"></span>
+                            启动时自动检查更新
+                        </label>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="saveSettings()">
+                            <i class="fas fa-save"></i>
+                            保存设置
+                        </button>
+                    </div>
                 </div>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="debug-mode"> 启用调试模式
-                </label>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="auto-check-update" checked> 启动时自动检查更新
-                </label>
-            </div>
-            
-            <button class="submit-btn" onclick="saveSettings()">保存设置</button>
-            
-            <div class="form-group" style="margin-top: 30px;">
-                <h3>更新操作</h3>
-                <button class="action-btn" onclick="manualCheckUpdates()">检查更新</button>
-            </div>
-            
-            <div class="form-group" style="margin-top: 30px;">
-                <h3>配置文件操作</h3>
-                <button class="action-btn" onclick="useDefaultConfig()">使用默认配置</button>
-                <button class="secondary-btn" onclick="resetConfig()" style="margin-left: 10px;">重置配置</button>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">配置操作</h3>
+                    <div class="action-grid">
+                        <button class="action-btn" onclick="useDefaultConfig()">
+                            <i class="fas fa-file-alt"></i>
+                            使用默认配置
+                        </button>
+                        <button class="action-btn danger" onclick="resetConfig()">
+                            <i class="fas fa-redo"></i>
+                            重置配置
+                        </button>
+                    </div>
+                    
+                    <div class="action-grid">
+                        <button class="action-btn" onclick="manualCheckUpdates()">
+                            <i class="fas fa-sync-alt"></i>
+                            检查更新
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- 模态窗口容器 -->
     <div id="modal-container"></div>
+
+    <!-- 最小化窗口容器 -->
+    <div id="minimized-container"></div>
 
     <script src="script.js"></script>
 </body>

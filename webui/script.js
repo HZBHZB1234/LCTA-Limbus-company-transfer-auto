@@ -1,3 +1,178 @@
+// 主题管理
+class ThemeManager {
+    constructor() {
+        this.currentTheme = localStorage.getItem('lcta-theme') || 'light';
+        this.isTransitioning = false; // 添加过渡状态标志
+        this.pendingTheme = null; // 存储待处理的主题
+        this.debounceTimer = null; // 防抖计时器
+        this.debounceDelay = 300; // 防抖延迟时间
+        this.init();
+    }
+    
+    init() {
+        // 设置初始主题
+        this.setTheme(this.currentTheme, true); // 初始化时不使用防抖
+        
+        // 绑定主题按钮事件
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const theme = e.target.dataset.theme || e.target.closest('.theme-btn').dataset.theme;
+                this.setThemeWithDebounce(theme);
+            });
+        });
+    }
+    
+    // 带防抖功能的主题设置方法
+    setThemeWithDebounce(theme) {
+        // 添加视觉反馈
+        const clickedBtn = [...document.querySelectorAll('.theme-btn')].find(btn => btn.dataset.theme === theme);
+        if (clickedBtn) {
+            clickedBtn.classList.add('changing');
+            setTimeout(() => {
+                clickedBtn.classList.remove('changing');
+            }, 300);
+        }
+        
+        // 清除之前的定时器
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+        }
+        
+        // 设置新的定时器
+        this.debounceTimer = setTimeout(() => {
+            this.setTheme(theme);
+        }, this.debounceDelay);
+    }
+    
+    setTheme(theme, skipDebounce = false) {
+        // 如果正在过渡中，存储待处理的主题
+        if (this.isTransitioning) {
+            this.pendingTheme = theme;
+            return;
+        }
+        
+        // 如果点击的是当前主题，直接返回
+        if (this.currentTheme === theme) {
+            return;
+        }
+        
+        // 设置过渡状态
+        this.isTransitioning = true;
+        document.body.classList.add('theme-transition');
+        
+        // 移除所有主题类
+        document.body.classList.remove('theme-light', 'theme-dark', 'theme-purple');
+        
+        // 添加新主题类
+        document.body.classList.add(`theme-${theme}`);
+        
+        // 更新当前主题
+        this.currentTheme = theme;
+        
+        // 保存到本地存储
+        localStorage.setItem('lcta-theme', theme);
+        
+        // 更新按钮状态
+        this.updateThemeButtons(theme);
+        
+        // 添加主题切换动画
+        this.addThemeTransition();
+    }
+    
+    updateThemeButtons(theme) {
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            if (btn.dataset.theme === theme) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    }
+    
+    addThemeTransition() {
+        // 使用setTimeout确保样式变化能够正确触发过渡动画
+        setTimeout(() => {
+            // 移除过渡效果
+            document.body.classList.remove('theme-transition');
+            this.isTransitioning = false;
+            
+            // 如果有待处理的主题，处理它
+            if (this.pendingTheme && this.pendingTheme !== this.currentTheme) {
+                const pendingTheme = this.pendingTheme;
+                this.pendingTheme = null;
+                this.setTheme(pendingTheme);
+            }
+        }, 300);
+    }
+}
+
+// 动画管理器
+class AnimationManager {
+    static fadeIn(element, duration = 150) { // 默认加快动画速度
+        element.style.opacity = 0;
+        element.style.display = 'block';
+        
+        let start = null;
+        const animate = (timestamp) => {
+            if (!start) start = timestamp;
+            const progress = timestamp - start;
+            const opacity = Math.min(progress / duration, 1);
+            
+            element.style.opacity = opacity;
+            
+            if (progress < duration) {
+                requestAnimationFrame(animate);
+            }
+        };
+        
+        requestAnimationFrame(animate);
+    }
+    
+    static fadeOut(element, duration = 150) { // 默认加快动画速度
+        let start = null;
+        const animate = (timestamp) => {
+            if (!start) start = timestamp;
+            const progress = timestamp - start;
+            const opacity = 1 - Math.min(progress / duration, 1);
+            
+            element.style.opacity = opacity;
+            
+            if (progress < duration) {
+                requestAnimationFrame(animate);
+            } else {
+                element.style.display = 'none';
+                element.style.opacity = 1;
+            }
+        };
+        
+        requestAnimationFrame(animate);
+    }
+    
+    static slideIn(element, from = 'left', duration = 150) { // 默认加快动画速度
+        const direction = from === 'left' ? '-100%' : '100%';
+        element.style.transform = `translateX(${direction})`;
+        element.style.display = 'block';
+        
+        let start = null;
+        const animate = (timestamp) => {
+            if (!start) start = timestamp;
+            const progress = timestamp - start;
+            const percentage = Math.min(progress / duration, 1);
+            
+            element.style.transform = `translateX(${parseInt(direction) * (1 - percentage)}%)`;
+            
+            if (progress < duration) {
+                requestAnimationFrame(animate);
+            }
+        };
+        
+        requestAnimationFrame(animate);
+    }
+}
+
+// 初始化主题管理器
+let themeManager;
+
 // 存储所有模态窗口的数组
 let modalWindows = [];
 
@@ -22,63 +197,139 @@ function ensureMinimizedContainer() {
         container.style.bottom = '20px';
         container.style.right = '20px';
         container.style.display = 'flex';
-        container.style.flexDirection = 'row';
+        container.style.flexDirection = 'column';
         container.style.gap = '10px';
         container.style.zIndex = '999';
-        container.style.flexWrap = 'wrap';
-        container.style.justifyContent = 'flex-end';
-        container.style.alignItems = 'flex-end';
-        container.style.maxWidth = 'calc(300px * 3 + 10px * 2)'; // 限制最大宽度为三个窗口加间隙
         document.body.appendChild(container);
     }
     return container;
 }
 
 // 切换侧边栏按钮激活状态
-document.querySelectorAll('.sidebar button').forEach(button => {
-    button.addEventListener('click', () => {
-        // 移除所有按钮的active类
-        document.querySelectorAll('.sidebar button').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        
-        // 添加active类到当前按钮
-        button.classList.add('active');
-        
-        // 隐藏所有内容区域
-        document.querySelectorAll('.content-section').forEach(section => {
-            section.classList.remove('active');
-        });
-        
-        // 显示对应的内容区域
-        const sectionId = button.id.replace('-btn', '-section');
-        const section = document.getElementById(sectionId);
-        if (section) {
-            section.classList.add('active');
+function initNavigation() {
+    document.querySelectorAll('.nav-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            // 如果点击的是已经激活的按钮，则不执行任何操作
+            if (button.classList.contains('active')) {
+                return;
+            }
             
-            // 如果是设置界面，加载设置
-            if (sectionId === 'settings-section') {
-                loadSettings();
+            // 移除所有按钮的active类
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // 移除所有指示器
+            document.querySelectorAll('.nav-indicator').forEach(indicator => {
+                indicator.remove();
+            });
+            
+            // 添加active类到当前按钮
+            button.classList.add('active');
+            
+            // 添加指示器
+            const indicator = document.createElement('div');
+            indicator.className = 'nav-indicator';
+            button.appendChild(indicator);
+            
+            // 隐藏所有内容区域
+            document.querySelectorAll('.content-section').forEach(section => {
+                if (section.classList.contains('active')) {
+                    AnimationManager.fadeOut(section, 150); // 加快动画速度
+                    setTimeout(() => {
+                        section.classList.remove('active');
+                    }, 150); // 加快动画速度
+                }
+            });
+            
+            // 显示对应的内容区域
+            const sectionId = button.id.replace('-btn', '-section');
+            const section = document.getElementById(sectionId);
+            if (section) {
+                setTimeout(() => {
+                    section.classList.add('active');
+                    AnimationManager.fadeIn(section, 150); // 加快动画速度
+                    
+                    // 如果是设置界面，加载设置
+                    if (sectionId === 'settings-section') {
+                        loadSettings();
+                    }
+                    
+                    // 如果是日志界面，滚动到底部
+                    if (sectionId === 'log-section') {
+                        scrollLogToBottom();
+                    }
+                }, 150); // 加快动画速度
+            }
+        });
+    });
+}
+
+// 滚动日志到底部
+function scrollLogToBottom() {
+    const logDisplay = document.getElementById('log-display');
+    if (logDisplay) {
+        setTimeout(() => {
+            logDisplay.scrollTop = logDisplay.scrollHeight;
+        }, 100);
+    }
+}
+
+// 复选框逻辑
+function initCheckboxes() {
+    document.getElementById('custom-script')?.addEventListener('change', function() {
+        const group = document.getElementById('script-path-group');
+        if (group) {
+            if (this.checked) {
+                AnimationManager.fadeIn(group);
+            } else {
+                AnimationManager.fadeOut(group);
             }
         }
     });
-});
 
-// 复选框逻辑
-document.getElementById('custom-script').addEventListener('change', function() {
-    const group = document.getElementById('script-path-group');
-    group.style.display = this.checked ? 'block' : 'none';
-});
+    document.getElementById('half-trans')?.addEventListener('change', function() {
+        const group = document.getElementById('half-trans-path-group');
+        if (group) {
+            if (this.checked) {
+                AnimationManager.fadeIn(group);
+            } else {
+                AnimationManager.fadeOut(group);
+            }
+        }
+    });
 
-document.getElementById('half-trans').addEventListener('change', function() {
-    const group = document.getElementById('half-trans-path-group');
-    group.style.display = this.checked ? 'block' : 'none';
-});
+    document.getElementById('backup')?.addEventListener('change', function() {
+        const group = document.getElementById('backup-path-group');
+        if (group) {
+            if (this.checked) {
+                AnimationManager.fadeIn(group);
+            } else {
+                AnimationManager.fadeOut(group);
+            }
+        }
+    });
+}
 
-document.getElementById('backup').addEventListener('change', function() {
-    const group = document.getElementById('backup-path-group');
-    group.style.display = this.checked ? 'block' : 'none';
-});
+// 密码显示/隐藏切换
+function initPasswordToggles() {
+    document.querySelectorAll('.toggle-password').forEach(button => {
+        button.addEventListener('click', function() {
+            const input = this.parentElement.querySelector('input');
+            const icon = this.querySelector('i');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        });
+    });
+}
 
 // 浏览文件函数
 function browseFile(inputId) {
@@ -95,10 +346,21 @@ function browsePackageDirectory() {
         // 更新配置
         const packageDirInput = document.getElementById('package-directory');
         if (packageDirInput && packageDirInput.value) {
-            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value);
-            // 刷新汉化包列表
-            refreshPackageList();
+            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value)
+                .then(function(success) {
+                    if (success) {
+                        // 刷新汉化包列表
+                        refreshPackageList();
+                    } else {
+                        showMessage('错误', '更新配置失败');
+                    }
+                })
+                .catch(function(error) {
+                    showMessage('错误', '更新配置时发生错误: ' + error);
+                });
         }
+    }).catch(function(error) {
+        showMessage('错误', '浏览文件夹时发生错误: ' + error);
     });
 }
 
@@ -108,10 +370,21 @@ function browseInstallPackageDirectory() {
         // 更新配置
         const packageDirInput = document.getElementById('install-package-directory');
         if (packageDirInput && packageDirInput.value) {
-            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value);
-            // 刷新汉化包列表
-            refreshInstallPackageList();
+            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value)
+                .then(function(success) {
+                    if (success) {
+                        // 刷新汉化包列表
+                        refreshInstallPackageList();
+                    } else {
+                        showMessage('错误', '更新配置失败');
+                    }
+                })
+                .catch(function(error) {
+                    showMessage('错误', '更新配置时发生错误: ' + error);
+                });
         }
+    }).catch(function(error) {
+        showMessage('错误', '浏览文件夹时发生错误: ' + error);
     });
 }
 
@@ -122,20 +395,20 @@ class ModalWindow {
         this.title = title;
         this.isMinimized = false;
         this.isCompleted = false;
-        this.isPaused = false;  // 添加暂停状态
+        this.isPaused = false;
         this.options = {
             showProgress: false,
             showCancelButton: true,
-            showPauseButton: false,  // 添加暂停按钮选项
+            showPauseButton: false,
             cancelButtonText: '取消',
-            pauseButtonText: '暂停',  // 添加暂停按钮文本
-            resumeButtonText: '继续', // 添加恢复按钮文本
+            pauseButtonText: '暂停',
+            resumeButtonText: '继续',
             confirmButtonText: '确定',
-            showMinimizeButton: true,  // 默认显示最小化按钮
-            showLog: true,  // 默认显示日志区域
-            onCancel: null,  // 添加取消回调函数
-            onPause: null,   // 添加暂停回调函数
-            onResume: null,  // 添加恢复回调函数
+            showMinimizeButton: true,
+            showLog: true,
+            onCancel: null,
+            onPause: null,
+            onResume: null,
             ...options
         };
         this.createModal();
@@ -147,6 +420,13 @@ class ModalWindow {
         
         this.element = document.createElement('div');
         this.element.className = 'modal-overlay';
+        
+        // 获取当前主题以便应用正确的样式
+        const currentTheme = document.body.classList.contains('theme-dark') ? 'theme-dark' :
+                           document.body.classList.contains('theme-purple') ? 'theme-purple' : 'theme-light';
+        
+        this.element.classList.add(currentTheme);
+        
         this.element.innerHTML = `
             <div class="modal-window">
                 <div class="modal-header">
@@ -179,11 +459,9 @@ class ModalWindow {
     
     getFooterButtons() {
         let buttons = '';
-        // 添加暂停按钮（如果启用）
         if (this.options.showPauseButton) {
             buttons += `<button class="action-btn" id="pause-btn-${this.id}">${this.options.pauseButtonText}</button>`;
         }
-        // 添加取消/完成按钮（如果启用）
         if (this.options.showCancelButton) {
             buttons += `<button class="action-btn" id="cancel-btn-${this.id}">${this.options.cancelButtonText}</button>`;
         }
@@ -195,7 +473,6 @@ class ModalWindow {
             this.close();
         });
         
-        // 只有当显示最小化按钮时才绑定最小化事件
         if (this.options.showMinimizeButton) {
             document.getElementById(`minimize-btn-${this.id}`).addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -203,7 +480,6 @@ class ModalWindow {
             });
         }
         
-        // 绑定暂停按钮事件（如果启用）
         if (this.options.showPauseButton) {
             document.getElementById(`pause-btn-${this.id}`).addEventListener('click', () => {
                 if (this.isPaused) {
@@ -214,7 +490,6 @@ class ModalWindow {
             });
         }
         
-        // 绑定取消/完成按钮事件
         if (this.options.showCancelButton) {
             document.getElementById(`cancel-btn-${this.id}`).addEventListener('click', () => {
                 if (this.isCompleted) {
@@ -229,22 +504,17 @@ class ModalWindow {
     setStatus(status) {
         const statusElement = document.getElementById(`modal-status-${this.id}`);
         if (statusElement) {
-            // 处理换行符，将 \n 转换为 <br> 标签
             if (typeof status === 'string' && status.includes('\n')) {
                 statusElement.innerHTML = status.replace(/\n/g, '<br>');
             } else {
                 statusElement.textContent = status;
             }
         }
-        // 同步更新到日志页面
         addLogMessage(`[${this.title}] ${status}`);
-        
-        // 同步更新到最小化窗口状态（如果已最小化）
         this.updateMinimizedStatus(status);
     }
     
     addLog(message) {
-        // 只有当显示日志区域时才添加日志
         if (this.options.showLog) {
             const logElement = document.getElementById(`modal-log-${this.id}`);
             if (logElement) {
@@ -257,7 +527,6 @@ class ModalWindow {
                 logElement.scrollTop = logElement.scrollHeight;
             }
         }
-        // 同步更新到日志页面
         addLogMessage(`[${this.title}] ${message}`);
     }
     
@@ -277,12 +546,27 @@ class ModalWindow {
         if (progressFill) {
             progressFill.style.width = percent + '%';
         }
-        // 同步更新到日志页面
+        
         if (text) {
             addLogMessage(`[${this.title}] ${text}`);
         }
         
-        // 同步更新到最小化窗口进度条（如果已最小化）
+        // 更新主界面的进度条
+        const mainProgressFill = document.getElementById('progress-fill');
+        const mainProgressPercent = document.getElementById('progress-percent');
+        const mainProgressText = document.getElementById('progress-text');
+        const progressContainer = document.getElementById('translation-progress');
+        
+        if (mainProgressFill && mainProgressPercent) {
+            mainProgressFill.style.width = percent + '%';
+            mainProgressPercent.textContent = percent + '%';
+            progressContainer.style.display = 'block';
+        }
+        
+        if (mainProgressText && text) {
+            mainProgressText.textContent = text;
+        }
+        
         this.syncProgressToMinimized(percent);
     }
     
@@ -293,17 +577,14 @@ class ModalWindow {
             cancelButton.textContent = '完成';
         }
         
-        // 如果当前是暂停状态，则恢复按钮为"完成"
         const pauseButton = document.getElementById(`pause-btn-${this.id}`);
         if (pauseButton) {
             pauseButton.textContent = '完成';
         }
         
-        // 更新最小化窗口状态为已完成
         this.updateMinimizedStatus('已完成');
     }
     
-    // 添加暂停方法
     pause() {
         if (this.isCompleted) return;
         
@@ -316,13 +597,11 @@ class ModalWindow {
         this.setStatus('已暂停');
         this.addLog('操作已暂停');
         
-        // 调用暂停回调函数（如果提供）
         if (this.options.onPause && typeof this.options.onPause === 'function') {
             this.options.onPause(this.id);
         }
     }
     
-    // 添加恢复方法
     resume() {
         if (this.isCompleted) return;
         
@@ -335,18 +614,15 @@ class ModalWindow {
         this.setStatus('正在恢复...');
         this.addLog('操作已恢复');
         
-        // 调用恢复回调函数（如果提供）
         if (this.options.onResume && typeof this.options.onResume === 'function') {
             this.options.onResume(this.id);
         }
     }
     
     cancel() {
-        // 如果提供了取消回调函数，则执行它
         if (this.options.onCancel && typeof this.options.onCancel === 'function') {
             this.options.onCancel(this.id);
         }
-        // 取消操作的逻辑可以在具体的实现中定义
         this.close();
     }
     
@@ -354,11 +630,8 @@ class ModalWindow {
         if (this.isMinimized) return;
         
         this.isMinimized = true;
-        
-        // 确保最小化容器存在
         const minimizedContainer = ensureMinimizedContainer();
         
-        // 创建最小化窗口
         const minimizedElement = document.createElement('div');
         minimizedElement.className = 'minimized-modal';
         minimizedElement.id = `minimized-${this.id}`;
@@ -374,16 +647,12 @@ class ModalWindow {
             </div>
         `;
         
-        // 添加点击恢复事件
         minimizedElement.addEventListener('click', (e) => {
             e.stopPropagation();
             this.restoreFromMinimized();
         });
         
-        // 将最小化窗口添加到容器中
         minimizedContainer.appendChild(minimizedElement);
-        
-        // 隐藏原始模态窗口
         this.element.style.display = 'none';
     }
     
@@ -391,30 +660,27 @@ class ModalWindow {
         if (!this.isMinimized) return;
         
         this.isMinimized = false;
-        
-        // 删除最小化窗口
         const minimizedElement = document.getElementById(`minimized-${this.id}`);
         if (minimizedElement) {
             minimizedElement.remove();
         }
         
-        // 显示原始模态窗口
         this.element.style.display = 'flex';
     }
     
     close() {
-        // 从modalWindows数组中移除
         const index = modalWindows.indexOf(this);
         if (index > -1) {
             modalWindows.splice(index, 1);
         }
         
-        // 删除元素
         if (this.element) {
-            this.element.remove();
+            AnimationManager.fadeOut(this.element);
+            setTimeout(() => {
+                this.element.remove();
+            }, 300);
         }
         
-        // 删除最小化的元素（如果存在）
         const minimizedElement = document.getElementById(`minimized-${this.id}`);
         if (minimizedElement) {
             minimizedElement.remove();
@@ -440,19 +706,18 @@ class ModalWindow {
     }
 }
 
-// 消息模态窗口类 - 继承自基类
+// 消息模态窗口类
 class MessageModal extends ModalWindow {
     constructor(title, message, onCloseCallback = null) {
         super(title, {
             showProgress: false,
             showCancelButton: true,
             cancelButtonText: '确定',
-            showMinimizeButton: false,  // 不显示最小化按钮
-            showLog: false  // 不显示日志区域
+            showMinimizeButton: false,
+            showLog: false
         });
         
         this.onCloseCallback = onCloseCallback;
-        
         this.setStatus(message);
         this.setupMessageButton();
     }
@@ -461,11 +726,9 @@ class MessageModal extends ModalWindow {
         const cancelButton = document.getElementById(`cancel-btn-${this.id}`);
         if (cancelButton) {
             cancelButton.textContent = '确定';
-            // 移除所有现有的事件监听器
             const newCancelButton = cancelButton.cloneNode(true);
             document.getElementById(`modal-footer-${this.id}`).replaceChild(newCancelButton, cancelButton);
             
-            // 添加新的点击事件
             newCancelButton.addEventListener('click', () => {
                 this.close();
                 if (this.onCloseCallback && typeof this.onCloseCallback === 'function') {
@@ -476,15 +739,15 @@ class MessageModal extends ModalWindow {
     }
 }
 
-// 确认模态窗口类 - 继承自基类
+// 确认模态窗口类
 class ConfirmModal extends ModalWindow {
     constructor(title, message, onConfirmCallback, onCancelCallback) {
         super(title, {
             showProgress: false,
             showCancelButton: true,
             cancelButtonText: '取消',
-            showMinimizeButton: false,  // 不显示最小化按钮
-            showLog: false  // 不显示日志区域
+            showMinimizeButton: false,
+            showLog: false
         });
         
         this.onConfirmCallback = onConfirmCallback;
@@ -498,11 +761,10 @@ class ConfirmModal extends ModalWindow {
         const modalFooter = document.getElementById(`modal-footer-${this.id}`);
         if (modalFooter) {
             modalFooter.innerHTML = `
-                <button class="action-btn" id="confirm-btn-${this.id}">确定</button>
-                <button class="secondary-btn" id="cancel-btn-${this.id}">取消</button>
+                <button class="primary-btn" id="confirm-btn-${this.id}">确定</button>
+                <button class="action-btn" id="cancel-btn-${this.id}">取消</button>
             `;
             
-            // 绑定确认按钮事件
             document.getElementById(`confirm-btn-${this.id}`).addEventListener('click', () => {
                 this.close();
                 if (this.onConfirmCallback && typeof this.onConfirmCallback === 'function') {
@@ -510,7 +772,6 @@ class ConfirmModal extends ModalWindow {
                 }
             });
             
-            // 绑定取消按钮事件
             document.getElementById(`cancel-btn-${this.id}`).addEventListener('click', () => {
                 this.close();
                 if (this.onCancelCallback && typeof this.onCancelCallback === 'function') {
@@ -518,7 +779,6 @@ class ConfirmModal extends ModalWindow {
                 }
             });
             
-            // 绑定关闭按钮事件（执行取消函数）
             document.getElementById(`close-btn-${this.id}`).addEventListener('click', () => {
                 this.close();
                 if (this.onCancelCallback && typeof this.onCancelCallback === 'function') {
@@ -528,24 +788,22 @@ class ConfirmModal extends ModalWindow {
         }
     }
     
-    // 添加设置HTML内容的方法
     setHtmlContent(htmlContent) {
         const statusElement = document.getElementById(`modal-status-${this.id}`);
         if (statusElement) {
             statusElement.innerHTML = htmlContent;
         }
-        // 同步更新到日志页面
         addLogMessage(`[${this.title}] 更新信息已设置`);
     }
 }
 
-// 进度模态窗口类 - 继承自基类
+// 进度模态窗口类
 class ProgressModal extends ModalWindow {
     constructor(title) {
         super(title, {
             showProgress: true,
             showCancelButton: true,
-            showPauseButton: true,  // 启用暂停按钮
+            showPauseButton: true,
             cancelButtonText: '取消',
             pauseButtonText: '暂停',
             resumeButtonText: '继续'
@@ -556,7 +814,6 @@ class ProgressModal extends ModalWindow {
         this.updateProgress(0, '初始化中...');
     }
     
-    // 可以添加进度窗口特有的方法
     complete(success = true, message = '操作完成') {
         if (success) {
             this.setStatus('操作完成');
@@ -570,7 +827,7 @@ class ProgressModal extends ModalWindow {
     }
 }
 
-// 使用工厂函数创建不同类型的模态窗口
+// 工厂函数
 function showMessage(title, message, onCloseCallback = () => {
     pywebview.api.log("用户关闭窗口")
 }) {
@@ -585,143 +842,558 @@ function showProgress(title) {
     return new ProgressModal(title);
 }
 
-// 各功能函数 - 使用新的模态窗口类
+// 各功能函数
 function startTranslation() {
-    const modal = new ProgressModal('翻译工具');
+    const modal = new ProgressModal('开始翻译');
     modal.setStatus('正在初始化翻译过程...');
     modal.addLog('开始翻译任务');
     
-    // 模拟翻译过程
-    setTimeout(() => {
-        modal.setStatus('正在解析游戏文件...');
-        modal.addLog('开始解析游戏文件');
-        modal.updateProgress(30, '解析游戏文件中...');
-    }, 1000);
+    // 显示主界面进度条
+    const progressContainer = document.getElementById('translation-progress');
+    progressContainer.style.display = 'block';
     
-    setTimeout(() => {
-        modal.setStatus('正在调用翻译API...');
-        modal.addLog('调用百度翻译API');
-        modal.updateProgress(60, '翻译进行中...');
-    }, 2000);
-    
-    setTimeout(() => {
-        modal.setStatus('正在生成翻译文件...');
-        modal.addLog('生成翻译文件');
-        modal.updateProgress(90, '生成文件中...');
-    }, 3000);
-    
-    setTimeout(() => {
-        modal.complete(true, '翻译任务已完成');
-    }, 4000);
+    // 调用后端API进行实际翻译
+    pywebview.api.start_translation(modal.id).then(function(result) {
+        if (result.success) {
+            modal.complete(true, '翻译任务已完成');
+        } else {
+            modal.complete(false, '翻译失败: ' + result.message);
+        }
+        
+        // 隐藏主界面进度条
+        setTimeout(() => {
+            progressContainer.style.display = 'none';
+        }, 2000);
+    }).catch(function(error) {
+        modal.complete(false, '翻译过程中发生错误: ' + error);
+        
+        // 隐藏主界面进度条
+        setTimeout(() => {
+            progressContainer.style.display = 'none';
+        }, 2000);
+    });
 }
 
 function refreshPackageList() {
-    pywebview.api.get_translation_packages().then(function(result) {
-        const packageList = document.getElementById('package-list');
-        packageList.innerHTML = '';
-        
-        if (result.packages && result.packages.length > 0) {
-            result.packages.forEach(function(pkg) {
-                const option = document.createElement('option');
-                option.value = pkg;
-                option.textContent = pkg;
-                packageList.appendChild(option);
-            });
-        } else {
-            const option = document.createElement('option');
-            option.value = '';
-            option.textContent = '未找到可用的汉化包';
-            packageList.appendChild(option);
-        }
-    }).catch(function(error) {
-        console.error('获取汉化包列表失败:', error);
-        const packageList = document.getElementById('package-list');
-        packageList.innerHTML = '';
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = '获取列表失败: ' + error;
-        packageList.appendChild(option);
-        
-        // 显示错误消息
-        showMessage('错误', '获取汉化包列表失败: ' + error);
-    });
+    const packageList = document.getElementById('install-package-list');
+    if (!packageList) return;
+    
+    packageList.innerHTML = '<div class="loading">正在加载...</div>';
+    
+    // 调用后端API获取汉化包列表
+    pywebview.api.get_translation_packages()
+        .then(function(result) {
+            packageList.innerHTML = '';
+            
+            if (result.success && result.packages && result.packages.length > 0) {
+                result.packages.forEach(pkg => {
+                    const packageItem = document.createElement('div');
+                    packageItem.className = 'list-item';
+                    packageItem.innerHTML = `
+                        <div class="list-item-content">
+                            <i class="fas fa-box"></i>
+                            <span>${pkg}</span>
+                        </div>
+                    `;
+                    packageItem.addEventListener('click', () => selectListItem(packageItem));
+                    packageList.appendChild(packageItem);
+                });
+            } else {
+                const emptyItem = document.createElement('div');
+                emptyItem.className = 'list-empty';
+                emptyItem.innerHTML = `
+                    <i class="fas fa-box-open"></i>
+                    <p>未找到可用的汉化包</p>
+                `;
+                packageList.appendChild(emptyItem);
+            }
+        })
+        .catch(function(error) {
+            packageList.innerHTML = '';
+            const errorItem = document.createElement('div');
+            errorItem.className = 'list-error';
+            errorItem.innerHTML = `
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>加载汉化包列表失败: ${error}</p>
+            `;
+            packageList.appendChild(errorItem);
+        });
+}
+
+// 初始化安装包列表
+function initPackageList() {
+    refreshPackageList();
 }
 
 function refreshInstallPackageList() {
-    pywebview.api.get_translation_packages().then(function(result) {
-        const packageList = document.getElementById('install-package-list');
-        packageList.innerHTML = '';
-        
-        if (result.packages && result.packages.length > 0) {
-            result.packages.forEach(function(pkg) {
-                const option = document.createElement('option');
-                option.value = pkg;
-                option.textContent = pkg;
-                packageList.appendChild(option);
-            });
-        } else {
-            const option = document.createElement('option');
-            option.value = '';
-            option.textContent = '未找到可用的汉化包';
-            packageList.appendChild(option);
-        }
-    }).catch(function(error) {
-        console.error('获取汉化包列表失败:', error);
-        const packageList = document.getElementById('install-package-list');
-        packageList.innerHTML = '';
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = '获取列表失败: ' + error;
-        packageList.appendChild(option);
-        
-        // 显示错误消息
-        showMessage('错误', '获取汉化包列表失败: ' + error);
+    // 显示加载状态
+    const packageList = document.getElementById('install-package-list');
+    if (!packageList) return;
+    
+    packageList.innerHTML = `
+        <div class="list-empty">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>正在加载汉化包列表...</p>
+        </div>
+    `;
+    
+    pywebview.api.get_translation_packages()
+        .then(function(result) {
+            packageList.innerHTML = '';
+            
+            if (result.success && result.packages && result.packages.length > 0) {
+                result.packages.forEach(function(pkg) {
+                    const packageItem = document.createElement('div');
+                    packageItem.className = 'list-item';
+                    packageItem.innerHTML = `
+                        <div class="list-item-content">
+                            <i class="fas fa-box"></i>
+                            <span>${pkg}</span>
+                        </div>
+                        <div class="list-item-actions">
+                            <button class="list-action-btn" title="选择" onclick="selectPackage('${pkg}')">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </div>
+                    `;
+                    packageList.appendChild(packageItem);
+                });
+            } else {
+                const emptyItem = document.createElement('div');
+                emptyItem.className = 'list-empty';
+                emptyItem.innerHTML = `
+                    <i class="fas fa-box-open"></i>
+                    <p>未找到可用的汉化包</p>
+                `;
+                packageList.appendChild(emptyItem);
+            }
+        })
+        .catch(function(error) {
+            console.error('获取汉化包列表失败:', error);
+            packageList.innerHTML = '';
+            const errorItem = document.createElement('div');
+            errorItem.className = 'list-empty';
+            errorItem.innerHTML = `
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>获取列表失败: ${error.message || '未知错误'}</p>
+            `;
+            packageList.appendChild(errorItem);
+        });
+}
+
+function selectPackage(packageName) {
+    // 移除所有项目的选中状态
+    document.querySelectorAll('.list-item').forEach(item => {
+        item.classList.remove('selected');
+        item.removeAttribute('data-selected');
     });
+    
+    // 查找并高亮选中的包
+    const items = document.querySelectorAll('.list-item');
+    for (let item of items) {
+        const span = item.querySelector('span');
+        if (span && span.textContent === packageName) {
+            item.classList.add('selected');
+            item.setAttribute('data-selected', 'true');
+            break;
+        }
+    }
 }
 
 function installSelectedPackage() {
-    const packageList = document.getElementById('install-package-list');
-    const selectedPackage = packageList.value;
+    const selectedItem = document.querySelector('.list-item[data-selected="true"]');
+    if (!selectedItem) {
+        showMessage('提示', '请先选择一个汉化包');
+        return;
+    }
     
-    if (!selectedPackage || selectedPackage === '') {
-        showMessage('错误', '请先选择一个汉化包');
+    const packageName = selectedItem.querySelector('span')?.textContent;
+    if (!packageName) {
+        showMessage('错误', '无法获取选中汉化包的名称');
         return;
     }
     
     const modal = new ProgressModal('安装汉化包');
-    modal.addLog('开始安装汉化包: ' + selectedPackage);
+    modal.addLog(`开始安装汉化包: ${packageName}`);
     
-    pywebview.api.install_translation(selectedPackage, modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '汉化包安装成功: ' + result.message);
-        } else {
-            modal.complete(false, '汉化包安装失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '安装过程中出现错误: ' + error);
-    });
+    // 调用后端API进行实际安装
+    pywebview.api.install_translation(packageName, modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '汉化包安装成功');
+            } else {
+                modal.complete(false, '安装失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '安装过程中发生错误: ' + error);
+        });
 }
 
-function deleteSelectedPackage() {
-    const packageList = document.getElementById('install-package-list');
-    const selectedPackage = packageList.value;
-    
-    if (!selectedPackage) {
-        showMessage('错误', '请先选择一个汉化包');
+function changeFontForPackage() {
+    const selectedItem = document.querySelector('.list-item[data-selected="true"]');
+    if (!selectedItem) {
+        showMessage('提示', '请先选择一个汉化包');
         return;
     }
     
-    showConfirm('确认删除', `确定要删除汉化包 "${selectedPackage}" 吗？此操作不可撤销。`, 
+    const packageName = selectedItem.querySelector('span')?.textContent;
+    if (!packageName) {
+        showMessage('错误', '无法获取选中汉化包的名称');
+        return;
+    }
+    
+    // 调用后端API获取系统字体列表
+    pywebview.api.get_system_fonts_list()
+        .then(function(result) {
+            const modal = new ModalWindow('更换字体', {
+                showProgress: false,
+                showCancelButton: true,
+                cancelButtonText: '关闭',
+                showMinimizeButton: true,
+                showLog: false
+            });
+            
+            let modalContent = `
+                <div class="font-selector">
+                    <div class="form-group">
+                        <label for="font-search-${modal.id}">搜索字体:</label>
+                        <input type="text" id="font-search-${modal.id}" placeholder="输入字体名称搜索..." style="width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label>系统字体:</label>
+                        <div class="list-container" style="max-height: 200px; overflow-y: auto;">
+                            <div id="font-list-${modal.id}" style="width: 100%; padding: 10px;">
+            `;
+            
+            if (result.success && result.fonts && result.fonts.length > 0) {
+                modalContent += '<div class="list-empty"><p>加载中...</p></div>';
+            } else {
+                modalContent += '<div class="list-empty"><p>未找到系统字体</p></div>';
+            }
+            
+            modalContent += `
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>预览:</label>
+                        <div id="font-preview-${modal.id}" style="border: 1px solid var(--color-border); padding: 10px; min-height: 60px; background-color: var(--color-bg-input); border-radius: var(--radius-md);">
+                            选择字体以预览
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            modal.element.querySelector('.modal-body').innerHTML = modalContent;
+            
+            if (result.success && result.fonts && result.fonts.length > 0) {
+                const fontList = document.getElementById(`font-list-${modal.id}`);
+                fontList.innerHTML = '';
+                
+                result.fonts.forEach(font => {
+                    const fontItem = document.createElement('div');
+                    fontItem.className = 'list-item';
+                    fontItem.innerHTML = `
+                        <div class="list-item-content">
+                            <i class="fas fa-font"></i>
+                            <span>${font}</span>
+                        </div>
+                    `;
+                    fontItem.addEventListener('click', () => {
+                        // 高亮选中项
+                        document.querySelectorAll(`#font-list-${modal.id} .list-item`).forEach(item => {
+                            item.classList.remove('selected');
+                        });
+                        fontItem.classList.add('selected');
+                        
+                        const previewDiv = document.getElementById(`font-preview-${modal.id}`);
+                        previewDiv.innerHTML = `
+                            <div style="font-family: '${font}'; font-size: 16px; margin-bottom: 8px;">
+                                字体预览: ${font}
+                            </div>
+                            <div style="font-family: '${font}';">
+                                The quick brown fox jumps over the lazy dog.<br>
+                                0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>
+                                abcdefghijklmnopqrstuvwxyz<br>
+                                中文示例文本
+                            </div>
+                        `;
+                    });
+                    fontList.appendChild(fontItem);
+                });
+                
+                // 搜索功能
+                const searchInput = document.getElementById(`font-search-${modal.id}`);
+                searchInput.addEventListener('input', function() {
+                    const searchTerm = searchInput.value.toLowerCase();
+                    const items = fontList.querySelectorAll('.list-item');
+                    
+                    items.forEach(item => {
+                        const fontName = item.querySelector('span')?.textContent?.toLowerCase() || '';
+                        if (fontName.includes(searchTerm)) {
+                            item.style.display = 'flex';
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+                });
+            }
+            
+            // 添加确定按钮
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = 'primary-btn';
+            confirmBtn.innerHTML = '<i class="fas fa-check"></i> 确定';
+            confirmBtn.onclick = function() {
+                const selectedFontItem = document.querySelector(`#font-list-${modal.id} .list-item.selected`);
+                if (!selectedFontItem) {
+                    showMessage('提示', '请先选择一个字体');
+                    return;
+                }
+                
+                const fontName = selectedFontItem.querySelector('span')?.textContent;
+                if (!fontName) {
+                    showMessage('错误', '无法获取选中字体的名称');
+                    return;
+                }
+                
+                modal.close();
+                
+                const progressModal = new ProgressModal('更换字体');
+                progressModal.addLog(`开始为汉化包 "${packageName}" 更换字体为 "${fontName}"`);
+                
+                // 调用后端API进行实际字体更换
+                pywebview.api.export_selected_font(fontName, "") // 目标路径将在后端处理
+                    .then(function(result) {
+                        if (result.success) {
+                            progressModal.complete(true, '字体更换成功');
+                        } else {
+                            progressModal.complete(false, '字体更换失败: ' + result.message);
+                        }
+                    })
+                    .catch(function(error) {
+                        progressModal.complete(false, '更换过程中发生错误: ' + error);
+                    });
+            };
+            
+            const footer = document.getElementById(`modal-footer-${modal.id}`);
+            footer.innerHTML = '';
+            footer.appendChild(confirmBtn);
+            
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'action-btn';
+            cancelBtn.textContent = '取消';
+            cancelBtn.onclick = () => modal.close();
+            footer.appendChild(cancelBtn);
+        })
+        .catch(function(error) {
+            showMessage('错误', '获取系统字体列表时发生错误: ' + error);
+        });
+}
+
+function getFontFromInstalled() {
+    // 调用后端API获取系统字体列表
+    pywebview.api.get_system_fonts_list()
+        .then(function(result) {
+            const modal = new ModalWindow('导出系统字体', {
+                showProgress: false,
+                showCancelButton: true,
+                cancelButtonText: '关闭',
+                showMinimizeButton: true,
+                showLog: false
+            });
+            
+            let modalContent = `
+                <div class="font-selector">
+                    <div class="form-group">
+                        <label for="font-search-${modal.id}">搜索字体:</label>
+                        <input type="text" id="font-search-${modal.id}" placeholder="输入字体名称搜索..." style="width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label>系统字体:</label>
+                        <div class="list-container" style="max-height: 200px; overflow-y: auto;">
+                            <div id="font-list-${modal.id}" style="width: 100%; padding: 10px;">
+            `;
+            
+            if (result.success && result.fonts && result.fonts.length > 0) {
+                modalContent += '<div class="list-empty"><p>加载中...</p></div>';
+            } else {
+                modalContent += '<div class="list-empty"><p>未找到系统字体</p></div>';
+            }
+            
+            modalContent += `
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>预览:</label>
+                        <div id="font-preview-${modal.id}" style="border: 1px solid var(--color-border); padding: 10px; min-height: 60px; background-color: var(--color-bg-input); border-radius: var(--radius-md);">
+                            选择字体以预览
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            modal.element.querySelector('.modal-body').innerHTML = modalContent;
+            
+            if (result.success && result.fonts && result.fonts.length > 0) {
+                const fontList = document.getElementById(`font-list-${modal.id}`);
+                fontList.innerHTML = '';
+                
+                result.fonts.forEach(font => {
+                    const fontItem = document.createElement('div');
+                    fontItem.className = 'list-item';
+                    fontItem.innerHTML = `
+                        <div class="list-item-content">
+                            <i class="fas fa-font"></i>
+                            <span>${font}</span>
+                        </div>
+                    `;
+                    fontItem.addEventListener('click', () => {
+                        // 高亮选中项
+                        document.querySelectorAll(`#font-list-${modal.id} .list-item`).forEach(item => {
+                            item.classList.remove('selected');
+                        });
+                        fontItem.classList.add('selected');
+                        
+                        const previewDiv = document.getElementById(`font-preview-${modal.id}`);
+                        previewDiv.innerHTML = `
+                            <div style="font-family: '${font}'; font-size: 16px; margin-bottom: 8px;">
+                                字体预览: ${font}
+                            </div>
+                            <div style="font-family: '${font}';">
+                                The quick brown fox jumps over the lazy dog.<br>
+                                0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>
+                                abcdefghijklmnopqrstuvwxyz<br>
+                                中文示例文本
+                            </div>
+                        `;
+                    });
+                    fontList.appendChild(fontItem);
+                });
+                
+                // 搜索功能
+                const searchInput = document.getElementById(`font-search-${modal.id}`);
+                searchInput.addEventListener('input', function() {
+                    const searchTerm = searchInput.value.toLowerCase();
+                    const items = fontList.querySelectorAll('.list-item');
+                    
+                    items.forEach(item => {
+                        const fontName = item.querySelector('span')?.textContent?.toLowerCase() || '';
+                        if (fontName.includes(searchTerm)) {
+                            item.style.display = 'flex';
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+                });
+            }
+            
+            // 添加导出按钮
+            const exportBtn = document.createElement('button');
+            exportBtn.className = 'primary-btn';
+            exportBtn.innerHTML = '<i class="fas fa-file-export"></i> 导出';
+            exportBtn.onclick = function() {
+                const selectedFontItem = document.querySelector(`#font-list-${modal.id} .list-item.selected`);
+                if (!selectedFontItem) {
+                    showMessage('提示', '请先选择一个字体');
+                    return;
+                }
+                
+                const fontName = selectedFontItem.querySelector('span')?.textContent;
+                if (!fontName) {
+                    showMessage('错误', '无法获取选中字体的名称');
+                    return;
+                }
+                
+                // 选择导出路径
+                pywebview.api.browse_folder('font-export-path')
+                    .then(function(result) {
+                        if (result && result.length > 0) {
+                            const exportPath = result[0];
+                            
+                            modal.close();
+                            
+                            const progressModal = new ProgressModal('导出字体');
+                            progressModal.addLog(`开始导出字体 "${fontName}" 到 "${exportPath}"`);
+                            
+                            // 调用后端API进行实际字体导出
+                            pywebview.api.export_selected_font(fontName, exportPath)
+                                .then(function(result) {
+                                    if (result.success) {
+                                        progressModal.complete(true, '字体导出成功');
+                                    } else {
+                                        progressModal.complete(false, '字体导出失败: ' + result.message);
+                                    }
+                                })
+                                .catch(function(error) {
+                                    progressModal.complete(false, '导出过程中发生错误: ' + error);
+                                });
+                        }
+                    })
+                    .catch(function(error) {
+                        showMessage('错误', '选择导出路径时发生错误: ' + error);
+                    });
+            };
+            
+            const footer = document.getElementById(`modal-footer-${modal.id}`);
+            footer.innerHTML = '';
+            footer.appendChild(exportBtn);
+            
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'action-btn';
+            cancelBtn.textContent = '取消';
+            cancelBtn.onclick = () => modal.close();
+            footer.appendChild(cancelBtn);
+        })
+        .catch(function(error) {
+            showMessage('错误', '获取系统字体列表时发生错误: ' + error);
+        });
+}
+
+function deleteSelectedPackage() {
+    const selectedItem = document.querySelector('.list-item[data-selected="true"]');
+    if (!selectedItem) {
+        showMessage('提示', '请先选择一个汉化包');
+        return;
+    }
+    
+    const packageName = selectedItem.querySelector('span')?.textContent;
+    if (!packageName) {
+        showMessage('错误', '无法获取选中汉化包的名称');
+        return;
+    }
+    
+    showConfirm('确认删除', `确定要删除汉化包 "${packageName}" 吗？此操作不可撤销。`, 
         function() {
-            pywebview.api.run_func('delete_translation_package',selectedPackage).then(function(result) {
+            // 调用后端API进行实际删除
+            pywebview.api.delete_translation_package(packageName).then(function(result) {
                 if (result.success) {
-                    showMessage('成功', result.message);
-                    refreshInstallPackageList(); // 刷新列表
+                    selectedItem.style.opacity = '0.5';
+                    selectedItem.style.textDecoration = 'line-through';
+                    
+                    setTimeout(() => {
+                        selectedItem.remove();
+                        
+                        // 检查是否还有包
+                        const packageList = document.getElementById('install-package-list');
+                        if (!packageList.children.length || (packageList.children.length === 1 && packageList.children[0].classList.contains('list-empty'))) {
+                            const emptyItem = document.createElement('div');
+                            emptyItem.className = 'list-empty';
+                            emptyItem.innerHTML = `
+                                <i class="fas fa-box-open"></i>
+                                <p>未找到可用的汉化包</p>
+                            `;
+                            packageList.appendChild(emptyItem);
+                        }
+                        
+                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
+                    }, 300);
                 } else {
-                    showMessage('错误', result.message);
+                    showMessage('删除失败', `删除汉化包失败: ${result.message}`);
                 }
             }).catch(function(error) {
-                showMessage('错误', '删除失败: ' + error);
+                showMessage('删除失败', `删除过程中发生错误: ${error}`);
             });
         },
         function() {
@@ -730,655 +1402,444 @@ function deleteSelectedPackage() {
     );
 }
 
-function changeFontForPackage() {
-    const packageList = document.getElementById('install-package-list');
-    const selectedPackage = packageList.value;
+function fetchProperNouns() {
+    const outputFormat = document.getElementById('proper-output').value;
+    const skipSpace = document.getElementById('proper-skip-space').checked;
+    const maxCount = document.getElementById('proper-max-count').value;
     
-    if (!selectedPackage) {
-        showMessage('错误', '请先选择一个汉化包');
+    const modal = new ProgressModal('抓取专有词汇');
+    modal.addLog('开始抓取专有词汇...');
+    modal.addLog(`输出格式: ${outputFormat}`);
+    modal.addLog(`跳过含空格词汇: ${skipSpace ? '是' : '否'}`);
+    if (maxCount) {
+        modal.addLog(`最大词汇数量: ${maxCount}`);
+    }
+    
+    // 调用后端API进行实际抓取
+    pywebview.api.fetch_proper_nouns(modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '专有词汇抓取成功');
+            } else {
+                modal.complete(false, '抓取失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '抓取过程中发生错误: ' + error);
+        });
+}
+
+function searchText() {
+    const keyword = document.getElementById('search-keyword').value;
+    const searchPath = document.getElementById('search-path').value;
+    const caseSensitive = document.getElementById('search-case-sensitive').checked;
+    
+    if (!keyword) {
+        showMessage('提示', '请输入搜索关键词');
         return;
     }
     
-    // 创建一个隐藏的文件输入框来选择字体文件
-    const fontInput = document.createElement('input');
-    fontInput.type = 'file';
-    fontInput.accept = '.ttf,.otf,.ttc';
-    fontInput.onchange = function(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        // 使用pywebview的文件对话框功能来获取路径
-        // 创建临时输入框用于保存路径
-        const tempInput = document.createElement('input');
-        tempInput.type = 'hidden';
-        tempInput.id = 'temp-font-path';
-        tempInput.value = file.path || '';
-        document.body.appendChild(tempInput);
-        
-        // 稍后移除临时输入框并处理字体更改
-        setTimeout(function() {
-            const fontPath = tempInput.value;
-            if (!fontPath) {
-                // 如果无法直接获取路径，提示用户使用pywebview对话框
-                showMessage('提示', '请选择字体文件', function() {
-                    // 打开文件选择对话框
-                    pywebview.api.browse_file('temp-font-path').then(function() {
-                        const fontPath = document.getElementById('temp-font-path').value;
-                        if (!fontPath) {
-                            showMessage('提示', '未选择字体文件');
-                            document.body.removeChild(tempInput);
-                            return;
-                        }
-                        
-                        performFontChange(selectedPackage, fontPath, tempInput);
-                    });
-                });
-            } else {
-                performFontChange(selectedPackage, fontPath, tempInput);
-            }
-        }, 100);
-    };
-    
-    fontInput.click();
-}
-
-function performFontChange(selectedPackage, fontPath, tempInput) {
-    const modal = new ProgressModal('更换字体');
-    modal.addLog(`开始为 "${selectedPackage}" 更换字体...`);
-    
-    pywebview.api.change_font_for_package(selectedPackage, fontPath, modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, result.message);
-            refreshPackageList(); // 刷新列表
-        } else {
-            modal.complete(false, result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '更换字体时出现错误: ' + error);
-    });
-    
-    if (tempInput && document.body.contains(tempInput)) {
-        document.body.removeChild(tempInput);
+    const modal = new ProgressModal('文本搜索');
+    modal.addLog('开始文本搜索...');
+    modal.addLog(`关键词: ${keyword}`);
+    if (searchPath) {
+        modal.addLog(`搜索路径: ${searchPath}`);
     }
+    modal.addLog(`区分大小写: ${caseSensitive ? '是' : '否'}`);
+    
+    // 调用后端API进行实际搜索
+    pywebview.api.search_text(modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '文本搜索完成');
+                // 显示搜索结果
+                showSearchResults(result.results);
+            } else {
+                modal.complete(false, '搜索失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '搜索过程中发生错误: ' + error);
+        });
 }
 
-function getFontFromInstalled() {
-    const modal = new ModalWindow('字体选择', {
-        showProgress: false,
-        showCancelButton: true,
-        cancelButtonText: '关闭',
-        showMinimizeButton: true,
-        showLog: false
-    });
+function showSearchResults(results) {
+    const resultsContainer = document.getElementById('search-results');
+    if (!resultsContainer) return;
     
-    // 设置模态窗口内容
-    modal.element.querySelector('.modal-body').innerHTML = `
-        <div class="font-selector">
-            <div class="form-group">
-                <label for="font-search-${modal.id}">搜索字体:</label>
-                <input type="text" id="font-search-${modal.id}" placeholder="输入字体名称搜索..." style="width: 100%;">
+    if (!results || results.length === 0) {
+        resultsContainer.innerHTML = `
+            <div class="results-placeholder">
+                <i class="fas fa-search"></i>
+                <p>未找到匹配的结果</p>
             </div>
-            <div class="form-group">
-                <label>已安装字体:</label>
-                <div class="list-container">
-                    <select id="font-list-${modal.id}" size="10" style="width: 100%; height: 300px;">
-                        <option value="">加载中...</option>
-                    </select>
+        `;
+        return;
+    }
+    
+    let html = '<div class="search-results-list">';
+    results.forEach(result => {
+        html += `
+            <div class="search-result-item">
+                <div class="result-header">
+                    <span class="result-file">${result.file}</span>
+                    <span class="result-line">第 ${result.line} 行</span>
                 </div>
+                <div class="result-content">${result.content}</div>
             </div>
-            <div class="form-group">
-                <label>预览:</label>
-                <div id="font-preview-${modal.id}" style="border: 1px solid #ddd; padding: 10px; min-height: 60px; background-color: #f8f9fa;">
-                    选择字体以预览
-                </div>
+        `;
+    });
+    html += '</div>';
+    
+    resultsContainer.innerHTML = html;
+}
+
+function backupText() {
+    const sourcePath = document.getElementById('backup-source').value;
+    const destPath = document.getElementById('backup-destination').value;
+    
+    if (!sourcePath) {
+        showMessage('提示', '请选择源文件路径');
+        return;
+    }
+    
+    if (!destPath) {
+        showMessage('提示', '请选择备份保存路径');
+        return;
+    }
+    
+    const modal = new ProgressModal('备份原文');
+    modal.addLog('开始备份原文...');
+    modal.addLog(`源路径: ${sourcePath}`);
+    modal.addLog(`目标路径: ${destPath}`);
+    
+    // 调用后端API进行实际备份
+    pywebview.api.backup_text(modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '原文备份成功');
+            } else {
+                modal.complete(false, '备份失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '备份过程中发生错误: ' + error);
+        });
+}
+
+function manageFonts() {
+    const modal = new ProgressModal('管理字体');
+    modal.addLog('开始管理字体...');
+    
+    // 调用后端API进行实际管理
+    pywebview.api.manage_fonts(modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '字体管理完成');
+            } else {
+                modal.complete(false, '字体管理失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '管理过程中发生错误: ' + error);
+        });
+}
+
+function manageImages() {
+    const modal = new ProgressModal('管理图片');
+    modal.addLog('开始管理图片...');
+    
+    // 调用后端API进行实际管理
+    pywebview.api.manage_images(modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '图片管理完成');
+            } else {
+                modal.complete(false, '图片管理失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '管理过程中发生错误: ' + error);
+        });
+}
+
+function manageAudio() {
+    const modal = new ProgressModal('管理音频');
+    modal.addLog('开始管理音频...');
+    
+    // 调用后端API进行实际管理
+    pywebview.api.manage_audio(modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '音频管理完成');
+            } else {
+                modal.complete(false, '音频管理失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '管理过程中发生错误: ' + error);
+        });
+}
+
+function adjustImage() {
+    const imagePath = document.getElementById('image-path').value;
+    const brightness = document.getElementById('brightness').value;
+    const contrast = document.getElementById('contrast').value;
+    
+    if (!imagePath) {
+        showMessage('提示', '请选择要调整的图片文件');
+        return;
+    }
+    
+    const modal = new ProgressModal('调整图片');
+    modal.addLog('开始调整图片...');
+    modal.addLog(`图片路径: ${imagePath}`);
+    modal.addLog(`亮度: ${brightness}`);
+    modal.addLog(`对比度: ${contrast}`);
+    
+    // 调用后端API进行实际调整
+    pywebview.api.adjust_image(modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '图片调整完成');
+            } else {
+                modal.complete(false, '图片调整失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '调整过程中发生错误: ' + error);
+        });
+}
+
+function calculateGacha() {
+    const totalItems = document.getElementById('total-items').value;
+    const rareItems = document.getElementById('rare-items').value;
+    const drawCount = document.getElementById('draw-count').value;
+    
+    if (!totalItems || !rareItems || !drawCount) {
+        showMessage('提示', '请填写所有参数');
+        return;
+    }
+    
+    const modal = new ProgressModal('计算抽卡概率');
+    modal.addLog('开始计算抽卡概率...');
+    modal.addLog(`总物品数: ${totalItems}`);
+    modal.addLog(`稀有物品数: ${rareItems}`);
+    modal.addLog(`抽取次数: ${drawCount}`);
+    
+    // 调用后端API进行实际计算
+    pywebview.api.calculate_gacha(modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '抽卡概率计算完成');
+                // 显示计算结果
+                showCalculationResults(result.data);
+            } else {
+                modal.complete(false, '计算失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '计算过程中发生错误: ' + error);
+        });
+}
+
+function showCalculationResults(data) {
+    const resultsContainer = document.getElementById('calculation-results');
+    if (!resultsContainer) return;
+    
+    if (!data) {
+        resultsContainer.innerHTML = `
+            <div class="results-placeholder">
+                <i class="fas fa-chart-pie"></i>
+                <p>暂无计算结果</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div class="calculation-results-content">
+            <div class="result-item">
+                <h4>基础概率</h4>
+                <p>单次抽取稀有物品概率: ${(data.singleProbability * 100).toFixed(2)}%</p>
+            </div>
+            <div class="result-item">
+                <h4>多次抽取概率</h4>
+                <p>至少获得一件稀有物品: ${(data.atLeastOneProbability * 100).toFixed(2)}%</p>
+            </div>
+            <div class="result-item">
+                <h4>期望值</h4>
+                <p>期望抽取次数: ${data.expectedDraws.toFixed(2)}</p>
             </div>
         </div>
     `;
     
-    // 获取系统字体列表
-    pywebview.api.get_system_fonts().then(function(result) {
-        const fontList = document.getElementById(`font-list-${modal.id}`);
-        fontList.innerHTML = '';
-        
-        if (result.success && result.fonts) {
-            result.fonts.forEach(function(font) {
-                const option = document.createElement('option');
-                option.value = font;
-                option.textContent = font;
-                fontList.appendChild(option);
-            });
-        } else {
-            const option = document.createElement('option');
-            option.value = '';
-            option.textContent = '获取字体列表失败';
-            fontList.appendChild(option);
-        }
-    }).catch(function(error) {
-        const fontList = document.getElementById(`font-list-${modal.id}`);
-        fontList.innerHTML = '';
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = '获取字体列表失败: ' + error;
-        fontList.appendChild(option);
-    });
-    
-    // 绑定搜索功能
-    const searchInput = document.getElementById(`font-search-${modal.id}`);
-    searchInput.addEventListener('input', function() {
-        const searchTerm = searchInput.value.toLowerCase();
-        const options = fontList.options;
-        for (let i = 0; i < options.length; i++) {
-            const option = options[i];
-            if (searchTerm === '' || option.text.toLowerCase().includes(searchTerm)) {
-                option.style.display = '';
-            } else {
-                option.style.display = 'none';
-            }
-        }
-    });
-    
-    // 绑定字体选择事件
-    const fontList = document.getElementById(`font-list-${modal.id}`);
-    fontList.addEventListener('change', function() {
-        const selectedFont = fontList.value;
-        if (selectedFont) {
-            const previewDiv = document.getElementById(`font-preview-${modal.id}`);
-            previewDiv.textContent = `${selectedFont}\n\n中文示例文本\nABCDEFGabcdefg\n1234567890`;
-            previewDiv.style.fontFamily = selectedFont;
-        }
-    });
-    
-    // 添加导出按钮
-    const footer = modal.element.querySelector('.modal-footer');
-    footer.innerHTML = `
-        <button class="action-btn" id="export-font-btn-${modal.id}">导出选中字体</button>
-        <button class="secondary-btn" id="close-font-modal-btn-${modal.id}">关闭</button>
-    `;
-    
-    document.getElementById(`export-font-btn-${modal.id}`).addEventListener('click', function() {
-        const selectedFont = fontList.value;
-        if (!selectedFont) {
-            showMessage('提示', '请先选择一个字体');
-            return;
-        }
-        
-        // 通过文件对话框让用户选择保存位置
-        const tempInput = document.createElement('input');
-        tempInput.type = 'hidden';
-        tempInput.id = `temp-font-path-${modal.id}`;
-        document.body.appendChild(tempInput);
-        
-        // 延迟执行以确保元素已创建
-        setTimeout(function() {
-            pywebview.api.browse_file(`temp-font-path-${modal.id}`).then(function() {
-                const savePath = document.getElementById(`temp-font-path-${modal.id}`).value;
-                if (!savePath) {
-                    showMessage('提示', '未选择保存位置');
-                    document.body.removeChild(tempInput);
-                    return;
-                }
-                
-                // 调用后端API导出字体文件
-                pywebview.api.export_system_font(selectedFont, savePath).then(function(result) {
-                    if (result.success) {
-                        showMessage('成功', result.message);
-                    } else {
-                        showMessage('错误', result.message);
-                    }
-                }).catch(function(error) {
-                    showMessage('错误', '导出字体时出现错误: ' + error);
-                });
-                
-                document.body.removeChild(tempInput);
-            });
-        }, 100);
-    });
-    
-    document.getElementById(`close-font-modal-btn-${modal.id}`).addEventListener('click', function() {
-        modal.close();
-    });
-    
-    modal.setStatus('已加载字体列表');
-}
-
-function installTranslation() {
-    const modal = new ProgressModal('安装汉化包');
-    
-    pywebview.api.install_translation(modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '汉化包安装成功: ' + result.message);
-        } else {
-            modal.complete(false, '汉化包安装失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '安装过程中出现错误: ' + error);
-    });
+    resultsContainer.innerHTML = html;
 }
 
 function downloadOurplay() {
-    // 保存当前的配置到后端
     const fontOption = document.getElementById('ourplay-font-option').value;
     const checkHash = document.getElementById('ourplay-check-hash').checked;
     
-    // 更新配置
-    pywebview.api.update_config_value('ui_default.ourplay.font_option', fontOption);
-    pywebview.api.update_config_value('ui_default.ourplay.check_hash', checkHash);
-    
     const modal = new ProgressModal('下载OurPlay汉化包');
     modal.addLog('开始下载OurPlay汉化包...');
-    pywebview.api.add_modal_id(modal.id).then(function(result) { 
-    });
-    modal.options.onCancel = function(modal_id){
-        pywebview.api.set_modal_running(modal_id, "cancel")
-    };
-    modal.options.onPause = function(modal_id){
-        pywebview.api.set_modal_running(modal_id, "pause")
-    };
-    modal.options.onResume = function(modal_id){
-        pywebview.api.set_modal_running(modal_id, "running")
-    };
+    modal.addLog(`字体选项: ${fontOption}`);
+    modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
     
+    // 调用后端API进行实际下载
     pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
         if (result.success) {
-            modal.complete(true, 'OurPlay汉化包下载成功: ' + result.message);
+            modal.complete(true, 'OurPlay汉化包下载成功');
         } else {
-            modal.complete(false, 'OurPlay汉化包下载失败: ' + result.message);
+            if (result.message === "已取消") {
+                modal.cancel();
+            } else {
+                modal.complete(false, '下载失败: ' + result.message);
+            }
         }
     }).catch(function(error) {
-        modal.complete(false, '下载OurPlay汉化包时出现错误: ' + error);
+        modal.complete(false, '下载过程中发生错误: ' + error);
     });
 }
 
 function cleanCache() {
     const modal = new ProgressModal('清除缓存');
     
+    // 调用后端API进行实际清理
     pywebview.api.clean_cache(modal.id).then(function(result) {
         if (result.success) {
-            modal.complete(true, '缓存清除成功: ' + result.message);
+            modal.complete(true, '缓存清除成功');
         } else {
-            modal.complete(false, '缓存清除失败: ' + result.message);
+            modal.complete(false, '清除失败: ' + result.message);
         }
     }).catch(function(error) {
-        modal.complete(false, '清除缓存时出现错误: ' + error);
+        modal.complete(false, '清除过程中发生错误: ' + error);
     });
 }
 
-// 其他功能函数也类似地修改为使用新的模态窗口类...
-// 由于篇幅限制，这里只展示几个示例，其他函数可以按照相同模式修改
-
 function downloadLLC() {
-    // 保存当前的配置到后端
     const checkHash = document.getElementById('llc-check-hash').checked;
     const dumpDefault = document.getElementById('llc-dump-default').checked;
     
-    // 更新配置
-    pywebview.api.update_config_value('ui_default.zero.check_hash', checkHash);
-    pywebview.api.update_config_value('ui_default.zero.dump_default', dumpDefault);
-    
     const modal = new ProgressModal('下载零协汉化包');
     modal.addLog('开始下载零协汉化包...');
-    pywebview.api.add_modal_id(modal.id).then(function(result) { 
-    });
-    modal.options.onCancel = function(modal_id){
-        pywebview.api.set_modal_running(modal_id, "cancel")
-    };
-    modal.options.onPause = function(modal_id){
-        pywebview.api.set_modal_running(modal_id, "pause")
-    };
-    modal.options.onResume = function(modal_id){
-        pywebview.api.set_modal_running(modal_id, "running")
-    };
+    modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
+    modal.addLog(`保存原始文件: ${dumpDefault ? '是' : '否'}`);
+    
+    // 调用后端API进行实际下载
     pywebview.api.download_llc_translation(modal.id).then(function(result) {
         if (result.success) {
-            modal.complete(true, '零协汉化包下载成功: ' + result.message);
+            modal.complete(true, '零协汉化包下载成功');
         } else {
-            modal.complete(false, '零协汉化包下载失败: ' + result.message);
+            if (result.message === "已取消") {
+                modal.cancel();
+            } else {
+                modal.complete(false, '下载失败: ' + result.message);
+            }
         }
     }).catch(function(error) {
-        modal.complete(false, '下载零协汉化包时出现错误: ' + error);
+        modal.complete(false, '下载过程中发生错误: ' + error);
     });
 }
 
 function saveAPIConfig() {
-    const modal = new ProgressModal('保存API配置');
+    const apiService = document.getElementById('api-service').value;
+    const apiKey = document.getElementById('api-key').value;
+    const apiSecret = document.getElementById('api-secret').value;
     
+    if (!apiKey) {
+        showMessage('错误', '请输入API密钥');
+        return;
+    }
+    
+    const modal = new ProgressModal('保存API配置');
+    modal.addLog(`保存配置: ${apiService}`);
+    
+    // 调用后端API进行实际保存
     pywebview.api.save_api_config(modal.id).then(function(result) {
         if (result.success) {
-            modal.complete(true, 'API配置保存成功: ' + result.message);
+            modal.complete(true, 'API配置保存成功');
         } else {
-            modal.complete(false, 'API配置保存失败: ' + result.message);
+            modal.complete(false, '保存失败: ' + result.message);
         }
     }).catch(function(error) {
-        modal.complete(false, '保存API配置时出现错误: ' + error);
+        modal.complete(false, '保存过程中发生错误: ' + error);
     });
+}
+
+// 滑块值更新
+function updateValue(sliderId) {
+    const slider = document.getElementById(sliderId);
+    const valueSpan = document.getElementById(`${sliderId}-value`);
+    if (slider && valueSpan) {
+        valueSpan.textContent = slider.value;
+    }
 }
 
 // 设置界面相关函数
 function loadSettings() {
-    // 从后端获取当前配置并填充到表单
-    pywebview.api.get_attr('config').then(function(config) {
-        if (config && typeof config === 'object') {
-            // 填充游戏路径
-            if (config.game_path !== undefined) {
-                document.getElementById('game-path').value = config.game_path;
+    // 调用后端API获取游戏路径
+    pywebview.api.get_game_path()
+        .then(function(gamePath) {
+            if (gamePath) {
+                document.getElementById('game-path').value = gamePath;
             }
-            
-            // 设置调试模式复选框
-            if (config.debug !== undefined) {
-                document.getElementById('debug-mode').checked = config.debug;
-            }
-        }
-    }).catch(function(error) {
-        console.error('加载设置时出错:', error);
-    });
+        })
+        .catch(function(error) {
+            console.error('获取游戏路径失败:', error);
+        });
     
-    // 检查游戏路径是否存在，如果不存在则尝试自动查找
-    checkAndSetGamePath();
-}
-
-// 从后端加载配置并填充到UI
-function loadConfigToUI() {
-    // 从后端获取当前配置
-    pywebview.api.get_attr('config').then(function(config) {
-        if (config && typeof config === 'object') {
-            // 填充游戏路径设置
-            if (config.game_path !== undefined) {
-                const gamePathInput = document.getElementById('game-path');
-                if (gamePathInput) {
-                    gamePathInput.value = config.game_path;
-                }
-            }
-            
-            // 设置调试模式复选框
-            if (config.debug !== undefined) {
-                const debugModeCheckbox = document.getElementById('debug-mode');
-                if (debugModeCheckbox) {
-                    debugModeCheckbox.checked = config.debug;
-                }
-            }
-            
-            // 设置自动检查更新复选框
-            if (config.auto_check_update !== undefined) {
-                const autoCheckUpdateCheckbox = document.getElementById('auto-check-update');
-                if (autoCheckUpdateCheckbox) {
-                    autoCheckUpdateCheckbox.checked = config.auto_check_update;
-                }
-            }
-            
-            // 根据ui_default配置填充其他界面元素
-            if (config.ui_default && typeof config.ui_default === 'object') {
-                // 翻译工具界面配置
-                if (config.ui_default.translator && typeof config.ui_default.translator === 'object') {
-                    // 填充汉化包目录设置
-                    if (config.ui_default.install && config.ui_default.install.package_directory !== undefined) {
-                        const packageDirInput = document.getElementById('package-directory');
-                        if (packageDirInput) {
-                            packageDirInput.value = config.ui_default.install.package_directory;
-                        }
-                    }
-                }
-                
-                // 更新配置
-                const packageDirInput = document.getElementById('package-directory');
-                if (packageDirInput) {
-                    pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value);
-                    // 更新配置
-                    pywebview.api.update_config_value('ui_default.translator.package_directory', packageDirInput.value);
-                }
-                
-                // 安装界面配置
-                if (config.ui_default.install !== undefined) {
-                    // 可以根据需要填充安装相关配置
-                }
-                
-                // 零协下载界面配置
-                if (config.ui_default.zero && typeof config.ui_default.zero === 'object') {
-                    if (config.ui_default.zero.better_download !== undefined) {
-                        const betterDownloadCheckbox = document.getElementById('better-download');
-                        if (betterDownloadCheckbox) {
-                            betterDownloadCheckbox.checked = config.ui_default.zero.better_download;
-                        }
-                    }
-                    
-                    // 添加check_hash和dump_default配置
-                    if (config.ui_default.zero.check_hash !== undefined) {
-                        const checkHashCheckbox = document.getElementById('llc-check-hash');
-                        if (checkHashCheckbox) {
-                            checkHashCheckbox.checked = config.ui_default.zero.check_hash;
-                        }
-                    }
-                    
-                    if (config.ui_default.zero.dump_default !== undefined) {
-                        const dumpDefaultCheckbox = document.getElementById('llc-dump-default');
-                        if (dumpDefaultCheckbox) {
-                            dumpDefaultCheckbox.checked = config.ui_default.zero.dump_default;
-                        }
-                    }
-                }
-                
-                // OurPlay下载界面配置
-                if (config.ui_default.ourplay && typeof config.ui_default.ourplay === 'object') {
-                    if (config.ui_default.ourplay.font_option !== undefined) {
-                        const fontOptionSelect = document.getElementById('ourplay-font-option');
-                        if (fontOptionSelect) {
-                            fontOptionSelect.value = config.ui_default.ourplay.font_option;
-                        }
-                    }
-                    
-                    if (config.ui_default.ourplay.check_hash !== undefined) {
-                        const checkHashCheckbox = document.getElementById('ourplay-check-hash');
-                        if (checkHashCheckbox) {
-                            checkHashCheckbox.checked = config.ui_default.ourplay.check_hash;
-                        }
-                    }
-                }
-                
-                // 清理界面配置
-                if (config.ui_default.clean && typeof config.ui_default.clean === 'object') {
-                    if (config.ui_default.clean.remove_cache !== undefined) {
-                        const removeCacheCheckbox = document.getElementById('remove-cache');
-                        if (removeCacheCheckbox) {
-                            removeCacheCheckbox.checked = config.ui_default.clean.remove_cache;
-                        }
-                    }
-                }
-                
-                // 专有词汇界面配置
-                if (config.ui_default.proper && typeof config.ui_default.proper === 'object') {
-                    if (config.ui_default.proper.join_char !== undefined) {
-                        const joinCharInput = document.getElementById('join-char');
-                        if (joinCharInput) {
-                            joinCharInput.value = config.ui_default.proper.join_char;
-                        }
-                    }
-                    
-                    if (config.ui_default.proper.disable_space !== undefined) {
-                        const disableSpaceCheckbox = document.getElementById('disable-space');
-                        if (disableSpaceCheckbox) {
-                            disableSpaceCheckbox.checked = config.ui_default.proper.disable_space;
-                        }
-                    }
-                    
-                    if (config.ui_default.proper.max_length !== undefined) {
-                        const maxLengthInput = document.getElementById('max-length');
-                        if (maxLengthInput) {
-                            maxLengthInput.value = config.ui_default.proper.max_length;
-                        }
-                    }
-                    
-                    if (config.ui_default.proper.output_type !== undefined) {
-                        const outputTypeSelect = document.getElementById('output-type');
-                        if (outputTypeSelect) {
-                            outputTypeSelect.value = config.ui_default.proper.output_type;
-                        }
-                    }
-                }
-                
-                // 搜索界面配置
-                if (config.ui_default.search && typeof config.ui_default.search === 'object') {
-                    if (config.ui_default.search.divide_size !== undefined) {
-                        const divideSizeCheckbox = document.getElementById('divide-size');
-                        if (divideSizeCheckbox) {
-                            divideSizeCheckbox.checked = config.ui_default.search.divide_size;
-                        }
-                    }
-                    
-                    if (config.ui_default.search.using_re !== undefined) {
-                        const usingReCheckbox = document.getElementById('using-re');
-                        if (usingReCheckbox) {
-                            usingReCheckbox.checked = config.ui_default.search.using_re;
-                        }
-                    }
-                    
-                    if (config.ui_default.search.all_same !== undefined) {
-                        const allSameCheckbox = document.getElementById('all-same');
-                        if (allSameCheckbox) {
-                            allSameCheckbox.checked = config.ui_default.search.all_same;
-                        }
-                    }
-                }
-            }
-        }
-    }).catch(function(error) {
-        console.error('加载配置到UI时出错:', error);
-    });
-}
-
-// 保存配置值到后端
-function saveConfigValue(keyPath, value) {
-    // 创建模态窗口显示保存进度
-    const modal = new ProgressModal('保存配置');
-    modal.addLog(`正在保存配置项: ${keyPath}`);
+    // 从本地存储加载其他设置
+    const debugMode = localStorage.getItem('lcta-debug-mode') === 'true';
+    const autoCheckUpdate = localStorage.getItem('lcta-auto-check-update') !== 'false';
     
-    // 调用后端API更新配置值
-    pywebview.api.update_config_value(keyPath, value).then(function(result) {
-        if (result.success) {
-            modal.complete(true, `配置项 ${keyPath} 保存成功`);
-            // 重新加载设置到UI
-            loadConfigToUI();
-        } else {
-            modal.complete(false, `配置项 ${keyPath} 保存失败: ${result.message}`);
-        }
-    }).catch(function(error) {
-        modal.complete(false, `保存配置项 ${keyPath} 时出现错误: ${error}`);
-    });
+    document.getElementById('debug-mode').checked = debugMode;
+    document.getElementById('auto-check-update').checked = autoCheckUpdate;
 }
 
-// 保存设置的通用函数
 function saveSettings() {
-    const modal = new ProgressModal('保存设置');
-    
-    // 获取表单数据
     const gamePath = document.getElementById('game-path').value;
     const debugMode = document.getElementById('debug-mode').checked;
     const autoCheckUpdate = document.getElementById('auto-check-update').checked;
     
+    const modal = new ProgressModal('保存设置');
     modal.addLog('正在保存设置...');
     
     // 调用后端API保存设置
-    pywebview.api.save_settings(gamePath, debugMode, autoCheckUpdate).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '设置保存成功: ' + result.message);
-        } else {
-            modal.complete(false, '设置保存失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '保存设置时出现错误: ' + error);
-    });
-}
-
-function checkAndSetGamePath() {
-    // 检查当前设置的游戏路径
-    pywebview.api.get_attr('config').then(function(config) {
-        if (config && typeof config === 'object' && config.game_path) {
-            // 验证当前游戏路径是否存在
-            pywebview.api.run_func("check_game_path", config.game_path).then(function(isValid) {
-                if (!isValid) {
-                    // 当前路径无效，尝试自动查找
-                    attemptAutoFindGamePath();
-                }
-            }).catch(function() {
-                // 出错时也尝试自动查找
-                attemptAutoFindGamePath();
-            });
-        } else {
-            // 没有设置游戏路径，尝试自动查找
-            attemptAutoFindGamePath();
-        }
-    });
-}
-
-function attemptAutoFindGamePath() {
-    // 使用find_lcb查找游戏路径
-    pywebview.api.run_func('find_lcb').then(function(foundPath) {
-        if (foundPath) {
-            // 找到了游戏路径，询问用户确认
-            showConfirm(
-                "确认游戏路径",
-                `系统检测到游戏可能安装在以下位置:\n${foundPath}\n这是否正确?`,
-                function() {
-                    // 用户确认路径正确，更新配置
-                    updateGamePathSetting(foundPath);
-                },
-                function() {
-                    // 用户表示路径不正确，让用户手动选择
-                    showGamePathSelection();
-                }
-            );
-        } else {
-            // 未找到游戏路径，让用户手动选择
-            showGamePathSelection();
-        }
-    }).catch(function() {
-        // 查找失败，让用户手动选择
-        showGamePathSelection();
-    });
-}
-
-function showGamePathSelection() {
-    showMessage(
-        "选择游戏路径",
-        "请手动选择游戏路径:\n1. 点击确定后会弹出文件夹选择窗口\n2. 请选择包含 LimbusCompany.exe 文件的文件夹",
-        function() {
-            browseFolder('game-path');
-        }
-    );
-}
-
-function updateGamePathSetting(gamePath) {
-    // 更新游戏路径配置
-    const modal = new ProgressModal('更新配置');
-    modal.addLog('正在更新游戏路径配置...');
-    
-    pywebview.api.save_settings(gamePath, document.getElementById('debug-mode').checked).then(function(result) {
-        if (result.success) {
-            // 更新界面上的显示
-            document.getElementById('game-path').value = gamePath;
-            modal.complete(true, '游戏路径配置更新成功');
-        } else {
-            modal.complete(false, '更新失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '更新过程中出现错误: ' + error);
-    });
+    pywebview.api.save_settings(gamePath, debugMode, autoCheckUpdate)
+        .then(function(result) {
+            if (result.success) {
+                // 保存到本地存储
+                localStorage.setItem('lcta-debug-mode', debugMode);
+                localStorage.setItem('lcta-auto-check-update', autoCheckUpdate);
+                
+                modal.complete(true, '设置保存成功');
+            } else {
+                modal.complete(false, '保存失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '保存过程中发生错误: ' + error);
+        });
 }
 
 function useDefaultConfig() {
     const modal = new ProgressModal('使用默认配置');
+    modal.addLog('正在重置为默认配置...');
     
-    modal.addLog('正在加载默认配置...');
-    
-    pywebview.api.use_default_config(modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, result.message);
-            // 重新加载设置到表单
-            setTimeout(loadSettings, 1000);
-        } else {
-            modal.complete(false, '操作失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '操作时出现错误: ' + error);
-    });
+    // 调用后端API使用默认配置
+    pywebview.api.use_default_config()
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '已使用默认配置');
+                setTimeout(loadSettings, 500);
+            } else {
+                modal.complete(false, '配置重置失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '重置过程中发生错误: ' + error);
+        });
 }
 
 function resetConfig() {
@@ -1387,107 +1848,131 @@ function resetConfig() {
         "确定要重置所有配置吗？这将删除当前配置并恢复为默认设置。",
         function() {
             const modal = new ProgressModal('重置配置');
-            
             modal.addLog('正在重置配置...');
             
-            pywebview.api.reset_config(modal.id).then(function(result) {
-                if (result.success) {
-                    modal.complete(true, result.message);
-                    // 重新加载设置到表单
-                    setTimeout(loadSettings, 1000);
-                } else {
-                    modal.complete(false, '操作失败: ' + result.message);
-                }
-            }).catch(function(error) {
-                modal.complete(false, '操作时出现错误: ' + error);
-            });
+            // 调用后端API重置配置
+            pywebview.api.reset_config()
+                .then(function(result) {
+                    if (result.success) {
+                        // 清除本地存储
+                        localStorage.removeItem('lcta-debug-mode');
+                        localStorage.removeItem('lcta-auto-check-update');
+                        
+                        modal.complete(true, '配置已重置');
+                        setTimeout(loadSettings, 500);
+                    } else {
+                        modal.complete(false, '配置重置失败: ' + result.message);
+                    }
+                })
+                .catch(function(error) {
+                    modal.complete(false, '重置过程中发生错误: ' + error);
+                });
         },
         function() {
-            // 用户取消操作，不做任何事
+            // 取消操作
         }
     );
 }
 
-function checkForUpdates() {
-    // 检查更新
-    pywebview.api.auto_check_update().then(function(update_info) {
-        if (update_info && update_info.has_update) {
-            showUpdateInfo(update_info);
-        }
-    }).catch(function(error) {
-        console.error('检查更新失败:', error);
-        addLogMessage('检查更新失败: ' + error);
-    });
-}
-
 function manualCheckUpdates() {
-    // 创建检查更新的模态窗口
     const modal = new ProgressModal('检查更新');
     modal.addLog('正在检查是否有可用更新...');
     
-    // 检查更新
-    pywebview.api.manual_check_update().then(function(update_info) {
-        if (update_info && update_info.has_update) {
-            modal.close(); // 关闭检查更新的模态窗口
-            showUpdateInfo(update_info);
-        } else {
-            modal.complete(true, '当前已是最新版本');
-            // 3秒后自动关闭模态窗口
+    // 调用后端API进行实际检查更新
+    pywebview.api.manual_check_update()
+        .then(function(result) {
+            if (result.has_update) {
+                modal.complete(true, `发现新版本 ${result.latest_version}，请前往GitHub下载更新`);
+                // 显示更新详情
+                setTimeout(() => {
+                    if (!modal.isMinimized) {
+                        modal.close();
+                        showUpdateInfo(result);
+                    }
+                }, 2000);
+            } else {
+                modal.complete(true, '当前已是最新版本');
+                setTimeout(() => {
+                    if (!modal.isMinimized) {
+                        modal.close();
+                    }
+                }, 2000);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '检查更新时发生错误: ' + error);
             setTimeout(() => {
                 if (!modal.isMinimized) {
                     modal.close();
                 }
             }, 3000);
-        }
-    }).catch(function(error) {
-        console.error('检查更新失败:', error);
-        modal.complete(false, '检查更新失败: ' + error);
-        addLogMessage('检查更新失败: ' + error);
-    });
+        });
+}
+
+// 自动检查更新函数（仅在有更新时显示窗口）
+function autoCheckUpdates() {
+    // 调用后端API进行实际检查更新
+    pywebview.api.manual_check_update()
+        .then(function(result) {
+            if (result.has_update) {
+                showUpdateInfo(result);
+            }
+        })
+        .catch(function(error) {
+            addLogMessage('自动检查更新时发生错误: ' + error, 'error');
+        });
 }
 
 // 更新进度条函数
 function updateProgress(percent, text) {
-    document.getElementById('progress-fill').style.width = percent + '%';
-    document.getElementById('progress-text').textContent = text || percent + '%';
+    const progressFill = document.getElementById('progress-fill');
+    const progressPercent = document.getElementById('progress-percent');
+    const progressText = document.getElementById('progress-text');
+    const progressContainer = document.getElementById('translation-progress');
+    
+    if (progressFill) {
+        progressFill.style.width = percent + '%';
+    }
+    
+    if (progressPercent) {
+        progressPercent.textContent = percent + '%';
+    }
+    
+    if (progressText && text) {
+        progressText.textContent = text;
+    }
+    
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+    }
 }
 
 // 添加日志消息
-function addLogMessage(message) {
-    // 添加到日志页面
+function addLogMessage(message, level = 'info') {
     const logDisplay = document.getElementById('log-display');
     if (logDisplay) {
         const now = new Date();
         const timestamp = `[${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
         
         const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
-        logEntry.innerHTML = `<span class="log-timestamp">${timestamp}</span> <span class="log-message">${message}</span>`;
+        logEntry.className = `log-entry ${level}`;
+        logEntry.innerHTML = `
+            <div class="log-timestamp">${timestamp}</div>
+            <div class="log-level">[${level.toUpperCase()}]</div>
+            <div class="log-message">${message}</div>
+        `;
         
         logDisplay.appendChild(logEntry);
         logDisplay.scrollTop = logDisplay.scrollHeight;
     }
-    
-    // 同时添加到底部日志区域（为了向后兼容）
-    const logArea = document.getElementById('log-area');
-    if (logArea) {
-        const now = new Date();
-        const timestamp = `[${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
-        
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
-        logEntry.innerHTML = `<span class="log-timestamp">${timestamp}</span> <span class="log-message">${message}</span>`;
-        
-        logArea.appendChild(logEntry);
-        logArea.scrollTop = logArea.scrollHeight;
-    }
 }
 
-// 简单的代码转HTML函数
+// 简单Markdown转HTML
 function simpleMarkdownToHtml(text) {
     if (!text) return '';
     
-    // 保护已经存在的HTML标签
+
+    
     const htmlTagRegex = /(<[^>]+>)/g;
     const htmlTags = [];
     let processedText = text.replace(htmlTagRegex, function(match) {
@@ -1495,7 +1980,6 @@ function simpleMarkdownToHtml(text) {
         return `\x01${htmlTags.length - 1}\x01`;
     });
     
-    // 转换代码块 ```code```
     processedText = processedText.replace(/```(\w*)\n([\s\S]*?)```/g, function(match, lang, code) {
         const escapedCode = code.replace(/&/g, '&amp;')
                                .replace(/</g, '&lt;')
@@ -1504,24 +1988,14 @@ function simpleMarkdownToHtml(text) {
         return `<pre><code class="language-${lang || 'text'}">${escapedCode}</code></pre>`;
     });
     
-    // 转换行内代码 `code`
     processedText = processedText.replace(/`([^`]+)`/g, '<code>$1</code>');
-    
-    // 转换加粗 **text** 和 __text__
     processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     processedText = processedText.replace(/__(.*?)__/g, '<strong>$1</strong>');
-    
-    // 转换斜体 *text* 和 _text_
     processedText = processedText.replace(/(?:^|\s)\*([^\*]+)\*(?:\s|$)/g, ' <em>$1</em> ');
     processedText = processedText.replace(/(?:^|\s)_([^_]+)_(?:\s|$)/g, ' <em>$1</em> ');
-    
-    // 转换链接 [text](url)
     processedText = processedText.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-    
-    // 转换图片 ![alt](url)
     processedText = processedText.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%;">');
     
-    // 转换标题 # Header
     processedText = processedText.replace(/^###### (.*$)/gm, '<h6>$1</h6>');
     processedText = processedText.replace(/^##### (.*$)/gm, '<h5>$1</h5>');
     processedText = processedText.replace(/^#### (.*$)/gm, '<h4>$1</h4>');
@@ -1529,27 +2003,19 @@ function simpleMarkdownToHtml(text) {
     processedText = processedText.replace(/^## (.*$)/gm, '<h2>$1</h2>');
     processedText = processedText.replace(/^# (.*$)/gm, '<h1>$1</h1>');
     
-    // 转换无序列表 - item 或 * item
     processedText = processedText.replace(/^[*-] (.*$)/gm, '<li>$1</li>');
-    // 将连续的<li>元素包裹在<ul>中
     processedText = processedText.replace(/(<li>.*<\/li>)+/gs, function(match) {
         return '<ul>' + match.replace(/<\/li><li>/g, '</li>\n<li>') + '</ul>';
     });
     
-    // 恢复HTML标签
     processedText = processedText.replace(/\x01(\d+)\x01/g, function(match, index) {
         return htmlTags[index];
     });
     
-    // 处理段落：将多个换行符分隔的段落用<p>标签包裹
     const paragraphs = processedText.split(/\n\s*\n/);
     const processedParagraphs = paragraphs.map(paragraph => {
-        // 清理段落前后的空白字符
         paragraph = paragraph.trim();
-        
-        // 如果段落不是HTML块级元素，则用<p>包裹
         if (paragraph && !paragraph.match(/^<(h[1-6]|ul|ol|li|pre|div|blockquote)/)) {
-            // 处理段落内的单个换行符
             paragraph = paragraph.replace(/\n/g, '<br>');
             return '<p>' + paragraph + '</p>';
         }
@@ -1559,200 +2025,138 @@ function simpleMarkdownToHtml(text) {
     return processedParagraphs.filter(p => p !== '').join('\n');
 }
 
-// 显示更新信息的专门函数
+// 显示更新信息
 function showUpdateInfo(update_info) {
-    // 检查是否在PyInstaller打包环境中
-    // 从Python环境获取是否为打包环境
-    let isFrozen = false;
-    pywebview.api.get_attr('is_frozen').then(function(frozenValue) {
-        isFrozen = frozenValue;
-        continueShowUpdateInfo();
-    }).catch(function() {
-        isFrozen = true;  // 默认假设为打包环境
-        continueShowUpdateInfo();
-    });
+    let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
+    htmlMessage += `<p><strong>当前版本:</strong> ${update_info.current_version || 'unknown'}</p>`;
     
-    function continueShowUpdateInfo() {
-        // 构建HTML格式的更新信息
-        let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-        htmlMessage += `<p><strong>当前版本:</strong> ${update_info.current_version || 'unknown'}</p>`;
-        
-        // 添加发布标题
-        if (update_info.title) {
-            htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
-        }
-        
-        // 添加发布详情
-        if (update_info.body) {
-            let body = update_info.body.trim();
-            // 使用代码转HTML处理
-            const bodyHtml = simpleMarkdownToHtml(body);
-            htmlMessage += `<div><strong>更新详情:</strong></div>`;
-            htmlMessage += `<div style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.1); border-radius: 4px; max-height: 300px; overflow-y: auto;">${bodyHtml}</div>`;
-        }
-        
-        // 添加发布时间
-        if (update_info.published_at) {
-            const publishDate = new Date(update_info.published_at);
-            htmlMessage += `<p><strong>发布时间:</strong> ${publishDate.toLocaleDateString('zh-CN')}</p>`;
-        }
-        
-        // 添加发布链接
-        if (update_info.html_url) {
-            htmlMessage += `<p><strong>发布页面:</strong> <a href="${update_info.html_url}" target="_blank" style="color: #4CAF50; text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
-        }
-        
-        // 计算文件大小
-        if (update_info.size > 0) {
-            let sizeStr = '';
-            if (update_info.size > 1024 * 1024) {
-                sizeStr = (update_info.size / (1024 * 1024)).toFixed(2) + ' MB';
-            } else if (update_info.size > 1024) {
-                sizeStr = (update_info.size / 1024).toFixed(2) + ' KB';
-            } else {
-                sizeStr = update_info.size + ' bytes';
-            }
-            htmlMessage += `<p><strong>更新包大小:</strong> ${sizeStr}</p>`;
-        }
-        
-        // 根据是否为打包环境显示不同的信息和按钮
-        if (isFrozen) {
-            htmlMessage += `<p style="margin-top: 15px; color: #FFA500;"><strong>注意:</strong> 您正在使用打包版本的应用，自动更新功能不可用。</p>`;
-            htmlMessage += `<p>请前往发布页面手动下载最新版本并替换当前应用。</p>`;
-        } else {
-            htmlMessage += `<p style="margin-top: 15px;"><strong>是否现在更新？</strong></p>`;
-        }
-        
-        // 使用HTML内容显示方式
-        const modal = showConfirm(
-            '发现新版本',
-            '', // 初始时不设置文本内容
-            isFrozen ? null : function() {
-                // 用户确认更新（仅在非打包环境中）
-                const progressModal = new ProgressModal('更新程序');
-                progressModal.addLog('开始下载并安装更新...');
-                
-                // 执行更新
-                pywebview.api.perform_update_in_modal(progressModal.id).then(function(result) {
-                    if (result) {
-                        progressModal.complete(true, '更新完成，应用将自动重启');
-                    } else {
-                        progressModal.complete(false, '更新失败，请查看日志');
-                    }
-                }).catch(function(error) {
-                    progressModal.complete(false, '更新过程中出现错误: ' + error);
-                });
-            },
-            function() {
-                // 用户取消更新
-                addLogMessage('用户取消了更新');
-            }
-        );
-        
-        // 如果是打包环境，则移除确认按钮，只保留取消按钮
-        if (isFrozen) {
-            // 等待DOM更新后修改按钮
-            setTimeout(() => {
-                const confirmBtn = document.getElementById(`confirm-btn-${modal.id}`);
-                const cancelBtn = document.getElementById(`cancel-btn-${modal.id}`);
-                const modalFooter = document.getElementById(`modal-footer-${modal.id}`);
-                
-                if (confirmBtn) {
-                    confirmBtn.remove();
-                }
-                
-                if (cancelBtn) {
-                    cancelBtn.textContent = '知道了';
-                }
-            }, 100);
-        }
-        
-        // 使用setTimeout确保DOM完全加载后再设置内容
-        setTimeout(() => {
-            const statusElement = document.getElementById(`modal-status-${modal.id}`);
-            if (statusElement) {
-                statusElement.innerHTML = htmlMessage;
-            }
-        }, 100);
+    if (update_info.title) {
+        htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
     }
+    
+    if (update_info.body) {
+        let body = update_info.body.trim();
+        const bodyHtml = simpleMarkdownToHtml(body);
+        htmlMessage += `<div><strong>更新详情:</strong></div>`;
+        htmlMessage += `<div style="margin: 10px 0; padding: 10px; background: var(--color-bg-input); border-radius: var(--radius-md); max-height: 300px; overflow-y: auto;">${bodyHtml}</div>`;
+    }
+    
+    if (update_info.published_at) {
+        const publishDate = new Date(update_info.published_at);
+        htmlMessage += `<p><strong>发布时间:</strong> ${publishDate.toLocaleDateString('zh-CN')}</p>`;
+    }
+    
+    if (update_info.html_url) {
+        htmlMessage += `<p><strong>发布页面:</strong> <a href="${update_info.html_url}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
+    }
+    
+    const modal = showConfirm(
+        '发现新版本',
+        '',
+        function() {
+            // 用户确认更新
+            const progressModal = new ProgressModal('更新程序');
+            progressModal.addLog('开始下载并安装更新...');
+        },
+        function() {
+            // 用户取消更新
+            addLogMessage('用户取消了更新');
+        }
+    );
+    
+    setTimeout(() => {
+        const statusElement = document.getElementById(`modal-status-${modal.id}`);
+        if (statusElement) {
+            statusElement.innerHTML = htmlMessage;
+        }
+    }, 100);
 }
 
-// 从Python后端接收日志消息
-window.addEventListener('pywebviewready', function() {
-    addLogMessage('WebUI已准备就绪');
-    console.log('PyWebview API is ready');
+// 初始化函数
+function init() {
+    // 初始化主题管理器
+    themeManager = new ThemeManager();
+    
+    // 初始化导航
+    initNavigation();
+    
+    // 初始化复选框
+    initCheckboxes();
+    
+    // 初始化密码切换
+    initPasswordToggles();
+    
+    // 添加初始日志
+    addLogMessage('系统已启动，准备就绪');
+    addLogMessage('当前主题: ' + themeManager.currentTheme);
+    addLogMessage('WebUI 初始化完成');
+}
 
-    // 加载设置界面的数据
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', init);
+
+// 与后端通信的初始化
+window.addEventListener('pywebviewready', function() {
+    addLogMessage('PyWebview API 已准备就绪', 'success');
+    
+    // 加载设置
     loadSettings();
     
-    // 从配置加载UI设置
-    loadConfigToUI();
-
-    pywebview.api.get_attr("message_list").then(function(message_list) {
-        if (message_list && Array.isArray(message_list)) {
-            for (let i = message_list.length - 1; i >= 0; i--) {
-                const msg = message_list[i];
-                if (Array.isArray(msg) && msg.length >= 2) {
-                    showMessage(msg[0], msg[1]);
-                    message_list.splice(i, 1);
-                }
+    // 检查配置
+    pywebview.api.get_attr('config_ok')
+        .then(function(config_ok) {
+            if (config_ok === false) {
+                pywebview.api.get_attr('config_error')
+                    .then(function(config_error) {
+                        let errorMessage = "配置项格式错误，是否尝试修复?\n否则将会使用默认配置";
+                        if (config_error && Array.isArray(config_error) && config_error.length > 0) {
+                            errorMessage += "\n\n详细错误信息:\n" + config_error.join("\n");
+                        }
+                        
+                        showConfirm(
+                            "警告",
+                            errorMessage,
+                            () => {
+                                pywebview.api.get_attr("config")
+                                    .then(function(config) {
+                                        return pywebview.api.run_func('fix_config', config);
+                                    })
+                                    .then(function(fixed_config) {
+                                        return pywebview.api.set_attr("config", fixed_config);
+                                    })
+                                    .then(function() {
+                                        return pywebview.api.use_inner();
+                                    })
+                                    .then(function() {
+                                        showMessage("提示", "配置已修复并保存，请重新启动程序");
+                                    })
+                                    .catch(function(error) {
+                                        showMessage("错误", "修复配置时出错: " + error);
+                                    });
+                            },
+                            () => {
+                                pywebview.api.use_default()
+                                    .then(function() {
+                                        showMessage("提示", "已使用默认配置，请重新启动程序");
+                                    })
+                                    .catch(function(error) {
+                                        showMessage("错误", "使用默认配置时出错: " + error);
+                                    });
+                            }
+                        );
+                    })
+                    .catch(function(error) {
+                        showMessage(
+                            "错误",
+                            "未知错误，可能导致未知后果。错误信息:\n" + error
+                        );
+                    });
             }
-        }
-    });
-
-    pywebview.api.get_attr('config_ok').then(function(config_ok) {
-        console.log(config_ok);
-        if (config_ok === false) { 
-            // 获取详细的配置错误信息
-            pywebview.api.get_attr('config_error').then(function(config_error) {
-                let errorMessage = "配置项格式错误，是否尝试修复?\n否则将会使用默认配置";
-                if (config_error && Array.isArray(config_error) && config_error.length > 0) {
-                    errorMessage += "\n\n详细错误信息:\n" + config_error.join("\n");
-                }
-                
-                showConfirm(
-                    "警告",
-                    errorMessage,
-                    () => {
-                        // 点击确认按钮的处理
-                        pywebview.api.get_attr("config").then(function(config) {
-                            return pywebview.api.run_func('fix_config', config);
-                        }).then(function(fixed_config) {
-                            return pywebview.api.set_attr("config", fixed_config);
-                        }).then(function() {
-                            // 保存修复后的配置到文件
-                            return pywebview.api.use_inner();
-                        }).then(function() {
-                            showMessage("提示", "配置已修复并保存，请重新启动程序");
-                        }).catch(function(error) {
-                            showMessage("错误", "修复配置时出错: " + error);
-                        });
-                    },
-                    () => {
-                        // 点击取消按钮的处理
-                        pywebview.api.use_default().then(function() {
-                            showMessage("提示", "已使用默认配置，请重新启动程序");
-                        }).catch(function(error) {
-                            showMessage("错误", "使用默认配置时出错: " + error);
-                        });
-                    }
-                );
-            }).catch(function(error) {
-                showMessage(
-                    "错误",
-                    "未知错误，可能导致未知后果。错误信息:\n" + error
-                );
-            });
-        }
-    }).catch(function(error) {
-        pywebview.api.log('Error checking config:'+ error);
-    });
+        })
+        .catch(function(error) {
+            addLogMessage('检查配置时出错: ' + error, 'error');
+        });
     
-    checkForUpdates()
-
-    pywebview.api.get_attr('config').then(function(config) {
-        pywebview.api.log('Config loaded  and close success');
-    }).catch(function(error) {
-        pywebview.api.log('Error getting config:'+ error);
-    });
+    // 检查更新
+autoCheckUpdates();
 });

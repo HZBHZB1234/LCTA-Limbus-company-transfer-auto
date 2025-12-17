@@ -2301,13 +2301,103 @@ function removeConnectionMask() {
         }
     }
 }
+function setupGlobalErrorHandling() {
+    // 创建一个数组来存储在API连接之前的错误
+    window.preApiErrors = [];
+    window.preApiRejections = [];
+    
+    // 标记API是否已经就绪
+    window.apiReady = false;
+    
+    // 捕获 JavaScript 运行时错误
+    window.addEventListener('error', function(event) {
+        const errorMessage = `[全局错误] ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`;
+        const stack = event.error && event.error.stack ? event.error.stack : '无堆栈信息';
+        
+        addLogMessage(errorMessage, 'error');
+        addLogMessage(stack, 'error');
+        console.log('已捕捉到异常',errorMessage);
+        
+        // 发送到后端记录
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.log && window.apiReady) {
+            pywebview.api.log(`[前端错误] ${errorMessage}\n堆栈: ${stack}`)
+                .catch(function(error) {
+                    console.error('无法将错误发送到后端:', error);
+                });
+        } else {
+            // 如果API还未就绪，将错误存储在列表中
+            window.preApiErrors.push({
+                message: errorMessage,
+                stack: stack,
+                timestamp: new Date().toISOString()
+            });
+        }
+    });
+    
+    // 捕获 Promise rejection 错误
+    window.addEventListener('unhandledrejection', function(event) {
+        const errorMessage = `[未处理的Promise拒绝] ${event.reason}`;
+        
+        addLogMessage(errorMessage, 'error');
+        console.log('已捕捉到异常',errorMessage);
+        
+        // 发送到后端记录
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.log && window.apiReady) {
+            pywebview.api.log(`[前端Promise错误] ${errorMessage}`)
+                .catch(function(error) {
+                    console.error('无法将Promise错误发送到后端:', error);
+                });
+        } else {
+            // 如果API还未就绪，将错误存储在列表中
+            window.preApiRejections.push({
+                message: errorMessage,
+                timestamp: new Date().toISOString()
+            });
+        }
+    });
+}
 
 // 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', function() {
+    init();
+    setupGlobalErrorHandling();
+});
 
 // 与后端通信的初始化
 window.addEventListener('pywebviewready', function() {
+    // 标记API已经就绪
+    window.apiReady = true;
+    
     addLogMessage('PyWebview API 已准备就绪', 'success');
+    
+    // 发送之前存储的错误信息
+    if (window.preApiErrors && window.preApiErrors.length > 0) {
+        addLogMessage(`正在发送 ${window.preApiErrors.length} 条之前捕获的错误信息...`, 'info');
+        
+        window.preApiErrors.forEach(function(error) {
+            pywebview.api.log(`[前端错误][延迟发送] ${error.message}\n堆栈: ${error.stack}`)
+                .catch(function(sendError) {
+                    console.error('无法将延迟错误发送到后端:', sendError);
+                });
+        });
+        
+        // 清空已发送的错误
+        window.preApiErrors = [];
+    }
+    
+    if (window.preApiRejections && window.preApiRejections.length > 0) {
+        addLogMessage(`正在发送 ${window.preApiRejections.length} 条之前捕获的Promise拒绝信息...`, 'info');
+        
+        window.preApiRejections.forEach(function(rejection) {
+            pywebview.api.log(`[前端Promise错误][延迟发送] ${rejection.message}`)
+                .catch(function(sendError) {
+                    console.error('无法将延迟Promise错误发送到后端:', sendError);
+                });
+        });
+        
+        // 清空已发送的拒绝信息
+        window.preApiRejections = [];
+    }
     
     // 移除遮罩层并更新状态
     removeConnectionMask();

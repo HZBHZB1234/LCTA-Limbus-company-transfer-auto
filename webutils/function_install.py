@@ -7,7 +7,7 @@ import tempfile
 import json
 import winreg
 
-from .log_h import LogManager
+from .log_manage import LogManager
 from .functions import *
 
 

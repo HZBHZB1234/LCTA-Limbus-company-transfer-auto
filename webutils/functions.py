@@ -9,7 +9,7 @@ import zipfile
 import hashlib
 import shutil
 import base64
-from .log_h import LogManager
+from .log_manage import LogManager
 
 def zip_folder(folder_path, output_path, logger_:LogManager=None):
     try:

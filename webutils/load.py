@@ -6,7 +6,7 @@ from shutil import rmtree, copytree,copyfile
 import time
 import sys
 
-from .log_h import LogManager
+from .log_manage import LogManager
 
 log:LogManager = None
 

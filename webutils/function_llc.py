@@ -1,5 +1,5 @@
 import requests
-from .log_h import LogManager
+from .log_manage import LogManager
 import tempfile
 from .functions import *
 import shutil

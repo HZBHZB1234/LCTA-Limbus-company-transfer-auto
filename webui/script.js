@@ -194,12 +194,19 @@ function ensureMinimizedContainer() {
         container = document.createElement('div');
         container.id = 'minimized-container';
         container.style.position = 'fixed';
-        container.style.bottom = '20px';
+        container.style.top = '80px'; // 增加与顶部的距离，避免与主题切换按钮重叠
         container.style.right = '20px';
+        container.style.bottom = '20px';
+        container.style.width = '300px';
         container.style.display = 'flex';
         container.style.flexDirection = 'column';
+        container.style.alignItems = 'flex-end';
         container.style.gap = '10px';
         container.style.zIndex = '999';
+        container.style.maxHeight = 'calc(100vh - 100px)';
+        container.style.overflowY = 'auto';
+        container.style.overflowX = 'hidden';
+        container.style.padding = '5px';
         document.body.appendChild(container);
     }
     return container;
@@ -573,13 +580,14 @@ class ModalWindow {
     setCompleted() {
         this.isCompleted = true;
         const cancelButton = document.getElementById(`cancel-btn-${this.id}`);
+        const pauseButton = document.getElementById(`pause-btn-${this.id}`);
+        
         if (cancelButton) {
             cancelButton.textContent = '完成';
         }
         
-        const pauseButton = document.getElementById(`pause-btn-${this.id}`);
         if (pauseButton) {
-            pauseButton.textContent = '完成';
+            pauseButton.style.display = 'none';
         }
         
         this.updateMinimizedStatus('已完成');
@@ -812,6 +820,14 @@ class ProgressModal extends ModalWindow {
         this.setStatus('正在初始化...');
         this.showProgress(true);
         this.updateProgress(0, '初始化中...');
+        
+        // 注册模态ID到后端
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.add_modal_id) {
+            pywebview.api.add_modal_id(this.id)
+                .catch(function(error) {
+                    console.error('注册模态ID失败:', error);
+                });
+        }
     }
     
     complete(success = true, message = '操作完成') {
@@ -824,6 +840,45 @@ class ProgressModal extends ModalWindow {
             this.addLog(message);
         }
         this.setCompleted();
+    }
+    
+    cancel() {
+        // 调用后端API处理取消操作
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_modal_cancel) {
+            pywebview.api.handle_modal_cancel(this.id)
+                .catch(function(error) {
+                    console.error('处理取消操作失败:', error);
+                });
+        }
+        
+        // 调用父类的取消方法
+        super.cancel();
+    }
+    
+    pause() {
+        // 调用后端API处理暂停操作
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_modal_pause) {
+            pywebview.api.handle_modal_pause(this.id)
+                .catch(function(error) {
+                    console.error('处理暂停操作失败:', error);
+                });
+        }
+        
+        // 调用父类的暂停方法
+        super.pause();
+    }
+    
+    resume() {
+        // 调用后端API处理恢复操作
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_modal_resume) {
+            pywebview.api.handle_modal_resume(this.id)
+                .catch(function(error) {
+                    console.error('处理恢复操作失败:', error);
+                });
+        }
+        
+        // 调用父类的恢复方法
+        super.resume();
     }
 }
 
@@ -1191,7 +1246,10 @@ function changeFontForPackage() {
             const cancelBtn = document.createElement('button');
             cancelBtn.className = 'action-btn';
             cancelBtn.textContent = '取消';
-            cancelBtn.onclick = () => modal.close();
+            cancelBtn.onclick = () => {
+                modal.close();
+                modal.setCompleted(); // 确保调用setCompleted方法
+            };
             footer.appendChild(cancelBtn);
         })
         .catch(function(error) {
@@ -1351,7 +1409,10 @@ function getFontFromInstalled() {
             const cancelBtn = document.createElement('button');
             cancelBtn.className = 'action-btn';
             cancelBtn.textContent = '取消';
-            cancelBtn.onclick = () => modal.close();
+            cancelBtn.onclick = () => {
+                modal.close();
+                modal.setCompleted(); // 确保调用setCompleted方法
+            };
             footer.appendChild(cancelBtn);
         })
         .catch(function(error) {

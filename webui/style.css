@@ -148,6 +148,7 @@ body {
     display: flex;
     overflow: hidden;
     transition: background-color var(--transition-speed) var(--transition-easing);
+    box-sizing: border-box;
 }
 
 /* 主题切换器 */
@@ -1370,6 +1371,8 @@ button {
     transition: all var(--transition-speed) var(--transition-easing);
     position: relative;
     animation: slideInRight 0.3s var(--transition-easing);
+    margin-top: 70px; /* 为顶部主题切换按钮留出空间 */
+    margin-right: 20px; /* 为右侧最小化窗口留出空间 */
 }
 
 @keyframes slideInRight {

@@ -44,11 +44,10 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
         logger_.log_modal_process("开始下载翻译文件", modal_id)
         logger_.log_modal_status("正在初始化链接", modal_id)
 
-        api_url = any(i['endpoint'] for i in APINode if i["id"] == kwargs.get("api_node", "local_api"))
+        api_url = [i['endpoint'] for i in APINode if i["id"] == kwargs.get("api_node", "local_api")][0]
         api_version = api_url.format('v2/resource/get_version')
         api_hash = api_url.format("v2/hash/get_hash")
-        node_url = any(i['endpoint'] for i in NodeList if i["id"] == kwargs.get("file_node", "auto"))
-        
+        node_url = [i['endpoint'] for i in NodeList if i["id"] == kwargs.get("file_node", "auto")][0]
         logger_.log(f"api_url {api_url}")
         logger_.log(f"api_version {api_version}")
         logger_.log(f"api_hash {api_hash}")
@@ -60,8 +59,8 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
         version_ = requests.get(api_version)
         version_.raise_for_status()
         version_ = version_.json()
-        if not version_.get("note") == "本次文本更新没有提示":
-            logger_.log_modal_process(f"本次更新有特殊提示 {version_.get('note')}", modal_id)
+        if not version_.get("notice") == '本次文本更新没有提示。':
+            logger_.log_modal_process(f"本次更新有特殊提示 {version_.get('notice')}", modal_id)
         version = version_.get("version", "unknown")
         logger_.log_modal_process(f"请求到版本 {version}")
 

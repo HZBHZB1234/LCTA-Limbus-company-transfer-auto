@@ -269,7 +269,24 @@ function initNavigation() {
                     
                     // 如果是安装汉化包界面，刷新包列表
                     if (sectionId === 'install-section') {
-                        refreshInstallPackageList();
+                        // 先保存目录设置再刷新列表
+                        const packageDirInput = document.getElementById('install-package-directory');
+                        if (packageDirInput) {
+                            const packageDirValue = packageDirInput.value;
+                            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirValue)
+                                .then(function(success) {
+                                    if (success) {
+                                        refreshInstallPackageList();
+                                    } else {
+                                        showMessage('错误', '保存汉化包目录设置失败');
+                                    }
+                                })
+                                .catch(function(error) {
+                                    showMessage('错误', '保存汉化包目录设置时发生错误: ' + error);
+                                });
+                        } else {
+                            refreshInstallPackageList();
+                        }
                     }
                 }, 150); // 加快动画速度
             }
@@ -398,6 +415,27 @@ function browseInstallPackageDirectory() {
     }).catch(function(error) {
         showMessage('错误', '浏览文件夹时发生错误: ' + error);
     });
+}
+
+// 添加清空汉化包目录输入框的函数
+function clearPackageDirectory() {
+    const packageDirInput = document.getElementById('install-package-directory');
+    if (packageDirInput) {
+        packageDirInput.value = '';
+        // 更新配置
+        pywebview.api.update_config_value('ui_default.install.package_directory', '')
+            .then(function(success) {
+                if (success) {
+                    // 刷新汉化包列表
+                    refreshInstallPackageList();
+                } else {
+                    showMessage('错误', '更新配置失败');
+                }
+            })
+            .catch(function(error) {
+                showMessage('错误', '更新配置时发生错误: ' + error);
+            });
+    }
 }
 
 // 模态窗口基类
@@ -989,6 +1027,21 @@ function refreshInstallPackageList() {
     // 显示加载状态
     const packageList = document.getElementById('install-package-list');
     if (!packageList) return;
+    
+    // 获取汉化包目录输入框的值并自动保存
+    const packageDirInput = document.getElementById('install-package-directory');
+    if (packageDirInput) {
+        const packageDirValue = packageDirInput.value;
+        pywebview.api.update_config_value('ui_default.install.package_directory', packageDirValue)
+            .then(function(success) {
+                if (!success) {
+                    showMessage('错误', '保存汉化包目录设置失败');
+                }
+            })
+            .catch(function(error) {
+                showMessage('错误', '保存汉化包目录设置时发生错误: ' + error);
+            });
+    }
     
     packageList.innerHTML = `
         <div class="list-empty">

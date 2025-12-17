@@ -273,7 +273,12 @@
                     <div class="form-group">
                         <label for="install-package-directory">汉化包目录:</label>
                         <div class="file-input-group">
-                            <input type="text" id="install-package-directory" placeholder="留空则使用程序所在目录">
+                            <div class="input-wrapper">
+                                <input type="text" id="install-package-directory" placeholder="留空则使用程序所在目录">
+                                <button type="button" class="input-clear" onclick="clearPackageDirectory()" title="清空目录设置">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
                             <button type="button" class="action-btn secondary" onclick="browseInstallPackageDirectory()">
                                 <i class="fas fa-folder-open"></i> 浏览
                             </button>

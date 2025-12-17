@@ -656,12 +656,52 @@ input:focus, select:focus, textarea:focus {
 
 /* 文件输入组 */
 .file-input-group {
+    position: relative;
     display: flex;
     gap: var(--spacing-sm);
 }
 
+.file-input-group .input-wrapper {
+    position: relative;
+    flex: 1;
+    height: 44px; /* 与input的总高度 (padding*2 + line-height) 匹配 */
+    display: flex;
+    align-items: center;
+}
+
 .file-input-group input {
     flex: 1;
+    padding-right: 30px; /* 为清除按钮留出空间 */
+}
+
+/* 输入框内的清除按钮 */
+.file-input-group .input-clear {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    z-index: 2;
+    padding: 0;
+    margin: 0;
+}
+
+.file-input-group .input-clear:hover {
+    background: var(--color-bg-primary);
+    color: var(--color-danger);
+}
+
+.file-input-group .input-clear i {
+    font-size: 14px;
 }
 
 /* 按钮样式 */

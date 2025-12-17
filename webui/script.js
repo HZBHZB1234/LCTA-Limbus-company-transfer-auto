@@ -266,6 +266,11 @@ function initNavigation() {
                     if (sectionId === 'log-section') {
                         scrollLogToBottom();
                     }
+                    
+                    // 如果是安装汉化包界面，刷新包列表
+                    if (sectionId === 'install-section') {
+                        refreshInstallPackageList();
+                    }
                 }, 150); // 加快动画速度
             }
         });
@@ -2177,6 +2182,71 @@ function init() {
     addLogMessage('系统已启动，准备就绪');
     addLogMessage('当前主题: ' + themeManager.currentTheme);
     addLogMessage('WebUI 初始化完成');
+    
+    // 创建遮罩层
+    createConnectionMask();
+}
+
+// 创建连接遮罩层
+function createConnectionMask() {
+    // 创建遮罩层元素
+    const mask = document.createElement('div');
+    mask.id = 'connection-mask';
+    mask.className = 'connection-mask';
+    
+    // 创建遮罩内容
+    mask.innerHTML = `
+        <div class="mask-content">
+            <div class="spinner"></div>
+            <div class="mask-text">正在连接到API...</div>
+        </div>
+    `;
+    
+    // 将遮罩层添加到body
+    document.body.appendChild(mask);
+    
+    // 更新状态指示器为"连接中"
+    const statusIndicator = document.querySelector('.status-indicator');
+    if (statusIndicator) {
+        const statusDot = statusIndicator.querySelector('.status-dot');
+        const statusText = statusIndicator.querySelector('span');
+        
+        if (statusDot) {
+            statusDot.className = 'status-dot connecting';
+        }
+        
+        if (statusText) {
+            statusText.textContent = '连接中';
+        }
+    }
+}
+
+// 移除连接遮罩层
+function removeConnectionMask() {
+    const mask = document.getElementById('connection-mask');
+    if (mask) {
+        mask.style.opacity = '0';
+        setTimeout(() => {
+            if (mask.parentNode) {
+                mask.parentNode.removeChild(mask);
+            }
+        }, 300);
+    }
+    
+    // 更新状态指示器为"已连接"
+    const statusIndicator = document.querySelector('.status-indicator');
+    if (statusIndicator) {
+        const statusDot = statusIndicator.querySelector('.status-dot');
+        const statusText = statusIndicator.querySelector('span');
+        
+        if (statusDot) {
+            statusDot.className = 'status-dot connected';
+        }
+        
+        if (statusText) {
+            statusText.textContent = '已连接';
+        }
+    }
 }
 
 // 页面加载完成后初始化
@@ -2185,6 +2255,9 @@ document.addEventListener('DOMContentLoaded', init);
 // 与后端通信的初始化
 window.addEventListener('pywebviewready', function() {
     addLogMessage('PyWebview API 已准备就绪', 'success');
+    
+    // 移除遮罩层并更新状态
+    removeConnectionMask();
     
     // 加载设置
     loadSettings();

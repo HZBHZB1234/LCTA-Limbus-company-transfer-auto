@@ -207,6 +207,7 @@ def main():
     fetch_request = requests.post(f'{API_URL}/info',
                                  headers=headers, data={'note_name': ADDRESS, "note_pwd": "AutoTranslate"})
     fetch_request.raise_for_status()
+    print(fetch_request.json())
     note_info = fetch_request.json()['data']
     
     if not str(note_info['status']) == '1':

@@ -1,0 +1,37 @@
+name: Check Newest Package
+
+on:
+  # 每小时运行一次（在15分钟时）
+  schedule:
+    - cron: '15 * * * *'
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # 2. 设置Python环境
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'  # 指定Python版本
+          cache: 'pip'  # 可选：启用pip缓存加速
+      
+      # 3. 安装依赖（如果有requirements.txt）
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+      
+      # 4. 运行脚本
+      - name: Run Python script
+        env:
+          ADDRESS: ${{ secrets.WEBNOTE_ADDRESS }}
+        run: |
+          python .github/UpdatePackage.py

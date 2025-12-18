@@ -6,7 +6,9 @@
         },
         "zero": {
             "check_hash": "bool",
-            "dump_default": "bool"
+            "dump_default": "bool",
+            "api_node": "str",
+            "file_node": "str"
         },
         "ourplay": {
             "decrease_size": "bool",

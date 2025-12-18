@@ -1845,13 +1845,21 @@ function cleanCache() {
 }
 
 function downloadLLC() {
+    const apiNode = document.getElementById('llc-api-node').value;
+    const fileNode = document.getElementById('llc-file-node').value;
     const checkHash = document.getElementById('llc-check-hash').checked;
     const dumpDefault = document.getElementById('llc-dump-default').checked;
     
+    // 更新配置
+    pywebview.api.update_config_value('ui_default.zero.api_node', apiNode);
+    pywebview.api.update_config_value('ui_default.zero.file_node', fileNode);
+    pywebview.api.update_config_value('ui_default.zero.check_hash', checkHash);
+    pywebview.api.update_config_value('ui_default.zero.dump_default', dumpDefault);
+    
     const modal = new ProgressModal('下载零协汉化包');
     modal.addLog('开始下载零协汉化包...');
-    modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
-    modal.addLog(`保存原始文件: ${dumpDefault ? '是' : '否'}`);
+    modal.addLog(`使用API节点: ${apiNode}`);
+    modal.addLog(`使用文件节点: ${fileNode}`);
     
     // 调用后端API进行实际下载
     pywebview.api.download_llc_translation(modal.id).then(function(result) {

@@ -7,7 +7,9 @@
         },
         "zero":{
             "check_hash": true,
-            "dump_default": false
+            "dump_default": false,
+            "api_node": "local_api",
+            "file_node": "auto"
         },
         "ourplay":{
             "decrease_size":true,

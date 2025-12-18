@@ -450,6 +450,29 @@
                 <div class="setting-card">
                     <h3 class="setting-title">下载配置</h3>
                     <div class="form-group">
+                        <label for="llc-api-node">API节点:</label>
+                        <div class="select-wrapper">
+                            <select id="llc-api-node">
+                                <option value="local_api">零协会官方 API</option>
+                                <option value="cf_api">CloudFlare CDN API(海外)</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="llc-file-node">文件节点:</label>
+                        <div class="select-wrapper">
+                            <select id="llc-file-node">
+                                <option value="auto">自动选择节点</option>
+                                <option value="local">零协会镇江节点</option>
+                                <option value="cf">CloudFlare CDN(海外)</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
                         <label class="checkbox-container">
                             <input type="checkbox" id="llc-check-hash" checked>
                             <span class="checkmark"></span>

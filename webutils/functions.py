@@ -205,3 +205,29 @@ def calculate_md5(file_path, logger_: LogManager=None):
             logger_.log(f"计算文件MD5失败: {e}")
             logger_.log_error(e)
         return None
+
+def decompress_zip(file_path, output_dir='.', logger_: LogManager=None):
+    if not os.path.exists(file_path):
+        logger_.log(f"压缩文件不存在: {file_path}")
+        return False
+    if output_dir is None:
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        output_dir = os.path.join(os.getcwd(), base_name)
+    
+    os.makedirs(output_dir, exist_ok=True)
+    try: 
+        with zipfile.ZipFile(file_path, 'r') as zip_ref:
+            zip_ref.extractall(output_dir)
+    except Exception as e:
+        logger_.log(f"解压失败: {e}")
+        logger_.log_error(e)
+        return False
+
+
+def decompress_by_extension(file_path, output_dir='.', logger_: LogManager=None):
+    if file_path.endswith('.zip'):
+        return decompress_zip(file_path, output_dir, logger_=logger_)
+    elif file_path.endswith('.7z'):
+        return decompress_7z(file_path, output_dir, logger_=logger_)
+    else:
+        return False

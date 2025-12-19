@@ -5,9 +5,21 @@ import json
 import base64
 from datetime import datetime, timedelta
 
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-}
+headers={
+    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0',
+    'Referer':'https://webnote.cc/',
+    'Origin':'https://webnote.cc/',
+    'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8',
+    'Accept':'application/json, text/javascript, */*; q=0.01',
+    'Accept-Encoding':'gzip, deflate, br, zstd',
+    'Accept-Language':'en-US,en;q=0.9',
+    'Sec-Ch-Ua':'"Chromium";v="140", "Not=A?Brand";v="24", "Microsoft Edge";v="140"',
+    'Sec-Ch-Ua-Mobile':'?0',
+    'Sec-Ch-Ua-Platform':'"Windows"',
+    'Sec-Fetch-Dest':'empty',
+    'Sec-Fetch-Mode':'cors',
+    'Sec-Fetch-Site':'cross-site',
+    }
 ADDRESS = os.getenv("ADDRESS")
 API_URL = "https://api.txttool.cn/netcut/note"
 

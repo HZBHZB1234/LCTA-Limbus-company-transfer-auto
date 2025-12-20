@@ -13,9 +13,9 @@
             "download_source": "github"
         },
         "ourplay":{
-            "decrease_size":true,
-            "llc_font":true,
-            "check_hash": true
+            "font_option": "simplify",
+            "check_hash": true,
+            "use_api": true
         },
         "clean":{
             "remove_cache":true
@@ -35,5 +35,25 @@
     },
     "game_path":"",
     "debug":false,
-    "auto_check_update": true
+    "auto_check_update": true,
+    "launcher": {
+        "zero": {
+            "zip_type": "seven",
+            "use_proxy": true,
+            "use_cache": true,
+            "download_source": "github"
+        },
+        "ourplay":{
+            "font_option": "simplify",
+            "use_api": true
+        },
+        "work":{
+            "update": "all",
+            "mod": false
+        },
+        "last_install": {
+            "llc" : "0",
+            "ourplay": "0"
+        }
+    }
 }

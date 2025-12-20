@@ -10,7 +10,7 @@ from zipfile import ZipFile
 from UnityPy.files import SerializedFile, BundleFile, ObjectReader
 from UnityPy.streams import EndianBinaryReader
 
-from compress import compress_lunartique_mod
+from launcher.compress import compress_lunartique_mod
 
 import UnityPy
 

@@ -7,6 +7,28 @@ import json
 import base64
 import os
 
+def check_ver_ourplay(logger_: LogManager = None):
+    headers = {
+        'device-user': make_device(),
+        'traceparent': '00-6ab78dbd83864f7c9d9315a590765cdd-83864f7c9d9315a5-00',
+        'tracestate': 'ODM4NjRmN2M5ZDkzMTVhNQ==',
+        'Accept': 'application/json, text/json, text/x-json, text/javascript, application/xml, text/xml',
+        'User-Agent': 'RestSharp/108.0.2.0',
+        'Content-Type': 'application/json'
+    }
+    
+    url = 'https://api-pc.ourplay.com.cn/pcapi/ourplay_pc/game/zh/file'
+    data = {"gameid": 126447, "language_type": "chinese", "language_ver": 0}
+    data_json = json.dumps(data)
+    
+    logger_.log("正在请求 OurPlay 汉化包信息")
+    
+    r = requests.post(url, headers=headers, data=data_json)
+    r.raise_for_status()
+    response_data = r.json()
+
+    return response_data['data']['versionCode']
+
 def make_device():
     """
     生成 OurPlay 设备信息

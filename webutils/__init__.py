@@ -1,5 +1,5 @@
-from .function_llc import function_llc_main
-from .function_ourplay import function_ourplay_main
+from .function_llc import function_llc_main, check_ver_github
+from .function_ourplay import function_ourplay_main, check_ver_ourplay
 from .function_install import (
     find_translation_packages,
     delete_translation_package,
@@ -17,5 +17,7 @@ __all__ = [
     'change_font_for_package',
     'install_translation_package',
     'get_system_fonts',
-    'export_system_font'
+    'export_system_font',
+    'check_ver_github',
+    'check_ver_ourplay'
 ]

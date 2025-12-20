@@ -6,6 +6,15 @@ from web_function import *
 from pathlib import Path
 import json
 
+def check_ver_github(from_proxy):
+    GithubDownloader = GitHubReleaseFetcher(
+        "LocalizeLimbusCompany",
+        "LocalizeLimbusCompany",
+        from_proxy,
+        ignore_ssl=True
+    )
+
+    return GithubDownloader.get_latest_release().tag_name
 
 def function_llc_main(modal_id, logger_: LogManager, **kwargs):
     logger_.log_modal_process("成功链接后端", modal_id)
@@ -137,6 +146,8 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
                 
                 logger_.update_modal_progress(100, "成功打包文件", modal_id)
                 logger_.log_modal_process("成功打包文件", modal_id)
+                logger_.log_modal_status("全部操作完成", modal_id)
+                return final_zip_path
 
         logger_.log_modal_status("全部操作完成", modal_id)
 
@@ -257,3 +268,5 @@ def _download_from_api(temp_dir, logger_: LogManager, modal_id, zip_type, from_p
         
         logger_.update_modal_progress(100, "成功打包文件", modal_id)
         logger_.log_modal_process("成功打包文件", modal_id)
+        logger_.log_modal_status("全部操作完成", modal_id)
+        return final_zip_path

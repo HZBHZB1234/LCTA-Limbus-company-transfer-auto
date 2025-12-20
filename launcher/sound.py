@@ -5,7 +5,7 @@ import shutil
 import time
 from threading import Thread
 
-from modfolder import get_mod_folder
+from launcher.modfolder import get_mod_folder
 
 _game_path = None
 def sound_folder():

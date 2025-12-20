@@ -12,9 +12,9 @@
             "download_source": "str"
         },
         "ourplay": {
-            "decrease_size": "bool",
-            "llc_font": "bool",
-            "check_hash": "bool"
+            "font_option": "str",
+            "check_hash": "bool",
+            "use_api": "bool"
         },
         "clean": {
             "remove_cache": "bool"
@@ -34,5 +34,25 @@
     },
     "game_path": "str",
     "debug": "bool",
-    "auto_check_update": "bool"
+    "auto_check_update": "bool",
+    "launcher": {
+        "zero": {
+            "zip_type": "str",
+            "use_proxy": "bool",
+            "use_cache": "bool",
+            "download_source": "str"
+        },
+        "ourplay": {
+            "font_option": "str",
+            "use_api": "bool"
+        },
+        "work": {
+            "update": "str",
+            "mod": "bool"
+        },
+        "last_install": {
+            "llc" : "str",
+            "ourplay": "str"
+        }
+    }
 }

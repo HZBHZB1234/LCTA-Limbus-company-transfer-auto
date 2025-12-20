@@ -13,6 +13,7 @@ sys.path.append(project_root.as_posix())
 
 from web_function import *
 
+os.environ["ADDRESS"] = "LCTA_8131547723879782"
 ADDRESS = os.getenv("ADDRESS")
 API_URL = "https://api.txttool.cn/netcut/note"
 
@@ -80,11 +81,11 @@ def get_ourplay():
         print(f"OurPlay 响应: {str(response_data)[:200]}...")  # 截断输出
         if not str(response_data.get('code')) == '1':
             print("响应错误")
-            return None
-        return response_data.get('data')
+            return None, None
+        return response_data.get('data').get('versionCode'), response_data.get('data').get('url')
     except Exception as e:
         print(f"获取 OurPlay 版本失败: {e}")
-        return None
+        return None, None
 
 def get_llc():
     """
@@ -170,8 +171,8 @@ def main():
     note_.fetch_note_info()
     try:
         current_data = json.loads(note_.note_content)
-        current_ourplay_version = current_data.get('ourplay_version')
-        current_llc_version = current_data.get('llc_version')
+        current_ourplay_version = current_data['ourplay_version']
+        current_llc_version = current_data['llc_version']
         
         # 解析上次更新时间
         try:
@@ -184,7 +185,7 @@ def main():
         except (ValueError, TypeError):
             llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
             
-    except (json.JSONDecodeError, KeyError):
+    except (json.JSONDecodeError, KeyError, TypeError):
         # 首次运行，初始化数据
         print("首次运行，初始化数据")
         current_ourplay_version = None

@@ -37,7 +37,7 @@ class Note():
         
     def fetch_note_info(self):
         fetch_request = requests.post(f'{API_URL}/info',
-                                     headers=WEBNOTE_HEADERS, data={'note_name': self.address, "note_pwd": self.pwd})
+                                     headers=WEBNOTE_HEADERS, data={'note_name': self.note_name, "note_pwd": self.pwd})
         fetch_request.raise_for_status()
         note_info = fetch_request.json()
         

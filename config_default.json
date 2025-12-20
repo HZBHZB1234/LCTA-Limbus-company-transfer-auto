@@ -5,11 +5,11 @@
         "install":{
             "package_directory": ""
         },
-        "zero":{
-            "check_hash": true,
-            "dump_default": false,
-            "api_node": "local_api",
-            "file_node": "auto"
+        "zero": {
+            "zip_type": "zip",
+            "use_proxy": true,
+            "use_cache": true,
+            "dump_default": false
         },
         "ourplay":{
             "decrease_size":true,

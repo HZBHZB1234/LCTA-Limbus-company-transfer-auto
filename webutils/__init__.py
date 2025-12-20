@@ -1,4 +1,4 @@
-from .function_llc_old import function_llc_main
+from .function_llc import function_llc_main
 from .function_ourplay import function_ourplay_main
 from .function_install import (
     find_translation_packages,

@@ -5,10 +5,10 @@
             "package_directory": "str"
         },
         "zero": {
-            "check_hash": "bool",
-            "dump_default": "bool",
-            "api_node": "str",
-            "file_node": "str"
+            "zip_type": "str",
+            "use_proxy": "bool",
+            "use_cache": "bool",
+            "dump_default": "bool"
         },
         "ourplay": {
             "decrease_size": "bool",

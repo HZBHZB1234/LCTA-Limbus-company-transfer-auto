@@ -414,16 +414,24 @@ class LCTA_API():
         try:
             self.add_modal_log("开始下载零协汉化包...", modal_id)
             # 从配置中读取参数
-            check_hash = self.config.get("ui_default", {}).get("zero", {}).get("check_hash", True)
             dump_default = self.config.get("ui_default", {}).get("zero", {}).get("dump_default", False)
-            api_node = self.config.get("ui_default", {}).get("zero", {}).get("api_node", "local_api")
-            file_node = self.config.get("ui_default", {}).get("zero", {}).get("file_node", "auto")
+            zip_type = self.config.get("ui_default", {}).get("zero", {}).get("zip_type", "zip")
+            use_proxy = self.config.get("ui_default", {}).get("zero", {}).get("use_proxy", True)
+            use_cache = self.config.get("ui_default", {}).get("zero", {}).get("use_cache", False)
             
-            self.add_modal_log(f"使用API节点: {api_node}", modal_id)
-            self.add_modal_log(f"使用文件节点: {file_node}", modal_id)
+            self.add_modal_log(f"压缩格式: {zip_type}", modal_id)
+            self.add_modal_log(f"使用代理: {use_proxy}", modal_id)
+            self.add_modal_log(f"使用缓存: {use_cache}", modal_id)
             
-            function_llc_main(modal_id, self.log_manager, check_hash=check_hash, dump_default=dump_default, 
-                             api_node=api_node, file_node=file_node)
+            # 传递新参数给function_llc_main
+            function_llc_main(
+                modal_id, 
+                self.log_manager, 
+                dump_default=dump_default,
+                zip_type=zip_type,
+                from_="proxy" if use_proxy else "direct",
+                use_cache=self.config.get('game_path')+'LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf' if use_cache else False
+            )
             self.add_modal_log("零协汉化包下载成功", modal_id)
             self.log_manager.log_modal_status("操作完成", modal_id)
             return {"success": True, "message": "零协汉化包下载成功"}
@@ -875,6 +883,8 @@ def main():
     logger.info("WebUI窗口已创建")
 
     debug_mode = api.config.get("debug", False)
+
+    webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
 
     # 启动应用
     webview.start(

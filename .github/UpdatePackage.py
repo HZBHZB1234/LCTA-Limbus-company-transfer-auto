@@ -251,7 +251,7 @@ def main():
     need_update_ourplay = (should_check_ourplay_flag and new_ourplay_version != current_ourplay_version)
     need_update_llc = (should_check_llc_flag and new_llc_version != current_llc_version)
     
-    if not need_update_ourplay and not need_update_llc:
+    if not need_update_ourplay and not need_update_llc and not should_check_llc_mirror_flag:
         print("版本无变化")
         return
     

@@ -6,6 +6,7 @@ import shutil
 import json
 import base64
 import os
+from web_function import Note
 
 def check_ver_ourplay(logger_: LogManager = None):
     headers = {
@@ -220,3 +221,95 @@ def function_ourplay_main(modal_id, logger_: LogManager, **kwargs):
             logger_.log_modal_status("操作完成  警告：存在哈希校验失败的文件")
         else:
             logger_.log_modal_status("全部操作完成")
+            
+def function_ourplay_api(modal_id, logger_: LogManager, **kwargs):
+    """
+    OurPlay 下载主函数
+    """
+    logger_.log_modal_process("成功链接后端", modal_id)
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        logger_.log_modal_process("开始下载 OurPlay 汉化包", modal_id)
+        logger_.log_modal_status("正在初始化链接", modal_id)
+        
+        note_ = Note(address="062d22d6ecb233d1", pwd="AutoTranslate", read_only=True)
+        note_.fetch_note_info()
+        url = json.loads(note_.note_content).get("ourplay_download_url")
+        save_path = f"{temp_dir}/transfile.zip"
+        
+        logger_.log(f"OurPlay 下载地址: {url}")
+        logger_.check_running(modal_id)
+        logger_.log_modal_process("开始下载汉化包", modal_id)
+        logger_.log_modal_status("正在下载汉化包", modal_id)
+        
+        # 下载文件
+        if not download_with(url, save_path, chunk_size=1024*100, 
+                            logger_=logger_, modal_id=modal_id, progress_=[0, 50]):
+            logger_.log_modal_process("下载 OurPlay 汉化包时出现错误", modal_id)
+            raise
+            
+        logger_.log("OurPlay 汉化包下载完成")
+        logger_.log_modal_process("OurPlay 汉化包下载完成", modal_id)
+        logger_.update_modal_progress(50, "下载完成", modal_id)
+        
+        logger_.log_modal_process("跳过文件校验", modal_id)
+        logger_.update_modal_progress(60, "跳过文件校验", modal_id)
+        
+        logger_.check_running(modal_id)
+        logger_.log_modal_process("开始处理文件", modal_id)
+        logger_.log_modal_status("正在处理文件", modal_id)
+        
+        font_option = kwargs.get("font_option", "keep")
+        
+        logger_.log("正在解压文件...")
+        with zipfile.ZipFile(save_path, 'r') as zip_file:
+            zip_file.extractall(f'{temp_dir}\\')
+            
+        logger_.check_running(modal_id)
+        logger_.log("正在格式化文件...")
+        
+
+        if font_option == "simplify" or font_option == "llc":
+            shutil.rmtree(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Title')
+            os.makedirs(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Title')
+            logger_.log("已精简字体")
+
+        if font_option == "llc":
+            logger_.log("正在下载 LLC 字体...")
+            
+            # 下载LLC字体文件
+            font_url = "https://download.zeroasso.top/files/LLCCN-Font.7z"
+            save_path_font = f"{temp_dir}/LLCCN-Font.7z"
+            
+            logger_.log_modal_process("开始下载字体文件")
+            logger_.log_modal_status("正在下载字体文件")
+            
+            if not download_with(font_url, save_path_font,
+                                chunk_size=1024 * 100, logger_=logger_,
+                                modal_id=modal_id, progress_=[60, 75]):
+                logger_.log_modal_process("下载字体文件时出现错误", modal_id)
+                raise
+                
+            logger_.log("字体文件下载完成")
+            logger_.log_modal_process("字体文件下载完成")
+            
+            # 解压字体文件
+            if not decompress_7z(save_path_font, temp_dir, logger_=logger_):
+                logger_.log("字体文件解压失败")
+                raise
+                
+            os.remove(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
+                
+            shutil.move(f'{temp_dir}\\LimbusCompany_Data\\Lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf',
+                        f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
+            logger_.log("已替换为LLC字体")
+                
+        logger_.log("正在压缩文件...")
+        if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua', 'ourplay.zip', logger_):
+            logger_.log_modal_process("处理文件时出现错误", modal_id)
+            raise
+            
+        logger_.log('格式化完成')
+        logger_.log_modal_process("文件处理完成", modal_id)
+        logger_.update_modal_progress(100, "操作完成", modal_id)
+        logger_.log_modal_status("全部操作完成")

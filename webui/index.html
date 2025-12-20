@@ -55,7 +55,12 @@
                 <i class="fas fa-users"></i>
                 <span>从零协下载汉化</span>
             </button>
-            
+        
+            <button id="launcher-config-btn" class="nav-btn">
+                <i class="fas fa-rocket"></i>
+                <span>Launcher配置</span>
+            </button>
+
             <button id="config-btn" class="nav-btn">
                 <i class="fas fa-cog"></i>
                 <span>配置汉化api</span>
@@ -1073,6 +1078,116 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Launcher配置界面 -->
+        <div id="launcher-config-section" class="content-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-rocket"></i>
+                    Launcher配置
+                </h2>
+                <p class="section-subtitle">配置游戏启动器相关选项</p>
+            </div>
+            
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">零协汉化配置</h3>
+                    <div class="form-group">
+                        <label for="launcher-zero-zip-type">压缩格式:</label>
+                        <div class="select-wrapper">
+                            <select id="launcher-zero-zip-type">
+                                <option value="zip">ZIP格式</option>
+                                <option value="seven">7Z格式</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="launcher-zero-download-source">文本下载来源:</label>
+                        <div class="select-wrapper">
+                            <select id="launcher-zero-download-source">
+                                <option value="github">从github下载</option>
+                                <option value="mirror">从公益镜像下载 beta</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="launcher-zero-use-proxy" checked>
+                            <span class="checkmark"></span>
+                            使用代理加速下载
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="launcher-zero-use-cache" checked>
+                            <span class="checkmark"></span>
+                            使用本地字体缓存
+                        </label>
+                        <small class="form-hint">使用本地已有的字体文件，加快下载速度</small>
+                    </div>
+                </div>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">OurPlay配置</h3>
+                    <div class="form-group">
+                        <label for="launcher-ourplay-font-option">字体处理选项:</label>
+                        <div class="select-wrapper">
+                            <select id="launcher-ourplay-font-option">
+                                <option value="keep">保留原字体</option>
+                                <option value="simplify">精简字体</option>
+                                <option value="llc">从零协下载字体</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="launcher-ourplay-use-api" checked>
+                            <span class="checkmark"></span>
+                            使用API获取版本信息
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="setting-card">
+                    <h3 class="setting-title">工作模式配置</h3>
+                    <div class="form-group">
+                        <label for="launcher-work-update">更新模式:</label>
+                        <div class="select-wrapper">
+                            <select id="launcher-work-update">
+                                <option value="no">不自动更新</option>
+                                <option value="llc">仅零协更新</option>
+                                <option value="ourplay">仅ourplay更新</option>
+                                <option value="all">两者都更新</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="launcher-work-mod" checked>
+                            <span class="checkmark"></span>
+                            启用MOD支持
+                        </label>
+                        <small class="form-hint">启用后将加载MOD并启动游戏</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="action-area">
+                <button class="primary-btn" onclick="saveLauncherConfig()">
+                    <i class="fas fa-save"></i>
+                    保存配置
+                </button>
             </div>
         </div>
     </div>

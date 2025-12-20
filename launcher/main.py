@@ -15,8 +15,14 @@ import os
 import logging
 
 # DO NOT IMPORT ANY FILES BEFORE THESE TWO LINES
+print('开始')
 file_dir = Path(os.path.dirname(__file__)).parent
-sys.path.append(file_dir)
+print(f'\n\n{file_dir}')
+sys.path.insert(0, str(file_dir))
+
+os.chdir(file_dir)
+if not os.getenv('path_', False):
+    os.environ['path_']=str(os.getcwd())
 
 from web_function import *
 from webutils.log_manage import LogManager
@@ -35,7 +41,7 @@ def check_network():
     return False
 
 def get_note_content():
-    note_ = Note(address="062d22d6ecb233d1", pwd="AutoTranslate")
+    note_ = Note(address="062d22d6ecb233d1", pwd="AutoTranslate", read_only=True)
     note_.fetch_note_info()
     note_content = note_.note_content
     note_content = json.loads(note_content)
@@ -43,7 +49,7 @@ def get_note_content():
 
 def update_config_last(name, version):
     global config_whole
-    config_whole['last_install'][name] = version
+    config_whole['launcher']['last_install'][name] = str(version)
     with open(os.getenv('path_') + "\\config.json", 'w', encoding='utf-8') as f:
         json.dump(config_whole, f, indent=4, ensure_ascii=False)
 
@@ -61,12 +67,12 @@ def main_pre():
     LoadUtils.set_logger(logger)
     logger = LogManager()
     logger.set_log_callback(logging.info)
-    logger.set_error_callback(logging.error)
+    logger.set_error_callback(logging.exception)
     logger.set_ui_callback(lambda message,_: logging.info(message))
     logger.set_modal_callbacks(status_callback=lambda status, modal_id: logging.info(f"{modal_id}: 阶段 {status}"), 
                             log_callback=lambda message, modal_id: logging.info(f"{modal_id}: {message}"), 
                             progress_callback=lambda percent, text, modal_id: logging.info(f"{modal_id}: {text} {percent}%"),
-                            check_running=lambda modal_id: logging.info(f"{modal_id} 阶段正在运行"))
+                            check_running=lambda modal_id, log=True: (logging.info(f"{modal_id} 阶段正在运行")) if log else None)
 
     config_whole = LoadUtils.load_config()
     config = config_whole.get("launcher", {})
@@ -83,7 +89,7 @@ def main_pre():
         if zero.get("download_source", "github") == "github":
             latest_version = check_ver_github(zero.get("from_proxy", True))
         else:
-            latest_version = get_note_content().get('llc_version', '0.0.0')
+            latest_version = str(get_note_content().get('llc_version', '0.0.0'))
         if latest_version == "0.0.0":
             logger.log("无法获取到最新版本，请检查网络连接")
             return
@@ -113,16 +119,22 @@ def main_pre():
         logger.log("启用ourplay更新")
         ourplay = config.get("ourplay", {})
         if ourplay.get("use_api", True):
-            latest_version = get_note_content().get('ourplay_version', '0.0.0')
+            latest_version = str(get_note_content().get('ourplay_version', '0.0.0'))
         else:
-            latest_version = check_ver_ourplay(logger)
+            latest_version = str(check_ver_ourplay(logger))
         if latest_version == "0.0.0":
             logger.log("无法获取到最新版本，请检查网络连接")
             return
         if latest_version == last.get("ourplay", "0.0.0"):
             logger.log(f"当前已是最新版本 {latest_version}，无需更新")
             return
-        function_ourplay_main("llc_update", logger,
+        if not ourplay.get("use_api", True):
+            function_ourplay_main("llc_update", logger,
+                        check_hash=ourplay.get("check_hash", True),
+                        font_option=ourplay.get("font_option", "simplify")
+                        )
+        else:
+            function_ourplay_api("llc_update", logger,
                         check_hash=ourplay.get("check_hash", True),
                         font_option=ourplay.get("font_option", "simplify")
                         )
@@ -138,7 +150,7 @@ def main_pre():
         update_config_last("ourplay", latest_version)
         return
     
-    elif update == "both":
+    elif update == "all":
         logger.log("启用LLC和ourplay更新")
         note_content = get_note_content()
         try:
@@ -153,10 +165,17 @@ def main_pre():
 
         if llc_last_update < ourplay_last_update:
             logger.log("ourplay更新时间较新，执行ourplay更新")
-            if note_content.get('ourplay_version', '0.0.0') == last.get("ourplay", "0.0.0"):
+            ourplay = config.get("ourplay", {})
+            if str(note_content.get('ourplay_version', '0.0.0')) == last.get("ourplay", "0.0.0"):
                 logger.log(f"当前已是最新版本 {note_content.get('ourplay_version', '0.0.0')}，无需更新")
                 return
-            function_ourplay_main("llc_update", logger,
+            if not ourplay.get("use_api", True):
+                function_ourplay_main("llc_update", logger,
+                            check_hash=ourplay.get("check_hash", True),
+                            font_option=ourplay.get("font_option", "simplify")
+                            )
+            else:
+                function_ourplay_api("llc_update", logger,
                             check_hash=ourplay.get("check_hash", True),
                             font_option=ourplay.get("font_option", "simplify")
                             )
@@ -172,7 +191,7 @@ def main_pre():
             update_config_last("ourplay", note_content.get('ourplay_version', '0.0.0'))
         else:
             logger.log("LLC更新时间较新，执行LLC更新")
-            if last.get("llc", "0.0.0") == last.get("llc", "0.0.0"):
+            if str(note_content.get('llc_version', '0.0.0')) == last.get("llc", "0.0.0"):
                 logger.log(f"当前已是最新版本 {last.get('llc', '0.0.0')}，无需更新")
                 return
             zero = config.get("zero", {})

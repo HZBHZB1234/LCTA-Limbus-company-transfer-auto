@@ -1937,6 +1937,124 @@ function loadSettings() {
     document.getElementById('auto-check-update').checked = autoCheckUpdate;
 }
 
+// Launcher配置相关函数
+function loadLauncherConfig() {
+    // 确保API可用
+    if (typeof pywebview === 'undefined' || !pywebview.api) {
+        console.warn('PyWebview API 尚未准备好');
+        return;
+    }
+    
+    // 加载零协配置
+    if (pywebview.api.get_config_value) {
+        pywebview.api.get_config_value('launcher.zero.zip_type')
+            .then(function(value) {
+                if (value !== undefined) {
+                    const element = document.getElementById('launcher-zero-zip-type');
+                    if (element) {
+                        element.value = value;
+                    }
+                }
+            })
+            .catch(function(error) {
+                console.error('加载launcher.zero.zip_type配置时出错:', error);
+            });
+            
+        pywebview.api.get_config_value('launcher.zero.download_source')
+            .then(function(value) {
+                if (value !== undefined) {
+                    const element = document.getElementById('launcher-zero-download-source');
+                    if (element) {
+                        element.value = value;
+                    }
+                }
+            })
+            .catch(function(error) {
+                console.error('加载launcher.zero.download_source配置时出错:', error);
+            });
+            
+        pywebview.api.get_config_value('launcher.zero.use_proxy')
+            .then(function(value) {
+                if (value !== undefined) {
+                    const element = document.getElementById('launcher-zero-use-proxy');
+                    if (element) {
+                        element.checked = value;
+                    }
+                }
+            })
+            .catch(function(error) {
+                console.error('加载launcher.zero.use_proxy配置时出错:', error);
+            });
+            
+        pywebview.api.get_config_value('launcher.zero.use_cache')
+            .then(function(value) {
+                if (value !== undefined) {
+                    const element = document.getElementById('launcher-zero-use-cache');
+                    if (element) {
+                        element.checked = value;
+                    }
+                }
+            })
+            .catch(function(error) {
+                console.error('加载launcher.zero.use_cache配置时出错:', error);
+            });
+        
+        // 加载OurPlay配置
+        pywebview.api.get_config_value('launcher.ourplay.font_option')
+            .then(function(value) {
+                if (value !== undefined) {
+                    const element = document.getElementById('launcher-ourplay-font-option');
+                    if (element) {
+                        element.value = value;
+                    }
+                }
+            })
+            .catch(function(error) {
+                console.error('加载launcher.ourplay.font_option配置时出错:', error);
+            });
+            
+        pywebview.api.get_config_value('launcher.ourplay.use_api')
+            .then(function(value) {
+                if (value !== undefined) {
+                    const element = document.getElementById('launcher-ourplay-use-api');
+                    if (element) {
+                        element.checked = value;
+                    }
+                }
+            })
+            .catch(function(error) {
+                console.error('加载launcher.ourplay.use_api配置时出错:', error);
+            });
+        
+        // 加载工作模式配置
+        pywebview.api.get_config_value('launcher.work.update')
+            .then(function(value) {
+                if (value !== undefined) {
+                    const element = document.getElementById('launcher-work-update');
+                    if (element) {
+                        element.value = value;
+                    }
+                }
+            })
+            .catch(function(error) {
+                console.error('加载launcher.work.update配置时出错:', error);
+            });
+            
+        pywebview.api.get_config_value('launcher.work.mod')
+            .then(function(value) {
+                if (value !== undefined) {
+                    const element = document.getElementById('launcher-work-mod');
+                    if (element) {
+                        element.checked = value;
+                    }
+                }
+            })
+            .catch(function(error) {
+                console.error('加载launcher.work.mod配置时出错:', error);
+            });
+    }
+}
+
 function saveSettings() {
     const gamePath = document.getElementById('game-path').value;
     const debugMode = document.getElementById('debug-mode').checked;
@@ -1954,6 +2072,7 @@ function saveSettings() {
                 localStorage.setItem('lcta-auto-check-update', autoCheckUpdate);
                 
                 modal.complete(true, '设置保存成功');
+                pywebview.api.save_config_to_file()
             } else {
                 modal.complete(false, '保存失败: ' + result.message);
             }
@@ -1961,6 +2080,60 @@ function saveSettings() {
         .catch(function(error) {
             modal.complete(false, '保存过程中发生错误: ' + error);
         });
+}
+
+function saveLauncherConfig() {
+    // 确保API可用
+    if (typeof pywebview === 'undefined' || !pywebview.api) {
+        showMessage('错误', 'API尚未准备就绪');
+        return;
+    }
+    
+    const modal = new ProgressModal('保存Launcher配置');
+    modal.addLog('正在保存Launcher配置...');
+    
+    // 保存零协配置
+    const zeroZipType = document.getElementById('launcher-zero-zip-type').value;
+    const zeroDownloadSource = document.getElementById('launcher-zero-download-source').value;
+    const zeroUseProxy = document.getElementById('launcher-zero-use-proxy').checked;
+    const zeroUseCache = document.getElementById('launcher-zero-use-cache').checked;
+    
+    // 保存OurPlay配置
+    const ourplayFontOption = document.getElementById('launcher-ourplay-font-option').value;
+    const ourplayUseApi = document.getElementById('launcher-ourplay-use-api').checked;
+    
+    // 保存工作模式配置
+    const workUpdate = document.getElementById('launcher-work-update').value;
+    const workMod = document.getElementById('launcher-work-mod').checked;
+    
+    // 执行保存操作
+    if (pywebview.api.update_config_value) {
+        Promise.all([
+            pywebview.api.update_config_value('launcher.zero.zip_type', zeroZipType),
+            pywebview.api.update_config_value('launcher.zero.download_source', zeroDownloadSource),
+            pywebview.api.update_config_value('launcher.zero.use_proxy', zeroUseProxy),
+            pywebview.api.update_config_value('launcher.zero.use_cache', zeroUseCache),
+            pywebview.api.update_config_value('launcher.ourplay.font_option', ourplayFontOption),
+            pywebview.api.update_config_value('launcher.ourplay.use_api', ourplayUseApi),
+            pywebview.api.update_config_value('launcher.work.update', workUpdate),
+            pywebview.api.update_config_value('launcher.work.mod', workMod)
+        ])
+        .then(function(results) {
+            // 检查是否所有保存操作都成功
+            const allSuccess = results.every(result => result === true);
+            if (allSuccess) {
+                modal.complete(true, 'Launcher配置保存成功');
+            } else {
+                modal.complete(false, '部分配置保存失败');
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '保存配置时发生错误: ' + error);
+        });
+        pywebview.api.save_config_to_file()
+    } else {
+        modal.complete(false, 'API方法不可用');
+    }
 }
 
 function useDefaultConfig() {
@@ -2417,6 +2590,8 @@ window.addEventListener('pywebviewready', function() {
     
     // 加载设置
     loadSettings();
+
+    loadLauncherConfig();
     
     // 检查配置
     pywebview.api.get_attr('config_ok')

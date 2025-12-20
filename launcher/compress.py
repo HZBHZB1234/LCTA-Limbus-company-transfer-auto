@@ -22,7 +22,7 @@ def scan_lunartique_mod_root(zip_file: ZipFile) -> str:
     raise Exception("Root folder for installation folder and uninstallation folder not found")
 
 
-def scan_lunartique_data(zip_path: ZipFile, data_folder: str) -> set[str]:
+def scan_lunartique_data(zip_path: ZipFile, data_folder: str):
     root = scan_lunartique_mod_root(zip_path)
     names = set()
     for name in zip_path.namelist():

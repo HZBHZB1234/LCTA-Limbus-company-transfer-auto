@@ -869,6 +869,7 @@ def main():
     )
     
     api.set_window(window)
+    window.events.closed += api.save_config_to_file
     # 设置模态窗口相关的回调
     api.log_manager.set_modal_callbacks(
         status_callback=api.set_modal_status,

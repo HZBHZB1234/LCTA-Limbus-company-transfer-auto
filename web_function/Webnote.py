@@ -30,12 +30,19 @@ class Note():
     ONE_YEAR = 31536000
     TWO_YEAR = 63072000
     THREE_YEAR = 94608000
-    def __init__(self, address, pwd=""):
+    def __init__(self, address, pwd="", read_only=False):
         self.note_name = address
         self.pwd = pwd
         self.note_url = f'webnote.cc/{self.note_name}'
+        self.read_only = read_only
         
     def fetch_note_info(self):
+        if self.read_only:
+            self._fetch_note_info_ReadOnly()
+        else:
+            self._fetch_note_info_write()
+    
+    def _fetch_note_info_write(self):
         fetch_request = requests.post(f'{API_URL}/info',
                                      headers=WEBNOTE_HEADERS, data={'note_name': self.note_name, "note_pwd": self.pwd})
         fetch_request.raise_for_status()
@@ -57,6 +64,24 @@ class Note():
         
         return note_data
 
+    def _fetch_note_info_ReadOnly(self):
+        fetch_request = requests.post(f'{API_URL}/info',
+                                     headers=WEBNOTE_HEADERS, data={'note_id': self.note_name, "note_pwd": self.pwd})
+        fetch_request.raise_for_status()
+        note_info = fetch_request.json()
+        
+        if not str(note_info['status']) == '1':
+            raise ValueError(f"无法获取笔记信息，状态码: {note_info['status']}")
+        
+        note_data = note_info['data']
+        self.created_time = note_data['created_time']
+        self.expire_time = note_data['expire_time']
+        self.note_content = note_data['note_content']
+        self.note_id = note_data['note_id']
+        self.note_token = note_data['note_token']
+        self.updated_time = note_data['updated_time']
+        
+        return note_data
     def update_note_content(self, new_content):
         update_request = requests.post(f'{API_URL}/save',
                                        headers=WEBNOTE_HEADERS,

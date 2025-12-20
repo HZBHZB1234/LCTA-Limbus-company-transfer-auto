@@ -155,7 +155,7 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
 def _download_from_api(temp_dir, logger_: LogManager, modal_id, zip_type, from_proxy, dump_default, use_cache):
     """使用API下载文件"""
     # 初始化Note对象并获取API数据
-    note_ = Note(address="062d22d6ecb233d1", pwd="AutoTranslate")
+    note_ = Note(address="062d22d6ecb233d1", pwd="AutoTranslate", read_only=True)
     note_.fetch_note_info()
     
     try:

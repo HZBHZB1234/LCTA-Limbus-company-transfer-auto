@@ -166,15 +166,12 @@ def main():
     
     print(f"开始检查，ADDRESS: {ADDRESS}")
     
-    note_ = Note(address=ADDRESS, password="AutoTranslate")
+    note_ = Note(address=ADDRESS, pwd="AutoTranslate")
     note_.fetch_note_info()
     try:
         current_data = json.loads(note_.note_content)
         current_ourplay_version = current_data.get('ourplay_version')
         current_llc_version = current_data.get('llc_version')
-        current_ourplay_url = current_data.get('ourplay_download_url')
-        current_llc_url = current_data.get('llc_download_url')
-        current_llc_mirror = current_data.get('llc_download_mirror')
         
         # 解析上次更新时间
         try:

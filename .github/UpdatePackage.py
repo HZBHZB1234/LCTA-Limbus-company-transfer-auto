@@ -4,24 +4,18 @@ import time
 import json
 import base64
 from datetime import datetime, timedelta
+from pathlib import Path
+import sys
 
-headers={
-    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0',
-    'Referer':'https://webnote.cc/',
-    'Origin':'https://webnote.cc/',
-    'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8',
-    'Accept':'application/json, text/javascript, */*; q=0.01',
-    'Accept-Encoding':'gzip, deflate, br, zstd',
-    'Accept-Language':'en-US,en;q=0.9',
-    'Sec-Ch-Ua':'"Chromium";v="140", "Not=A?Brand";v="24", "Microsoft Edge";v="140"',
-    'Sec-Ch-Ua-Mobile':'?0',
-    'Sec-Ch-Ua-Platform':'"Windows"',
-    'Sec-Fetch-Dest':'empty',
-    'Sec-Fetch-Mode':'cors',
-    'Sec-Fetch-Site':'cross-site',
-    }
+project_root = Path(__file__).parent
+print(project_root)
+sys.path.insert(0, str(project_root))
+
+from web_function import *
+
 ADDRESS = os.getenv("ADDRESS")
 API_URL = "https://api.txttool.cn/netcut/note"
+
 
 def make_device():
     """
@@ -87,7 +81,7 @@ def get_ourplay():
         if not str(response_data.get('code')) == '1':
             print("响应错误")
             return None
-        return response_data.get('data').get('version_code')
+        return response_data.get('data')
     except Exception as e:
         print(f"获取 OurPlay 版本失败: {e}")
         return None
@@ -96,14 +90,17 @@ def get_llc():
     """
     从 LLC 获取汉化包信息
     """
-    url = 'https://cdn-api.zeroasso.top/v2/resource/get_version'
-    print("正在请求 LLC 汉化包信息")
     
     try:
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        response_data = r.json()
-        return response_data['version']
+        GithubDownloader = GitHubReleaseFetcher(
+            "LocalizeLimbusCompany",
+            "LocalizeLimbusCompany",
+            False,
+            ignore_ssl=True
+        )
+        last_ver = GithubDownloader.get_latest_release()
+        return last_ver.tag_name, last_ver
+
     except Exception as e:
         print(f"获取 LLC 版本失败: {e}")
         return None
@@ -161,52 +158,6 @@ def should_check_llc(last_update_time):
         # 本周还没有更新，可以检查
         return True
 
-def update_note(note_info, ourplay_version, llc_version, update_ourplay=True, update_llc=True):
-    """
-    更新笔记内容
-    update_ourplay: 是否更新OurPlay版本和时间
-    update_llc: 是否更新LLC版本和时间
-    """
-    now = datetime.now()
-    update_time = now.isoformat()
-    
-    # 获取当前数据
-    try:
-        current_data = json.loads(note_info['note_content'])
-    except (json.JSONDecodeError, KeyError):
-        current_data = {}
-    
-    # 创建或更新数据
-    data = {
-        'ourplay_version': ourplay_version if update_ourplay else current_data.get('ourplay_version'),
-        'llc_version': llc_version if update_llc else current_data.get('llc_version'),
-        'ourplay_last_update_time': update_time if update_ourplay else current_data.get('ourplay_last_update_time', '1970-01-01T00:00:00'),
-        'llc_last_update_time': update_time if update_llc else current_data.get('llc_last_update_time', '1970-01-01T00:00:00'),
-        'last_check_time': update_time,
-        'week_boundary': get_current_week_boundary().isoformat()
-    }
-    
-    note_content = json.dumps(data, ensure_ascii=False, indent=2)
-    
-    save_data = {
-        'note_name': ADDRESS, 
-        'note_id': note_info['note_id'], 
-        'note_content': note_content,
-        'note_token': note_info['note_token'], 
-        'expire_time': 94608000, 
-        'note_pwd': "AutoTranslate"
-    }
-    
-    save_response = requests.post(f'{API_URL}/save', headers=headers, data=save_data)
-    save_response.raise_for_status()
-    
-    print(f"更新成功！更新时间: {update_time}")
-    if update_ourplay:
-        print(f"OurPlay版本: {ourplay_version}")
-    if update_llc:
-        print(f"LLC版本: {llc_version}")
-    
-    return save_response.json()
 
 def main():
     if not ADDRESS:
@@ -215,23 +166,15 @@ def main():
     
     print(f"开始检查，ADDRESS: {ADDRESS}")
     
-    # 获取现有记录
-    fetch_request = requests.post(f'{API_URL}/info',
-                                 headers=headers, data={'note_name': ADDRESS, "note_pwd": "AutoTranslate"})
-    fetch_request.raise_for_status()
-    print(fetch_request.json())
-    note_info = fetch_request.json()['data']
-    
-    if not str(note_info['status']) == '1':
-        print("获取笔记信息失败")
-        exit(1)
-    
-    # 获取当前数据
-    note_content = note_info['note_content']
+    note_ = Note(address=ADDRESS, password="AutoTranslate")
+    note_.fetch_note_info()
     try:
-        current_data = json.loads(note_content)
+        current_data = json.loads(note_.note_content)
         current_ourplay_version = current_data.get('ourplay_version')
         current_llc_version = current_data.get('llc_version')
+        current_ourplay_url = current_data.get('ourplay_download_url')
+        current_llc_url = current_data.get('llc_download_url')
+        current_llc_mirror = current_data.get('llc_download_mirror')
         
         # 解析上次更新时间
         try:
@@ -268,7 +211,7 @@ def main():
     
     if should_check_ourplay_flag:
         print("检查OurPlay更新...")
-        new_ourplay_version = get_ourplay()
+        new_ourplay_version, download_url = get_ourplay()
         if new_ourplay_version is None:
             print("获取OurPlay版本失败，使用当前版本")
             new_ourplay_version = current_ourplay_version
@@ -278,7 +221,7 @@ def main():
     
     if should_check_llc_flag:
         print("检查LLC更新...")
-        new_llc_version = get_llc()
+        new_llc_version, last_ver = get_llc()
         if new_llc_version is None:
             print("获取LLC版本失败，使用当前版本")
             new_llc_version = current_llc_version
@@ -295,17 +238,52 @@ def main():
     need_update_llc = (should_check_llc_flag and new_llc_version != current_llc_version)
     
     if not need_update_ourplay and not need_update_llc:
-        print("版本无变化，仅更新检查时间")
-        # 只更新检查时间，不更新版本和时间
-        update_note(note_info, new_ourplay_version, new_llc_version, update_ourplay=False, update_llc=False)
-    else:
-        if need_update_ourplay:
-            print(f"OurPlay发现新版本！当前: {current_ourplay_version}, 最新: {new_ourplay_version}")
-        if need_update_llc:
-            print(f"LLC发现新版本！当前: {current_llc_version}, 最新: {new_llc_version}")
+        print("版本无变化")
+        return
+    
+    if need_update_llc:
+        print(f"LLC版本更新: {current_llc_version} -> {new_llc_version}")
+        seven_zip_asset = last_ver.get_assets_by_extension(".7z")[0]
+        zip_asset = last_ver.get_assets_by_extension(".zip")[0]
+        new_llc_download_url = {'zip':zip_asset.download_url, 
+                                'seven':seven_zip_asset.download_url}
+        with open(zip_asset.name, "wb") as f:
+            r = requests.get(zip_asset.download_url)
+            f.write(r.content)
+            
+        with open(seven_zip_asset.name, "wb") as f:
+            r = requests.get(seven_zip_asset.download_url)
+            f.write(r.content)
         
-        update_note(note_info, new_ourplay_version, new_llc_version, 
-                   update_ourplay=need_update_ourplay, update_llc=need_update_llc)
+        file_transfer = UpFileClient()
+        llc_upload_result = file_transfer.upload(zip_asset.name)
+        llc_seven_upload_result = file_transfer.upload(seven_zip_asset.name)
+        
+        if not llc_upload_result.get('success') or not llc_seven_upload_result.get('success'):
+            print("LLC文件上传失败，取消更新")
+            return
+        new_llc_mirror = {
+            'zip': {'direct': llc_upload_result.get('direct_download_url'),
+                    'web': llc_upload_result.get('download_url')},
+            'seven': {'direct': llc_seven_upload_result.get('direct_download_url'),
+                      'web': llc_seven_upload_result.get('download_url')}
+        }
+        current_data['llc_download_url'] = new_llc_download_url
+        current_data['llc_download_mirror'] = new_llc_mirror
+        current_data['llc_version'] = new_llc_version
+        current_data['llc_last_update_time'] = datetime.now().isoformat()
+        
+    if need_update_ourplay:
+        print(f"OurPlay版本更新: {current_ourplay_version} -> {new_ourplay_version}")
+        current_data['ourplay_version'] = new_ourplay_version
+        current_data['ourplay_download_url'] = download_url
+        current_data['ourplay_last_update_time'] = datetime.now().isoformat()
+        
+    # 提交更新
+    note_.update_note_content(json.dumps(current_data, ensure_ascii=False, indent=4))
+
+    print("更新完成")
+
 
 if __name__ == "__main__":
     main()

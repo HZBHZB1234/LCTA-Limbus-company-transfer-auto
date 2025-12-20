@@ -2,4 +2,5 @@ requests
 jsonpatch
 pywebview
 pyunpack
-py7zr
+UnityPy==1.10.14
+xxhash==3.5.0

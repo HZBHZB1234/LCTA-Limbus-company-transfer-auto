@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <direct.h>
 #include <shlwapi.h>
+#include <shellapi.h>
 
 // 函数声明
 int setup_environment();
@@ -12,11 +13,31 @@ int verify_python_environment(const char* python_path);
 int run_python_script(const char* python_path, const char* script_path);
 void show_error_message(const char* title, const char* message);
 
-int main() {
+int main(int argc, char* argv[]) {
     printf("Starting LCTA Launcher...\n");
-
+    
+    // 检查命令行参数
+    int show_console = 0;
+    char script_name[MAX_PATH] = "code\\start_webui.py";
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-launcher") == 0) {
+            show_console = 1;  // 显示控制台窗口
+            strcpy(script_name, "code\\launcher\\main.py");
+            printf("Launcher mode detected, starting launcher GUI...\n");
+            break;
+        }
+    }
+    
+    // 根据参数决定是否隐藏控制台窗口
     HWND console = GetConsoleWindow();
-    ShowWindow(console, SW_HIDE);
+    if (!show_console) {
+        ShowWindow(console, SW_HIDE);
+        printf("Console window hidden\n");
+    } else {
+        ShowWindow(console, SW_SHOW);
+        printf("Console window shown\n");
+    }
     
     // 1. 设置工作目录到应用所在目录
     if (!setup_environment()) {
@@ -66,7 +87,7 @@ int main() {
     // 5. 构建脚本路径
     char script_path[MAX_PATH];
     snprintf(script_path, sizeof(script_path), 
-             "%s\\code\\start_webui.py", exe_dir);
+             "%s\\%s", exe_dir, script_name);
     
     // 6. 检查脚本是否存在
     if (GetFileAttributes(script_path) == INVALID_FILE_ATTRIBUTES) {

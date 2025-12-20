@@ -42,5 +42,30 @@ def start_webui():
         import traceback
         traceback.print_exc()
 
+def start_launcher():
+    """启动Launcher界面"""
+    try:
+        import os
+        os.environ['path_'] = str(get_resource_path())
+        # 判断是否为打包环境
+        is_frozen = hasattr(sys, 'frozen') or hasattr(sys, '_MEIPASS')
+        os.environ['is_frozen'] = str(is_frozen).lower()
+        
+        from launcher.main import main
+        print("正在启动LCTA Launcher...")
+        print("请稍候，界面即将打开...")
+        main()
+    except ImportError as e:
+        print(f"启动Launcher失败: {e}")
+        print("请确保项目结构完整")
+    except Exception as e:
+        print(f"启动Launcher时发生错误: {e}")
+        import traceback
+        traceback.print_exc()
+
 if __name__ == "__main__":
-    start_webui()
+    # 检查命令行参数
+    if "-launcher" in sys.argv:
+        start_launcher()
+    else:
+        start_webui()

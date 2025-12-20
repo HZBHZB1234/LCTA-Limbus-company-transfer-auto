@@ -20,10 +20,6 @@ file_dir = Path(os.path.dirname(__file__)).parent
 print(f'\n\n{file_dir}')
 sys.path.insert(0, str(file_dir))
 
-os.chdir(file_dir)
-if not os.getenv('path_', False):
-    os.environ['path_']=str(os.getcwd())
-
 from web_function import *
 from webutils.log_manage import LogManager
 from webutils import *
@@ -50,7 +46,7 @@ def get_note_content():
 def update_config_last(name, version):
     global config_whole
     config_whole['launcher']['last_install'][name] = str(version)
-    with open(os.getenv('path_') + "\\config.json", 'w', encoding='utf-8') as f:
+    with open("config.json", 'w', encoding='utf-8') as f:
         json.dump(config_whole, f, indent=4, ensure_ascii=False)
 
 def main_pre():

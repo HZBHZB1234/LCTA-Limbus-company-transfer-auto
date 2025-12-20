@@ -13,7 +13,6 @@ sys.path.append(project_root.as_posix())
 
 from web_function import *
 
-os.environ["ADDRESS"] = "LCTA_8131547723879782"
 ADDRESS = os.getenv("ADDRESS")
 API_URL = "https://api.txttool.cn/netcut/note"
 
@@ -159,6 +158,15 @@ def should_check_llc(last_update_time):
         # 本周还没有更新，可以检查
         return True
 
+def should_check_mirror(last_update_time):
+    """
+    判断LLC镜像是否需要更新
+    规则：如果距离上一次更新超过2.5天，则需要更新
+    """
+    now = datetime.now()
+    if now - last_update_time >= timedelta(days=2, hours=12):
+        return True
+    return False
 
 def main():
     if not ADDRESS:
@@ -185,6 +193,11 @@ def main():
         except (ValueError, TypeError):
             llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
             
+        try:
+            llc_mirror_update = datetime.fromisoformat(current_data.get('llc_mirror_update_time', '1970-01-01T00:00:00'))
+        except (ValueError, TypeError):
+            llc_mirror_update = datetime.fromisoformat('1970-01-01T00:00:00')
+            
     except (json.JSONDecodeError, KeyError, TypeError):
         # 首次运行，初始化数据
         print("首次运行，初始化数据")
@@ -192,15 +205,18 @@ def main():
         current_llc_version = None
         ourplay_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
         llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
+        llc_mirror_update = datetime.fromisoformat('1970-01-01T00:00:00')
         current_data = {}
     
     # 判断是否需要检查OurPlay
     should_check_ourplay_flag = should_check_ourplay(ourplay_last_update)
     # 判断是否需要检查LLC
     should_check_llc_flag = should_check_llc(llc_last_update)
+    # 判断是否需要检查LLC镜像
+    should_check_llc_mirror_flag = should_check_mirror(llc_mirror_update)
     
-    if not should_check_ourplay_flag and not should_check_llc_flag:
-        print("OurPlay和LLC本周已有更新，且不在中午12点，跳过检查")
+    if not should_check_ourplay_flag and not should_check_llc_flag and not should_check_llc_mirror_flag:
+        print("OurPlay和LLC本周已有更新，且不在中午12点，镜像不需要更新，跳过检查")
         return
     
     # 获取最新版本
@@ -217,7 +233,7 @@ def main():
         print("跳过OurPlay检查")
         new_ourplay_version = current_ourplay_version
     
-    if should_check_llc_flag:
+    if should_check_llc_flag or should_check_llc_mirror_flag:
         print("检查LLC更新...")
         new_llc_version, last_ver = get_llc()
         if new_llc_version is None:
@@ -239,8 +255,8 @@ def main():
         print("版本无变化")
         return
     
-    if need_update_llc:
-        print(f"LLC版本更新: {current_llc_version} -> {new_llc_version}")
+    if need_update_llc or should_check_llc_mirror_flag:
+        if need_update_llc:print(f"LLC版本更新: {current_llc_version} -> {new_llc_version}")
         seven_zip_asset = last_ver.get_assets_by_extension(".7z")[0]
         zip_asset = last_ver.get_assets_by_extension(".zip")[0]
         new_llc_download_url = {'zip':zip_asset.download_url, 
@@ -269,7 +285,7 @@ def main():
         current_data['llc_download_url'] = new_llc_download_url
         current_data['llc_download_mirror'] = new_llc_mirror
         current_data['llc_version'] = new_llc_version
-        current_data['llc_last_update_time'] = datetime.now().isoformat()
+        if need_update_llc:current_data['llc_last_update_time'] = datetime.now().isoformat()
         
     if need_update_ourplay:
         print(f"OurPlay版本更新: {current_ourplay_version} -> {new_ourplay_version}")

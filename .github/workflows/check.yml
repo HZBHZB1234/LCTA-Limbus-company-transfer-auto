@@ -12,6 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      # 设置时区为东八区（北京时间）
+      - name: Set timezone to Beijing
+        uses: szenius/set-timezone@v1.2
+        with:
+          timezoneLinux: "Asia/Shanghai"
+      
       # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4

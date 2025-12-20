@@ -23,7 +23,6 @@ jobs:
           python-version: '3.9'  # 指定Python版本
           cache: 'pip'  # 可选：启用pip缓存加速
       
-      # 3. 安装依赖（如果有requirements.txt）
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

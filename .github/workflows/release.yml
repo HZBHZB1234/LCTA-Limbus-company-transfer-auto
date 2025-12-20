@@ -65,6 +65,7 @@ jobs:
       run: |
         python -m venv venv
         .\venv\Scripts\activate
+        pip install pip --upgrade
         pip install -r LCTA\requirements.txt
     - name: Install Embedded Python
       run: |

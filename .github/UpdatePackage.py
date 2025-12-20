@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import sys
 
-project_root = Path(__file__).parent
+project_root = Path(os.path.dirname(__file__)).parent
 print(project_root)
-sys.path.insert(0, str(project_root))
+sys.path.append(project_root.as_posix())
 
 from web_function import *
 

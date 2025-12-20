@@ -8,7 +8,8 @@
             "zip_type": "str",
             "use_proxy": "bool",
             "use_cache": "bool",
-            "dump_default": "bool"
+            "dump_default": "bool",
+            "download_source": "str"
         },
         "ourplay": {
             "decrease_size": "bool",

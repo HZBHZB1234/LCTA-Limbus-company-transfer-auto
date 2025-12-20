@@ -1849,18 +1849,22 @@ function downloadLLC() {
     const useProxy = document.getElementById('llc-use-proxy').checked;
     const useCache = document.getElementById('llc-use-cache').checked;
     const dumpDefault = document.getElementById('llc-dump-default').checked;
+    const download_source = document.getElementById('llc-download-source').value;
     
     // 更新配置
     pywebview.api.update_config_value('ui_default.zero.zip_type', zipType);
     pywebview.api.update_config_value('ui_default.zero.use_proxy', useProxy);
     pywebview.api.update_config_value('ui_default.zero.use_cache', useCache);
     pywebview.api.update_config_value('ui_default.zero.dump_default', dumpDefault);
+    pywebview.api.update_config_value('ui_default.zero.download_source', download_source);
     
     const modal = new ProgressModal('下载零协汉化包');
     modal.addLog('开始下载零协汉化包...');
     modal.addLog(`压缩格式: ${zipType}`);
     modal.addLog(`使用代理: ${useProxy ? '是' : '否'}`);
     modal.addLog(`使用缓存: ${useCache ? '是' : '否'}`);
+    modal.addLog(`导出默认配置: ${dumpDefault ? '是' : '否'}`);
+    modal.addLog(`下载源: ${download_source}`);
     
     // 调用后端API进行实际下载
     pywebview.api.download_llc_translation(modal.id).then(function(result) {

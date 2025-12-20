@@ -9,7 +9,8 @@
             "zip_type": "zip",
             "use_proxy": true,
             "use_cache": true,
-            "dump_default": false
+            "dump_default": false,
+            "download_source": "github"
         },
         "ourplay":{
             "decrease_size":true,

@@ -418,18 +418,15 @@ class LCTA_API():
             zip_type = self.config.get("ui_default", {}).get("zero", {}).get("zip_type", "zip")
             use_proxy = self.config.get("ui_default", {}).get("zero", {}).get("use_proxy", True)
             use_cache = self.config.get("ui_default", {}).get("zero", {}).get("use_cache", False)
-            
-            self.add_modal_log(f"压缩格式: {zip_type}", modal_id)
-            self.add_modal_log(f"使用代理: {use_proxy}", modal_id)
-            self.add_modal_log(f"使用缓存: {use_cache}", modal_id)
+            download_source = self.config.get("ui_default", {}).get("zero", {}).get("download_source", "github")
             
             # 传递新参数给function_llc_main
             function_llc_main(
                 modal_id, 
                 self.log_manager, 
                 dump_default=dump_default,
-                zip_type=zip_type,
-                from_="proxy" if use_proxy else "direct",
+                download_source=download_source,
+                from_proxy=use_proxy,
                 use_cache=self.config.get('game_path')+'LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf' if use_cache else False
             )
             self.add_modal_log("零协汉化包下载成功", modal_id)

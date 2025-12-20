@@ -286,6 +286,7 @@ def main():
         current_data['llc_download_mirror'] = new_llc_mirror
         current_data['llc_version'] = new_llc_version
         if need_update_llc:current_data['llc_last_update_time'] = datetime.now().isoformat()
+        current_data['llc_mirror_update_time'] = datetime.now().isoformat()
         
     if need_update_ourplay:
         print(f"OurPlay版本更新: {current_ourplay_version} -> {new_ourplay_version}")

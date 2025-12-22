@@ -23,7 +23,7 @@ def find_lcb():
         
         with open(value + '\\steamapps\\libraryfolders.vdf', 'r') as f:
             game_path_file = f.read()
-            applist=[i.split('\"')[3] for i in game_path_file.split('\n') if 'path' in i]
+            applist=[i.split('\"')[3].replace('\\\\','\\') for i in game_path_file.split('\n') if 'path' in i]
         
         for i in applist:
             game_path = i + '\\steamapps\\common\\Limbus Company\\'

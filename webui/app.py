@@ -41,7 +41,6 @@ class LCTA_API():
         self.log_manager.set_log_callback(self.logger.info)
         self.log_manager.set_error_callback(self.logger.exception)
         self.log_manager.set_ui_callback(self.log_ui)
-        self.message_list = []
         self.modal_list = []
 
         # 判断是否为打包环境
@@ -81,10 +80,10 @@ class LCTA_API():
                 try:
                     self.use_default()
                     self.log("已生成默认配置文件")
-                    self.message_list.append(["提示","配置文件不存在，已生成默认配置文件"])
+                    self.message_config=(["提示","配置文件不存在，已生成默认配置文件"])
                 except Exception as e:
                     self.log("生成默认配置文件时出现问题")
-                    self.message_list.append(["错误","生成默认配置文件时出现问题"])
+                    self.message_config=(["错误","生成默认配置文件时出现问题"])
                     self.log_error(e)
         self.config_ok, self.config_error = self.validate_config(self.config)
         if not self.config_ok:

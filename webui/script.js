@@ -1813,7 +1813,8 @@ function downloadOurplay() {
     modal.addLog(`字体选项: ${fontOption}`);
     modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
     
-    // 调用后端API进行实际下载
+    pywebview.api.update_config_value('ui_default.ourplay.font_option', fontOption);
+    pywebview.api.update_config_value('ui_default.ourplay.check_hash', checkHash);
     pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, 'OurPlay汉化包下载成功');
@@ -2543,6 +2544,75 @@ function setupGlobalErrorHandling() {
     });
 }
 
+function checkGamePath() {
+    if (window.config.game_path == null || window.config.game_path === "") {
+        pywebview.api.run_func('find_lcb')
+            .then(function(foundPath) {
+                if (foundPath) {
+                    confirmGamePath(foundPath);
+                } else {
+                    requestGamePath();
+                }
+            })
+            .catch(function(error) {
+                addLogMessage('检查游戏路径时发生错误: ' + error, 'error');
+            });
+    }
+}
+
+// 添加确认游戏路径的函数
+function confirmGamePath(foundPath) {
+    showConfirm(
+        "确认游戏路径",
+        `这是否是你的游戏路径：\n${foundPath}\n是否使用此路径？`,
+        function() {
+            // 用户确认使用找到的路径
+            pywebview.api.update_config_value('game_path', foundPath)
+                .then(function(success) {
+                    if (success) {
+                        // 更新界面上的游戏路径显示
+                        document.getElementById('game-path').value = foundPath;
+                        addLogMessage('游戏路径已确认并保存: ' + foundPath, 'success');
+                    } else {
+                        addLogMessage('保存游戏路径时出错', 'error');
+                    }
+                })
+                .catch(function(error) {
+                    addLogMessage('设置游戏路径时发生错误: ' + error, 'error');
+                });
+            pywebview.api.save_config_to_file();
+        },
+        function() {
+            // 用户不确认，请求手动选择路径
+            requestGamePath();
+            foundPath = document.getElementById('game-path').value;
+            pywebview.api.update_config_value('game_path', foundPath)
+                .then(function(success) {
+                    if (success) {
+                        addLogMessage('游戏路径已确认并保存: ' + foundPath, 'success');
+                    } else {
+                        addLogMessage('保存游戏路径时出错', 'error');
+                    }
+                })
+                .catch(function(error) {
+                    addLogMessage('设置游戏路径时发生错误: ' + error, 'error');
+                });
+            pywebview.api.save_config_to_file();
+        }
+    );
+}
+
+// 添加请求用户手动选择游戏路径的函数
+function requestGamePath() {
+    showMessage(
+        "选择游戏路径", 
+        "请手动选择游戏的安装目录（包含LimbusCompany.exe的文件夹）",
+        function() {
+            browseFolder('game-path');
+        }
+    );
+}
+
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
     init();
@@ -2592,6 +2662,11 @@ window.addEventListener('pywebviewready', function() {
     loadSettings();
 
     loadLauncherConfig();
+    
+    pywebview.api.get_attr('message_config')
+        .then(function(message_config) {
+            showMessage(message_config[0], message_config[1]);
+        })
     
     // 检查配置
     pywebview.api.get_attr('config_ok')
@@ -2648,7 +2723,13 @@ window.addEventListener('pywebviewready', function() {
             addLogMessage('检查配置时出错: ' + error, 'error');
         });
     
-    // 检查更新 - 只在这里检查一次，避免重复创建窗口
+    pywebview.api.get_attr('config')
+        .then(function(config) {
+            console.log('配置已加载到前端:', config);
+            window.config = config;
+            checkGamePath();
+        });
+    
     const autoCheckUpdate = localStorage.getItem('lcta-auto-check-update') !== 'false';
     if (autoCheckUpdate) {
         autoCheckUpdates();

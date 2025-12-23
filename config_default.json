@@ -36,6 +36,9 @@
     "game_path":"",
     "debug":false,
     "auto_check_update": true,
+    "delete_updating": true,
+    "update_use_proxy": true,
+    "update_only_stable": false,
     "launcher": {
         "zero": {
             "zip_type": "seven",

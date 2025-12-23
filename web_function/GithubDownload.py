@@ -140,6 +140,46 @@ class GitHubReleaseFetcher:
             print(f"发生未知错误: {e}")
             return None
     
+    def get_latest_stable_release(self) -> Optional[ReleaseInfo]:
+        """
+        获取最新的稳定版release（排除预发布和草稿）
+        
+        Returns:
+            ReleaseInfo对象，如果失败则返回None
+        """
+        try:
+            # 获取所有release
+            all_releases = self.list_all_releases()
+            
+            if not all_releases:
+                print(f"未找到任何release: {self.repo_owner}/{self.repo_name}")
+                return None
+            
+            # 过滤掉预发布版本和草稿版本
+            stable_releases = [
+                release for release in all_releases 
+                if not release.prerelease and not release.draft
+            ]
+            
+            if not stable_releases:
+                print(f"未找到稳定版release: {self.repo_owner}/{self.repo_name}")
+                return None
+            
+            # 按发布时间倒序排序
+            stable_releases.sort(
+                key=lambda x: x.published_at, 
+                reverse=True
+            )
+            
+            latest_stable = stable_releases[0]
+            print(f"找到最新稳定版: {latest_stable.tag_name} (发布于: {latest_stable.published_at})")
+            
+            return latest_stable
+            
+        except Exception as e:
+            print(f"获取最新稳定版失败: {e}")
+            return None
+    
     def get_release_by_tag(self, tag_name: str) -> Optional[ReleaseInfo]:
         """
         通过标签获取指定release信息

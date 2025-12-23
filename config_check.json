@@ -35,6 +35,9 @@
     "game_path": "str",
     "debug": "bool",
     "auto_check_update": "bool",
+    "delete_updating": "bool",
+    "update_use_proxy": "bool",
+    "update_only_stable": "bool",
     "launcher": {
         "zero": {
             "zip_type": "str",

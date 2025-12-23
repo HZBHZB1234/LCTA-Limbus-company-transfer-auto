@@ -6,18 +6,36 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict, Any
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from web_function.GithubDownload import GitHubReleaseFetcher, ReleaseInfo
 
 
 class Updater:
-    def __init__(self, repo_owner: str, repo_name: str, delete_old_files: bool = True, output_func: Callable[[str], None] = print):
+    def __init__(self, repo_owner: str, repo_name: str, 
+                 delete_old_files: bool = True, 
+                 output_func: Callable[[str], None] = print,
+                 use_proxy: bool = True,
+                 proxy_url: str = "https://gh-proxy.org/",
+                 only_stable: bool = False):
         self.repo_owner = repo_owner
         self.repo_name = repo_name
         self.delete_old_files = delete_old_files
         self.output_func = output_func
-        self.api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/releases/latest"
+        self.use_proxy = use_proxy
+        self.proxy_url = proxy_url
+        self.only_stable = only_stable
+        
+        # 使用 GitHubReleaseFetcher 替代原有的 GitHub API 调用
+        self.fetcher = GitHubReleaseFetcher(
+            repo_owner=repo_owner,
+            repo_name=repo_name,
+            use_proxy=use_proxy,
+            proxy_url=proxy_url,
+            ignore_ssl=True
+        )
+        
         self.session = self._create_session()
         
     def _create_session(self):
@@ -44,14 +62,18 @@ class Updater:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
         return session
-        
+    
     def get_latest_version(self) -> Optional[str]:
         """获取最新版本号"""
         try:
-            response = self.session.get(self.api_url)
-            response.raise_for_status()
-            data = response.json()
-            return data.get('tag_name')
+            if self.only_stable:
+                release_info = self.fetcher.get_latest_stable_release()
+            else:
+                release_info = self.fetcher.get_latest_release()
+                
+            if release_info:
+                return release_info.tag_name
+            return None
         except Exception as e:
             self.output_func(f"获取最新版本失败: {e}")
             return None
@@ -72,22 +94,19 @@ class Updater:
         """下载最新版本源码"""
         try:
             # 获取最新发布信息
-            response = self.session.get(self.api_url)
-            response.raise_for_status()
-            data = response.json()
+            if self.only_stable:
+                release_info = self.fetcher.get_latest_stable_release()
+            else:
+                release_info = self.fetcher.get_latest_release()
+                
+            if not release_info:
+                self.output_func("获取最新发布信息失败")
+                return None
             
-            # 获取源码下载URL (tarball or zipball)
-            download_url = data.get('zipball_url')
+            # 获取下载URL
+            download_url = self.get_release_download_url(release_info)
             if not download_url:
-                # 尝试从assets中找源码包
-                assets = data.get('assets', [])
-                for asset in assets:
-                    if 'source' in asset.get('name', '').lower() or asset.get('name', '').endswith('.zip'):
-                        download_url = asset.get('browser_download_url')
-                        break
-            
-            if not download_url:
-                self.output_func("未找到源码下载链接")
+                self.output_func("未找到可下载的发布文件")
                 return None
             
             # 确保缓存目录存在
@@ -95,18 +114,65 @@ class Updater:
             
             # 下载文件
             zip_path = os.path.join(cache_dir, "latest_release.zip")
-            self.output_func(f"正在下载: {download_url}")
             
-            response = self.session.get(download_url)
-            response.raise_for_status()
-            
-            with open(zip_path, 'wb') as f:
-                f.write(response.content)
-            
-            return zip_path
+            if self.download_file(download_url, zip_path):
+                return zip_path
+            else:
+                return None
+                
         except Exception as e:
             self.output_func(f"下载最新版本失败: {e}")
             return None
+    
+    def get_release_download_url(self, release_info: ReleaseInfo) -> Optional[str]:
+        """获取发布版本的下载URL"""
+        # 优先从assets中查找zip文件
+        zip_assets = release_info.get_assets_by_extension('.zip')
+        if zip_assets:
+            return zip_assets[0].download_url
+        
+        # 如果没有找到zip文件，尝试使用源码下载URL
+        download_url = release_info.source_code_urls['zip'].format(
+            owner=self.repo_owner, repo=self.repo_name
+        )
+        
+        return download_url
+
+    def download_file(self, url: str, save_path: str) -> bool:
+        """下载文件到指定路径"""
+        try:
+            self.output_func(f"正在下载: {url}")
+            
+            # 如果使用代理，为下载URL添加代理前缀
+            if self.use_proxy and url.startswith("https://github.com/"):
+                proxy_url = self.proxy_url.rstrip('/')
+                url = f"{proxy_url}/{url}"
+                self.output_func(f"使用代理下载: {url}")
+            
+            response = self.session.get(url, stream=True)
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+            
+            with open(save_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        # 显示下载进度
+                        if total_size > 0:
+                            percent = (downloaded_size / total_size) * 100
+                            self.output_func(f"\r下载进度: {percent:.1f}% ({downloaded_size}/{total_size} bytes)", end="")
+            
+            self.output_func()  # 换行
+            self.output_func(f"下载完成: {save_path}")
+            return True
+            
+        except Exception as e:
+            self.output_func(f"下载文件失败: {e}")
+            return False
     
     def extract_release(self, zip_path: str, extract_to: str) -> Optional[str]:
         """解压下载的文件到缓存目录"""
@@ -224,24 +290,36 @@ class Updater:
     def check_and_update(self, current_version: str, cache_dir: str = "dev_cache") -> bool:
         """检查并执行更新"""
         self.output_func("开始检查更新...")
-
-        try:
-            shutil.rmtree(cache_dir)
-        except FileNotFoundError:
-            pass
         
-        latest_version = self.get_latest_version()
-        if not latest_version:
+        # 清理缓存目录
+        try:
+            if os.path.exists(cache_dir):
+                shutil.rmtree(cache_dir)
+        except Exception as e:
+            self.output_func(f"清理缓存目录失败: {e}")
+        
+        # 根据only_stable参数决定获取最新版本还是稳定版本
+        if self.only_stable:
+            release_info = self.fetcher.get_latest_stable_release()
+        else:
+            release_info = self.fetcher.get_latest_release()
+            
+        if not release_info:
             self.output_func("获取最新版本信息失败")
             return False
         
+        latest_version = release_info.tag_name
         self.output_func(f"当前版本: {current_version}, 最新版本: {latest_version}")
         
+        # 比较版本
         if not self.compare_versions(current_version, latest_version):
             self.output_func("当前已是最新版本")
             return False
         
         self.output_func("发现新版本，开始更新...")
+        self.output_func(f"更新内容: {release_info.name}")
+        if release_info.body:
+            self.output_func(f"更新详情: {release_info.body[:200]}...")
         
         # 下载最新版本
         zip_path = self.download_latest_release(cache_dir)
@@ -257,11 +335,13 @@ class Updater:
             return False
         
         # 安装新依赖
+        self.output_func("正在检查依赖更新...")
         if not self.install_requirements(source_dir):
             self.output_func("安装新依赖失败")
-            return False
+            # 继续执行，依赖更新不是致命错误
         
         # 更新文件
+        self.output_func("正在更新文件...")
         if not self.update_files(source_dir):
             self.output_func("更新文件失败")
             return False
@@ -269,14 +349,19 @@ class Updater:
         # 更新版本文件
         update_version_file(latest_version, self.output_func)
         
-        self.output_func("更新完成！正在重启应用...")
+        self.output_func("更新完成！")
         
-        # 重启应用
+        # 清理缓存
+        try:
+            shutil.rmtree(cache_dir)
+        except:
+            pass
+
         self.restart_application()
         
         return True
 
-    def check_for_updates(self, current_version: str) -> dict:
+    def check_for_updates(self, current_version: str) -> Dict[str, Any]:
         """
         检查是否存在更新，如果存在则返回更新包大小、release标题与详情、发布时间
         
@@ -292,53 +377,58 @@ class Updater:
                     "body": str,                  # release详情
                     "published_at": str,          # 发布时间
                     "size": int,                  # 更新包大小(字节)
-                    "download_url": str           # 下载链接
+                    "download_url": str,          # 下载链接
+                    "release_url": str,           # release页面URL
+                    "prerelease": bool,           # 是否为预发布版本
+                    "draft": bool,                # 是否为草稿
+                    "asset_count": int            # 附件数量
                 }
         """
         try:
-            response = self.session.get(self.api_url)
-            response.raise_for_status()
-            data = response.json()
+            # 根据only_stable参数决定获取最新版本还是稳定版本
+            if self.only_stable:
+                release_info = self.fetcher.get_latest_stable_release()
+            else:
+                release_info = self.fetcher.get_latest_release()
+                
+            if not release_info:
+                raise Exception("无法获取release信息")
             
-            latest_version = data.get('tag_name', '')
-            
-            # 检查是否有更新
+            latest_version = release_info.tag_name
             has_update = self.compare_versions(current_version, latest_version)
             
-            # 获取下载信息
-            download_url = data.get('zipball_url') or ''
+            # 获取下载URL和大小
+            download_url = self.get_release_download_url(release_info)
             size = 0
             
-            # 如果有assets，尝试从中获取更准确的大小信息
-            assets = data.get('assets', [])
-            if assets:
-                # 查找zip文件的asset
-                for asset in assets:
-                    if asset.get('name', '').endswith('.zip'):
-                        download_url = asset.get('browser_download_url', download_url)
-                        size = asset.get('size', size)
-                        break
-            
-            # 如果没有从assets获取到大小信息，则使用zipball_url
-            if not size and download_url:
-                # 发送HEAD请求获取文件大小
+            if download_url:
+                # 尝试获取文件大小
                 try:
                     head_response = self.session.head(download_url)
                     if head_response.status_code == 200:
                         size_str = head_response.headers.get('Content-Length', '0')
                         size = int(size_str)
-                except Exception:
-                    pass  # 忽略获取大小失败的情况
+                except:
+                    # 如果HEAD请求失败，尝试从asset中获取大小
+                    zip_assets = release_info.get_assets_by_extension(".zip")
+                    if zip_assets:
+                        size = zip_assets[0].size
+            
+            # 构建release页面URL
+            release_url = f"https://github.com/{self.repo_owner}/{self.repo_name}/releases/tag/{latest_version}"
             
             return {
                 "has_update": has_update,
-                "html_url": self.api_url.replace('api.', '').replace('/repos', ''),
                 "latest_version": latest_version,
-                "title": data.get('name', ''),
-                "body": data.get('body', ''),
-                "published_at": data.get('published_at', ''),
+                "title": release_info.name,
+                "body": release_info.body,
+                "published_at": release_info.published_at,
                 "size": size,
-                "download_url": download_url
+                "download_url": download_url or "",
+                "release_url": release_url,
+                "prerelease": release_info.prerelease,
+                "draft": release_info.draft,
+                "asset_count": len(release_info.assets)
             }
         except Exception as e:
             self.output_func(f"检查更新失败: {e}")
@@ -350,7 +440,11 @@ class Updater:
                 "body": "",
                 "published_at": "",
                 "size": 0,
-                "download_url": ""
+                "download_url": "",
+                "release_url": "",
+                "prerelease": False,
+                "draft": False,
+                "asset_count": 0
             }
 
 
@@ -386,9 +480,10 @@ def update_version_file(new_version: str, output_func: Callable[[str], None] = p
         output_func(f"更新版本文件失败: {e}")
 
 
-def run_update_check(output_func: Callable[[str], None] = print):
+def run_update_check(output_func: Callable[[str], None] = print, only_stable: bool = False):
     """运行更新检查"""
-    updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", output_func=output_func)
+    updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", 
+                      output_func=output_func, only_stable=only_stable)
     current_version = get_app_version()
     if not current_version:
         output_func("无法获取当前版本信息，请检查版本文件或配置文件")
@@ -397,4 +492,4 @@ def run_update_check(output_func: Callable[[str], None] = print):
 
 # 使用示例
 if __name__ == "__main__":
-    run_update_check()
+    run_update_check(only_stable=True)

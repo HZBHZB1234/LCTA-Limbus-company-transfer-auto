@@ -755,9 +755,16 @@ class LCTA_API():
             self.current_version = get_app_version()
             self.log(f"当前版本: {self.current_version}")
             
-            # 创建更新器实例
-            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", 
-                             self.config.get("delete_updating", True), self.log)
+            # 创建更新器实例，使用新配置
+            updater = Updater(
+                "HZBHZB1234", 
+                "LCTA-Limbus-company-transfer-auto",
+                delete_old_files=self.config.get("delete_updating", True),
+                output_func=self.log,
+                use_proxy=self.config.get("update_use_proxy", True),
+                proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
+                only_stable=self.config.get("update_only_stable", False)
+            )
             
             update_info = updater.check_for_updates(self.current_version)
             return update_info
@@ -772,9 +779,16 @@ class LCTA_API():
             self.current_version = get_app_version()
             self.log(f"当前版本: {self.current_version}")
             
-            # 创建更新器实例
-            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", 
-                             self.config.get("delete_updating", True), self.log)
+            # 创建更新器实例，使用新配置
+            updater = Updater(
+                "HZBHZB1234", 
+                "LCTA-Limbus-company-transfer-auto",
+                delete_old_files=self.config.get("delete_updating", True),
+                output_func=self.log,
+                use_proxy=self.config.get("update_use_proxy", True),
+                proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
+                only_stable=self.config.get("update_only_stable", False)
+            )
             
             update_info = updater.check_for_updates(self.current_version)
             return update_info
@@ -792,10 +806,16 @@ class LCTA_API():
                 self.add_modal_log("当前处于打包环境，跳过更新", modal_id)
                 return 
     
-            # 创建更新器实例
-            updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", 
-                             self.config.get("delete_updating", True), 
-                             lambda msg: self.add_modal_log(msg, modal_id))
+            # 创建更新器实例，使用新配置
+            updater = Updater(
+                "HZBHZB1234", 
+                "LCTA-Limbus-company-transfer-auto",
+                delete_old_files=self.config.get("delete_updating", True),
+                output_func=lambda msg: self.add_modal_log(msg, modal_id),
+                use_proxy=self.config.get("update_use_proxy", True),
+                proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
+                only_stable=self.config.get("update_only_stable", False)
+            )
             
             # 执行更新
             result = updater.check_and_update(self.current_version)

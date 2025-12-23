@@ -269,24 +269,12 @@ function initNavigation() {
                     
                     // 如果是安装汉化包界面，刷新包列表
                     if (sectionId === 'install-section') {
-                        // 先保存目录设置再刷新列表
-                        const packageDirInput = document.getElementById('install-package-directory');
-                        if (packageDirInput) {
-                            const packageDirValue = packageDirInput.value;
-                            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirValue)
-                                .then(function(success) {
-                                    if (success) {
-                                        refreshInstallPackageList();
-                                    } else {
-                                        showMessage('错误', '保存汉化包目录设置失败');
-                                    }
-                                })
-                                .catch(function(error) {
-                                    showMessage('错误', '保存汉化包目录设置时发生错误: ' + error);
-                                });
-                        } else {
-                            refreshInstallPackageList();
-                        }
+                        refreshInstallPackageList();
+                    }
+                    
+                    // 如果是launcher配置界面，应用配置
+                    if (sectionId === 'launcher-config-section') {
+                        applyLauncherConfigToUI();
                     }
                 }, 150); // 加快动画速度
             }
@@ -375,7 +363,7 @@ function browsePackageDirectory() {
         // 更新配置
         const packageDirInput = document.getElementById('package-directory');
         if (packageDirInput && packageDirInput.value) {
-            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value)
+            updateConfigValue('ui_default.install.package_directory', packageDirInput.value)
                 .then(function(success) {
                     if (success) {
                         // 刷新汉化包列表
@@ -399,7 +387,7 @@ function browseInstallPackageDirectory() {
         // 更新配置
         const packageDirInput = document.getElementById('install-package-directory');
         if (packageDirInput && packageDirInput.value) {
-            pywebview.api.update_config_value('ui_default.install.package_directory', packageDirInput.value)
+            updateConfigValue('ui_default.install.package_directory', packageDirInput.value)
                 .then(function(success) {
                     if (success) {
                         // 刷新汉化包列表
@@ -423,7 +411,7 @@ function clearPackageDirectory() {
     if (packageDirInput) {
         packageDirInput.value = '';
         // 更新配置
-        pywebview.api.update_config_value('ui_default.install.package_directory', '')
+        updateConfigValue('ui_default.install.package_directory', '')
             .then(function(success) {
                 if (success) {
                     // 刷新汉化包列表
@@ -1032,7 +1020,7 @@ function refreshInstallPackageList() {
     const packageDirInput = document.getElementById('install-package-directory');
     if (packageDirInput) {
         const packageDirValue = packageDirInput.value;
-        pywebview.api.update_config_value('ui_default.install.package_directory', packageDirValue)
+        updateConfigValue('ui_default.install.package_directory', packageDirValue)
             .then(function(success) {
                 if (!success) {
                     showMessage('错误', '保存汉化包目录设置失败');
@@ -1813,8 +1801,8 @@ function downloadOurplay() {
     modal.addLog(`字体选项: ${fontOption}`);
     modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
     
-    pywebview.api.update_config_value('ui_default.ourplay.font_option', fontOption);
-    pywebview.api.update_config_value('ui_default.ourplay.check_hash', checkHash);
+    updateConfigValue('ui_default.ourplay.font_option', fontOption);
+    updateConfigValue('ui_default.ourplay.check_hash', checkHash);
     pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, 'OurPlay汉化包下载成功');
@@ -1853,11 +1841,11 @@ function downloadLLC() {
     const download_source = document.getElementById('llc-download-source').value;
     
     // 更新配置
-    pywebview.api.update_config_value('ui_default.zero.zip_type', zipType);
-    pywebview.api.update_config_value('ui_default.zero.use_proxy', useProxy);
-    pywebview.api.update_config_value('ui_default.zero.use_cache', useCache);
-    pywebview.api.update_config_value('ui_default.zero.dump_default', dumpDefault);
-    pywebview.api.update_config_value('ui_default.zero.download_source', download_source);
+    updateConfigValue('ui_default.zero.zip_type', zipType);
+    updateConfigValue('ui_default.zero.use_proxy', useProxy);
+    updateConfigValue('ui_default.zero.use_cache', useCache);
+    updateConfigValue('ui_default.zero.dump_default', dumpDefault);
+    updateConfigValue('ui_default.zero.download_source', download_source);
     
     const modal = new ProgressModal('下载零协汉化包');
     modal.addLog('开始下载零协汉化包...');
@@ -1917,163 +1905,161 @@ function updateValue(sliderId) {
     }
 }
 
-// 设置界面相关函数
-function loadSettings() {
-    // 调用后端API获取游戏路径
-    pywebview.api.get_game_path()
-        .then(function(gamePath) {
-            if (gamePath) {
-                document.getElementById('game-path').value = gamePath;
-            }
-        })
-        .catch(function(error) {
-            console.error('获取游戏路径失败:', error);
-        });
+// ================================
+// 配置管理函数
+// ================================
+
+// 从window.config获取配置值
+function getConfigValue(keyPath, defaultValue = undefined) {
+    if (!window.config) return defaultValue;
     
-    // 从本地存储加载其他设置
-    const debugMode = localStorage.getItem('lcta-debug-mode') === 'true';
-    const autoCheckUpdate = localStorage.getItem('lcta-auto-check-update') !== 'false';
+    const keys = keyPath.split('.');
+    let value = window.config;
     
+    for (const key of keys) {
+        if (value && typeof value === 'object' && key in value) {
+            value = value[key];
+        } else {
+            return defaultValue;
+        }
+    }
+    
+    return value;
+}
+
+// 更新window.config中的值
+function updateConfigValue(keyPath, value) {
+    if (!window.config) return Promise.resolve(false);
+    
+    const keys = keyPath.split('.');
+    let current = window.config;
+    
+    // 遍历到倒数第二个键
+    for (let i = 0; i < keys.length - 1; i++) {
+        const key = keys[i];
+        if (!(key in current) || typeof current[key] !== 'object') {
+            current[key] = {};
+        }
+        current = current[key];
+    }
+    
+    // 设置最终值
+    const finalKey = keys[keys.length - 1];
+    current[finalKey] = value;
+    
+    // 同时更新后端
+    return pywebview.api.update_config_value(keyPath, value);
+}
+
+// 应用设置到UI
+function applySettingsToUI() {
+    if (!window.config) return;
+    
+    // 基本设置
+    const gamePath = window.config.game_path || '';
+    const debugMode = window.config.debug || false;
+    const autoCheckUpdate = window.config.auto_check_update !== false;
+    const deleteUpdating = window.config.delete_updating || false;
+    const updateUseProxy = window.config.update_use_proxy !== false;
+    const updateOnlyStable = window.config.update_only_stable !== false;
+    
+    document.getElementById('game-path').value = gamePath;
     document.getElementById('debug-mode').checked = debugMode;
     document.getElementById('auto-check-update').checked = autoCheckUpdate;
-}
-
-// Launcher配置相关函数
-function loadLauncherConfig() {
-    // 确保API可用
-    if (typeof pywebview === 'undefined' || !pywebview.api) {
-        console.warn('PyWebview API 尚未准备好');
-        return;
-    }
+    document.getElementById('delete-updating').checked = deleteUpdating;
+    document.getElementById('update-use-proxy').checked = updateUseProxy;
+    document.getElementById('update-only-stable').checked = updateOnlyStable;
     
-    // 加载零协配置
-    if (pywebview.api.get_config_value) {
-        pywebview.api.get_config_value('launcher.zero.zip_type')
-            .then(function(value) {
-                if (value !== undefined) {
-                    const element = document.getElementById('launcher-zero-zip-type');
-                    if (element) {
-                        element.value = value;
-                    }
-                }
-            })
-            .catch(function(error) {
-                console.error('加载launcher.zero.zip_type配置时出错:', error);
-            });
-            
-        pywebview.api.get_config_value('launcher.zero.download_source')
-            .then(function(value) {
-                if (value !== undefined) {
-                    const element = document.getElementById('launcher-zero-download-source');
-                    if (element) {
-                        element.value = value;
-                    }
-                }
-            })
-            .catch(function(error) {
-                console.error('加载launcher.zero.download_source配置时出错:', error);
-            });
-            
-        pywebview.api.get_config_value('launcher.zero.use_proxy')
-            .then(function(value) {
-                if (value !== undefined) {
-                    const element = document.getElementById('launcher-zero-use-proxy');
-                    if (element) {
-                        element.checked = value;
-                    }
-                }
-            })
-            .catch(function(error) {
-                console.error('加载launcher.zero.use_proxy配置时出错:', error);
-            });
-            
-        pywebview.api.get_config_value('launcher.zero.use_cache')
-            .then(function(value) {
-                if (value !== undefined) {
-                    const element = document.getElementById('launcher-zero-use-cache');
-                    if (element) {
-                        element.checked = value;
-                    }
-                }
-            })
-            .catch(function(error) {
-                console.error('加载launcher.zero.use_cache配置时出错:', error);
-            });
-        
-        // 加载OurPlay配置
-        pywebview.api.get_config_value('launcher.ourplay.font_option')
-            .then(function(value) {
-                if (value !== undefined) {
-                    const element = document.getElementById('launcher-ourplay-font-option');
-                    if (element) {
-                        element.value = value;
-                    }
-                }
-            })
-            .catch(function(error) {
-                console.error('加载launcher.ourplay.font_option配置时出错:', error);
-            });
-            
-        pywebview.api.get_config_value('launcher.ourplay.use_api')
-            .then(function(value) {
-                if (value !== undefined) {
-                    const element = document.getElementById('launcher-ourplay-use-api');
-                    if (element) {
-                        element.checked = value;
-                    }
-                }
-            })
-            .catch(function(error) {
-                console.error('加载launcher.ourplay.use_api配置时出错:', error);
-            });
-        
-        // 加载工作模式配置
-        pywebview.api.get_config_value('launcher.work.update')
-            .then(function(value) {
-                if (value !== undefined) {
-                    const element = document.getElementById('launcher-work-update');
-                    if (element) {
-                        element.value = value;
-                    }
-                }
-            })
-            .catch(function(error) {
-                console.error('加载launcher.work.update配置时出错:', error);
-            });
-            
-        pywebview.api.get_config_value('launcher.work.mod')
-            .then(function(value) {
-                if (value !== undefined) {
-                    const element = document.getElementById('launcher-work-mod');
-                    if (element) {
-                        element.checked = value;
-                    }
-                }
-            })
-            .catch(function(error) {
-                console.error('加载launcher.work.mod配置时出错:', error);
-            });
-    }
+    // UI默认设置
+    const uiDefault = window.config.ui_default || {};
+    
+    // 安装设置
+    const install = uiDefault.install || {};
+    const packageDirectory = install.package_directory || '';
+    document.getElementById('install-package-directory').value = packageDirectory;
+    
+    // OurPlay设置
+    const ourplay = uiDefault.ourplay || {};
+    const fontOption = ourplay.font_option || 'keep';
+    const checkHash = ourplay.check_hash !== false;
+    document.getElementById('ourplay-font-option').value = fontOption;
+    document.getElementById('ourplay-check-hash').checked = checkHash;
+    
+    // 零协设置
+    const zero = uiDefault.zero || {};
+    const zipType = zero.zip_type || 'zip';
+    const downloadSource = zero.download_source || 'github';
+    const useProxy = zero.use_proxy !== false;
+    const useCache = zero.use_cache || false;
+    const dumpDefault = zero.dump_default || false;
+    document.getElementById('llc-zip-type').value = zipType;
+    document.getElementById('llc-download-source').value = downloadSource;
+    document.getElementById('llc-use-proxy').checked = useProxy;
+    document.getElementById('llc-use-cache').checked = useCache;
+    document.getElementById('llc-dump-default').checked = dumpDefault;
 }
 
+// 应用launcher配置到UI
+function applyLauncherConfigToUI() {
+    if (!window.config) return;
+    
+    const launcher = window.config.launcher || {};
+    
+    // 零协配置
+    const zero = launcher.zero || {};
+    const zeroZipType = zero.zip_type || 'zip';
+    const zeroDownloadSource = zero.download_source || 'github';
+    const zeroUseProxy = zero.use_proxy !== false;
+    const zeroUseCache = zero.use_cache !== false;
+    
+    document.getElementById('launcher-zero-zip-type').value = zeroZipType;
+    document.getElementById('launcher-zero-download-source').value = zeroDownloadSource;
+    document.getElementById('launcher-zero-use-proxy').checked = zeroUseProxy;
+    document.getElementById('launcher-zero-use-cache').checked = zeroUseCache;
+    
+    // OurPlay配置
+    const ourplay = launcher.ourplay || {};
+    const ourplayFontOption = ourplay.font_option || 'keep';
+    const ourplayUseApi = ourplay.use_api !== false;
+    
+    document.getElementById('launcher-ourplay-font-option').value = ourplayFontOption;
+    document.getElementById('launcher-ourplay-use-api').checked = ourplayUseApi;
+    
+    // 工作模式配置
+    const work = launcher.work || {};
+    const workUpdate = work.update || 'no';
+    const workMod = work.mod !== false;
+    
+    document.getElementById('launcher-work-update').value = workUpdate;
+    document.getElementById('launcher-work-mod').checked = workMod;
+}
+
+// 保存设置
 function saveSettings() {
     const gamePath = document.getElementById('game-path').value;
     const debugMode = document.getElementById('debug-mode').checked;
     const autoCheckUpdate = document.getElementById('auto-check-update').checked;
+    const deleteUpdating = document.getElementById('delete-updating').checked;
+    const updateUseProxy = document.getElementById('update-use-proxy').checked;
+    const updateOnlyStable = document.getElementById('update-only-stable').checked;
     
     const modal = new ProgressModal('保存设置');
     modal.addLog('正在保存设置...');
+    
+    // 更新window.config
+    updateConfigValue('game_path', gamePath);
+    updateConfigValue('debug', debugMode);
+    updateConfigValue('auto_check_update', autoCheckUpdate);
+    updateConfigValue('delete_updating', deleteUpdating);
+    updateConfigValue('update_use_proxy', updateUseProxy);
+    updateConfigValue('update_only_stable', updateOnlyStable);
     
     // 调用后端API保存设置
     pywebview.api.save_settings(gamePath, debugMode, autoCheckUpdate)
         .then(function(result) {
             if (result.success) {
-                // 保存到本地存储
-                localStorage.setItem('lcta-debug-mode', debugMode);
-                localStorage.setItem('lcta-auto-check-update', autoCheckUpdate);
-                
                 modal.complete(true, '设置保存成功');
-                pywebview.api.save_config_to_file()
+                pywebview.api.save_config_to_file();
             } else {
                 modal.complete(false, '保存失败: ' + result.message);
             }
@@ -2083,8 +2069,8 @@ function saveSettings() {
         });
 }
 
+// 保存launcher配置
 function saveLauncherConfig() {
-    // 确保API可用
     if (typeof pywebview === 'undefined' || !pywebview.api) {
         showMessage('错误', 'API尚未准备就绪');
         return;
@@ -2093,48 +2079,42 @@ function saveLauncherConfig() {
     const modal = new ProgressModal('保存Launcher配置');
     modal.addLog('正在保存Launcher配置...');
     
-    // 保存零协配置
+    // 从UI获取值
     const zeroZipType = document.getElementById('launcher-zero-zip-type').value;
     const zeroDownloadSource = document.getElementById('launcher-zero-download-source').value;
     const zeroUseProxy = document.getElementById('launcher-zero-use-proxy').checked;
     const zeroUseCache = document.getElementById('launcher-zero-use-cache').checked;
     
-    // 保存OurPlay配置
     const ourplayFontOption = document.getElementById('launcher-ourplay-font-option').value;
     const ourplayUseApi = document.getElementById('launcher-ourplay-use-api').checked;
     
-    // 保存工作模式配置
     const workUpdate = document.getElementById('launcher-work-update').value;
     const workMod = document.getElementById('launcher-work-mod').checked;
     
     // 执行保存操作
-    if (pywebview.api.update_config_value) {
-        Promise.all([
-            pywebview.api.update_config_value('launcher.zero.zip_type', zeroZipType),
-            pywebview.api.update_config_value('launcher.zero.download_source', zeroDownloadSource),
-            pywebview.api.update_config_value('launcher.zero.use_proxy', zeroUseProxy),
-            pywebview.api.update_config_value('launcher.zero.use_cache', zeroUseCache),
-            pywebview.api.update_config_value('launcher.ourplay.font_option', ourplayFontOption),
-            pywebview.api.update_config_value('launcher.ourplay.use_api', ourplayUseApi),
-            pywebview.api.update_config_value('launcher.work.update', workUpdate),
-            pywebview.api.update_config_value('launcher.work.mod', workMod)
-        ])
-        .then(function(results) {
-            // 检查是否所有保存操作都成功
-            const allSuccess = results.every(result => result === true);
-            if (allSuccess) {
-                modal.complete(true, 'Launcher配置保存成功');
-            } else {
-                modal.complete(false, '部分配置保存失败');
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '保存配置时发生错误: ' + error);
-        });
-        pywebview.api.save_config_to_file()
-    } else {
-        modal.complete(false, 'API方法不可用');
-    }
+    Promise.all([
+        updateConfigValue('launcher.zero.zip_type', zeroZipType),
+        updateConfigValue('launcher.zero.download_source', zeroDownloadSource),
+        updateConfigValue('launcher.zero.use_proxy', zeroUseProxy),
+        updateConfigValue('launcher.zero.use_cache', zeroUseCache),
+        updateConfigValue('launcher.ourplay.font_option', ourplayFontOption),
+        updateConfigValue('launcher.ourplay.use_api', ourplayUseApi),
+        updateConfigValue('launcher.work.update', workUpdate),
+        updateConfigValue('launcher.work.mod', workMod)
+    ])
+    .then(function(results) {
+        // 检查是否所有保存操作都成功
+        const allSuccess = results.every(result => result === true);
+        if (allSuccess) {
+            modal.complete(true, 'Launcher配置保存成功');
+            pywebview.api.save_config_to_file();
+        } else {
+            modal.complete(false, '部分配置保存失败');
+        }
+    })
+    .catch(function(error) {
+        modal.complete(false, '保存配置时发生错误: ' + error);
+    });
 }
 
 function useDefaultConfig() {
@@ -2146,7 +2126,13 @@ function useDefaultConfig() {
         .then(function(result) {
             if (result.success) {
                 modal.complete(true, '已使用默认配置');
-                setTimeout(loadSettings, 500);
+                // 重新加载配置
+                pywebview.api.get_attr('config')
+                    .then(function(config) {
+                        window.config = config;
+                        applySettingsToUI();
+                        applyLauncherConfigToUI();
+                    });
             } else {
                 modal.complete(false, '配置重置失败: ' + result.message);
             }
@@ -2168,12 +2154,17 @@ function resetConfig() {
             pywebview.api.reset_config()
                 .then(function(result) {
                     if (result.success) {
-                        // 清除本地存储
-                        localStorage.removeItem('lcta-debug-mode');
-                        localStorage.removeItem('lcta-auto-check-update');
-                        
-                        modal.complete(true, '配置已重置');
-                        setTimeout(loadSettings, 500);
+                        // 重新加载配置
+                        pywebview.api.get_attr('config')
+                            .then(function(config) {
+                                window.config = config;
+                                applySettingsToUI();
+                                applyLauncherConfigToUI();
+                                modal.complete(true, '配置已重置');
+                            })
+                            .catch(function(error) {
+                                modal.complete(false, '重新加载配置时发生错误: ' + error);
+                            });
                     } else {
                         modal.complete(false, '配置重置失败: ' + result.message);
                     }
@@ -2567,7 +2558,7 @@ function confirmGamePath(foundPath) {
         `这是否是你的游戏路径：\n${foundPath}\n是否使用此路径？`,
         function() {
             // 用户确认使用找到的路径
-            pywebview.api.update_config_value('game_path', foundPath)
+            updateConfigValue('game_path', foundPath)
                 .then(function(success) {
                     if (success) {
                         // 更新界面上的游戏路径显示
@@ -2586,7 +2577,7 @@ function confirmGamePath(foundPath) {
             // 用户不确认，请求手动选择路径
             requestGamePath();
             foundPath = document.getElementById('game-path').value;
-            pywebview.api.update_config_value('game_path', foundPath)
+            updateConfigValue('game_path', foundPath)
                 .then(function(success) {
                     if (success) {
                         addLogMessage('游戏路径已确认并保存: ' + foundPath, 'success');
@@ -2658,10 +2649,6 @@ window.addEventListener('pywebviewready', function() {
     // 移除遮罩层并更新状态
     removeConnectionMask();
     
-    // 加载设置
-    loadSettings();
-
-    loadLauncherConfig();
     
     pywebview.api.get_attr('message_config')
         .then(function(message_config) {
@@ -2727,11 +2714,16 @@ window.addEventListener('pywebviewready', function() {
         .then(function(config) {
             console.log('配置已加载到前端:', config);
             window.config = config;
+            
+            // 应用配置到UI
+            applySettingsToUI();
+            applyLauncherConfigToUI();
+            
             checkGamePath();
+            
+            let autoCheckUpdate = window.config.auto_check_update;
+            if (autoCheckUpdate) {
+               autoCheckUpdates();
+            }
         });
-    
-    const autoCheckUpdate = localStorage.getItem('lcta-auto-check-update') !== 'false';
-    if (autoCheckUpdate) {
-        autoCheckUpdates();
-    }
 });

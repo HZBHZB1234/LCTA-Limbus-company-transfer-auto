@@ -2618,7 +2618,9 @@ window.addEventListener('pywebviewready', function() {
     
     pywebview.api.get_attr('message_config')
         .then(function(message_config) {
+            if (message_config && Array.isArray(message_config) && message_config.length === 2) {
             showMessage(message_config[0], message_config[1]);
+            }
         });
     
     pywebview.api.get_attr('config_ok')
@@ -2682,10 +2684,21 @@ window.addEventListener('pywebviewready', function() {
             
             // 初始化配置管理器的缓存
             if (configManager) {
-                Object.keys(configManager.configKeyMap).forEach(id => {
-                    const keyPath = configManager.configKeyMap[id];
-                    configManager.setCachedValue(keyPath, configManager.getCachedValue(keyPath));
-                });
+                // 递归函数，用于将配置对象扁平化并设置到缓存中
+                function setConfigToCache(obj, prefix = '') {
+                    for (const [key, value] of Object.entries(obj)) {
+                        const path = prefix ? `${prefix}.${key}` : key;
+                        
+                        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                            setConfigToCache(value, path);
+                        } else {
+                            configManager.setCachedValue(path, value);
+                        }
+                    }
+                }
+                
+                // 将后端配置数据填充到缓存
+                setConfigToCache(config);
                 
                 // 应用配置到UI
                 configManager.applyConfigToUI();

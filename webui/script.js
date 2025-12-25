@@ -2,18 +2,16 @@
 class ThemeManager {
     constructor() {
         this.currentTheme = localStorage.getItem('lcta-theme') || 'light';
-        this.isTransitioning = false; // 添加过渡状态标志
-        this.pendingTheme = null; // 存储待处理的主题
-        this.debounceTimer = null; // 防抖计时器
-        this.debounceDelay = 300; // 防抖延迟时间
+        this.isTransitioning = false;
+        this.pendingTheme = null;
+        this.debounceTimer = null;
+        this.debounceDelay = 300;
         this.init();
     }
     
     init() {
-        // 设置初始主题
-        this.setTheme(this.currentTheme, true); // 初始化时不使用防抖
+        this.setTheme(this.currentTheme, true);
         
-        // 绑定主题按钮事件
         document.querySelectorAll('.theme-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const theme = e.target.dataset.theme || e.target.closest('.theme-btn').dataset.theme;
@@ -22,9 +20,7 @@ class ThemeManager {
         });
     }
     
-    // 带防抖功能的主题设置方法
     setThemeWithDebounce(theme) {
-        // 添加视觉反馈
         const clickedBtn = [...document.querySelectorAll('.theme-btn')].find(btn => btn.dataset.theme === theme);
         if (clickedBtn) {
             clickedBtn.classList.add('changing');
@@ -33,49 +29,35 @@ class ThemeManager {
             }, 300);
         }
         
-        // 清除之前的定时器
         if (this.debounceTimer) {
             clearTimeout(this.debounceTimer);
         }
         
-        // 设置新的定时器
         this.debounceTimer = setTimeout(() => {
             this.setTheme(theme);
         }, this.debounceDelay);
     }
     
     setTheme(theme, skipDebounce = false) {
-        // 如果正在过渡中，存储待处理的主题
         if (this.isTransitioning) {
             this.pendingTheme = theme;
             return;
         }
         
-        // 如果点击的是当前主题，直接返回
         if (this.currentTheme === theme) {
             return;
         }
         
-        // 设置过渡状态
         this.isTransitioning = true;
         document.body.classList.add('theme-transition');
         
-        // 移除所有主题类
         document.body.classList.remove('theme-light', 'theme-dark', 'theme-purple');
-        
-        // 添加新主题类
         document.body.classList.add(`theme-${theme}`);
         
-        // 更新当前主题
         this.currentTheme = theme;
-        
-        // 保存到本地存储
         localStorage.setItem('lcta-theme', theme);
         
-        // 更新按钮状态
         this.updateThemeButtons(theme);
-        
-        // 添加主题切换动画
         this.addThemeTransition();
     }
     
@@ -90,13 +72,10 @@ class ThemeManager {
     }
     
     addThemeTransition() {
-        // 使用setTimeout确保样式变化能够正确触发过渡动画
         setTimeout(() => {
-            // 移除过渡效果
             document.body.classList.remove('theme-transition');
             this.isTransitioning = false;
             
-            // 如果有待处理的主题，处理它
             if (this.pendingTheme && this.pendingTheme !== this.currentTheme) {
                 const pendingTheme = this.pendingTheme;
                 this.pendingTheme = null;
@@ -108,7 +87,7 @@ class ThemeManager {
 
 // 动画管理器
 class AnimationManager {
-    static fadeIn(element, duration = 150) { // 默认加快动画速度
+    static fadeIn(element, duration = 150) {
         element.style.opacity = 0;
         element.style.display = 'block';
         
@@ -128,7 +107,7 @@ class AnimationManager {
         requestAnimationFrame(animate);
     }
     
-    static fadeOut(element, duration = 150) { // 默认加快动画速度
+    static fadeOut(element, duration = 150) {
         let start = null;
         const animate = (timestamp) => {
             if (!start) start = timestamp;
@@ -148,7 +127,7 @@ class AnimationManager {
         requestAnimationFrame(animate);
     }
     
-    static slideIn(element, from = 'left', duration = 150) { // 默认加快动画速度
+    static slideIn(element, from = 'left', duration = 150) {
         const direction = from === 'left' ? '-100%' : '100%';
         element.style.transform = `translateX(${direction})`;
         element.style.display = 'block';
@@ -170,8 +149,231 @@ class AnimationManager {
     }
 }
 
-// 初始化主题管理器
-let themeManager;
+// 配置管理器
+class ConfigManager {
+    constructor() {
+        // 配置键名对照表：id -> 配置键路径
+        this.configKeyMap = {
+            // 基本设置
+            'game-path': 'game_path',
+            'debug-mode': 'debug',
+            'auto-check-update': 'auto_check_update',
+            'delete-updating': 'delete_updating',
+            'update-use-proxy': 'update_use_proxy',
+            'update-only-stable': 'update_only_stable',
+            
+            // 安装设置
+            'install-package-directory': 'ui_default.install.package_directory',
+            'package-directory': 'ui_default.install.package_directory',
+            
+            // OurPlay设置
+            'ourplay-font-option': 'ui_default.ourplay.font_option',
+            'ourplay-check-hash': 'ui_default.ourplay.check_hash',
+            
+            // 零协设置
+            'llc-zip-type': 'ui_default.zero.zip_type',
+            'llc-download-source': 'ui_default.zero.download_source',
+            'llc-use-proxy': 'ui_default.zero.use_proxy',
+            'llc-use-cache': 'ui_default.zero.use_cache',
+            'llc-dump-default': 'ui_default.zero.dump_default',
+            
+            // Launcher设置
+            'launcher-zero-zip-type': 'launcher.zero.zip_type',
+            'launcher-zero-download-source': 'launcher.zero.download_source',
+            'launcher-zero-use-proxy': 'launcher.zero.use_proxy',
+            'launcher-zero-use-cache': 'launcher.zero.use_cache',
+            'launcher-ourplay-font-option': 'launcher.ourplay.font_option',
+            'launcher-ourplay-use-api': 'launcher.ourplay.use_api',
+            'launcher-work-update': 'launcher.work.update',
+            'launcher-work-mod': 'launcher.work.mod'
+        };
+        
+        this.configCache = {}; // 配置缓存
+        this.pendingUpdates = {}; // 待更新的配置
+        this.debounceTimer = null;
+        this.debounceDelay = 500; // 防抖延迟
+    }
+    
+    // 批量获取配置值
+    async getConfigValues(ids) {
+        const keyPaths = ids.map(id => this.configKeyMap[id]).filter(path => path);
+        
+        if (keyPaths.length === 0) {
+            return {};
+        }
+        
+        try {
+            const result = await pywebview.api.get_config_batch(keyPaths);
+            if (result.success) {
+                // 更新缓存
+                Object.assign(this.configCache, result.config_values);
+                return result.config_values;
+            }
+            return {};
+        } catch (error) {
+            console.error('批量获取配置失败:', error);
+            return {};
+        }
+    }
+    
+    // 批量更新配置值
+    async updateConfigValues(updates) {
+        const configUpdates = {};
+        
+        // 转换id到配置键路径
+        for (const [id, value] of Object.entries(updates)) {
+            const keyPath = this.configKeyMap[id];
+            if (keyPath) {
+                configUpdates[keyPath] = value;
+                // 更新缓存
+                this.setCachedValue(keyPath, value);
+            }
+        }
+        
+        if (Object.keys(configUpdates).length === 0) {
+            return { success: false, message: '没有有效的配置项' };
+        }
+        
+        try {
+            const result = await pywebview.api.update_config_batch(configUpdates);
+            if (result.success) {
+                console.log(`批量更新配置成功: ${result.updated}/${result.total} 项`);
+            }
+            return result;
+        } catch (error) {
+            console.error('批量更新配置失败:', error);
+            return { success: false, message: error.toString() };
+        }
+    }
+    
+    // 单次配置更新（自动批量化处理）
+    async updateConfigValue(id, value) {
+        const keyPath = this.configKeyMap[id];
+        if (!keyPath) {
+            console.warn(`未找到id对应的配置键: ${id}`);
+            return false;
+        }
+        
+        // 添加到待更新队列
+        this.pendingUpdates[id] = value;
+        
+        // 防抖处理，避免频繁调用
+        this.debounceUpdate();
+        
+        return true;
+    }
+    
+    // 防抖更新
+    debounceUpdate() {
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+        }
+        
+        this.debounceTimer = setTimeout(() => {
+            this.flushPendingUpdates();
+        }, this.debounceDelay);
+    }
+    
+    // 立即执行待更新
+    async flushPendingUpdates() {
+        if (Object.keys(this.pendingUpdates).length === 0) {
+            return;
+        }
+        
+        const updates = { ...this.pendingUpdates };
+        this.pendingUpdates = {};
+        
+        await this.updateConfigValues(updates);
+    }
+    
+    // 获取缓存值
+    getCachedValue(keyPath) {
+        const keys = keyPath.split('.');
+        let value = this.configCache;
+        
+        for (const key of keys) {
+            if (value && typeof value === 'object' && key in value) {
+                value = value[key];
+            } else {
+                return undefined;
+            }
+        }
+        
+        return value;
+    }
+    
+    // 设置缓存值
+    setCachedValue(keyPath, value) {
+        const keys = keyPath.split('.');
+        let obj = this.configCache;
+        
+        for (let i = 0; i < keys.length - 1; i++) {
+            const key = keys[i];
+            if (!(key in obj) || typeof obj[key] !== 'object') {
+                obj[key] = {};
+            }
+            obj = obj[key];
+        }
+        
+        obj[keys[keys.length - 1]] = value;
+    }
+    
+    // 应用配置到UI（批量）
+    async applyConfigToUI() {
+        const allIds = Object.keys(this.configKeyMap);
+        const configValues = await this.getConfigValues(allIds);
+        
+        // 遍历所有配置项，更新UI
+        for (const [id, keyPath] of Object.entries(this.configKeyMap)) {
+            if (keyPath in configValues) {
+                this.applyValueToUI(id, configValues[keyPath]);
+            }
+        }
+    }
+    
+    // 将值应用到UI元素
+    applyValueToUI(id, value) {
+        const element = document.getElementById(id);
+        if (!element) return;
+        
+        if (element.type === 'checkbox') {
+            element.checked = Boolean(value);
+        } else if (element.tagName === 'SELECT') {
+            element.value = value || '';
+        } else {
+            element.value = value || '';
+        }
+    }
+    
+    // 从UI收集配置值（批量）
+    collectConfigFromUI() {
+        const updates = {};
+        
+        for (const [id, keyPath] of Object.entries(this.configKeyMap)) {
+            const element = document.getElementById(id);
+            if (element) {
+                let value;
+                
+                if (element.type === 'checkbox') {
+                    value = element.checked;
+                } else if (element.tagName === 'SELECT' || element.tagName === 'INPUT') {
+                    value = element.value;
+                }
+                
+                // 如果值与缓存不同，则添加到更新
+                const cachedValue = this.getCachedValue(keyPath);
+                if (value !== cachedValue) {
+                    updates[id] = value;
+                }
+            }
+        }
+        
+        return updates;
+    }
+}
+
+// 初始化全局配置管理器
+let configManager;
 
 // 存储所有模态窗口的数组
 let modalWindows = [];
@@ -194,7 +396,7 @@ function ensureMinimizedContainer() {
         container = document.createElement('div');
         container.id = 'minimized-container';
         container.style.position = 'fixed';
-        container.style.top = '80px'; // 增加与顶部的距离，避免与主题切换按钮重叠
+        container.style.top = '80px';
         container.style.right = '20px';
         container.style.bottom = '20px';
         container.style.width = '300px';
@@ -216,67 +418,56 @@ function ensureMinimizedContainer() {
 function initNavigation() {
     document.querySelectorAll('.nav-btn').forEach(button => {
         button.addEventListener('click', () => {
-            // 如果点击的是已经激活的按钮，则不执行任何操作
             if (button.classList.contains('active')) {
                 return;
             }
             
-            // 移除所有按钮的active类
             document.querySelectorAll('.nav-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
             
-            // 移除所有指示器
             document.querySelectorAll('.nav-indicator').forEach(indicator => {
                 indicator.remove();
             });
             
-            // 添加active类到当前按钮
             button.classList.add('active');
             
-            // 添加指示器
             const indicator = document.createElement('div');
             indicator.className = 'nav-indicator';
             button.appendChild(indicator);
             
-            // 隐藏所有内容区域
             document.querySelectorAll('.content-section').forEach(section => {
                 if (section.classList.contains('active')) {
-                    AnimationManager.fadeOut(section, 150); // 加快动画速度
+                    AnimationManager.fadeOut(section, 150);
                     setTimeout(() => {
                         section.classList.remove('active');
-                    }, 150); // 加快动画速度
+                    }, 150);
                 }
             });
             
-            // 显示对应的内容区域
             const sectionId = button.id.replace('-btn', '-section');
             const section = document.getElementById(sectionId);
             if (section) {
                 setTimeout(() => {
                     section.classList.add('active');
-                    AnimationManager.fadeIn(section, 150); // 加快动画速度
+                    AnimationManager.fadeIn(section, 150);
                     
-                    // 如果是设置界面，加载设置
                     if (sectionId === 'settings-section') {
                         loadSettings();
                     }
                     
-                    // 如果是日志界面，滚动到底部
                     if (sectionId === 'log-section') {
                         scrollLogToBottom();
                     }
                     
-                    // 如果是安装汉化包界面，刷新包列表
                     if (sectionId === 'install-section') {
                         refreshInstallPackageList();
                     }
                     
-                    // 如果是launcher配置界面，应用配置
                     if (sectionId === 'launcher-config-section') {
                         applyLauncherConfigToUI();
                     }
-                }, 150); // 加快动画速度
+                }, 150);
             }
         });
     });
@@ -357,47 +548,28 @@ function browseFolder(inputId) {
     pywebview.api.browse_folder(inputId);
 }
 
-// 添加一个新的函数用于浏览汉化包目录
+// 浏览汉化包目录
 function browsePackageDirectory() {
     pywebview.api.browse_folder('package-directory').then(function(result) {
-        // 更新配置
         const packageDirInput = document.getElementById('package-directory');
-        if (packageDirInput && packageDirInput.value) {
-            updateConfigValue('ui_default.install.package_directory', packageDirInput.value)
-                .then(function(success) {
-                    if (success) {
-                        // 刷新汉化包列表
-                        refreshPackageList();
-                    } else {
-                        showMessage('错误', '更新配置失败');
-                    }
-                })
-                .catch(function(error) {
-                    showMessage('错误', '更新配置时发生错误: ' + error);
-                });
+        if (packageDirInput && result) {
+            packageDirInput.value = result;
+            configManager.updateConfigValue('package-directory', result);
         }
     }).catch(function(error) {
         showMessage('错误', '浏览文件夹时发生错误: ' + error);
     });
 }
 
-// 添加一个新的函数用于浏览安装界面的汉化包目录
+// 浏览安装界面的汉化包目录
 function browseInstallPackageDirectory() {
     pywebview.api.browse_folder('install-package-directory').then(function(result) {
-        // 更新配置
         const packageDirInput = document.getElementById('install-package-directory');
-        if (packageDirInput && packageDirInput.value) {
-            updateConfigValue('ui_default.install.package_directory', packageDirInput.value)
-                .then(function(success) {
-                    if (success) {
-                        // 刷新汉化包列表
-                        refreshInstallPackageList();
-                    } else {
-                        showMessage('错误', '更新配置失败');
-                    }
-                })
-                .catch(function(error) {
-                    showMessage('错误', '更新配置时发生错误: ' + error);
+        if (packageDirInput && result) {
+            packageDirInput.value = result;
+            configManager.updateConfigValue('install-package-directory', result)
+                .then(() => {
+                    refreshInstallPackageList();
                 });
         }
     }).catch(function(error) {
@@ -405,23 +577,14 @@ function browseInstallPackageDirectory() {
     });
 }
 
-// 添加清空汉化包目录输入框的函数
+// 清空汉化包目录输入框
 function clearPackageDirectory() {
     const packageDirInput = document.getElementById('install-package-directory');
     if (packageDirInput) {
         packageDirInput.value = '';
-        // 更新配置
-        updateConfigValue('ui_default.install.package_directory', '')
-            .then(function(success) {
-                if (success) {
-                    // 刷新汉化包列表
-                    refreshInstallPackageList();
-                } else {
-                    showMessage('错误', '更新配置失败');
-                }
-            })
-            .catch(function(error) {
-                showMessage('错误', '更新配置时发生错误: ' + error);
+        configManager.updateConfigValue('install-package-directory', '')
+            .then(() => {
+                refreshInstallPackageList();
             });
     }
 }
@@ -459,7 +622,6 @@ class ModalWindow {
         this.element = document.createElement('div');
         this.element.className = 'modal-overlay';
         
-        // 获取当前主题以便应用正确的样式
         const currentTheme = document.body.classList.contains('theme-dark') ? 'theme-dark' :
                            document.body.classList.contains('theme-purple') ? 'theme-purple' : 'theme-light';
         
@@ -491,7 +653,6 @@ class ModalWindow {
         
         modalContainer.appendChild(this.element);
         
-        // 绑定事件
         this.bindEvents();
     }
     
@@ -589,7 +750,6 @@ class ModalWindow {
             addLogMessage(`[${this.title}] ${text}`);
         }
         
-        // 更新主界面的进度条
         const mainProgressFill = document.getElementById('progress-fill');
         const mainProgressPercent = document.getElementById('progress-percent');
         const mainProgressText = document.getElementById('progress-text');
@@ -852,7 +1012,6 @@ class ProgressModal extends ModalWindow {
         this.showProgress(true);
         this.updateProgress(0, '初始化中...');
         
-        // 注册模态ID到后端
         if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.add_modal_id) {
             pywebview.api.add_modal_id(this.id)
                 .catch(function(error) {
@@ -874,7 +1033,6 @@ class ProgressModal extends ModalWindow {
     }
     
     cancel() {
-        // 调用后端API处理取消操作
         if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_modal_cancel) {
             pywebview.api.handle_modal_cancel(this.id)
                 .catch(function(error) {
@@ -882,12 +1040,10 @@ class ProgressModal extends ModalWindow {
                 });
         }
         
-        // 调用父类的取消方法
         super.cancel();
     }
     
     pause() {
-        // 调用后端API处理暂停操作
         if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_modal_pause) {
             pywebview.api.handle_modal_pause(this.id)
                 .catch(function(error) {
@@ -895,12 +1051,10 @@ class ProgressModal extends ModalWindow {
                 });
         }
         
-        // 调用父类的暂停方法
         super.pause();
     }
     
     resume() {
-        // 调用后端API处理恢复操作
         if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_modal_resume) {
             pywebview.api.handle_modal_resume(this.id)
                 .catch(function(error) {
@@ -908,7 +1062,6 @@ class ProgressModal extends ModalWindow {
                 });
         }
         
-        // 调用父类的恢复方法
         super.resume();
     }
 }
@@ -934,11 +1087,9 @@ function startTranslation() {
     modal.setStatus('正在初始化翻译过程...');
     modal.addLog('开始翻译任务');
     
-    // 显示主界面进度条
     const progressContainer = document.getElementById('translation-progress');
     progressContainer.style.display = 'block';
     
-    // 调用后端API进行实际翻译
     pywebview.api.start_translation(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, '翻译任务已完成');
@@ -946,14 +1097,12 @@ function startTranslation() {
             modal.complete(false, '翻译失败: ' + result.message);
         }
         
-        // 隐藏主界面进度条
         setTimeout(() => {
             progressContainer.style.display = 'none';
         }, 2000);
     }).catch(function(error) {
         modal.complete(false, '翻译过程中发生错误: ' + error);
         
-        // 隐藏主界面进度条
         setTimeout(() => {
             progressContainer.style.display = 'none';
         }, 2000);
@@ -966,7 +1115,6 @@ function refreshPackageList() {
     
     packageList.innerHTML = '<div class="loading">正在加载...</div>';
     
-    // 调用后端API获取汉化包列表
     pywebview.api.get_translation_packages()
         .then(function(result) {
             packageList.innerHTML = '';
@@ -1012,24 +1160,8 @@ function initPackageList() {
 }
 
 function refreshInstallPackageList() {
-    // 显示加载状态
     const packageList = document.getElementById('install-package-list');
     if (!packageList) return;
-    
-    // 获取汉化包目录输入框的值并自动保存
-    const packageDirInput = document.getElementById('install-package-directory');
-    if (packageDirInput) {
-        const packageDirValue = packageDirInput.value;
-        updateConfigValue('ui_default.install.package_directory', packageDirValue)
-            .then(function(success) {
-                if (!success) {
-                    showMessage('错误', '保存汉化包目录设置失败');
-                }
-            })
-            .catch(function(error) {
-                showMessage('错误', '保存汉化包目录设置时发生错误: ' + error);
-            });
-    }
     
     packageList.innerHTML = `
         <div class="list-empty">
@@ -1058,10 +1190,9 @@ function refreshInstallPackageList() {
                         </div>
                     `;
                     
-                    // 使用addEventListener替代onclick属性，避免潜在的表单提交问题
                     const selectButton = packageItem.querySelector('.list-action-btn');
                     selectButton.addEventListener('click', function(e) {
-                        e.preventDefault(); // 阻止任何可能的默认行为
+                        e.preventDefault();
                         selectPackage(pkg);
                     });
                     
@@ -1091,13 +1222,11 @@ function refreshInstallPackageList() {
 }
 
 function selectPackage(packageName) {
-    // 移除所有项目的选中状态
     document.querySelectorAll('.list-item').forEach(item => {
         item.classList.remove('selected');
         item.removeAttribute('data-selected');
     });
     
-    // 查找并高亮选中的包
     const items = document.querySelectorAll('.list-item');
     for (let item of items) {
         const span = item.querySelector('span');
@@ -1125,7 +1254,6 @@ function installSelectedPackage() {
     const modal = new ProgressModal('安装汉化包');
     modal.addLog(`开始安装汉化包: ${packageName}`);
     
-    // 调用后端API进行实际安装
     pywebview.api.install_translation(packageName, modal.id)
         .then(function(result) {
             if (result.success) {
@@ -1152,7 +1280,6 @@ function changeFontForPackage() {
         return;
     }
     
-    // 调用后端API获取系统字体列表
     pywebview.api.get_system_fonts_list()
         .then(function(result) {
             const modal = new ModalWindow('更换字体', {
@@ -1210,7 +1337,6 @@ function changeFontForPackage() {
                         </div>
                     `;
                     fontItem.addEventListener('click', () => {
-                        // 高亮选中项
                         document.querySelectorAll(`#font-list-${modal.id} .list-item`).forEach(item => {
                             item.classList.remove('selected');
                         });
@@ -1232,7 +1358,6 @@ function changeFontForPackage() {
                     fontList.appendChild(fontItem);
                 });
                 
-                // 搜索功能
                 const searchInput = document.getElementById(`font-search-${modal.id}`);
                 searchInput.addEventListener('input', function() {
                     const searchTerm = searchInput.value.toLowerCase();
@@ -1249,7 +1374,6 @@ function changeFontForPackage() {
                 });
             }
             
-            // 添加确定按钮
             const confirmBtn = document.createElement('button');
             confirmBtn.className = 'primary-btn';
             confirmBtn.innerHTML = '<i class="fas fa-check"></i> 确定';
@@ -1271,8 +1395,7 @@ function changeFontForPackage() {
                 const progressModal = new ProgressModal('更换字体');
                 progressModal.addLog(`开始为汉化包 "${packageName}" 更换字体为 "${fontName}"`);
                 
-                // 调用后端API进行实际字体更换
-                pywebview.api.export_selected_font(fontName, "") // 目标路径将在后端处理
+                pywebview.api.export_selected_font(fontName, "")
                     .then(function(result) {
                         if (result.success) {
                             progressModal.complete(true, '字体更换成功');
@@ -1294,7 +1417,7 @@ function changeFontForPackage() {
             cancelBtn.textContent = '取消';
             cancelBtn.onclick = () => {
                 modal.close();
-                modal.setCompleted(); // 确保调用setCompleted方法
+                modal.setCompleted();
             };
             footer.appendChild(cancelBtn);
         })
@@ -1304,7 +1427,6 @@ function changeFontForPackage() {
 }
 
 function getFontFromInstalled() {
-    // 调用后端API获取系统字体列表
     pywebview.api.get_system_fonts_list()
         .then(function(result) {
             const modal = new ModalWindow('导出系统字体', {
@@ -1362,7 +1484,6 @@ function getFontFromInstalled() {
                         </div>
                     `;
                     fontItem.addEventListener('click', () => {
-                        // 高亮选中项
                         document.querySelectorAll(`#font-list-${modal.id} .list-item`).forEach(item => {
                             item.classList.remove('selected');
                         });
@@ -1384,7 +1505,6 @@ function getFontFromInstalled() {
                     fontList.appendChild(fontItem);
                 });
                 
-                // 搜索功能
                 const searchInput = document.getElementById(`font-search-${modal.id}`);
                 searchInput.addEventListener('input', function() {
                     const searchTerm = searchInput.value.toLowerCase();
@@ -1401,7 +1521,6 @@ function getFontFromInstalled() {
                 });
             }
             
-            // 添加导出按钮
             const exportBtn = document.createElement('button');
             exportBtn.className = 'primary-btn';
             exportBtn.innerHTML = '<i class="fas fa-file-export"></i> 导出';
@@ -1418,7 +1537,6 @@ function getFontFromInstalled() {
                     return;
                 }
                 
-                // 选择导出路径
                 pywebview.api.browse_folder('font-export-path')
                     .then(function(result) {
                         if (result && result.length > 0) {
@@ -1429,7 +1547,6 @@ function getFontFromInstalled() {
                             const progressModal = new ProgressModal('导出字体');
                             progressModal.addLog(`开始导出字体 "${fontName}" 到 "${exportPath}"`);
                             
-                            // 调用后端API进行实际字体导出
                             pywebview.api.export_selected_font(fontName, exportPath)
                                 .then(function(result) {
                                     if (result.success) {
@@ -1457,7 +1574,7 @@ function getFontFromInstalled() {
             cancelBtn.textContent = '取消';
             cancelBtn.onclick = () => {
                 modal.close();
-                modal.setCompleted(); // 确保调用setCompleted方法
+                modal.setCompleted();
             };
             footer.appendChild(cancelBtn);
         })
@@ -1481,7 +1598,6 @@ function deleteSelectedPackage() {
     
     showConfirm('确认删除', `确定要删除汉化包 "${packageName}" 吗？此操作不可撤销。`, 
         function() {
-            // 调用后端API进行实际删除
             pywebview.api.delete_translation_package(packageName).then(function(result) {
                 if (result.success) {
                     selectedItem.style.opacity = '0.5';
@@ -1490,7 +1606,6 @@ function deleteSelectedPackage() {
                     setTimeout(() => {
                         selectedItem.remove();
                         
-                        // 检查是否还有包
                         const packageList = document.getElementById('install-package-list');
                         if (!packageList.children.length || (packageList.children.length === 1 && packageList.children[0].classList.contains('list-empty'))) {
                             const emptyItem = document.createElement('div');
@@ -1530,7 +1645,6 @@ function fetchProperNouns() {
         modal.addLog(`最大词汇数量: ${maxCount}`);
     }
     
-    // 调用后端API进行实际抓取
     pywebview.api.fetch_proper_nouns(modal.id)
         .then(function(result) {
             if (result.success) {
@@ -1562,12 +1676,10 @@ function searchText() {
     }
     modal.addLog(`区分大小写: ${caseSensitive ? '是' : '否'}`);
     
-    // 调用后端API进行实际搜索
     pywebview.api.search_text(modal.id)
         .then(function(result) {
             if (result.success) {
                 modal.complete(true, '文本搜索完成');
-                // 显示搜索结果
                 showSearchResults(result.results);
             } else {
                 modal.complete(false, '搜索失败: ' + result.message);
@@ -1628,7 +1740,6 @@ function backupText() {
     modal.addLog(`源路径: ${sourcePath}`);
     modal.addLog(`目标路径: ${destPath}`);
     
-    // 调用后端API进行实际备份
     pywebview.api.backup_text(modal.id)
         .then(function(result) {
             if (result.success) {
@@ -1646,7 +1757,6 @@ function manageFonts() {
     const modal = new ProgressModal('管理字体');
     modal.addLog('开始管理字体...');
     
-    // 调用后端API进行实际管理
     pywebview.api.manage_fonts(modal.id)
         .then(function(result) {
             if (result.success) {
@@ -1664,7 +1774,6 @@ function manageImages() {
     const modal = new ProgressModal('管理图片');
     modal.addLog('开始管理图片...');
     
-    // 调用后端API进行实际管理
     pywebview.api.manage_images(modal.id)
         .then(function(result) {
             if (result.success) {
@@ -1682,7 +1791,6 @@ function manageAudio() {
     const modal = new ProgressModal('管理音频');
     modal.addLog('开始管理音频...');
     
-    // 调用后端API进行实际管理
     pywebview.api.manage_audio(modal.id)
         .then(function(result) {
             if (result.success) {
@@ -1712,7 +1820,6 @@ function adjustImage() {
     modal.addLog(`亮度: ${brightness}`);
     modal.addLog(`对比度: ${contrast}`);
     
-    // 调用后端API进行实际调整
     pywebview.api.adjust_image(modal.id)
         .then(function(result) {
             if (result.success) {
@@ -1742,12 +1849,10 @@ function calculateGacha() {
     modal.addLog(`稀有物品数: ${rareItems}`);
     modal.addLog(`抽取次数: ${drawCount}`);
     
-    // 调用后端API进行实际计算
     pywebview.api.calculate_gacha(modal.id)
         .then(function(result) {
             if (result.success) {
                 modal.complete(true, '抽卡概率计算完成');
-                // 显示计算结果
                 showCalculationResults(result.data);
             } else {
                 modal.complete(false, '计算失败: ' + result.message);
@@ -1801,27 +1906,33 @@ function downloadOurplay() {
     modal.addLog(`字体选项: ${fontOption}`);
     modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
     
-    updateConfigValue('ui_default.ourplay.font_option', fontOption);
-    updateConfigValue('ui_default.ourplay.check_hash', checkHash);
-    pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, 'OurPlay汉化包下载成功');
-        } else {
-            if (result.message === "已取消") {
-                modal.cancel();
-            } else {
-                modal.complete(false, '下载失败: ' + result.message);
-            }
-        }
-    }).catch(function(error) {
-        modal.complete(false, '下载过程中发生错误: ' + error);
-    });
+    // 批量更新配置
+    const updates = {
+        'ourplay-font-option': fontOption,
+        'ourplay-check-hash': checkHash
+    };
+    
+    configManager.updateConfigValues(updates)
+        .then(() => {
+            pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
+                if (result.success) {
+                    modal.complete(true, 'OurPlay汉化包下载成功');
+                } else {
+                    if (result.message === "已取消") {
+                        modal.cancel();
+                    } else {
+                        modal.complete(false, '下载失败: ' + result.message);
+                    }
+                }
+            }).catch(function(error) {
+                modal.complete(false, '下载过程中发生错误: ' + error);
+            });
+        });
 }
 
 function cleanCache() {
     const modal = new ProgressModal('清除缓存');
     
-    // 调用后端API进行实际清理
     pywebview.api.clean_cache(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, '缓存清除成功');
@@ -1840,35 +1951,39 @@ function downloadLLC() {
     const dumpDefault = document.getElementById('llc-dump-default').checked;
     const download_source = document.getElementById('llc-download-source').value;
     
-    // 更新配置
-    updateConfigValue('ui_default.zero.zip_type', zipType);
-    updateConfigValue('ui_default.zero.use_proxy', useProxy);
-    updateConfigValue('ui_default.zero.use_cache', useCache);
-    updateConfigValue('ui_default.zero.dump_default', dumpDefault);
-    updateConfigValue('ui_default.zero.download_source', download_source);
+    // 批量更新配置
+    const updates = {
+        'llc-zip-type': zipType,
+        'llc-use-proxy': useProxy,
+        'llc-use-cache': useCache,
+        'llc-dump-default': dumpDefault,
+        'llc-download-source': download_source
+    };
     
-    const modal = new ProgressModal('下载零协汉化包');
-    modal.addLog('开始下载零协汉化包...');
-    modal.addLog(`压缩格式: ${zipType}`);
-    modal.addLog(`使用代理: ${useProxy ? '是' : '否'}`);
-    modal.addLog(`使用缓存: ${useCache ? '是' : '否'}`);
-    modal.addLog(`导出默认配置: ${dumpDefault ? '是' : '否'}`);
-    modal.addLog(`下载源: ${download_source}`);
-    
-    // 调用后端API进行实际下载
-    pywebview.api.download_llc_translation(modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '零协汉化包下载成功');
-        } else {
-            if (result.message === "已取消") {
-                modal.cancel();
-            } else {
-                modal.complete(false, '下载失败: ' + result.message);
-            }
-        }
-    }).catch(function(error) {
-        modal.complete(false, '下载过程中发生错误: ' + error);
-    });
+    configManager.updateConfigValues(updates)
+        .then(() => {
+            const modal = new ProgressModal('下载零协汉化包');
+            modal.addLog('开始下载零协汉化包...');
+            modal.addLog(`压缩格式: ${zipType}`);
+            modal.addLog(`使用代理: ${useProxy ? '是' : '否'}`);
+            modal.addLog(`使用缓存: ${useCache ? '是' : '否'}`);
+            modal.addLog(`导出默认配置: ${dumpDefault ? '是' : '否'}`);
+            modal.addLog(`下载源: ${download_source}`);
+            
+            pywebview.api.download_llc_translation(modal.id).then(function(result) {
+                if (result.success) {
+                    modal.complete(true, '零协汉化包下载成功');
+                } else {
+                    if (result.message === "已取消") {
+                        modal.cancel();
+                    } else {
+                        modal.complete(false, '下载失败: ' + result.message);
+                    }
+                }
+            }).catch(function(error) {
+                modal.complete(false, '下载过程中发生错误: ' + error);
+            });
+        });
 }
 
 function saveAPIConfig() {
@@ -1884,7 +1999,6 @@ function saveAPIConfig() {
     const modal = new ProgressModal('保存API配置');
     modal.addLog(`保存配置: ${apiService}`);
     
-    // 调用后端API进行实际保存
     pywebview.api.save_api_config(modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, 'API配置保存成功');
@@ -1909,157 +2023,41 @@ function updateValue(sliderId) {
 // 配置管理函数
 // ================================
 
-// 从window.config获取配置值
-function getConfigValue(keyPath, defaultValue = undefined) {
-    if (!window.config) return defaultValue;
-    
-    const keys = keyPath.split('.');
-    let value = window.config;
-    
-    for (const key of keys) {
-        if (value && typeof value === 'object' && key in value) {
-            value = value[key];
-        } else {
-            return defaultValue;
-        }
-    }
-    
-    return value;
-}
-
-// 更新window.config中的值
-function updateConfigValue(keyPath, value) {
-    if (!window.config) return Promise.resolve(false);
-    
-    const keys = keyPath.split('.');
-    let current = window.config;
-    
-    // 遍历到倒数第二个键
-    for (let i = 0; i < keys.length - 1; i++) {
-        const key = keys[i];
-        if (!(key in current) || typeof current[key] !== 'object') {
-            current[key] = {};
-        }
-        current = current[key];
-    }
-    
-    // 设置最终值
-    const finalKey = keys[keys.length - 1];
-    current[finalKey] = value;
-    
-    // 同时更新后端
-    return pywebview.api.update_config_value(keyPath, value);
-}
-
 // 应用设置到UI
-function applySettingsToUI() {
-    if (!window.config) return;
-    
-    // 基本设置
-    const gamePath = window.config.game_path || '';
-    const debugMode = window.config.debug || false;
-    const autoCheckUpdate = window.config.auto_check_update !== false;
-    const deleteUpdating = window.config.delete_updating || false;
-    const updateUseProxy = window.config.update_use_proxy !== false;
-    const updateOnlyStable = window.config.update_only_stable !== false;
-    
-    document.getElementById('game-path').value = gamePath;
-    document.getElementById('debug-mode').checked = debugMode;
-    document.getElementById('auto-check-update').checked = autoCheckUpdate;
-    document.getElementById('delete-updating').checked = deleteUpdating;
-    document.getElementById('update-use-proxy').checked = updateUseProxy;
-    document.getElementById('update-only-stable').checked = updateOnlyStable;
-    
-    // UI默认设置
-    const uiDefault = window.config.ui_default || {};
-    
-    // 安装设置
-    const install = uiDefault.install || {};
-    const packageDirectory = install.package_directory || '';
-    document.getElementById('install-package-directory').value = packageDirectory;
-    
-    // OurPlay设置
-    const ourplay = uiDefault.ourplay || {};
-    const fontOption = ourplay.font_option || 'keep';
-    const checkHash = ourplay.check_hash !== false;
-    document.getElementById('ourplay-font-option').value = fontOption;
-    document.getElementById('ourplay-check-hash').checked = checkHash;
-    
-    // 零协设置
-    const zero = uiDefault.zero || {};
-    const zipType = zero.zip_type || 'zip';
-    const downloadSource = zero.download_source || 'github';
-    const useProxy = zero.use_proxy !== false;
-    const useCache = zero.use_cache || false;
-    const dumpDefault = zero.dump_default || false;
-    document.getElementById('llc-zip-type').value = zipType;
-    document.getElementById('llc-download-source').value = downloadSource;
-    document.getElementById('llc-use-proxy').checked = useProxy;
-    document.getElementById('llc-use-cache').checked = useCache;
-    document.getElementById('llc-dump-default').checked = dumpDefault;
-}
-
-// 应用launcher配置到UI
-function applyLauncherConfigToUI() {
-    if (!window.config) return;
-    
-    const launcher = window.config.launcher || {};
-    
-    // 零协配置
-    const zero = launcher.zero || {};
-    const zeroZipType = zero.zip_type || 'zip';
-    const zeroDownloadSource = zero.download_source || 'github';
-    const zeroUseProxy = zero.use_proxy !== false;
-    const zeroUseCache = zero.use_cache !== false;
-    
-    document.getElementById('launcher-zero-zip-type').value = zeroZipType;
-    document.getElementById('launcher-zero-download-source').value = zeroDownloadSource;
-    document.getElementById('launcher-zero-use-proxy').checked = zeroUseProxy;
-    document.getElementById('launcher-zero-use-cache').checked = zeroUseCache;
-    
-    // OurPlay配置
-    const ourplay = launcher.ourplay || {};
-    const ourplayFontOption = ourplay.font_option || 'keep';
-    const ourplayUseApi = ourplay.use_api !== false;
-    
-    document.getElementById('launcher-ourplay-font-option').value = ourplayFontOption;
-    document.getElementById('launcher-ourplay-use-api').checked = ourplayUseApi;
-    
-    // 工作模式配置
-    const work = launcher.work || {};
-    const workUpdate = work.update || 'no';
-    const workMod = work.mod !== false;
-    
-    document.getElementById('launcher-work-update').value = workUpdate;
-    document.getElementById('launcher-work-mod').checked = workMod;
+async function loadSettings() {
+    if (configManager) {
+        await configManager.applyConfigToUI();
+    }
 }
 
 // 保存设置
 function saveSettings() {
-    const gamePath = document.getElementById('game-path').value;
-    const debugMode = document.getElementById('debug-mode').checked;
-    const autoCheckUpdate = document.getElementById('auto-check-update').checked;
-    const deleteUpdating = document.getElementById('delete-updating').checked;
-    const updateUseProxy = document.getElementById('update-use-proxy').checked;
-    const updateOnlyStable = document.getElementById('update-only-stable').checked;
-    
     const modal = new ProgressModal('保存设置');
     modal.addLog('正在保存设置...');
     
-    // 更新window.config
-    updateConfigValue('game_path', gamePath);
-    updateConfigValue('debug', debugMode);
-    updateConfigValue('auto_check_update', autoCheckUpdate);
-    updateConfigValue('delete_updating', deleteUpdating);
-    updateConfigValue('update_use_proxy', updateUseProxy);
-    updateConfigValue('update_only_stable', updateOnlyStable);
+    if (!configManager) {
+        modal.complete(false, '配置管理器未初始化');
+        return;
+    }
     
-    // 调用后端API保存设置
-    pywebview.api.save_settings(gamePath, debugMode, autoCheckUpdate)
+    // 收集所有配置更新
+    const updates = configManager.collectConfigFromUI();
+    
+    if (Object.keys(updates).length === 0) {
+        modal.complete(true, '没有需要保存的更改');
+        return;
+    }
+    
+    // 批量更新配置
+    configManager.updateConfigValues(updates)
         .then(function(result) {
             if (result.success) {
-                modal.complete(true, '设置保存成功');
-                pywebview.api.save_config_to_file();
+                // 确保所有待更新都已刷新
+                configManager.flushPendingUpdates()
+                    .then(() => {
+                        modal.complete(true, '设置保存成功');
+                        pywebview.api.save_config_to_file();
+                    });
             } else {
                 modal.complete(false, '保存失败: ' + result.message);
             }
@@ -2067,6 +2065,14 @@ function saveSettings() {
         .catch(function(error) {
             modal.complete(false, '保存过程中发生错误: ' + error);
         });
+}
+
+// 应用launcher配置到UI
+function applyLauncherConfigToUI() {
+    if (configManager) {
+        // launcher配置已经包含在configManager的映射表中
+        // 它们会在applyConfigToUI时自动应用
+    }
 }
 
 // 保存launcher配置
@@ -2079,60 +2085,67 @@ function saveLauncherConfig() {
     const modal = new ProgressModal('保存Launcher配置');
     modal.addLog('正在保存Launcher配置...');
     
-    // 从UI获取值
-    const zeroZipType = document.getElementById('launcher-zero-zip-type').value;
-    const zeroDownloadSource = document.getElementById('launcher-zero-download-source').value;
-    const zeroUseProxy = document.getElementById('launcher-zero-use-proxy').checked;
-    const zeroUseCache = document.getElementById('launcher-zero-use-cache').checked;
+    if (!configManager) {
+        modal.complete(false, '配置管理器未初始化');
+        return;
+    }
     
-    const ourplayFontOption = document.getElementById('launcher-ourplay-font-option').value;
-    const ourplayUseApi = document.getElementById('launcher-ourplay-use-api').checked;
+    // 收集launcher相关配置更新
+    const launcherIds = [
+        'launcher-zero-zip-type',
+        'launcher-zero-download-source',
+        'launcher-zero-use-proxy',
+        'launcher-zero-use-cache',
+        'launcher-ourplay-font-option',
+        'launcher-ourplay-use-api',
+        'launcher-work-update',
+        'launcher-work-mod'
+    ];
     
-    const workUpdate = document.getElementById('launcher-work-update').value;
-    const workMod = document.getElementById('launcher-work-mod').checked;
-    
-    // 执行保存操作
-    Promise.all([
-        updateConfigValue('launcher.zero.zip_type', zeroZipType),
-        updateConfigValue('launcher.zero.download_source', zeroDownloadSource),
-        updateConfigValue('launcher.zero.use_proxy', zeroUseProxy),
-        updateConfigValue('launcher.zero.use_cache', zeroUseCache),
-        updateConfigValue('launcher.ourplay.font_option', ourplayFontOption),
-        updateConfigValue('launcher.ourplay.use_api', ourplayUseApi),
-        updateConfigValue('launcher.work.update', workUpdate),
-        updateConfigValue('launcher.work.mod', workMod)
-    ])
-    .then(function(results) {
-        // 检查是否所有保存操作都成功
-        const allSuccess = results.every(result => result === true);
-        if (allSuccess) {
-            modal.complete(true, 'Launcher配置保存成功');
-            pywebview.api.save_config_to_file();
-        } else {
-            modal.complete(false, '部分配置保存失败');
+    const updates = {};
+    launcherIds.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            let value;
+            if (element.type === 'checkbox') {
+                value = element.checked;
+            } else {
+                value = element.value;
+            }
+            updates[id] = value;
         }
-    })
-    .catch(function(error) {
-        modal.complete(false, '保存配置时发生错误: ' + error);
     });
+    
+    // 批量更新配置
+    configManager.updateConfigValues(updates)
+        .then(function(result) {
+            if (result.success) {
+                configManager.flushPendingUpdates()
+                    .then(() => {
+                        modal.complete(true, 'Launcher配置保存成功');
+                        pywebview.api.save_config_to_file();
+                    });
+            } else {
+                modal.complete(false, '部分配置保存失败');
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '保存配置时发生错误: ' + error);
+        });
 }
 
 function useDefaultConfig() {
     const modal = new ProgressModal('使用默认配置');
     modal.addLog('正在重置为默认配置...');
     
-    // 调用后端API使用默认配置
     pywebview.api.use_default_config()
         .then(function(result) {
             if (result.success) {
                 modal.complete(true, '已使用默认配置');
                 // 重新加载配置
-                pywebview.api.get_attr('config')
-                    .then(function(config) {
-                        window.config = config;
-                        applySettingsToUI();
-                        applyLauncherConfigToUI();
-                    });
+                if (configManager) {
+                    configManager.applyConfigToUI();
+                }
             } else {
                 modal.complete(false, '配置重置失败: ' + result.message);
             }
@@ -2150,21 +2163,14 @@ function resetConfig() {
             const modal = new ProgressModal('重置配置');
             modal.addLog('正在重置配置...');
             
-            // 调用后端API重置配置
             pywebview.api.reset_config()
                 .then(function(result) {
                     if (result.success) {
                         // 重新加载配置
-                        pywebview.api.get_attr('config')
-                            .then(function(config) {
-                                window.config = config;
-                                applySettingsToUI();
-                                applyLauncherConfigToUI();
-                                modal.complete(true, '配置已重置');
-                            })
-                            .catch(function(error) {
-                                modal.complete(false, '重新加载配置时发生错误: ' + error);
-                            });
+                        if (configManager) {
+                            configManager.applyConfigToUI();
+                            modal.complete(true, '配置已重置');
+                        }
                     } else {
                         modal.complete(false, '配置重置失败: ' + result.message);
                     }
@@ -2183,12 +2189,10 @@ function manualCheckUpdates() {
     const modal = new ProgressModal('检查更新');
     modal.addLog('正在检查是否有可用更新...');
     
-    // 调用后端API进行实际检查更新
     pywebview.api.manual_check_update()
         .then(function(result) {
             if (result.has_update) {
                 modal.complete(true, `发现新版本 ${result.latest_version}，请前往GitHub下载更新`);
-                // 显示更新详情
                 setTimeout(() => {
                     if (!modal.isMinimized) {
                         modal.close();
@@ -2216,7 +2220,6 @@ function manualCheckUpdates() {
 
 // 自动检查更新函数（仅在有更新时显示窗口）
 function autoCheckUpdates() {
-    // 调用后端API进行实际检查更新
     pywebview.api.manual_check_update()
         .then(function(result) {
             if (result.has_update) {
@@ -2276,8 +2279,6 @@ function addLogMessage(message, level = 'info') {
 function simpleMarkdownToHtml(text) {
     if (!text) return '';
     
-
-    
     const htmlTagRegex = /(<[^>]+>)/g;
     const htmlTags = [];
     let processedText = text.replace(htmlTagRegex, function(match) {
@@ -2335,7 +2336,6 @@ let updateModalShown = false;
 
 // 显示更新信息
 function showUpdateInfo(update_info) {
-    // 防止重复创建更新窗口
     if (updateModalShown) {
         return;
     }
@@ -2369,18 +2369,15 @@ function showUpdateInfo(update_info) {
         '发现新版本',
         '',
         function() {
-            // 用户确认更新
             const progressModal = new ProgressModal('更新程序');
             progressModal.addLog('开始下载并安装更新...');
         },
         function() {
-            // 用户取消更新
             addLogMessage('用户取消了更新');
             updateModalShown = false;
         }
     );
     
-    // 当窗口关闭时，重置标志
     const originalClose = modal.close;
     modal.close = function() {
         updateModalShown = false;
@@ -2397,6 +2394,9 @@ function showUpdateInfo(update_info) {
 
 // 初始化函数
 function init() {
+    // 初始化配置管理器
+    configManager = new ConfigManager();
+    
     // 初始化主题管理器
     themeManager = new ThemeManager();
     
@@ -2420,12 +2420,10 @@ function init() {
 
 // 创建连接遮罩层
 function createConnectionMask() {
-    // 创建遮罩层元素
     const mask = document.createElement('div');
     mask.id = 'connection-mask';
     mask.className = 'connection-mask';
     
-    // 创建遮罩内容
     mask.innerHTML = `
         <div class="mask-content">
             <div class="spinner"></div>
@@ -2433,10 +2431,8 @@ function createConnectionMask() {
         </div>
     `;
     
-    // 将遮罩层添加到body
     document.body.appendChild(mask);
     
-    // 更新状态指示器为"连接中"
     const statusIndicator = document.querySelector('.status-indicator');
     if (statusIndicator) {
         const statusDot = statusIndicator.querySelector('.status-dot');
@@ -2464,7 +2460,6 @@ function removeConnectionMask() {
         }, 300);
     }
     
-    // 更新状态指示器为"已连接"
     const statusIndicator = document.querySelector('.status-indicator');
     if (statusIndicator) {
         const statusDot = statusIndicator.querySelector('.status-dot');
@@ -2479,15 +2474,12 @@ function removeConnectionMask() {
         }
     }
 }
+
 function setupGlobalErrorHandling() {
-    // 创建一个数组来存储在API连接之前的错误
     window.preApiErrors = [];
     window.preApiRejections = [];
-    
-    // 标记API是否已经就绪
     window.apiReady = false;
     
-    // 捕获 JavaScript 运行时错误
     window.addEventListener('error', function(event) {
         const errorMessage = `[全局错误] ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`;
         const stack = event.error && event.error.stack ? event.error.stack : '无堆栈信息';
@@ -2496,14 +2488,12 @@ function setupGlobalErrorHandling() {
         addLogMessage(stack, 'error');
         console.log('已捕捉到异常',errorMessage);
         
-        // 发送到后端记录
         if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.log && window.apiReady) {
             pywebview.api.log(`[前端错误] ${errorMessage}\n堆栈: ${stack}`)
                 .catch(function(error) {
                     console.error('无法将错误发送到后端:', error);
                 });
         } else {
-            // 如果API还未就绪，将错误存储在列表中
             window.preApiErrors.push({
                 message: errorMessage,
                 stack: stack,
@@ -2512,21 +2502,18 @@ function setupGlobalErrorHandling() {
         }
     });
     
-    // 捕获 Promise rejection 错误
     window.addEventListener('unhandledrejection', function(event) {
         const errorMessage = `[未处理的Promise拒绝] ${event.reason}`;
         
         addLogMessage(errorMessage, 'error');
         console.log('已捕捉到异常',errorMessage);
         
-        // 发送到后端记录
         if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.log && window.apiReady) {
             pywebview.api.log(`[前端Promise错误] ${errorMessage}`)
                 .catch(function(error) {
                     console.error('无法将Promise错误发送到后端:', error);
                 });
         } else {
-            // 如果API还未就绪，将错误存储在列表中
             window.preApiRejections.push({
                 message: errorMessage,
                 timestamp: new Date().toISOString()
@@ -2536,7 +2523,8 @@ function setupGlobalErrorHandling() {
 }
 
 function checkGamePath() {
-    if (window.config.game_path == null || window.config.game_path === "") {
+    const gamePath = configManager.getCachedValue('game_path');
+    if (!gamePath) {
         pywebview.api.run_func('find_lcb')
             .then(function(foundPath) {
                 if (foundPath) {
@@ -2557,12 +2545,10 @@ function confirmGamePath(foundPath) {
         "确认游戏路径",
         `这是否是你的游戏路径：\n${foundPath}\n是否使用此路径？`,
         function() {
-            // 用户确认使用找到的路径
-            updateConfigValue('game_path', foundPath)
+            configManager.updateConfigValue('game-path', foundPath)
                 .then(function(success) {
                     if (success) {
-                        // 更新界面上的游戏路径显示
-                        document.getElementById('game-path').value = foundPath;
+                        configManager.flushPendingUpdates();
                         addLogMessage('游戏路径已确认并保存: ' + foundPath, 'success');
                     } else {
                         addLogMessage('保存游戏路径时出错', 'error');
@@ -2574,21 +2560,7 @@ function confirmGamePath(foundPath) {
             pywebview.api.save_config_to_file();
         },
         function() {
-            // 用户不确认，请求手动选择路径
             requestGamePath();
-            foundPath = document.getElementById('game-path').value;
-            updateConfigValue('game_path', foundPath)
-                .then(function(success) {
-                    if (success) {
-                        addLogMessage('游戏路径已确认并保存: ' + foundPath, 'success');
-                    } else {
-                        addLogMessage('保存游戏路径时出错', 'error');
-                    }
-                })
-                .catch(function(error) {
-                    addLogMessage('设置游戏路径时发生错误: ' + error, 'error');
-                });
-            pywebview.api.save_config_to_file();
         }
     );
 }
@@ -2612,12 +2584,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 与后端通信的初始化
 window.addEventListener('pywebviewready', function() {
-    // 标记API已经就绪
     window.apiReady = true;
     
     addLogMessage('PyWebview API 已准备就绪', 'success');
     
-    // 发送之前存储的错误信息
     if (window.preApiErrors && window.preApiErrors.length > 0) {
         addLogMessage(`正在发送 ${window.preApiErrors.length} 条之前捕获的错误信息...`, 'info');
         
@@ -2628,7 +2598,6 @@ window.addEventListener('pywebviewready', function() {
                 });
         });
         
-        // 清空已发送的错误
         window.preApiErrors = [];
     }
     
@@ -2642,20 +2611,16 @@ window.addEventListener('pywebviewready', function() {
                 });
         });
         
-        // 清空已发送的拒绝信息
         window.preApiRejections = [];
     }
     
-    // 移除遮罩层并更新状态
     removeConnectionMask();
-    
     
     pywebview.api.get_attr('message_config')
         .then(function(message_config) {
             showMessage(message_config[0], message_config[1]);
-        })
+        });
     
-    // 检查配置
     pywebview.api.get_attr('config_ok')
         .then(function(config_ok) {
             if (config_ok === false) {
@@ -2715,13 +2680,20 @@ window.addEventListener('pywebviewready', function() {
             console.log('配置已加载到前端:', config);
             window.config = config;
             
-            // 应用配置到UI
-            applySettingsToUI();
-            applyLauncherConfigToUI();
+            // 初始化配置管理器的缓存
+            if (configManager) {
+                Object.keys(configManager.configKeyMap).forEach(id => {
+                    const keyPath = configManager.configKeyMap[id];
+                    configManager.setCachedValue(keyPath, configManager.getCachedValue(keyPath));
+                });
+                
+                // 应用配置到UI
+                configManager.applyConfigToUI();
+            }
             
             checkGamePath();
             
-            let autoCheckUpdate = window.config.auto_check_update;
+            const autoCheckUpdate = configManager.getCachedValue('auto_check_update');
             if (autoCheckUpdate) {
                autoCheckUpdates();
             }

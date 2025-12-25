@@ -650,11 +650,52 @@ class LCTA_API():
             # 设置最终值
             final_key = keys[-1]
             current[final_key] = value
+            
+            # 立即保存到文件，减少前端请求
+            self.save_config_to_file()
             return True
         except Exception as e:
             self.log(f"更新配置值时出错: {key_path} = {value}, 错误: {e}")
             self.log_error(e)
             return False
+    
+    def update_config_batch(self, config_updates):
+        """
+        批量更新配置
+        :param config_updates: 字典，包含多个配置更新 {key_path: value, ...}
+        :return: 批量更新是否成功
+        """
+        try:
+            success_count = 0
+            total_count = len(config_updates)
+            
+            for key_path, value in config_updates.items():
+                if self.update_config_value(key_path, value, create_missing=True):
+                    success_count += 1
+            
+            self.log(f"批量更新配置: 成功 {success_count}/{total_count} 项")
+            return {"success": True, "updated": success_count, "total": total_count}
+        except Exception as e:
+            self.log(f"批量更新配置时出错: {e}")
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+    
+    def get_config_batch(self, key_paths):
+        """
+        批量获取配置值
+        :param key_paths: 配置键路径列表，例如 ["ui_default.game_path", "debug"]
+        :return: 字典，包含获取到的配置值
+        """
+        try:
+            result = {}
+            for key_path in key_paths:
+                value = self.get_config_value(key_path)
+                result[key_path] = value
+            return {"success": True, "config_values": result}
+        except Exception as e:
+            self.log(f"批量获取配置值时出错: {e}")
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
 
     def get_config_value(self, key_path, default_value=None):
         """

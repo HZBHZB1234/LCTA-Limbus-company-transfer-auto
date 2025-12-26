@@ -17,7 +17,9 @@
             "use_api": "bool"
         },
         "clean": {
-            "remove_cache": "bool"
+            "clean_progress": "bool",
+            "clean_notice": "bool",
+            "clean_mods": "bool"
         },
         "proper": {
             "join_char": "str",

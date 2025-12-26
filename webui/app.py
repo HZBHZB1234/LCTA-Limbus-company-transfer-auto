@@ -27,6 +27,7 @@ from webutils import (
     get_system_fonts,
     export_system_font
 )
+from webutils.function_clean import clean_config_main  # 导入clean_config_main函数
 
 class CancelRunning(Exception):
     pass
@@ -397,15 +398,44 @@ class LCTA_API():
             self.log_manager.log_modal_status("下载失败", modal_id)
             return {"success": False, "message": str(e)}
 
-    def clean_cache(self, modal_id= "false"):
+    def clean_cache(self, modal_id= "false", custom_files= [], clean_progress=None, clean_notice=None, clean_mods=None):
         """清理缓存"""
         try:
             self.add_modal_log("开始清除缓存...", modal_id)
-            time.sleep(1)  # 模拟清理过程
+            
+            # 如果参数未从前端传递，则从配置中获取
+            if clean_progress is None:
+                clean_progress = self.config.get("ui_default", {}).get("clean", {}).get("clean_progress", False)
+            if clean_notice is None:
+                clean_notice = self.config.get("ui_default", {}).get("clean", {}).get("clean_notice", False)
+            if clean_mods is None:
+                clean_mods = self.config.get("ui_default", {}).get("clean", {}).get("clean_mods", False)
+            
+            if clean_mods:
+                roaming_path = Path.home() / "AppData" / "Roaming"
+                mods_path = roaming_path / "LimbusCompanyMods"
+                custom_files.append(mods_path)
+            
+            # 调用清理函数
+            clean_config_main(
+                modal_id=modal_id,
+                logger_=self.log_manager,
+                clean_progress=clean_progress,
+                clean_notice=clean_notice,
+                custom_files=custom_files
+            )
+            
             self.add_modal_log("缓存清除成功", modal_id)
             return {"success": True, "message": "缓存清除成功"}
+        except CancelRunning:
+            self.log("清理任务已取消")
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
         except Exception as e:
+            self.add_modal_log(f"出现错误{e}，清理失败", modal_id)
             self.log_error(e)
+            self.log_manager.update_modal_progress(0, "清理失败", modal_id)
+            self.log_manager.log_modal_status("清理失败", modal_id)
             return {"success": False, "message": str(e)}
 
     def download_llc_translation(self, modal_id= "false"):

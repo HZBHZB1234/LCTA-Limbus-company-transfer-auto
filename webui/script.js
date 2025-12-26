@@ -177,6 +177,11 @@ class ConfigManager {
             'llc-use-cache': 'ui_default.zero.use_cache',
             'llc-dump-default': 'ui_default.zero.dump_default',
             
+            // 清理设置
+            'clean-progress': 'ui_default.clean.clean_progress',
+            'clean-notice': 'ui_default.clean.clean_notice',
+            'clean-mods': 'ui_default.clean.clean_mods',
+            
             // Launcher设置
             'launcher-zero-zip-type': 'launcher.zero.zip_type',
             'launcher-zero-download-source': 'launcher.zero.download_source',
@@ -362,7 +367,7 @@ class ConfigManager {
                 
                 // 如果值与缓存不同，则添加到更新
                 const cachedValue = this.getCachedValue(keyPath);
-                if (value !== cachedValue) {
+                if (JSON.stringify(value) !== JSON.stringify(cachedValue)) {
                     updates[id] = value;
                 }
             }
@@ -1933,15 +1938,142 @@ function downloadOurplay() {
 function cleanCache() {
     const modal = new ProgressModal('清除缓存');
     
-    pywebview.api.clean_cache(modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '缓存清除成功');
-        } else {
-            modal.complete(false, '清除失败: ' + result.message);
+    // 获取清理选项
+    const cleanProgress = document.getElementById('clean-progress').checked;
+    const cleanNotice = document.getElementById('clean-notice').checked;
+    const cleanMods = document.getElementById('clean-mods').checked;
+    
+    // 获取自定义文件列表
+    const customFilesList = [];
+    const customFilesContainer = document.getElementById('custom-files-list');
+    if (customFilesContainer) {
+        // 从列表项中获取文件路径
+        const fileItems = customFilesContainer.querySelectorAll('.file-item');
+        fileItems.forEach(item => {
+            const filePath = item.querySelector('.file-path').textContent;
+            if (filePath) {
+                customFilesList.push(filePath);
+            }
+        });
+    }
+    
+    // 使用配置管理器批量更新配置
+    const updates = {
+        'clean-progress': cleanProgress,
+        'clean-notice': cleanNotice,
+        'clean-mods': cleanMods
+    };
+    
+    // 保存清理配置并执行清理
+    configManager.updateConfigValues(updates)
+        .then(() => {
+            // 配置保存成功后执行清理操作
+            pywebview.api.clean_cache(modal.id, customFilesList, cleanProgress, cleanNotice, cleanMods).then(function(result) {
+                if (result.success) {
+                    modal.complete(true, '缓存清除成功');
+                } else {
+                    if (result.message === '已取消') {
+                        modal.complete(null, '操作已取消');
+                    } else {
+                        modal.complete(false, '清除失败: ' + result.message);
+                    }
+                }
+            }).catch(function(error) {
+                modal.complete(false, '清除过程中发生错误: ' + error);
+            });
+        })
+        .catch(function(error) {
+            console.error('保存清理配置时发生错误:', error);
+            modal.complete(false, '保存配置失败: ' + error);
+        });
+}
+
+// 添加自定义清理文件/文件夹
+function addCustomFile() {
+    const filePathInput = document.getElementById('custom-file-path');
+    if (filePathInput && filePathInput.value.trim()) {
+        const filePath = filePathInput.value.trim();
+        const customFilesContainer = document.getElementById('custom-files-list');
+        
+        // 检查文件路径是否已存在
+        const existingItems = customFilesContainer.querySelectorAll('.file-path');
+        let exists = false;
+        existingItems.forEach(item => {
+            if (item.textContent === filePath) {
+                exists = true;
+            }
+        });
+        
+        if (exists) {
+            showMessage('提示', '该文件路径已存在列表中');
+            return;
         }
-    }).catch(function(error) {
-        modal.complete(false, '清除过程中发生错误: ' + error);
-    });
+        
+        // 创建列表项
+        const fileItem = document.createElement('div');
+        fileItem.className = 'file-item';
+        fileItem.innerHTML = `
+            <div class="file-info">
+                <i class="fas fa-file"></i>
+                <span class="file-path">${filePath}</span>
+            </div>
+            <button class="action-btn small" onclick="removeCustomFile(this)">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        customFilesContainer.appendChild(fileItem);
+        filePathInput.value = '';
+        
+        // 更新配置
+        updateCustomFilesConfig();
+    }
+}
+
+// 移除自定义清理文件
+function removeCustomFile(element) {
+    const fileItem = element.closest('.file-item');
+    if (fileItem) {
+        fileItem.remove();
+        updateCustomFilesConfig();
+    }
+}
+
+// 更新自定义文件配置
+function updateCustomFilesConfig() {
+    const customFilesList = [];
+    const customFilesContainer = document.getElementById('custom-files-list');
+    if (customFilesContainer) {
+        const fileItems = customFilesContainer.querySelectorAll('.file-item');
+        fileItems.forEach(item => {
+            const filePath = item.querySelector('.file-path').textContent;
+            if (filePath) {
+                customFilesList.push(filePath);
+            }
+        });
+    }
+    
+    // 更新配置
+    configManager.updateConfigValue('custom-files', customFilesList);
+}
+
+// 添加浏览文件到自定义清理列表
+function browseCustomFile() {
+    pywebview.api.browse_file('custom-file-path');
+}
+
+// 添加浏览文件夹到自定义清理列表
+function browseCustomFolder() {
+    pywebview.api.browse_folder('custom-file-path');
+}
+
+// 清空自定义文件列表
+function clearCustomFilesList() {
+    const customFilesContainer = document.getElementById('custom-files-list');
+    if (customFilesContainer) {
+        customFilesContainer.innerHTML = '';
+        updateCustomFilesConfig();
+    }
 }
 
 function downloadLLC() {

@@ -18,7 +18,9 @@
             "use_api": true
         },
         "clean":{
-            "remove_cache":true
+            "clean_progress": false,
+            "clean_notice": false,
+            "clean_mods": false
         },
         "proper":{
             "join_char":"|||",

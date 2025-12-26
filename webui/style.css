@@ -1598,6 +1598,69 @@ button {
     background: var(--color-text-secondary);
 }
 
+/* 自定义文件列表样式 */
+.file-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+}
+
+.file-list-header label {
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.file-list-container {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-bg-input);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.file-list {
+    padding: var(--spacing-sm) 0;
+}
+
+.file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--color-border-light);
+    transition: background-color 0.2s ease;
+}
+
+.file-item:last-child {
+    border-bottom: none;
+}
+
+.file-item:hover {
+    background-color: var(--color-bg-primary);
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex: 1;
+    min-width: 0; /* 允许内容收缩 */
+}
+
+.file-path {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-text-primary);
+}
+
+.file-item .action-btn {
+    flex-shrink: 0;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+}
+
 /* 打印样式 */
 @media print {
     .sidebar, .theme-toggle {

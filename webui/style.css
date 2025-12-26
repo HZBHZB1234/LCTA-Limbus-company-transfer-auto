@@ -787,7 +787,9 @@ button {
 }
 
 .action-btn.success:hover {
-    background: rgba(var(--color-success), 0.9);
+    background: var(--color-success);
+    opacity: 0.9;
+    border-color: var(--color-success);
 }
 
 .action-btn.danger {
@@ -797,26 +799,9 @@ button {
 }
 
 .action-btn.danger:hover {
-    background: rgba(var(--color-danger), 0.9);
-}
-
-.danger-btn {
-    background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark));
-    color: white;
-    padding: 12px 24px;
-    border: none;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-}
-
-.danger-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(var(--color-danger), 0.3);
+    background: var(--color-danger);
+    opacity: 0.9;
+    border-color: var(--color-danger);
 }
 
 /* 按钮组 */

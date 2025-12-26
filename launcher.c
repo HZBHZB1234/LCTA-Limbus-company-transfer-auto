@@ -12,6 +12,7 @@ int find_python_executable(char* python_path, size_t buffer_size);
 int verify_python_environment(const char* python_path);
 int run_python_script(const char* python_path, const char* script_path);
 void show_error_message(const char* title, const char* message);
+void set_steam_argv(int argc, char* argv[], int launcher_index);
 
 int main(int argc, char* argv[]) {
     printf("Starting LCTA Launcher...\n");
@@ -20,10 +21,12 @@ int main(int argc, char* argv[]) {
     int show_console = 0;
     char script_name[MAX_PATH] = "code\\start_webui.py";
     
+    int launcher_index = -1;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-launcher") == 0) {
             show_console = 1;  // 显示控制台窗口
             strcpy(script_name, "code\\launcher\\main.py");
+            launcher_index = i; // 记录-launcher参数的位置
             printf("Launcher mode detected, starting launcher GUI...\n");
             break;
         }
@@ -37,6 +40,11 @@ int main(int argc, char* argv[]) {
     } else {
         ShowWindow(console, SW_SHOW);
         printf("Console window shown\n");
+    }
+    
+    // 如果是launcher模式，设置steam_argv环境变量
+    if (launcher_index != -1) {
+        set_steam_argv(argc, argv, launcher_index);
     }
     
     // 1. 设置工作目录到应用所在目录
@@ -117,6 +125,48 @@ int main(int argc, char* argv[]) {
     }
     
     return 0;
+}
+
+// 设置steam_argv环境变量，存储-launcher之后的所有参数
+void set_steam_argv(int argc, char* argv[], int launcher_index) {
+    if (launcher_index + 1 >= argc) {
+        // 没有额外参数，设置为空环境变量
+        SetEnvironmentVariable("steam_argv", "");
+        printf("Set steam_argv to empty (no additional arguments)\n");
+        return;
+    }
+    
+    // 计算需要的缓冲区大小
+    int total_len = 0;
+    for (int i = launcher_index + 1; i < argc; i++) {
+        total_len += strlen(argv[i]);
+        if (i < argc - 1) {
+            total_len += 1; // 为分隔符空格预留空间
+        }
+    }
+    
+    // 分配缓冲区
+    char* steam_argv = malloc(total_len + 1);
+    if (steam_argv == NULL) {
+        printf("Failed to allocate memory for steam_argv\n");
+        return;
+    }
+    
+    // 组合参数
+    steam_argv[0] = '\0'; // 初始化为空字符串
+    for (int i = launcher_index + 1; i < argc; i++) {
+        strcat(steam_argv, argv[i]);
+        if (i < argc - 1) {
+            strcat(steam_argv, " "); // 添加分隔符
+        }
+    }
+    
+    // 设置环境变量
+    SetEnvironmentVariable("steam_argv", steam_argv);
+    printf("Set steam_argv to: %s\n", steam_argv);
+    
+    // 释放内存
+    free(steam_argv);
 }
 
 // 设置工作环境

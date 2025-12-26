@@ -27,6 +27,7 @@ import webutils.load as LoadUtils
 
 config_whole = {}
 logger = None
+steam_argv = ''
 
 def check_network():
     try:
@@ -52,6 +53,7 @@ def update_config_last(name, version):
 def main_pre():
     global config_whole
     global logger
+    global steam_argv
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -70,7 +72,17 @@ def main_pre():
                             progress_callback=lambda percent, text, modal_id: logging.info(f"{modal_id}: {text} {percent}%"),
                             check_running=lambda modal_id, log=True: (logging.info(f"{modal_id} 阶段正在运行")) if log else None)
 
+    steam_argv = os.getenv('steam_argv', '')
+
     config_whole = LoadUtils.load_config()
+    
+    if steam_argv == '':
+        logger.log("unexpectedly missing steam_argv environment variable")
+        logger.log("use path in config instead")
+        
+        steam_argv = config_whole.get("game_path", "")+'LimbusCompany.exe'
+    logger.log(f"steam_argv: {steam_argv}")
+    
     config = config_whole.get("launcher", {})
     if not check_network():
         logger.log("当前网络不可用，无法检查更新")
@@ -210,7 +222,6 @@ def main_pre():
             update_config_last("llc", note_content.get('llc_version', '0.0.0'))
     else:
         logger.log("未启用任何更新选项，跳过更新检查")
-# dev分割线
 
 def main_after_mod():
     from modfolder import get_mod_folder
@@ -252,16 +263,16 @@ def main_after_mod():
         logging.info("Backing up data and patching assets....")
         patch.patch_assets(tmp_asset_root)
         patch.shutil.rmtree(tmp_asset_root)
-        sound.replace_sound(mod_zips_root_path,config_whole.get("game_path", "")+'LimbusCompany.exe')
+        sound.replace_sound(mod_zips_root_path,steam_argv)
         logging.info("Starting game")
-        subprocess.call(config_whole.get("game_path", "")+'LimbusCompany.exe')
+        subprocess.call(steam_argv)
 
     except Exception as e:
         logging.error("Error: %s", e)
         sys.exit(1)
 
 def main_after_game():
-    subprocess.call(config_whole.get("game_path", "")+'LimbusCompany.exe')
+    subprocess.call(steam_argv)
 
 def main():
     try:

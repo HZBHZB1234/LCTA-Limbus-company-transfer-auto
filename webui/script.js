@@ -221,36 +221,6 @@ class ConfigManager {
         }
     }
     
-    // 批量更新配置值
-    async updateConfigValues(updates) {
-        const configUpdates = {};
-        
-        // 转换id到配置键路径
-        for (const [id, value] of Object.entries(updates)) {
-            const keyPath = this.configKeyMap[id];
-            if (keyPath) {
-                configUpdates[keyPath] = value;
-                // 更新缓存
-                this.setCachedValue(keyPath, value);
-            }
-        }
-        
-        if (Object.keys(configUpdates).length === 0) {
-            return { success: false, message: '没有有效的配置项' };
-        }
-        
-        try {
-            const result = await pywebview.api.update_config_batch(configUpdates);
-            if (result.success) {
-                console.log(`批量更新配置成功: ${result.updated}/${result.total} 项`);
-            }
-            return result;
-        } catch (error) {
-            console.error('批量更新配置失败:', error);
-            return { success: false, message: error.toString() };
-        }
-    }
-    
     // 单次配置更新（自动批量化处理）
     async updateConfigValue(id, value) {
         const keyPath = this.configKeyMap[id];
@@ -289,6 +259,36 @@ class ConfigManager {
         this.pendingUpdates = {};
         
         await this.updateConfigValues(updates);
+    }
+    
+    // 批量更新配置值
+    async updateConfigValues(updates) {
+        const configUpdates = {};
+        
+        // 转换id到配置键路径
+        for (const [id, value] of Object.entries(updates)) {
+            const keyPath = this.configKeyMap[id];
+            if (keyPath) {
+                configUpdates[keyPath] = value;
+                // 更新缓存
+                this.setCachedValue(keyPath, value);
+            }
+        }
+        
+        if (Object.keys(configUpdates).length === 0) {
+            return { success: false, message: '没有有效的配置项' };
+        }
+        
+        try {
+            const result = await pywebview.api.update_config_batch(configUpdates);
+            if (result.success) {
+                console.log(`批量更新配置成功: ${result.updated}/${result.total} 项`);
+            }
+            return result;
+        } catch (error) {
+            console.error('批量更新配置失败:', error);
+            return { success: false, message: error.toString() };
+        }
     }
     
     // 获取缓存值

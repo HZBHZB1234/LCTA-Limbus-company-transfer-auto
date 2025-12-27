@@ -199,13 +199,52 @@ def change_font_for_package(path, path_font, logger_: LogManager = None, modal_i
 def install_translation_package(package_path, game_path, logger_: LogManager = None, modal_id: str = None):    
     logger_.log_modal_process(f"准备安装汉化包: {package_path}", modal_id)
     game_path = os.path.join(game_path, 'LimbusCompany_Data', 'Lang')
+    
+    # 确保目标目录存在
+    os.makedirs(game_path, exist_ok=True)
+    
+    # 先确定要安装的汉化包名称
     if os.path.isfile(package_path):
-        logger_.log_modal_process("检测到为压缩包，开始解压...", modal_id)
-        package_name = extract_zip_smartly(package_path, game_path)
+        logger_.log_modal_process("检测到为压缩包，获取解压后文件夹名...", modal_id)
+        # 获取解压后的文件夹名称
+        with zipfile.ZipFile(package_path, "r") as zipf:
+            # 获取压缩包内的第一个文件夹名称（假设汉化包结构为文件夹/...）
+            first_item = zipf.namelist()[0] if zipf.namelist() else ""
+            # 提取文件夹名称（假设压缩包根目录只有一个文件夹）
+            package_name = first_item.split('/')[0] if '/' in first_item else first_item
+            package_name = package_name.split('\\')[0] if '\\' in first_item else package_name
     else:
-        logger_.log_modal_process("检测到为文件夹，开始复制...", modal_id)
+        logger_.log_modal_process("检测到为文件夹，获取文件夹名...", modal_id)
         package_name = os.path.basename(package_path)
-        shutil.copytree(package_path, os.path.join(game_path, package_name))
+    
+    # 删除同名的旧汉化包文件夹
+    target_package_path = os.path.join(game_path, package_name)
+    if os.path.exists(target_package_path) and os.path.isdir(target_package_path):
+        logger_.log_modal_process(f"正在删除旧的汉化包文件夹: {package_name}", modal_id)
+        try:
+            shutil.rmtree(target_package_path)
+            logger_.log(f"已删除旧汉化包文件夹: {package_name}")
+        except Exception as e:
+            error_msg = f"删除旧汉化包文件夹失败: {package_name} - {str(e)}"
+            logger_.log(error_msg)
+            logger_.log_error(e)
+            # 继续安装，不中断
+    
+    # 安装新的汉化包
+    if os.path.isfile(package_path):
+        logger_.log_modal_process("开始解压压缩包...", modal_id)
+        # 使用原来的解压函数
+        extracted_name = extract_zip_smartly(package_path, game_path)
+        # 如果解压函数返回的名称与我们预期的不一致，使用返回的名称
+        if extracted_name and extracted_name != package_name:
+            package_name = extracted_name
+            logger_.log(f"解压后的文件夹名与预期不同，使用: {package_name}")
+    else:
+        logger_.log_modal_process("开始复制文件夹...", modal_id)
+        dest_path = os.path.join(game_path, package_name)
+        shutil.copytree(package_path, dest_path)
+    
+    # 写入配置文件
     config_path = os.path.join(game_path, 'config.json')
     logger_.log_modal_process("正在写入配置文件...", modal_id)
     with open(config_path, 'w', encoding='utf-8') as file:
@@ -214,5 +253,6 @@ def install_translation_package(package_path, game_path, logger_: LogManager = N
             "titleFont": "",
             "contextFont": ""
         }, file, ensure_ascii=False, indent=4)
+    
     logger_.log_modal_process("汉化包安装完成", modal_id)
     return True, "汉化包安装完成"

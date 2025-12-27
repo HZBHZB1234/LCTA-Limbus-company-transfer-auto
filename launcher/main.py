@@ -90,6 +90,7 @@ def main_pre():
 
     update = config.get("work", {}).get("update", "no")
     last = config.get("last_install", {})
+    cache_font = config_whole.get('game_path')+'LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf'
 
     if update == "llc":
         logger.log("启用LLC更新")
@@ -108,7 +109,7 @@ def main_pre():
                         download_source=zero.get("download_source", "github"),
                         from_proxy=zero.get("from_proxy", True),
                         zip_type=zero.get("zip_type", "zip"),
-                        use_cache=True)
+                        use_cache=cache_font)
         if not zip_path:
             logger.log(f"LLC更新包下载失败，路径: {zip_path}")
             return
@@ -207,7 +208,7 @@ def main_pre():
                             download_source=zero.get("download_source", "github"),
                             from_proxy=zero.get("from_proxy", True),
                             zip_type=zero.get("zip_type", "zip"),
-                            use_cache=True)
+                            use_cache=cache_font)
             if not zip_path:
                 logger.log(f"LLC更新包下载失败，路径: {zip_path}")
                 return
@@ -224,9 +225,9 @@ def main_pre():
         logger.log("未启用任何更新选项，跳过更新检查")
 
 def main_after_mod():
-    from modfolder import get_mod_folder
-    import patch
-    import sound
+    from launcher.modfolder import get_mod_folder
+    import launcher.patch as patch
+    import launcher.sound as sound
 
     mod_zips_root_path = get_mod_folder()
     os.makedirs(mod_zips_root_path, exist_ok=True)
@@ -279,10 +280,14 @@ def main():
         main_pre()
     except Exception as e:
         logger.log_error(e)
-    if config_whole.get("launcher", {}).get("work", {}).get("mod", False):
-        main_after_mod()
-    else:
-        main_after_game()
+    try:
+        if config_whole.get("launcher", {}).get("work", {}).get("mod", False):
+            main_after_mod()
+        else:
+            main_after_game()
+    except Exception as e:
+        logger.log_error(e)
+    logger.log('正常退出')
 
 if __name__ == '__main__':
     main()

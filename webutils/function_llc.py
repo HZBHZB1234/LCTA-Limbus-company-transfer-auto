@@ -23,7 +23,7 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
     from_ = kwargs.get('download_source', 'github')  # 可选值: github, api
     from_proxy = kwargs.get('from_proxy', True)  # 是否使用代理
     zip_type = kwargs.get("zip_type", "zip")
-    use_cache = kwargs.get('use_cache', False)
+    use_cache = kwargs.get('use_cache', '')
     dump_default = kwargs.get("dump_default", False)
     
     if use_cache and (not os.path.exists(use_cache)):

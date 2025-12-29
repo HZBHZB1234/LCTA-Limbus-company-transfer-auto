@@ -4,6 +4,8 @@ import tempfile
 from .functions import *
 import shutil
 
+HEADERS = {"User-Agent": "LLC_MOD_Toolbox"}
+
 NodeList = [
     {
         "id": "auto",
@@ -59,7 +61,7 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
         logger_.log_modal_status("正在请求元数据", modal_id)
 
         logger_.log("开始请求版本")
-        version_ = requests.get(api_version)
+        version_ = requests.get(api_version, headers=HEADERS)
         version_.raise_for_status()
         version_ = version_.json()
         if not version_.get("notice") == '本次文本更新没有提示。':
@@ -69,7 +71,7 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
 
         logger_.check_running(modal_id)
         logger_.log(f"开始请求哈希")
-        hash_ = requests.get(api_hash)
+        hash_ = requests.get(api_hash, headers=HEADERS)
         hash_.raise_for_status()
         hash_ = hash_.json()
         logger_.log(f"请求到哈希 {str(hash_)}")
@@ -88,7 +90,8 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
 
         if not download_with(download_url, save_path_text,
                              chunk_size=1024 * 100, logger_=logger_,
-                             modal_id=modal_id, progress_=[20, 40]):
+                             modal_id=modal_id, progress_=[20, 40],
+                             headers=HEADERS):
             logger_.log_modal_process("下载文本文件时出现错误", modal_id)
             raise
 
@@ -101,7 +104,8 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
 
         if not download_with(font_url, save_path_font,
                              chunk_size=1024 * 100, logger_=logger_,
-                             modal_id=modal_id, progress_=[40, 70]):
+                             modal_id=modal_id, progress_=[40, 70],
+                             headers=HEADERS):
             logger_.log_modal_process("下载字体文件时出现错误", modal_id)
             raise
         

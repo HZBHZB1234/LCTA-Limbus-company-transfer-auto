@@ -8,6 +8,8 @@ from .function_install import (
     get_system_fonts,
     export_system_font
 )
+from .function_fetch import function_fetch_main
+from webutils.function_clean import clean_config_main
 
 __all__ = [
     'function_llc_main',
@@ -20,5 +22,7 @@ __all__ = [
     'export_system_font',
     'check_ver_github',
     'check_ver_ourplay',
-    'function_ourplay_api'
+    'function_ourplay_api',
+    'function_fetch_main',
+    'clean_config_main'
 ]

@@ -10,6 +10,7 @@ dev_cache/
 *config.json
 proper.json
 .vscode
+.workshop
 .git
 .idea
 logs

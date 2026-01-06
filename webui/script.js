@@ -181,6 +181,12 @@ class ConfigManager {
             'clean-progress': 'ui_default.clean.clean_progress',
             'clean-notice': 'ui_default.clean.clean_notice',
             'clean-mods': 'ui_default.clean.clean_mods',
+
+            // 抓取设置
+            'proper-join-char': 'ui_default.proper.join_char',
+            'proper-disable-space': 'ui_default.proper.disable_space',
+            'proper-max_length': 'ui_default.proper.max_length',
+            'proper-output-type': 'ui_default.proper.output_type',
             
             // Launcher设置
             'launcher-zero-zip-type': 'launcher.zero.zip_type',
@@ -1641,7 +1647,15 @@ function fetchProperNouns() {
     const outputFormat = document.getElementById('proper-output').value;
     const skipSpace = document.getElementById('proper-skip-space').checked;
     const maxCount = document.getElementById('proper-max-count').value;
+    const joinChar = document.getElementById('proper-join-char').value;
     
+    const updates = {
+        'proper-join-char': joinChar,
+        'proper-max-lenth': maxCount,
+        'proper-output-type': outputFormat,
+        'proper-disable-space': skipSpace
+    };
+
     const modal = new ProgressModal('抓取专有词汇');
     modal.addLog('开始抓取专有词汇...');
     modal.addLog(`输出格式: ${outputFormat}`);
@@ -1649,18 +1663,24 @@ function fetchProperNouns() {
     if (maxCount) {
         modal.addLog(`最大词汇数量: ${maxCount}`);
     }
+    if (outputFormat === 'single') {
+        modal.addLog(`文本分割符：${joinChar}`);
+    }
     
-    pywebview.api.fetch_proper_nouns(modal.id)
-        .then(function(result) {
-            if (result.success) {
-                modal.complete(true, '专有词汇抓取成功');
-            } else {
-                modal.complete(false, '抓取失败: ' + result.message);
-            }
+    configManager.updateConfigValues(updates)
+        .then(() => {
+            pywebview.api.fetch_proper_nouns(modal.id)
+                .then(function(result) {
+                    if (result.success) {
+                        modal.complete(true, '专有词汇抓取成功');
+                    } else {
+                        modal.complete(false, '抓取失败: ' + result.message);
+                    }
+                })
+                .catch(function(error) {
+                    modal.complete(false, '抓取过程中发生错误: ' + error);
+                });
         })
-        .catch(function(error) {
-            modal.complete(false, '抓取过程中发生错误: ' + error);
-        });
 }
 
 function downloadOurplay() {

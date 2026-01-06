@@ -26,13 +26,7 @@
             "disable_space": "bool",
             "max_length": "int",
             "output_type": "str"
-        },
-        "search": {
-            "divide_size": "bool",
-            "using_re": "bool",
-            "all_same": "bool"
-        },
-        "backup": "null"
+        }
     },
     "game_path": "str",
     "debug": "bool",

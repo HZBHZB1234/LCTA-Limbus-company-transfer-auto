@@ -27,13 +27,7 @@
             "disable_space":false,
             "max_length":0,
             "output_type":"text_one"
-        },
-        "search":{
-            "divide_size":false,
-            "using_re":false,
-            "all_same":false
-        },
-        "backup":null
+        }
     },
     "game_path":"",
     "debug":false,

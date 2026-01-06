@@ -25,9 +25,10 @@ from webutils import (
     change_font_for_package,
     install_translation_package,
     get_system_fonts,
-    export_system_font
+    export_system_font,
+    function_fetch_main,
+    clean_config_main
 )
-from webutils.function_clean import clean_config_main  # 导入clean_config_main函数
 
 class CancelRunning(Exception):
     pass
@@ -487,86 +488,14 @@ class LCTA_API():
         """获取专有词汇"""
         try:
             self.add_modal_log("开始抓取专有词汇...", modal_id)
-            time.sleep(1)  # 模拟抓取过程
+            proper_config = self.config.get('ui_default', {}).get('proper',{})
+            function_fetch_main(
+                modal_id,
+                self.log_manager,
+                **proper_config
+            )
             self.add_modal_log("专有词汇抓取成功", modal_id)
             return {"success": True, "message": "专有词汇抓取成功"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
-    def search_text(self, modal_id= "false"):
-        """搜索文本"""
-        try:
-            self.add_modal_log("开始文本搜索...", modal_id)
-            time.sleep(1)  # 模拟搜索过程
-            self.add_modal_log("文本搜索完成", modal_id)
-            return {"success": True, "message": "文本搜索完成", "results": []}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
-    def backup_text(self, modal_id= "false"):
-        """备份文本"""
-        try:
-            self.add_modal_log("开始备份原文...", modal_id)
-            time.sleep(1)  # 模拟备份过程
-            self.add_modal_log("原文备份成功", modal_id)
-            return {"success": True, "message": "原文备份成功"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
-    def manage_fonts(self, modal_id= "false"):
-        """管理字体"""
-        try:
-            self.add_modal_log("开始管理字体...", modal_id)
-            time.sleep(1)  # 模拟管理过程
-            self.add_modal_log("字体管理完成", modal_id)
-            return {"success": True, "message": "字体管理完成"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
-    def manage_images(self, modal_id= "false"):
-        """管理图片"""
-        try:
-            self.add_modal_log("开始管理图片...", modal_id)
-            time.sleep(1)  # 模拟管理过程
-            self.add_modal_log("图片管理完成", modal_id)
-            return {"success": True, "message": "图片管理完成"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
-    def manage_audio(self, modal_id= "false"):
-        """管理音频"""
-        try:
-            self.add_modal_log("开始管理音频...", modal_id)
-            time.sleep(1)  # 模拟管理过程
-            self.add_modal_log("音频管理完成", modal_id)
-            return {"success": True, "message": "音频管理完成"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
-    def adjust_image(self, modal_id):
-        """调整图片"""
-        try:
-            self.add_modal_log("开始调整图片...", modal_id)
-            time.sleep(1)  # 模拟调整过程
-            self.add_modal_log("图片调整完成", modal_id)
-            return {"success": True, "message": "图片调整完成"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
-    def calculate_gacha(self, modal_id= "false"):
-        """计算抽卡概率"""
-        try:
-            self.add_modal_log("开始计算抽卡概率...", modal_id)
-            time.sleep(1)  # 模拟计算过程
-            self.add_modal_log("抽卡概率计算完成", modal_id)
-            return {"success": True, "message": "抽卡概率计算完成"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}

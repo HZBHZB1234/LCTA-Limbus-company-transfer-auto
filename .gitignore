@@ -17,3 +17,4 @@ logs
 build
 dist
 dev_assets
+.env

@@ -136,17 +136,20 @@ with tempfile.TemporaryDirectory() as temp_dir:
         for i in sub_affect:
             index_affect = get_item_id(KR_affect_data, i)
             affect_data.append(KR_affect_data[index_affect])
-    affect_data = [
+    
+    # 注意：这里先使用未翻译的affect_data
+    affect_data_untranslated = [
         {'id': affect.get('id', 'aaa'), 'ZH-data': {'name': affect.get('name', 'aaa'), 'desc': affect.get('desc', 'aaa')},
          'KR-data': {'name': KR.get('name', 'aaa'), 'desc': KR.get('desc', 'aaa')}
     } for affect, KR in zip(affect_data, KR_affect_data)
     ]
-    affect_data_id = get_list_id(affect_data)
+    affect_data_id = get_list_id(affect_data_untranslated)
     affect_data_id = [f'[{i}]' for i in affect_data_id]
-    affect_data_name = [i.get('KR-data', {}).get('name', 'aaa') for i in affect_data]
+    affect_data_name = [i.get('KR-data', {}).get('name', 'aaa') for i in affect_data_untranslated]
     affect_data_name = [f'{i} ' for i in affect_data_name]
     affect_data_id_matcher = kit.SimpleMatcher(affect_data_id)
     affect_data_name_matcher = kit.SimpleMatcher(affect_data_name)
+    
     llc_model_path = llc_path / "ScenarioModelCodes-AutoCreated.json"
     KR_model_path = KR_path / "KR_ScenarioModelCodes-AutoCreated.json"
     EN_model_path = EN_path / "EN_ScenarioModelCodes-AutoCreated.json"
@@ -167,156 +170,231 @@ with tempfile.TemporaryDirectory() as temp_dir:
     
     ERROR_FILES = []
     
+    # 第一步：收集所有文件到列表中
+    all_files = []
     for root, dirs, files in os.walk(KR_path):
         for file in files:
             if not file.endswith(".json"):
-                print('跳过非json文件:', file)
                 continue
-            true_file_name = file[3:]
             relative_path = os.path.relpath(root, KR_path)
-            try:
-                with open(f'{root}/{file}', 'r', encoding='utf-8-sig') as f:
-                    KR_data = json.load(f).get('dataList', [])
-                llc_data_path = llc_path / relative_path / true_file_name
-                if not os.path.exists(llc_data_path):
-                    logger.info(f'文件: {file} 缺少对应llc文件')
-                    LLC_data = []
-                else:
-                    with open(llc_data_path, 'r', encoding='utf-8-sig') as f:
-                        LLC_data = json.load(f).get('dataList', [])
-                if len(KR_data) == len(LLC_data):
-                    if os.path.exists(llc_data_path):
-                        shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
-                    continue
-                logger.info(f'开始翻译文件: {file}')
-                EN_data_path = f'{EN_path}/{relative_path}/EN_{true_file_name}'
-                JP_data_path = f'{JP_path}/{relative_path}/JP_{true_file_name}'
-                EN_data = []
-                JP_data = []
-                try:
-                    with open(EN_data_path, 'r', encoding='utf-8-sig') as f:
-                        EN_data = json.load(f).get('dataList', [])
-                    with open(JP_data_path, 'r', encoding='utf-8-sig') as f:
-                        JP_data = json.load(f).get('dataList', [])
-                except FileNotFoundError:
-                    logger.warning(f'文件: {file} 缺少EN或JP文件')
-            except json.decoder.JSONDecodeError:
-                logger.warning(f'文件: {file} 解析时错误')
-                ERROR_FILES.append(Path(relative_path) / true_file_name)
-                if os.path.exists(llc_data_path):
-                    shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
-                else:
-                    shutil.copy(f'{root}/{file}', final_path / relative_path / true_file_name)
-                continue
-            if EN_data in EMPTY_DATA_LIST and KR_data in EMPTY_DATA_LIST and LLC_data in EMPTY_DATA_LIST:
-                logger.warning(f'文件: {file} 无需翻译')
-                if os.path.exists(llc_data_path):
-                    shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
-                continue
-                
-            EN_patch = kit.compare_json([], EN_data)
-            EN_patch = kit.deoptimize_patch(EN_patch)
-            JP_patch = kit.compare_json([], JP_data)
-            JP_patch = kit.deoptimize_patch(JP_patch)
-            KR_patch = kit.compare_json([], KR_data)
-            KR_patch = kit.deoptimize_patch(KR_patch)
-            llc_patch = kit.compare_json([], LLC_data)
-            llc_patch = kit.deoptimize_patch(llc_patch)
-            EN_clean_patch = kit.filted_patchs(EN_patch, *FILT_CONFIG)
-            JP_clean_patch = kit.filted_patchs(JP_patch, *FILT_CONFIG)
-            KR_clean_patch = kit.filted_patchs(KR_patch, *FILT_CONFIG)
-            llc_clean_patch = kit.filted_patchs(llc_patch, *FILT_CONFIG)
-            if not len(EN_clean_patch)==len(JP_clean_patch)==len(KR_clean_patch):
-                logger.warning(f'文件: {file} 翻译后长度不一致')
-                if len(KR_clean_patch) >= len(EN_clean_patch) or len(KR_clean_patch) >= len(JP_clean_patch):
-                    logger.info(f'文件: {file} 韩文翻译长于其他语言')
-            EN_text = kit.make_list_patch(EN_clean_patch)
-            JP_text = kit.make_list_patch(JP_clean_patch)
-            KR_text = kit.make_list_patch(KR_clean_patch)
-            LLC_text = kit.make_list_patch(llc_clean_patch)
-            len_KR = len(KR_text)
-            EN_ok = change_len(EN_text, len_KR)
-            JP_ok = change_len(JP_text, len_KR)
-            proper = proper_fetcher.match_multiple(KR_text, 'sequential')
-            proper = [[proper_data[index] for index in i] for i in proper]
-            
-            # 修改构建请求的部分
-            request = {}
-            if root.endswith('StoryData'):
-                KR_models = make_model_patch(KR_clean_patch, KR_data)
-                EN_models = make_model_patch(EN_clean_patch, EN_data)
-                JP_models = make_model_patch(JP_clean_patch, JP_data)
-                KR_model_texts = get_text_model(KR_models, KR_model_data, KR_model_list)
-                EN_model_texts = get_text_model(EN_models, EN_model_data, EN_model_list)
-                JP_model_texts = get_text_model(JP_models, JP_model_data, JP_model_list)
-                texts = [{'en': EN,'jp': JP, 'kr': KR,
-                          'proper': PR, 'model': {
-                                'kr': MDKR, 'en': MDEN, 'jp': MDJP}} 
-                        for EN, JP, KR, PR, MDKR, MDEN, MDJP in zip(EN_ok, JP_ok, KR_text, proper,
-                                                                    KR_model_texts, EN_model_texts, JP_model_texts)]                
-                modal_doc = []
-                modal_add = set(KR_models)
-                for i in modal_add:
-                    if i in translate_doc.RLOE_COMPARE:
-                        modal_doc.append(translate_doc.ROLE_STYLE[translate_doc.RLOE_COMPARE[i]])
-                if modal_doc:
-                    request['doc_modal'] = modal_doc
+            all_files.append((root, relative_path, file))
+    
+    # 第二步：定义需要优先处理的特殊文件
+    special_files = [
+        ("", "KR_BattleKeywords.json"),  # BattleKeywords文件
+        ("", "KR_ScenarioModelCodes-AutoCreated.json")  # Model文件
+    ]
+    
+    # 第三步：将特殊文件移到列表最前面
+    # 首先分离出特殊文件和其他文件
+    special_file_items = []
+    normal_file_items = []
+    
+    for root, relative_path, file in all_files:
+        file_key = (relative_path, file)
+        is_special = False
+        
+        for special_rel_path, special_file in special_files:
+            # 检查是否是特殊文件
+            if (relative_path == special_rel_path and file == special_file):
+                special_file_items.append((root, relative_path, file))
+                is_special = True
+                break
+        
+        if not is_special:
+            normal_file_items.append((root, relative_path, file))
+    
+    # 第四步：重新组合列表，特殊文件在前
+    sorted_files = special_file_items + normal_file_items
+    
+    logger.info(f'总文件数量: {len(sorted_files)}')
+    
+    # 第五步：处理所有文件
+    for root, relative_path, file in sorted_files:
+        if not file.endswith(".json"):
+            print('跳过非json文件:', file)
+            continue
+        true_file_name = file[3:]  # 去掉"KR_"前缀
+        
+        try:
+            with open(f'{root}/{file}', 'r', encoding='utf-8-sig') as f:
+                KR_data = json.load(f).get('dataList', [])
+            llc_data_path = llc_path / relative_path / true_file_name
+            if not os.path.exists(llc_data_path):
+                logger.info(f'文件: {file} 缺少对应llc文件')
+                LLC_data = []
             else:
-                texts = [{'en': EN,'jp': JP, 'kr': KR,
-                          'proper': PR} for EN, JP, KR, PR in zip(EN_ok, JP_ok, KR_text, proper)]
-
-            if true_file_name.startswith('Skills'):
-                affect_id_match = affect_data_id_matcher.match_multiple(KR_text)
-                affect_name_match = affect_data_name_matcher.match_multiple(KR_text)
-                affect_index_match = [list(set(a)|set(b)) for a, b in zip(affect_id_match, affect_name_match)]
-                affects = [[affect_data[i] for i in index] for index in affect_index_match]
-                texts = [{**i, 'affect': b} for i, b in zip(texts, affects)]
-                request['doc_skill'] = translate_doc.SKILLL_DOC
-
-            r_texts = texts[len(LLC_text):]
-            request['textList'] = r_texts
-            
-            logger.info(f'待翻译文本块数量: {len(r_texts)}')
-            
-            # 调用翻译函数
-            try:
-                response = test_request.translate_text(request)
-                
-                if not response:
-                    logger.warning(f'文件: {file} 翻译结果为空')
-                    continue
-                    
-                # 合并已有翻译和新翻译
-                all_translated_texts = LLC_text + response
-                
-                # 检查长度是否匹配
-                if len(all_translated_texts) != len(KR_text):
-                    logger.error(f'翻译结果长度不匹配: 预期 {len(KR_text)}，实际 {len(all_translated_texts)}')
-                    ERROR_FILES.append(Path(relative_path) / true_file_name)
-                    raise Exception('翻译结果长度不匹配')
-                
-                # 应用翻译结果并保存
-                output_file_path = final_path / relative_path / true_file_name
-                try:
-                    with open(output_file_path, 'w', encoding='utf-8') as f:
-                        clean_result_patches = kit.apply_list_patch(KR_clean_patch, all_translated_texts)
-                        result_patches = kit.apply_filtered_patchs(KR_patch, clean_result_patches, *FILT_CONFIG)
-                        result_data = kit.apply_patch([], result_patches)
-                        result_data = {'dataList': result_data}
-                        json.dump(result_data, f, ensure_ascii=False, indent=4)
-                    logger.info(f'文件翻译完成并保存: {true_file_name}')
-                except Exception:
-                    logger.error(f'文件翻译保存失败: {true_file_name}')
-                    raise
-                    
-            except Exception as e:
-                logger.error(f'翻译过程中出错: {e}', exc_info=True)
-                ERROR_FILES.append(Path(relative_path) / true_file_name)
+                with open(llc_data_path, 'r', encoding='utf-8-sig') as f:
+                    LLC_data = json.load(f).get('dataList', [])
+            if len(KR_data) == len(LLC_data):
                 if os.path.exists(llc_data_path):
                     shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
-                else:
-                    shutil.copy(f'{root}/{file}', final_path / relative_path / true_file_name)
                 continue
+            logger.info(f'开始翻译文件: {file}')
+            EN_data_path = f'{EN_path}/{relative_path}/EN_{true_file_name}'
+            JP_data_path = f'{JP_path}/{relative_path}/JP_{true_file_name}'
+            EN_data = []
+            JP_data = []
+            try:
+                with open(EN_data_path, 'r', encoding='utf-8-sig') as f:
+                    EN_data = json.load(f).get('dataList', [])
+                with open(JP_data_path, 'r', encoding='utf-8-sig') as f:
+                    JP_data = json.load(f).get('dataList', [])
+            except FileNotFoundError:
+                logger.warning(f'文件: {file} 缺少EN或JP文件')
+        except json.decoder.JSONDecodeError:
+            logger.warning(f'文件: {file} 解析时错误')
+            ERROR_FILES.append(Path(relative_path) / true_file_name)
+            if os.path.exists(llc_data_path):
+                shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
+            else:
+                shutil.copy(f'{root}/{file}', final_path / relative_path / true_file_name)
+            continue
+        if EN_data in EMPTY_DATA_LIST and KR_data in EMPTY_DATA_LIST and LLC_data in EMPTY_DATA_LIST:
+            logger.warning(f'文件: {file} 无需翻译')
+            if os.path.exists(llc_data_path):
+                shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
+            continue
+            
+        EN_patch = kit.compare_json([], EN_data)
+        EN_patch = kit.deoptimize_patch(EN_patch)
+        JP_patch = kit.compare_json([], JP_data)
+        JP_patch = kit.deoptimize_patch(JP_patch)
+        KR_patch = kit.compare_json([], KR_data)
+        KR_patch = kit.deoptimize_patch(KR_patch)
+        llc_patch = kit.compare_json([], LLC_data)
+        llc_patch = kit.deoptimize_patch(llc_patch)
+        EN_clean_patch = kit.filted_patchs(EN_patch, *FILT_CONFIG)
+        JP_clean_patch = kit.filted_patchs(JP_patch, *FILT_CONFIG)
+        KR_clean_patch = kit.filted_patchs(KR_patch, *FILT_CONFIG)
+        llc_clean_patch = kit.filted_patchs(llc_patch, *FILT_CONFIG)
+        if not len(EN_clean_patch)==len(JP_clean_patch)==len(KR_clean_patch):
+            logger.warning(f'文件: {file} 翻译后长度不一致')
+            if len(KR_clean_patch) >= len(EN_clean_patch) or len(KR_clean_patch) >= len(JP_clean_patch):
+                logger.info(f'文件: {file} 韩文翻译长于其他语言')
+        EN_text = kit.make_list_patch(EN_clean_patch)
+        JP_text = kit.make_list_patch(JP_clean_patch)
+        KR_text = kit.make_list_patch(KR_clean_patch)
+        LLC_text = kit.make_list_patch(llc_clean_patch)
+        len_KR = len(KR_text)
+        EN_ok = change_len(EN_text, len_KR)
+        JP_ok = change_len(JP_text, len_KR)
+        proper = proper_fetcher.match_multiple(KR_text, 'sequential')
+        proper = [[proper_data[index] for index in i] for i in proper]
+        
+        # 修改构建请求的部分
+        request = {}
+        if root.endswith('StoryData'):
+            KR_models = make_model_patch(KR_clean_patch, KR_data)
+            EN_models = make_model_patch(EN_clean_patch, EN_data)
+            JP_models = make_model_patch(JP_clean_patch, JP_data)
+            # 注意：这里使用未翻译的model数据
+            KR_model_texts = get_text_model(KR_models, KR_model_data, KR_model_list)
+            EN_model_texts = get_text_model(EN_models, EN_model_data, EN_model_list)
+            JP_model_texts = get_text_model(JP_models, JP_model_data, JP_model_list)
+            texts = [{'en': EN,'jp': JP, 'kr': KR,
+                      'proper': PR, 'model': {
+                            'kr': MDKR, 'en': MDEN, 'jp': MDJP}} 
+                    for EN, JP, KR, PR, MDKR, MDEN, MDJP in zip(EN_ok, JP_ok, KR_text, proper,
+                                                                KR_model_texts, EN_model_texts, JP_model_texts)]                
+            modal_doc = []
+            modal_add = set(KR_models)
+            for i in modal_add:
+                if i in translate_doc.RLOE_COMPARE:
+                    modal_doc.append(translate_doc.ROLE_STYLE[translate_doc.RLOE_COMPARE[i]])
+            if modal_doc:
+                request['doc_modal'] = modal_doc
+        else:
+            texts = [{'en': EN,'jp': JP, 'kr': KR,
+                      'proper': PR} for EN, JP, KR, PR in zip(EN_ok, JP_ok, KR_text, proper)]
+
+        if true_file_name.startswith('Skills'):
+            # 使用当前的affect匹配器（如果是特殊文件翻译后，这里会使用更新后的匹配器）
+            affect_id_match = affect_data_id_matcher.match_multiple(KR_text)
+            affect_name_match = affect_data_name_matcher.match_multiple(KR_text)
+            affect_index_match = [list(set(a)|set(b)) for a, b in zip(affect_id_match, affect_name_match)]
+            affects = [[affect_data[i] for i in index] for index in affect_index_match]
+            texts = [{**i, 'affect': b} for i, b in zip(texts, affects)]
+            request['doc_skill'] = translate_doc.SKILLL_DOC
+
+        r_texts = texts[len(LLC_text):]
+        request['textList'] = r_texts
+        
+        logger.info(f'待翻译文本块数量: {len(r_texts)}')
+        
+        # 调用翻译函数
+        try:
+            response = test_request.translate_text(request)
+            
+            if not response:
+                logger.warning(f'文件: {file} 翻译结果为空')
+                continue
+                
+            # 合并已有翻译和新翻译
+            all_translated_texts = LLC_text + response
+            
+            # 检查长度是否匹配
+            if len(all_translated_texts) != len(KR_text):
+                logger.error(f'翻译结果长度不匹配: 预期 {len(KR_text)}，实际 {len(all_translated_texts)}')
+                ERROR_FILES.append(Path(relative_path) / true_file_name)
+                raise Exception('翻译结果长度不匹配')
+            
+            # 应用翻译结果并保存
+            output_file_path = final_path / relative_path / true_file_name
+            try:
+                with open(output_file_path, 'w', encoding='utf-8') as f:
+                    clean_result_patches = kit.apply_list_patch(KR_clean_patch, all_translated_texts)
+                    result_patches = kit.apply_filtered_patchs(KR_patch, clean_result_patches, *FILT_CONFIG)
+                    result_data = kit.apply_patch([], result_patches)
+                    result_data = {'dataList': result_data}
+                    json.dump(result_data, f, ensure_ascii=False, indent=4)
+                logger.info(f'文件翻译完成并保存: {true_file_name}')
+                
+                # 第六步：如果是特殊文件，翻译后更新相关数据
+                if file == "KR_BattleKeywords.json":
+                    # 更新affect_data
+                    logger.info("更新BattleKeywords匹配器数据")
+                    # 重新读取翻译后的文件
+                    with open(output_file_path, 'r', encoding='utf-8-sig') as f:
+                        new_affect_data = json.load(f).get('dataList', [])
+                    
+                    # 更新affect_data
+                    affect_data = new_affect_data
+                    
+                    # 重新构建匹配器
+                    affect_data_untranslated = [
+                        {'id': affect.get('id', 'aaa'), 'ZH-data': {'name': affect.get('name', 'aaa'), 'desc': affect.get('desc', 'aaa')},
+                         'KR-data': {'name': KR.get('name', 'aaa'), 'desc': KR.get('desc', 'aaa')}
+                    } for affect, KR in zip(affect_data, KR_affect_data)
+                    ]
+                    affect_data_id = get_list_id(affect_data_untranslated)
+                    affect_data_id = [f'[{i}]' for i in affect_data_id]
+                    affect_data_name = [i.get('KR-data', {}).get('name', 'aaa') for i in affect_data_untranslated]
+                    affect_data_name = [f'{i} ' for i in affect_data_name]
+                    affect_data_id_matcher = kit.SimpleMatcher(affect_data_id)
+                    affect_data_name_matcher = kit.SimpleMatcher(affect_data_name)
+                    logger.info("BattleKeywords匹配器已更新")
+                    
+                elif file == "KR_ScenarioModelCodes-AutoCreated.json":
+                    # 更新model_data
+                    logger.info("更新ScenarioModelCodes匹配器数据")
+                    # 重新读取翻译后的文件
+                    with open(output_file_path, 'r', encoding='utf-8-sig') as f:
+                        llc_model_data = json.load(f).get('dataList', [])
+                    logger.info("ScenarioModelCodes数据已更新")
+                    
+            except Exception:
+                logger.error(f'文件翻译保存失败: {true_file_name}')
+                raise
+                
+        except Exception as e:
+            logger.error(f'翻译过程中出错: {e}', exc_info=True)
+            ERROR_FILES.append(Path(relative_path) / true_file_name)
+            if os.path.exists(llc_data_path):
+                shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
+            else:
+                shutil.copy(f'{root}/{file}', final_path / relative_path / true_file_name)
+            continue
     
     logger.info('所有文件处理完成')
     try:

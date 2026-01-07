@@ -30,10 +30,13 @@ game_path = config['game_path']
 FILT_CONFIG = (['.*'],
                ['.*/id', '.*/model', '.*/usage'],
                ['remove'],
-               [int, float]
+               [int, float],
+               ['', '-']
                )
 
 EMPTY_DATA = {'dataList': []}
+
+EMPTY_DATA_LIST = [[], [{}]]
 
 def get_list_id(input_list: List) -> List[int]:
     return [i.get('id', 999) for i in input_list]
@@ -103,11 +106,16 @@ with tempfile.TemporaryDirectory() as temp_dir:
     llc_path = Path(game_path) / "LimbusCompany_Data" / "lang" / "LLC_zh-CN"
     assets_path = Path(game_path) / "LimbusCompany_Data" / "Assets" / "Resources_moved" / "Localize"
     final_path = Path(temp_dir) / "LLc-CN"
+    logger.info(f'最终路径: {final_path}')
     os.makedirs(final_path, exist_ok=True)
 
     EN_path = assets_path / "en"
     KR_path = assets_path / "kr"
     JP_path = assets_path / "jp"
+    
+    for i in os.listdir(KR_path):
+        if os.path.isdir(KR_path / i):
+            os.makedirs(final_path / i, exist_ok=True)
     
     proper_path = 'proper.json'
     with open(proper_path, 'r', encoding='utf-8-sig') as f:
@@ -157,6 +165,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
     EN_model_list = get_list_id(EN_model_data)
     JP_model_list = get_list_id(JP_model_data)
     
+    ERROR_FILES = []
+    
     for root, dirs, files in os.walk(KR_path):
         for file in files:
             if not file.endswith(".json"):
@@ -167,28 +177,43 @@ with tempfile.TemporaryDirectory() as temp_dir:
             try:
                 with open(f'{root}/{file}', 'r', encoding='utf-8-sig') as f:
                     KR_data = json.load(f).get('dataList', [])
-                llc_data_path = f'{llc_path}/{relative_path}/{true_file_name}'
+                llc_data_path = llc_path / relative_path / true_file_name
                 if not os.path.exists(llc_data_path):
-                    LLC_data = {}
+                    logger.info(f'文件: {file} 缺少对应llc文件')
+                    LLC_data = []
                 else:
                     with open(llc_data_path, 'r', encoding='utf-8-sig') as f:
                         LLC_data = json.load(f).get('dataList', [])
                 if len(KR_data) == len(LLC_data):
+                    if os.path.exists(llc_data_path):
+                        shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
                     continue
                 logger.info(f'开始翻译文件: {file}')
                 EN_data_path = f'{EN_path}/{relative_path}/EN_{true_file_name}'
                 JP_data_path = f'{JP_path}/{relative_path}/JP_{true_file_name}'
+                EN_data = []
+                JP_data = []
                 try:
                     with open(EN_data_path, 'r', encoding='utf-8-sig') as f:
                         EN_data = json.load(f).get('dataList', [])
                     with open(JP_data_path, 'r', encoding='utf-8-sig') as f:
                         JP_data = json.load(f).get('dataList', [])
                 except FileNotFoundError:
-                    logger.warning(f'文件: {file} 缺少EN或JP文件, 跳过')
-                    continue
+                    logger.warning(f'文件: {file} 缺少EN或JP文件')
             except json.decoder.JSONDecodeError:
-                logger.warning(f'文件: {file} 解析时错误, 跳过')
+                logger.warning(f'文件: {file} 解析时错误')
+                ERROR_FILES.append(Path(relative_path) / true_file_name)
+                if os.path.exists(llc_data_path):
+                    shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
+                else:
+                    shutil.copy(f'{root}/{file}', final_path / relative_path / true_file_name)
                 continue
+            if EN_data in EMPTY_DATA_LIST and KR_data in EMPTY_DATA_LIST and LLC_data in EMPTY_DATA_LIST:
+                logger.warning(f'文件: {file} 无需翻译')
+                if os.path.exists(llc_data_path):
+                    shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
+                continue
+                
             EN_patch = kit.compare_json([], EN_data)
             EN_patch = kit.deoptimize_patch(EN_patch)
             JP_patch = kit.compare_json([], JP_data)
@@ -251,5 +276,63 @@ with tempfile.TemporaryDirectory() as temp_dir:
             r_texts = texts[len(LLC_text):]
             request['textList'] = r_texts
             
-            logger.info(f'请求数据: {request}')
-            response = test_request.translate_text(request)
+            logger.info(f'待翻译文本块数量: {len(r_texts)}')
+            
+            # 调用翻译函数
+            try:
+                response = test_request.translate_text(request)
+                
+                if not response:
+                    logger.warning(f'文件: {file} 翻译结果为空')
+                    continue
+                    
+                # 合并已有翻译和新翻译
+                all_translated_texts = LLC_text + response
+                
+                # 检查长度是否匹配
+                if len(all_translated_texts) != len(KR_text):
+                    logger.error(f'翻译结果长度不匹配: 预期 {len(KR_text)}，实际 {len(all_translated_texts)}')
+                    ERROR_FILES.append(Path(relative_path) / true_file_name)
+                    raise Exception('翻译结果长度不匹配')
+                
+                # 应用翻译结果并保存
+                output_file_path = final_path / relative_path / true_file_name
+                try:
+                    with open(output_file_path, 'w', encoding='utf-8') as f:
+                        clean_result_patches = kit.apply_list_patch(KR_clean_patch, all_translated_texts)
+                        result_patches = kit.apply_filtered_patchs(KR_patch, clean_result_patches, *FILT_CONFIG)
+                        result_data = kit.apply_patch([], result_patches)
+                        result_data = {'dataList': result_data}
+                        json.dump(result_data, f, ensure_ascii=False, indent=4)
+                    logger.info(f'文件翻译完成并保存: {true_file_name}')
+                except Exception:
+                    logger.error(f'文件翻译保存失败: {true_file_name}')
+                    raise
+                    
+            except Exception as e:
+                logger.error(f'翻译过程中出错: {e}', exc_info=True)
+                ERROR_FILES.append(Path(relative_path) / true_file_name)
+                if os.path.exists(llc_data_path):
+                    shutil.copy2(llc_data_path, final_path / relative_path / true_file_name)
+                else:
+                    shutil.copy(f'{root}/{file}', final_path / relative_path / true_file_name)
+                continue
+    
+    logger.info('所有文件处理完成')
+    try:
+        shutil.copytree(llc_path / 'Font', final_path / 'Font')
+        shutil.copytree(llc_path / 'Info', final_path / 'Info')
+        with open(final_path / 'Info' / 'version.json', 'r+', encoding='utf-8') as f:
+            version_data = json.load(f)
+            import time
+            timestamp_str = time.strftime("%Y%m%d%H")
+            version_data['version'] = timestamp_str
+            json.dump(version_data, f, indent=4)
+        logger.info('设置文件夹格式成功')
+    except Exception as e:
+        logger.error(f'设置文件夹格式失败: {e}', exc_info=True)
+    try:
+        shutil.rmtree('./LLc-CN_LCTA')
+    except Exception:
+        pass
+    shutil.copytree(final_path, './LLc-CN_LCTA')

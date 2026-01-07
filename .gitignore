@@ -19,3 +19,5 @@ dist
 dev_assets
 .env
 .venv
+translatekit
+LLc-CN_LCTA

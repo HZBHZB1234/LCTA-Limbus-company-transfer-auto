@@ -1,7 +1,7 @@
 import translatekit as tkit
 from translatekit import kit
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from translate_doc import *
 import json
 
@@ -226,7 +226,100 @@ def make_text(texts):
     
     return "\n".join(result_lines)
 
+def split_text_request(texts_data: Dict[str, Any], max_length: int) -> List[Dict[str, Any]]:
+    """
+    如果请求文本过长，将文本分割成多个部分
+    
+    Args:
+        texts_data: 原始的文本数据
+        max_length: 最大允许长度
+    
+    Returns:
+        分割后的文本数据列表
+    """
+    # 创建统一请求并转换为实际发送的格式
+    unified_request = make_unified_request(texts_data)
+    
+    # 根据 is_text 配置决定实际发送的格式
+    if is_text:
+        request_text = make_text(unified_request)
+    else:
+        request_text = json.dumps(unified_request, indent=2, ensure_ascii=False)
+    
+    # 如果文本长度不超过限制，直接返回
+    if len(request_text) <= max_length:
+        return [texts_data]
+    
+    # 获取原始文本块
+    texts_list = texts_data.get('textList', [])
+    total_blocks = len(texts_list)
+    
+    # 尝试不同的分割方式
+    for num_parts in range(2, min(10, total_blocks) + 1):  # 最多尝试分割成10部分
+        # 计算每部分的大小
+        part_size = total_blocks // num_parts
+        remainder = total_blocks % num_parts
+        
+        parts = []
+        start_idx = 0
+        
+        for i in range(num_parts):
+            # 计算当前部分的结束索引
+            end_idx = start_idx + part_size + (1 if i < remainder else 0)
+            
+            # 提取当前部分的文本块
+            part_texts = texts_list[start_idx:end_idx]
+            
+            # 创建部分数据，保留所有参考信息
+            part_data = {
+                'textList': part_texts,
+                'doc_modal': texts_data.get('doc_modal', []),
+                'doc_skill': texts_data.get('doc_skill', '')
+            }
+            
+            parts.append(part_data)
+            start_idx = end_idx
+        
+        # 检查所有部分是否都满足长度限制
+        all_valid = True
+        for part in parts:
+            part_unified = make_unified_request(part)
+            # 使用与实际发送相同的格式来计算长度
+            if is_text:
+                part_text = make_text(part_unified)
+            else:
+                part_text = json.dumps(part_unified, indent=2, ensure_ascii=False)
+                
+            if len(part_text) > max_length:
+                all_valid = False
+                break
+        
+        if all_valid:
+            print(f"文本过长，已分割成 {num_parts} 部分")
+            return parts
+    
+    # 如果无法分割成满足条件的部分，尝试更激进的分割
+    print(f"警告：文本过长且无法合理分割，尝试强制分割")
+    
+    # 简单按固定大小分割
+    parts = []
+    part_size = max(1, total_blocks // 5)  # 固定分成5部分
+    for i in range(0, total_blocks, part_size):
+        end_idx = min(i + part_size, total_blocks)
+        part_texts = texts_list[i:end_idx]
+        
+        part_data = {
+            'textList': part_texts,
+            'doc_modal': texts_data.get('doc_modal', []),
+            'doc_skill': texts_data.get('doc_skill', '')
+        }
+        
+        parts.append(part_data)
+    
+    return parts
+
 is_text = False
+MAX_LENGTH = 20000
 with open('.env/llm.json', 'r', encoding='utf-8') as f:
     llm_config = json.load(f)
     
@@ -239,13 +332,14 @@ config = tkit.TranslationConfig(
     },
     debug_mode=True,
     enable_metrics=True,
-    text_max_length=30000
+    split_strategy = "semantic",
+    text_max_length=MAX_LENGTH*2
 )
 translator = tkit.LLMGeneralTranslator(config=config, model='deepseek')
 
 def translate_text(texts) -> List:
     """
-    使用 LLM 翻译文本
+    使用 LLM 翻译文本，自动处理过长的请求
     
     Args:
         texts: 待翻译的文本
@@ -253,19 +347,37 @@ def translate_text(texts) -> List:
     Returns:
         翻译后的文本
     """
-    # 创建统一结构的请求
-    unified_request = make_unified_request(texts)
+    # 分割过长的请求
+    text_parts = split_text_request(texts, MAX_LENGTH)
     
-    if is_text:
-        request_text = make_text(unified_request)
-    else:
-        request_text = json.dumps(unified_request, indent=2, ensure_ascii=False)
+    all_results = []
     
-    result = translator.translate(request_text)
+    for i, part in enumerate(text_parts):
+        print(f"正在翻译第 {i+1}/{len(text_parts)} 部分...")
+        
+        # 创建统一结构的请求
+        unified_request = make_unified_request(part)
+        
+        if is_text:
+            request_text = make_text(unified_request)
+        else:
+            request_text = json.dumps(unified_request, indent=2, ensure_ascii=False)
+        
+        # 计算超时时间
+        timeout = max(len(request_text) // 200 + 1, 40)
+        
+        # 翻译当前部分
+        result = translator.translate(request_text, timeout=timeout)
+        
+        if is_text:
+            result_list = result.split('\n\n')
+            result_list = [item.replace('\\n', '\n').replace('\\t', '\t').replace('\\r', '\r') for item in result_list]
+        else:
+            result_list = json.loads(result).get('translations', [])
+        
+        all_results.extend(result_list)
+        
+        print(f"第 {i+1} 部分翻译完成，获得 {len(result_list)} 条结果")
     
-    if is_text:
-        result_list = result.split('\n\n')
-        result_list = [item.replace('\\n', '\n').replace('\\t', '\t').replace('\\r', '\r') for item in result_list]
-    else:
-        result_list = json.loads(result).get('translations')
-    return result_list
+    print(f"所有部分翻译完成，总计 {len(all_results)} 条结果")
+    return all_results

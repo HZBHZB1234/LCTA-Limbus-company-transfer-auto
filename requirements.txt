@@ -5,3 +5,4 @@ patool
 pyunpack
 UnityPy==1.10.18
 xxhash==3.5.0
+translatekit

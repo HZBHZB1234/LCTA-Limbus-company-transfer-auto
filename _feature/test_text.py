@@ -21,8 +21,8 @@ sys.path.insert(0, str(project_root))
 
 import webutils.functions as functions
 import webutils.load as load_util
-import .feature.translate_doc as translate_doc
-import .feature.test_request as test_request
+import _feature.translate_doc as translate_doc
+import _feature.test_request as test_request
 
 config = load_util.load_config()
 game_path = config['game_path']
@@ -89,7 +89,7 @@ def make_model_patch(_jsonpatch: List, _json) -> List:
 
 def get_text_model(models: List[str], model_def: List[dict],
                    model_id: List[str]) -> List[str]:
-    results = [str()*len(models)]
+    results = ['']*len(models)
     for index, model in enumerate(models):
         if not model in model_id:
             results[index] = '获取失败'
@@ -214,6 +214,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
             JP_ok = change_len(JP_text, len_KR)
             proper = proper_fetcher.match_multiple(KR_text, 'sequential')
             proper = [[proper_data[index] for index in i] for i in proper]
+            
+            # 修改构建请求的部分
             request = {}
             if root.endswith('StoryData'):
                 KR_models = make_model_patch(KR_clean_patch, KR_data)
@@ -224,7 +226,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 JP_model_texts = get_text_model(JP_models, JP_model_data, JP_model_list)
                 texts = [{'en': EN,'jp': JP, 'kr': KR,
                           'proper': PR, 'model': {
-                                'kr': MDKR, 'en': MDEN, 'jp': MDJP}} for EN, JP, KR, PR, MDKR, MDEN, MDJP in zip(EN_ok, JP_ok, KR_text, proper,
+                                'kr': MDKR, 'en': MDEN, 'jp': MDJP}} 
+                        for EN, JP, KR, PR, MDKR, MDEN, MDJP in zip(EN_ok, JP_ok, KR_text, proper,
                                                                     KR_model_texts, EN_model_texts, JP_model_texts)]                
                 modal_doc = []
                 modal_add = set(KR_models)
@@ -236,6 +239,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
             else:
                 texts = [{'en': EN,'jp': JP, 'kr': KR,
                           'proper': PR} for EN, JP, KR, PR in zip(EN_ok, JP_ok, KR_text, proper)]
+
             if true_file_name.startswith('Skills'):
                 affect_id_match = affect_data_id_matcher.match_multiple(KR_text)
                 affect_name_match = affect_data_name_matcher.match_multiple(KR_text)
@@ -243,7 +247,9 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 affects = [[affect_data[i] for i in index] for index in affect_index_match]
                 texts = [{**i, 'affect': b} for i, b in zip(texts, affects)]
                 request['doc_skill'] = translate_doc.SKILLL_DOC
+
             r_texts = texts[len(LLC_text):]
-            request['textList']= r_texts
+            request['textList'] = r_texts
+            
             logger.info(f'请求数据: {request}')
             response = test_request.translate_text(request)

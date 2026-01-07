@@ -18,3 +18,4 @@ build
 dist
 dev_assets
 .env
+.venv

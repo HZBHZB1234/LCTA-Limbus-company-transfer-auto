@@ -138,14 +138,14 @@ with tempfile.TemporaryDirectory() as temp_dir:
             affect_data.append(KR_affect_data[index_affect])
     
     # 注意：这里先使用未翻译的affect_data
-    affect_data_untranslated = [
+    affect_data = [
         {'id': affect.get('id', 'aaa'), 'ZH-data': {'name': affect.get('name', 'aaa'), 'desc': affect.get('desc', 'aaa')},
          'KR-data': {'name': KR.get('name', 'aaa'), 'desc': KR.get('desc', 'aaa')}
     } for affect, KR in zip(affect_data, KR_affect_data)
     ]
-    affect_data_id = get_list_id(affect_data_untranslated)
+    affect_data_id = get_list_id(affect_data)
     affect_data_id = [f'[{i}]' for i in affect_data_id]
-    affect_data_name = [i.get('KR-data', {}).get('name', 'aaa') for i in affect_data_untranslated]
+    affect_data_name = [i.get('KR-data', {}).get('name', 'aaa') for i in affect_data]
     affect_data_name = [f'{i} ' for i in affect_data_name]
     affect_data_id_matcher = kit.SimpleMatcher(affect_data_id)
     affect_data_name_matcher = kit.SimpleMatcher(affect_data_name)
@@ -181,8 +181,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
     
     # 第二步：定义需要优先处理的特殊文件
     special_files = [
-        ("", "KR_BattleKeywords.json"),  # BattleKeywords文件
-        ("", "KR_ScenarioModelCodes-AutoCreated.json")  # Model文件
+        (".", "KR_BattleKeywords.json"),  # BattleKeywords文件
+        (".", "KR_ScenarioModelCodes-AutoCreated.json")  # Model文件
     ]
     
     # 第三步：将特殊文件移到列表最前面
@@ -292,11 +292,13 @@ with tempfile.TemporaryDirectory() as temp_dir:
             KR_model_texts = get_text_model(KR_models, KR_model_data, KR_model_list)
             EN_model_texts = get_text_model(EN_models, EN_model_data, EN_model_list)
             JP_model_texts = get_text_model(JP_models, JP_model_data, JP_model_list)
+            LLC_model_texts = get_text_model(KR_models, llc_model_data, llc_model_list)
             texts = [{'en': EN,'jp': JP, 'kr': KR,
                       'proper': PR, 'model': {
-                            'kr': MDKR, 'en': MDEN, 'jp': MDJP}} 
-                    for EN, JP, KR, PR, MDKR, MDEN, MDJP in zip(EN_ok, JP_ok, KR_text, proper,
-                                                                KR_model_texts, EN_model_texts, JP_model_texts)]                
+                            'kr': MDKR, 'en': MDEN, 'jp': MDJP, 'zh': MDZH}} 
+                    for EN, JP, KR, PR, MDKR, MDEN, MDJP, MDZH in zip(EN_ok, JP_ok, KR_text, proper,
+                                                                KR_model_texts, EN_model_texts, JP_model_texts,
+                                                                LLC_model_texts)]                
             modal_doc = []
             modal_add = set(KR_models)
             for i in modal_add:
@@ -362,14 +364,14 @@ with tempfile.TemporaryDirectory() as temp_dir:
                     affect_data = new_affect_data
                     
                     # 重新构建匹配器
-                    affect_data_untranslated = [
+                    affect_data = [
                         {'id': affect.get('id', 'aaa'), 'ZH-data': {'name': affect.get('name', 'aaa'), 'desc': affect.get('desc', 'aaa')},
                          'KR-data': {'name': KR.get('name', 'aaa'), 'desc': KR.get('desc', 'aaa')}
                     } for affect, KR in zip(affect_data, KR_affect_data)
                     ]
-                    affect_data_id = get_list_id(affect_data_untranslated)
+                    affect_data_id = get_list_id(affect_data)
                     affect_data_id = [f'[{i}]' for i in affect_data_id]
-                    affect_data_name = [i.get('KR-data', {}).get('name', 'aaa') for i in affect_data_untranslated]
+                    affect_data_name = [i.get('KR-data', {}).get('name', 'aaa') for i in affect_data]
                     affect_data_name = [f'{i} ' for i in affect_data_name]
                     affect_data_id_matcher = kit.SimpleMatcher(affect_data_id)
                     affect_data_name_matcher = kit.SimpleMatcher(affect_data_name)
@@ -381,6 +383,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                     # 重新读取翻译后的文件
                     with open(output_file_path, 'r', encoding='utf-8-sig') as f:
                         llc_model_data = json.load(f).get('dataList', [])
+                        llc_model_list = get_list_id(llc_model_data)
                     logger.info("ScenarioModelCodes数据已更新")
                     
             except Exception:

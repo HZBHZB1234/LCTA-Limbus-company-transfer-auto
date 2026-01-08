@@ -30,13 +30,13 @@ game_path = config['game_path']
 FILT_CONFIG = (['.*'],
                ['.*/id', '.*/model', '.*/usage'],
                ['remove'],
-               [int, float],
-               ['', '-']
+               [int, float]
                )
 
 EMPTY_DATA = {'dataList': []}
 
 EMPTY_DATA_LIST = [[], [{}]]
+EMPTY_TEXT = ['', '-']
 
 def get_list_id(input_list: List) -> List[int]:
     return [i.get('id', 999) for i in input_list]
@@ -181,8 +181,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
     
     # 第二步：定义需要优先处理的特殊文件
     special_files = [
-        (".", "KR_BattleKeywords.json"),  # BattleKeywords文件
-        (".", "KR_ScenarioModelCodes-AutoCreated.json")  # Model文件
+        (".", "KR_ScenarioModelCodes-AutoCreated.json"),  # Model文件
+        (".", "KR_BattleKeywords.json")  # BattleKeywords文件
     ]
     
     # 第三步：将特殊文件移到列表最前面
@@ -279,6 +279,27 @@ with tempfile.TemporaryDirectory() as temp_dir:
         len_KR = len(KR_text)
         EN_ok = change_len(EN_text, len_KR)
         JP_ok = change_len(JP_text, len_KR)
+        _KR_clean_patch = KR_clean_patch.copy()
+        _LLC_text = LLC_text.copy()
+        _KR_text = KR_text.copy()
+        
+        # 收集需要删除的索引
+        indices_to_remove = []
+        remove_content_kr = []
+        for index, (EN, JP, KR) in enumerate(zip(EN_ok, JP_ok, KR_text)):
+            if EN in EMPTY_TEXT and JP in EMPTY_TEXT and KR in EMPTY_TEXT:
+                indices_to_remove.append(index)
+                remove_content_kr.append(KR)
+        
+        # 从后往前删除，避免索引变化问题
+        for index in reversed(indices_to_remove):
+            EN_ok.pop(index)
+            JP_ok.pop(index)
+            KR_text.pop(index)
+            KR_clean_patch.pop(index)
+            if index < len(LLC_text):
+                LLC_text.pop(index)
+                
         proper = proper_fetcher.match_multiple(KR_text, 'sequential')
         proper = [[proper_data[index] for index in i] for i in proper]
         
@@ -341,11 +362,14 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 ERROR_FILES.append(Path(relative_path) / true_file_name)
                 raise Exception('翻译结果长度不匹配')
             
+            for index, i in enumerate(indices_to_remove):
+                all_translated_texts.insert(i-1,remove_content_kr[index])
+            
             # 应用翻译结果并保存
             output_file_path = final_path / relative_path / true_file_name
             try:
                 with open(output_file_path, 'w', encoding='utf-8') as f:
-                    clean_result_patches = kit.apply_list_patch(KR_clean_patch, all_translated_texts)
+                    clean_result_patches = kit.apply_list_patch(_KR_clean_patch, all_translated_texts)
                     result_patches = kit.apply_filtered_patchs(KR_patch, clean_result_patches, *FILT_CONFIG)
                     result_data = kit.apply_patch([], result_patches)
                     result_data = {'dataList': result_data}

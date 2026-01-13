@@ -1,8 +1,6 @@
-# pyright: reportMissingImports=false
 import translatekit as tkit
-from translatekit import kit
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import json
 import tempfile
 import sys
@@ -52,7 +50,7 @@ def flatten_dict_enhanced(d, parent_key=(), ignore_types=None, max_depth=None):
         
         if isinstance(obj, dict):
             for k, v in obj.items():
-                new_key = current_key + (k,)
+                new_key = current_key + (str(k),)
                 _flatten(v, new_key, depth + 1)
         elif isinstance(obj, (list, tuple)):
             for i, item in enumerate(obj):
@@ -80,14 +78,170 @@ def flatten_dict_enhanced(d, parent_key=(), ignore_types=None, max_depth=None):
     _flatten(d, parent_key)
     return dict(items)
 
+def unflatten_dict_enhanced(original_dict, flat_dict, ignore_types=None):
+    """
+    将扁平化的字典还原为嵌套字典
+    
+    参数:
+        original_dict: 原始字典结构模板，用于确定字典/列表类型
+        flat_dict: 扁平化的字典（键为元组）
+        ignore_types: 要忽略的值的类型列表，与flatten_dict_enhanced中的一致
+    
+    返回:
+        还原后的嵌套字典
+    """
+    # 创建原始结构的深拷贝
+    result = deepcopy(original_dict)
+    
+    def _set_nested(obj, keys, value, original_template, index=0):
+        """
+        递归设置嵌套字典/列表中的值
+        
+        参数:
+            obj: 当前处理的字典或列表
+            keys: 剩余的键序列
+            value: 要设置的值
+            original_template: 原始结构模板中对应的部分
+            index: 当前处理的键索引
+        """
+        if index >= len(keys):
+            return
+        
+        key = keys[index]
+        
+        # 如果是最后一个键，直接设置值
+        if index == len(keys) - 1:
+            # 检查是否需要忽略该值
+            if ignore_types:
+                should_ignore = False
+                for ignore_type in ignore_types:
+                    if isinstance(ignore_type, type):
+                        if isinstance(value, ignore_type):
+                            should_ignore = True
+                            break
+                    else:
+                        if value == ignore_type:
+                            should_ignore = True
+                            break
+                
+                if should_ignore:
+                    return
+            
+            # 根据原始模板确定数据类型
+            if isinstance(obj, dict):
+                # 如果原始模板中该键不存在，使用字符串键
+                if key not in original_template:
+                    # 尝试将整数键转换为字符串
+                    obj[str(key)] = value
+                else:
+                    obj[key] = value
+            elif isinstance(obj, list):
+                # 确保索引在列表范围内
+                while len(obj) <= key:
+                    if isinstance(original_template, list) and len(original_template) > len(obj):
+                        # 使用原始模板中的对应值作为占位符
+                        obj.append(deepcopy(original_template[len(obj)]))
+                    else:
+                        obj.append(None)
+                obj[key] = value
+            return
+        
+        # 如果不是最后一个键，继续递归
+        if isinstance(obj, dict):
+            # 检查原始模板中对应位置的数据类型
+            if key in original_template:
+                next_original = original_template[key]
+            else:
+                # 尝试将整数键转换为字符串
+                str_key = str(key)
+                if str_key in original_template:
+                    next_original = original_template[str_key]
+                    key = str_key  # 使用字符串键
+                else:
+                    # 如果原始模板中没有该键，根据下一个键的类型推断
+                    if index + 1 < len(keys):
+                        next_key = keys[index + 1]
+                        if isinstance(next_key, int):
+                            # 下一个键是整数，可能是列表
+                            next_original = []
+                        else:
+                            # 下一个键是字符串，可能是字典
+                            next_original = {}
+                    else:
+                        next_original = {}
+            
+            # 如果当前键不存在，根据原始模板或下一个键的类型创建
+            if key not in obj:
+                if isinstance(next_original, dict):
+                    obj[key] = {}
+                elif isinstance(next_original, list):
+                    obj[key] = []
+                else:
+                    # 如果下一个键是整数，创建列表
+                    if index + 1 < len(keys) and isinstance(keys[index + 1], int):
+                        obj[key] = []
+                    else:
+                        obj[key] = {}
+            
+            _set_nested(obj[key], keys, value, next_original, index + 1)
+            
+        elif isinstance(obj, list):
+            # 确保索引在列表范围内
+            while len(obj) <= key:
+                if isinstance(original_template, list) and len(original_template) > len(obj):
+                    obj.append(deepcopy(original_template[len(obj)]))
+                else:
+                    # 根据下一个键的类型创建占位符
+                    if index + 1 < len(keys):
+                        next_key = keys[index + 1]
+                        if isinstance(next_key, int):
+                            obj.append([])
+                        else:
+                            obj.append({})
+                    else:
+                        obj.append(None)
+            
+            # 获取原始模板中对应位置的数据类型
+            if isinstance(original_template, list) and key < len(original_template):
+                next_original = original_template[key]
+            else:
+                next_original = {}
+            
+            _set_nested(obj[key], keys, value, next_original, index + 1)
+    
+    # 遍历扁平化字典，设置值
+    for key_tuple, value in flat_dict.items():
+        _set_nested(result, key_tuple, value, original_dict)
+    
+    return result
+
 class ProcesserExit(Exception):
     def __init__(self, exit_type):
         self.exit_type = exit_type
 
+class SimpleMatcher:
+    def __init__(self, patterns: List[str]):
+        self.patterns = patterns
+        
+    def match(self, texts: list) -> List[List[int]]:
+        result = list()
+        for text in texts:
+            result.append([i for i, p in enumerate(self.patterns) if p in text])
+        return result
+    
+    def match_equal(self, texts: list) -> List[int]:
+        result = list()
+        for text in texts:
+            try:
+                result.append(self.patterns.index(text))
+            except ValueError:
+                result.append('')
+        return result
+
 @dataclass
 class RequestConfig:
-    is_skill: bool
-    is_story: bool
+    is_skill: bool = False
+    is_story: bool = False
     enable_proper: bool = True
     enable_role: bool = True
     enable_skill: bool = True
@@ -120,13 +274,14 @@ class PathConfig:
 class MatcherData:
     role_data: Dict[str, Dict]
     affect_data: List[Dict[str, Dict]]
+    proper_data: List[Dict[str, str]]
 
 @dataclass
 class TextMatcher:
-    proper_matcher: kit.ProperNounMatcher
-    role_list: List[str]
-    affect_id_matcher: kit.SimpleMatcher
-    affect_name_matcher: kit.SimpleMatcher
+    proper_matcher: SimpleMatcher
+    role_list: SimpleMatcher
+    affect_id_matcher: SimpleMatcher
+    affect_name_matcher: SimpleMatcher
 
 class RequestTextBuilder:
     def __init__(self, request_text: Dict[str, Dict[str, Dict[Tuple, str]]],
@@ -161,133 +316,37 @@ class RequestTextBuilder:
             统一结构化的请求字典
         """
         # 提取所有文本项
-        text_items = []
+        EN_texts = []
+        KR_texts = []
+        JP_texts = []
         all_proper_terms = {}
         all_affects = {}
         all_models = {}
         
         # 遍历所有翻译项（按ID）
-        for idx, item_id in self.kr_text.items():
+        for idx in self.kr_text.keys():
             # 获取当前ID对应的文本
-            kr_item = self.kr_text.get(item_id, {})
-            en_item = self.en_text.get(item_id, {})
-            jp_item = self.jp_text.get(item_id, {})
+            kr_item = self.kr_text.get(idx, {})
+            en_item = self.en_text.get(idx, {})
+            jp_item = self.jp_text.get(idx, {})
             
             # 合并所有路径的文本（用换行符连接）
-            kr_texts = list(kr_item.values())
-            en_texts = list(en_item.values())
-            jp_texts = list(jp_item.values())
+            kr_texts_item = list(kr_item.values())
+            en_texts_item = list(en_item.values())
+            jp_texts_item = list(jp_item.values())
             
-            # 过滤空文本
-            kr_texts = [t for t in kr_texts if t not in EMPTY_TEXT]
-            en_texts = [t for t in en_texts if t not in EMPTY_TEXT]
-            jp_texts = [t for t in jp_texts if t not in EMPTY_TEXT]
-            
-            if not kr_texts:
-                continue  # 跳过空文本
-                
-            # 合并文本（如果有多个路径的文本）
-            kr_combined = '\n'.join(kr_texts)
-            en_combined = '\n'.join(en_texts) if en_texts else ''
-            jp_combined = '\n'.join(jp_texts) if jp_texts else ''
-            
-            # 提取专有名词
-            proper_refs = []
-            if kr_combined:
-                proper_indices = self.matcher.proper_matcher.match(kr_combined)
-                if proper_indices:
-                    proper_refs = [self.proper_data[i].get('term', '') for i in proper_indices]
-                    # 添加到全局专有名词表
-                    for idx in proper_indices:
-                        proper_item = self.proper_data[idx]
-                        term = proper_item.get('term', '')
-                        if term and term not in all_proper_terms:
-                            all_proper_terms[term] = {
-                                'term': term,
-                                'translation': proper_item.get('translation', ''),
-                                'note': proper_item.get('note', '')
-                            }
-            
-            # 提取状态效果（如果是技能文件）
-            affect_refs = []
-            if self.file_type_info.get('is_skill', False) and kr_combined:
-                # 匹配ID和名称
-                affect_id_indices = self.matcher.affect_id_matcher.match(kr_combined)
-                affect_name_indices = self.matcher.affect_name_matcher.match(kr_combined)
-                affect_indices = list(set(affect_id_indices) | set(affect_name_indices))
-                
-                if affect_indices:
-                    # 获取状态效果数据
-                    for idx in affect_indices:
-                        if idx < len(self.matcher.affect_data):
-                            affect_item = self.matcher.affect_data[idx]
-                            affect_id = affect_item.get('id', '')
-                            if affect_id and affect_id not in all_affects:
-                                all_affects[affect_id] = {
-                                    'id': affect_id,
-                                    'ZH-data': affect_item.get('ZH-data', {}),
-                                    'KR-data': affect_item.get('KR-data', {})
-                                }
-                            affect_refs.append(affect_id)
-            
-            # 提取角色信息（如果是故事文件）
-            model_info = {}
-            if self.file_type_info.get('is_story', False) and kr_combined:
-                # 这里需要从角色数据中提取信息
-                # 简化处理：假设角色信息在role_data中
-                if self.role_data:
-                    # 尝试匹配角色
-                    for role_id, role_info_list in self.role_data.items():
-                        for role_info in role_info_list:
-                            role_name = role_info.get('name', '')
-                            if role_name and role_name in kr_combined:
-                                model_info = {
-                                    'kr': f"{role_info.get('name', '无')} / {role_info.get('desc', '无')}",
-                                    'en': f"{role_info.get('name_en', role_info.get('name', '无'))} / {role_info.get('desc_en', role_info.get('desc', '无'))}",
-                                    'jp': f"{role_info.get('name_jp', role_info.get('name', '无'))} / {role_info.get('desc_jp', role_info.get('desc', '无'))}",
-                                    'zh': f"{role_info.get('name_zh', role_info.get('name', '无'))} / {role_info.get('desc_zh', role_info.get('desc', '无'))}"
-                                }
-                                # 添加到全局角色表
-                                model_key = f"{role_info.get('name', '')}_{role_info.get('desc', '')}"
-                                if model_key not in all_models:
-                                    all_models[model_key] = model_info
-                                break
-            
-            # 构建文本块
-            text_block = {
-                'id': idx + 1,
-                'kr': kr_combined,
-                'en': en_combined,
-                'jp': jp_combined
-            }
-            
-            if proper_refs:
-                text_block['proper_refs'] = proper_refs
-                
-            if affect_refs:
-                text_block['affect_refs'] = affect_refs
-                
-            if model_info:
-                text_block['model'] = model_info
-                
-            text_items.append(text_block)
-        
-        # 构建统一请求结构
-        self.unified_request = {
-            'metadata': {
-                'total_text_blocks': len(text_items),
-                'proper_terms_count': len(all_proper_terms),
-                'affects_count': len(all_affects),
-                'models_count': len(all_models)
-            },
-            'reference': {
-                'proper_terms': list(all_proper_terms.values()) if all_proper_terms else [],
-                'affects': list(all_affects.values()) if all_affects else [],
-                'model_docs': [],  # 需要在FileProcessor中提供
-                'skill_doc': ''  # 需要在FileProcessor中提供
-            },
-            'text_blocks': text_items
-        }
+            for i in range(len(jp_texts_item) - 1, -1, -1):
+                JP = jp_texts_item[i]
+                EN = en_texts_item[i]
+                KR = kr_texts_item[i]
+                if JP in EMPTY_TEXT and EN in EMPTY_TEXT and KR in EMPTY_TEXT:
+                    jp_texts_item.pop(i)
+                    en_texts_item.pop(i)
+                    kr_texts_item.pop(i)
+                        
+            KR_texts.extend(kr_texts_item)
+            EN_texts.extend(en_texts_item)
+            JP_texts.extend(jp_texts_item)
         
         return self.unified_request
     
@@ -313,10 +372,12 @@ class RequestTextBuilder:
 
 class FileProcessor:
     def __init__(self, path_config: PathConfig, matcher: TextMatcher,
+                 request_config: RequestConfig,
                  logger: logging.Logger = logging.getLogger(__name__)):
         self.path_config = path_config
         self.matcher = matcher
         self.logger = logger
+        self.request_config = request_config
 
     def process_file(self):
         self._load_json()
@@ -335,7 +396,7 @@ class FileProcessor:
             "en": self._get_translating_text('en')
         }
         
-        builder = RequestTextBuilder(request_text, self.matcher)
+        builder = RequestTextBuilder(request_text, self.matcher, self.request_config)
         request_text = builder.build()
     
     def _load_json(self):
@@ -418,6 +479,14 @@ class FileProcessor:
             self.is_story = True
         else:
             self.is_story = False
+            
+        if self.path_config.real_name.startswith('Skills_'):
+            self.is_skill = True
+        else:
+            self.is_skill = False
+        
+        self.request_config.is_story = self.is_story
+        self.request_config.is_skill = self.is_skill
             
     def _make_data_index(self):
         if self.is_story:

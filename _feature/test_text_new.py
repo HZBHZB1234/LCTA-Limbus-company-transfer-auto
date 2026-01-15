@@ -285,28 +285,31 @@ class TextMatcher:
 
 class RequestTextBuilder:
     def __init__(self, request_text: Dict[str, Dict[str, Dict[Tuple, str]]],
-                 matcher: TextMatcher, file_type_info: Dict[str, bool],
-                 role_data: Dict[str, List[Dict]], proper_data: List[Dict]):
+                 matcher: TextMatcher, request_config: RequestConfig,
+                 matcher_data: MatcherData):
         """
         初始化请求文本构建器
         
         Args:
-            request_text: 包含en, jp, kr三种语言的文本字典
+            request_text: 包含en, jp, kr三种语言的文本字典，结构为 {lang: {id: {path_tuple: text}}}
             matcher: 文本匹配器，包含专有名词和状态效果匹配器
-            file_type_info: 文件类型信息，包含is_story和is_skill等标志
-            role_data: 角色数据，用于构建角色参考
-            proper_data: 专有名词数据
+            request_config: 请求配置信息信息，包含is_story和is_skill等标志
+            matcher_data: 匹配数据，包含角色数据，专有名词数据，状态效果数据
         """
         self.en_text = request_text['en']
         self.kr_text = request_text['kr']
         self.jp_text = request_text['jp']
         self.matcher = matcher
-        self.file_type_info = file_type_info
-        self.role_data = role_data
-        self.proper_data = proper_data
+        self.request_config = request_config
+        self.role_data = matcher_data.role_data
+        self.proper_data = matcher_data.proper_data
+        self.affect_data = matcher_data.affect_data
         
         # 用于存储构建结果
         self.unified_request = None
+        
+        # 角色信息缓存
+        self.role_model_cache = {}
         
     def build(self) -> Dict[str, Any]:
         """
@@ -315,10 +318,8 @@ class RequestTextBuilder:
         Returns:
             统一结构化的请求字典
         """
-        # 提取所有文本项
-        EN_texts = []
-        KR_texts = []
-        JP_texts = []
+        # 收集所有文本项
+        text_items = []
         all_proper_terms = {}
         all_affects = {}
         all_models = {}
@@ -335,20 +336,162 @@ class RequestTextBuilder:
             en_texts_item = list(en_item.values())
             jp_texts_item = list(jp_item.values())
             
-            for i in range(len(jp_texts_item) - 1, -1, -1):
-                JP = jp_texts_item[i]
-                EN = en_texts_item[i]
-                KR = kr_texts_item[i]
-                if JP in EMPTY_TEXT and EN in EMPTY_TEXT and KR in EMPTY_TEXT:
-                    jp_texts_item.pop(i)
-                    en_texts_item.pop(i)
-                    kr_texts_item.pop(i)
+            # 过滤空文本
+            filtered_texts = []
+            for i in range(len(jp_texts_item)):
+                JP = jp_texts_item[i] if i < len(jp_texts_item) else ''
+                EN = en_texts_item[i] if i < len(en_texts_item) else ''
+                KR = kr_texts_item[i] if i < len(kr_texts_item) else ''
+                if not (JP in EMPTY_TEXT and EN in EMPTY_TEXT and KR in EMPTY_TEXT):
+                    filtered_texts.append({
+                        'jp': JP,
+                        'en': EN,
+                        'kr': KR,
+                        'index': i
+                    })
+            
+            # 为每个非空文本创建文本块
+            for i, text_info in enumerate(filtered_texts):
+                text_block = {
+                    'id': len(text_items) + 1,
+                    'kr': text_info['kr'],
+                    'en': text_info['en'],
+                    'jp': text_info['jp']
+                }
+                
+                # 专有名词匹配
+                proper_matches = self.matcher.proper_matcher.match([text_info['kr']])[0]
+                if proper_matches:
+                    text_block['proper_refs'] = []
+                    for match_idx in proper_matches:
+                        if match_idx < len(self.proper_data):
+                            term_info = self.proper_data[match_idx]
+                            term = term_info.get('term', '')
+                            if term:
+                                text_block['proper_refs'].append(term)
+                                # 添加到全局专有名词
+                                if term not in all_proper_terms:
+                                    all_proper_terms[term] = {
+                                        'term': term,
+                                        'translation': term_info.get('translation', ''),
+                                        'note': term_info.get('note', '')
+                                    }
+                
+                # 状态效果匹配（如果是技能文件）
+                if self.request_config.is_skill and self.affect_data:
+                    affect_id_matches = self.matcher.affect_id_matcher.match([text_info['kr']])[0]
+                    affect_name_matches = self.matcher.affect_name_matcher.match([text_info['kr']])[0]
+                    affect_matches = list(set(affect_id_matches + affect_name_matches))
+                    
+                    if affect_matches:
+                        text_block['affect_refs'] = []
+                        for match_idx in affect_matches:
+                            if match_idx < len(self.affect_data):
+                                affect_info = self.affect_data[match_idx]
+                                affect_id = affect_info.get('id', '')
+                                if affect_id:
+                                    text_block['affect_refs'].append(affect_id)
+                                    # 添加到全局状态效果
+                                    if affect_id not in all_affects:
+                                        all_affects[affect_id] = {
+                                            'id': affect_id,
+                                            'ZH-data': affect_info.get('ZH-data', {}),
+                                            'KR-data': affect_info.get('KR-data', {})
+                                        }
+                
+                # 角色信息（如果是故事文件）
+                if self.request_config.is_story:
+                    # 尝试从role_data中获取角色信息
+                    model_key = str(idx)
+                    if model_key in self.role_model_cache:
+                        model_info = self.role_model_cache[model_key]
+                    else:
+                        # 尝试从role_data中查找
+                        model_info = {}
+                        for lang, lang_data in self.role_data.items():
+                            if str(idx) in lang_data:
+                                model_info[lang] = lang_data[str(idx)]
+                            elif idx in lang_data:  # 尝试不转换idx为字符串的情况
+                                model_info[lang] = lang_data[idx]
                         
-            KR_texts.extend(kr_texts_item)
-            EN_texts.extend(en_texts_item)
-            JP_texts.extend(jp_texts_item)
+                        # 如果没有找到，使用默认值
+                        if not model_info:
+                            model_info = {
+                                'kr': '获取失败',
+                                'en': '获取失败', 
+                                'jp': '获取失败',
+                                'zh': '获取失败'
+                            }
+                        
+                        self.role_model_cache[model_key] = model_info
+                    
+                    text_block['model'] = model_info
+                    
+                    # 添加到全局模型
+                    for lang, info in model_info.items():
+                        if info and info != '获取失败' and info not in all_models:
+                            all_models[info] = info
+                
+                text_items.append(text_block)
+        
+        # 构建统一的请求结构
+        self.unified_request = {
+            'metadata': {
+                'total_text_blocks': len(text_items),
+                'proper_terms_count': len(all_proper_terms),
+                'affects_count': len(all_affects),
+                'models_count': len(all_models)
+            },
+            'reference': {
+                'proper_terms': list(all_proper_terms.values()) if all_proper_terms else [],
+                'affects': list(all_affects.values()) if all_affects else [],
+                'model_docs': self._get_role_docs(),
+                'skill_doc': self._get_skill_doc()
+            },
+            'text_blocks': text_items
+        }
         
         return self.unified_request
+    
+    def _get_role_docs(self) -> List[str]:
+        """获取角色说话风格参考文档"""
+        if not self.request_config.is_story:
+            return []
+        
+        # 从role_data中提取角色ID并生成文档
+        role_docs = []
+        kr_roles = self.role_data.get('kr', {})
+        
+        for role_id, role_info in kr_roles.items():
+            if role_info and role_info != '获取失败':
+                # 尝试从translate_doc中获取角色风格
+                try:
+                    # 检查是否有对应的角色
+                    if hasattr(translate_doc, 'RLOE_COMPARE') and role_id in translate_doc.RLOE_COMPARE:
+                        role_name = translate_doc.RLOE_COMPARE[role_id]
+                        if hasattr(translate_doc, 'ROLE_STYLE') and role_name in translate_doc.ROLE_STYLE:
+                            role_style = translate_doc.ROLE_STYLE[role_name]
+                            role_doc = f"角色: {role_style.get('角色', role_name)}, " \
+                                       f"语言风格: {role_style.get('语言风格', '无特殊说明')}, " \
+                                       f"称呼习惯: {role_style.get('称呼习惯', '无特殊说明')}"
+                            role_docs.append(role_doc)
+                except Exception as e:
+                    logger.warning(f"获取角色风格时出现错误: {e}")
+                    # 退回到基本格式
+                    role_doc = f"角色ID: {role_id}, 描述: {role_info}"
+                    role_docs.append(role_doc)
+        
+        return role_docs
+    
+    def _get_skill_doc(self) -> str:
+        """获取技能翻译指南"""
+        if self.request_config.is_skill:
+            try:
+                return translate_doc.SKILLL_DOC
+            except Exception as e:
+                logger.warning(f"获取技能翻译指南时出现错误: {e}")
+                return "技能翻译指南：请保持技能名称和描述的一致性，注意状态效果的准确翻译。"
+        return ""
     
     def get_request_text(self, is_text_format: bool = False) -> str:
         """

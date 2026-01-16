@@ -5,20 +5,25 @@
 #include <direct.h>
 #include <shlwapi.h>
 #include <shellapi.h>
+#include <wincrypt.h>
 
 // 函数声明
 int setup_environment();
 int find_python_executable(char* python_path, size_t buffer_size);
-int verify_python_environment(const char* python_path);
+int verify_python_hash(const char* python_path);
 int run_python_script(const char* python_path, const char* script_path);
 void show_error_message(const char* title, const char* message);
 void set_steam_argv(int argc, char* argv[], int launcher_index);
+int calculate_file_hash(const char* file_path, char* hash_hex, size_t hex_size);
+int verify_embedded_python();
+
+#define EXPECTED_PYTHON_HASH "0FE699E2CB61A2CBE449A34EEE56BD6175FBEB6EE7DC1261B0C338574C010D2B"
 
 int main(int argc, char* argv[]) {
     printf("Starting LCTA Launcher...\n");
     
     // 检查命令行参数
-    int show_console = 0;
+    int show_console = 1;
     char script_name[MAX_PATH] = "code\\start_webui.py";
     
     int launcher_index = -1;
@@ -31,7 +36,7 @@ int main(int argc, char* argv[]) {
             break;
         }
     }
-    show_console = 1;  // 调试模式下显示控制台窗口
+    
     // 根据参数决定是否隐藏控制台窗口
     HWND console = GetConsoleWindow();
     if (!show_console) {
@@ -64,11 +69,11 @@ int main(int argc, char* argv[]) {
     
     printf("Python found at: %s\n", python_path);
     
-    // 3. 验证Python环境
-    if (!verify_python_environment(python_path)) {
-        show_error_message("Python Environment Error",
-            "Python environment verification failed.\n\n"
-            "The embedded Python may be corrupted.\n"
+    // 3. 通过哈希验证Python可执行文件
+    if (!verify_python_hash(python_path)) {
+        show_error_message("Python Integrity Error",
+            "Python executable integrity verification failed.\n\n"
+            "The embedded Python may be corrupted or modified.\n"
             "Try re-downloading the application.");
         return 1;
     }
@@ -217,58 +222,106 @@ int find_python_executable(char* python_path, size_t buffer_size) {
     return 0;
 }
 
-// 验证Python环境
-int verify_python_environment(const char* python_path) {
-    printf("Verifying Python environment...\n");
+// 通过哈希验证Python可执行文件
+int verify_python_hash(const char* python_path) {
+    printf("Verifying Python executable integrity via SHA256 hash...\n");
     
-    STARTUPINFO si;
-    PROCESS_INFORMATION pi;
-    
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_SHOW;  // 修改为显示控制台窗口
-    
-    ZeroMemory(&pi, sizeof(pi));
-    
-    // 构建命令行 - 使用临时文件来捕获输出
-    char command_line[1024];
-    snprintf(command_line, sizeof(command_line),
-             "\"%s\" -c \"import sys; print('Python', sys.version); import site; print('Site packages:', site.getsitepackages());\"",
-             python_path);
-    
-    printf("Verification command line: %s\n", command_line);
-    
-    // 创建进程进行验证
-    if (!CreateProcess(NULL,           // 不使用模块名
-                       command_line,   // 命令行
-                       NULL,           // 进程句柄不可继承
-                       NULL,           // 线程句柄不可继承
-                       FALSE,          // 不继承句柄
-                       0,              // 移除CREATE_NO_WINDOW标志
-                       NULL,           // 使用父进程环境
-                       NULL,           // 使用父进程目录
-                       &si,            // 启动信息
-                       &pi)) {         // 进程信息
-        printf("CreateProcess failed (%lu)\n", GetLastError());
+    char calculated_hash[65]; // SHA256哈希是64个字符 + 空终止符
+    if (!calculate_file_hash(python_path, calculated_hash, sizeof(calculated_hash))) {
+        printf("Failed to calculate file hash\n");
         return 0;
     }
     
-    // 等待进程结束
-    WaitForSingleObject(pi.hProcess, 10000); // 等待最多10秒
+    printf("Calculated hash: %s\n", calculated_hash);
+    printf("Expected hash: %s\n", EXPECTED_PYTHON_HASH);
     
-    // 获取退出代码
-    DWORD exit_code;
-    GetExitCodeProcess(pi.hProcess, &exit_code);
-    
-    // 关闭句柄
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    
-    if (exit_code != 0) {
-        printf("Python verification failed with code: %lu\n", exit_code);
+    // 比较哈希值
+    if (strcmp(calculated_hash, EXPECTED_PYTHON_HASH) != 0) {
+        printf("Hash mismatch! File may be corrupted or modified.\n");
         return 0;
     }
+    
+    printf("Python executable hash verification successful\n");
+    return 1;
+}
+
+// 计算文件的SHA256哈希值
+int calculate_file_hash(const char* file_path, char* hash_hex, size_t hex_size) {
+    HCRYPTPROV hProv = 0;
+    HCRYPTHASH hHash = 0;
+    HANDLE hFile = NULL;
+    BYTE buffer[4096];
+    DWORD bytesRead = 0;
+    BYTE hash[32]; // SHA256哈希是32字节
+    DWORD hashLen = 32;
+    
+    // 打开文件
+    hFile = CreateFile(file_path, 
+                       GENERIC_READ, 
+                       FILE_SHARE_READ, 
+                       NULL, 
+                       OPEN_EXISTING, 
+                       FILE_FLAG_SEQUENTIAL_SCAN, 
+                       NULL);
+    
+    if (hFile == INVALID_HANDLE_VALUE) {
+        printf("Failed to open file: %s (Error: %lu)\n", file_path, GetLastError());
+        return 0;
+    }
+    
+    // 获取加密服务提供程序
+    if (!CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
+        printf("CryptAcquireContext failed (Error: %lu)\n", GetLastError());
+        CloseHandle(hFile);
+        return 0;
+    }
+    
+    // 创建哈希对象
+    if (!CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash)) {
+        printf("CryptCreateHash failed (Error: %lu)\n", GetLastError());
+        CryptReleaseContext(hProv, 0);
+        CloseHandle(hFile);
+        return 0;
+    }
+    
+    // 读取文件并计算哈希
+    while (ReadFile(hFile, buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
+        if (!CryptHashData(hHash, buffer, bytesRead, 0)) {
+            printf("CryptHashData failed (Error: %lu)\n", GetLastError());
+            CryptDestroyHash(hHash);
+            CryptReleaseContext(hProv, 0);
+            CloseHandle(hFile);
+            return 0;
+        }
+    }
+    
+    // 获取哈希值
+    if (!CryptGetHashParam(hHash, HP_HASHVAL, hash, &hashLen, 0)) {
+        printf("CryptGetHashParam failed (Error: %lu)\n", GetLastError());
+        CryptDestroyHash(hHash);
+        CryptReleaseContext(hProv, 0);
+        CloseHandle(hFile);
+        return 0;
+    }
+    
+    // 将哈希转换为十六进制字符串
+    if (hex_size < 65) { // SHA256需要64个字符 + 空终止符
+        printf("Buffer too small for hex string\n");
+        CryptDestroyHash(hHash);
+        CryptReleaseContext(hProv, 0);
+        CloseHandle(hFile);
+        return 0;
+    }
+    
+    for (DWORD i = 0; i < hashLen; i++) {
+        sprintf_s(&hash_hex[i * 2], hex_size - (i * 2), "%02x", hash[i]);
+    }
+    hash_hex[64] = '\0'; // 确保字符串正确终止
+    
+    // 清理资源
+    CryptDestroyHash(hHash);
+    CryptReleaseContext(hProv, 0);
+    CloseHandle(hFile);
     
     return 1;
 }

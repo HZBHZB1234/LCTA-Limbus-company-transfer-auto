@@ -20,7 +20,7 @@ project_root = Path(__file__).parent.parent
 print(project_root)
 sys.path.insert(0, str(project_root))
 
-import _feature.translate_doc as translate_doc
+import translateFunc.translate_doc as translate_doc
 
 EMPTY_DATA = [{'dataList': []}, {}, []]
 EMPTY_DATA_LIST = [[], [{}]]

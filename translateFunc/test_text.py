@@ -21,8 +21,8 @@ sys.path.insert(0, str(project_root))
 
 import webutils.functions as functions
 import webutils.load as load_util
-import _feature.translate_doc as translate_doc
-import _feature.test_request as test_request
+import translateFunc.translate_doc as translate_doc
+import translateFunc.test_request as test_request
 
 config = load_util.load_config()
 game_path = config['game_path']

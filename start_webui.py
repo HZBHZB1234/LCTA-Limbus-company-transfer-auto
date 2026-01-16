@@ -1,5 +1,10 @@
+__version__ = "4.0.4"
+
 import sys
+import os
 from pathlib import Path
+
+os.environ["__version__"] = __version__
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent
@@ -24,7 +29,6 @@ def start_webui():
     """启动PyWebGUI界面"""
     try:
         # 将资源路径添加到环境变量，供app.py使用
-        import os
         os.environ['path_'] = str(get_resource_path())
         # 判断是否为打包环境
         is_frozen = hasattr(sys, 'frozen') or hasattr(sys, '_MEIPASS')
@@ -45,7 +49,6 @@ def start_webui():
 def start_launcher():
     """启动Launcher界面"""
     try:
-        import os
         os.environ['path_'] = str(get_resource_path())
         os.environ['steam_argv'] = ' '.join(sys.argv[1:].remove('-launcher'))
         # 判断是否为打包环境

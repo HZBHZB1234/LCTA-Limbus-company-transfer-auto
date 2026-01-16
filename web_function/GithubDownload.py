@@ -3,6 +3,7 @@ import warnings
 import time
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
+from copy import deepcopy
 
 
 @dataclass
@@ -13,6 +14,7 @@ class ReleaseAsset:
     download_url: str
     content_type: str
     download_count: int
+    proxys: 'ProxyManager'
     
     @property
     def formatted_size(self) -> str:
@@ -41,6 +43,7 @@ class ReleaseInfo:
     prerelease: bool
     draft: bool
     assets: List[ReleaseAsset]
+    proxys: 'ProxyManager'
     
     def get_asset_by_name(self, name: str) -> Optional[ReleaseAsset]:
         """通过名称查找资源文件"""
@@ -334,13 +337,21 @@ class GitHubReleaseFetcher:
         """解析GitHub API返回的release数据"""
         # 解析资源文件
         assets = []
+        proxys = deepcopy(self.proxy_manager)
         for asset in release_data.get('assets', []):
+            true_download_url = asset['browser_download_url']
+            true_download_url = [true_download_url[i:] for i in range(len(true_download_url))
+                                 if true_download_url[i:].startswith('https://github.com')]
+            if not true_download_url:
+                true_download_url = [asset['browser_download_url']]
+            true_download_url = true_download_url[0]
             assets.append(ReleaseAsset(
                 name=asset['name'],
                 size=asset['size'],
-                download_url=asset['browser_download_url'],
+                download_url=true_download_url,
                 content_type=asset.get('content_type', 'application/octet-stream'),
-                download_count=asset.get('download_count', 0)
+                download_count=asset.get('download_count', 0),
+                proxys=proxys
             ))
         
         # 创建ReleaseInfo对象
@@ -353,7 +364,8 @@ class GitHubReleaseFetcher:
             published_at=release_data.get('published_at', ''),
             prerelease=release_data.get('prerelease', False),
             draft=release_data.get('draft', False),
-            assets=assets
+            assets=assets,
+            proxys=proxys
         )
 
 

@@ -8,10 +8,12 @@ import time
 import zipfile
 import hashlib
 from pathlib import Path
-from typing import Optional, Set
+from typing import TYPE_CHECKING, Optional, Set
 import shutil
 import base64
 from .log_manage import LogManager
+if TYPE_CHECKING:
+    from web_function.GithubDownload import ReleaseAsset
 
 def zip_folder(folder_path, output_path, logger_:LogManager=None):
     try:
@@ -141,6 +143,118 @@ def download_with(url, save_path, size=0, chunk_size=1024*100, logger_: LogManag
         logger_.log(f"\n下载失败: {e}")
         logger_.log_error(e)
         return False
+
+def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100, 
+                        logger_: LogManager=None, modal_id=None, 
+                        progress_=[0,100], use_proxy=True):
+    """
+    下载ReleaseAsset中的文件，支持代理轮换重试
+    
+    Args:
+        asset: ReleaseAsset对象，包含下载URL和代理管理器
+        save_path: 保存路径
+        chunk_size: 分块大小
+        logger_: 日志管理器
+        modal_id: 模态窗口ID
+        progress_: 进度范围
+        use_proxy: 是否使用代理
+    Returns:
+        bool: 下载是否成功
+    """
+    if not asset:
+        if logger_:
+            logger_.log("ReleaseAsset为空，无法下载")
+        return False
+    
+    # 确保保存目录存在
+    save_dir = os.path.dirname(save_path)
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+    
+    if not use_proxy or not hasattr(asset, 'proxys') or not asset.proxys:
+        # 不使用代理，直接下载
+        if logger_:
+            logger_.log(f"不使用代理，直接下载: {asset.name}")
+        return download_with(
+            asset.download_url, save_path, 
+            size=asset.size, chunk_size=chunk_size,
+            logger_=logger_, modal_id=modal_id, 
+            progress_=progress_
+        )
+    
+    # 使用代理管理器
+    proxy_manager = asset.proxys
+    
+    # 准备尝试的URL列表：代理URL + 原始URL
+    urls_to_try = []
+    
+    # 如果有代理，先添加代理URL
+    if hasattr(proxy_manager, 'proxies') and proxy_manager.proxies:
+        for proxy in proxy_manager.proxies:
+            # 构建代理URL
+            proxy_url = proxy.rstrip('/') + '/' + asset.download_url.lstrip('/')
+            urls_to_try.append(proxy_url)
+    
+    # 最后添加原始URL作为备选
+    urls_to_try.append(asset.download_url)
+    
+    if logger_:
+        logger_.log(f"开始下载 {asset.name} (大小: {asset.size} bytes)")
+        logger_.log(f"将尝试 {len(urls_to_try)} 个URL")
+    
+    # 尝试所有URL直到成功
+    for i, url in enumerate(urls_to_try):
+        try:
+            if logger_:
+                if i < len(urls_to_try) - 1:
+                    logger_.log(f"尝试下载 (代理 {i+1}/{len(urls_to_try)-1}): {url}")
+                else:
+                    logger_.log(f"尝试直接下载 (不使用代理): {url}")
+            
+            # 使用download_with函数下载
+            success = download_with(
+                url, save_path, 
+                size=asset.size, chunk_size=chunk_size,
+                logger_=logger_, modal_id=modal_id, 
+                progress_=progress_,
+                headers={
+                    'Accept': 'application/octet-stream',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            )
+            
+            if success:
+                # 验证文件大小
+                if os.path.exists(save_path):
+                    actual_size = os.path.getsize(save_path)
+                    if asset.size > 0 and actual_size != asset.size:
+                        if logger_:
+                            logger_.log(f"警告: 文件大小不匹配。期望: {asset.size}, 实际: {actual_size}")
+                        # 文件大小不匹配，继续尝试下一个URL
+                        continue
+                    
+                    if logger_:
+                        if i < len(urls_to_try) - 1:
+                            logger_.log(f"下载成功! 使用代理 {i+1}/{len(urls_to_try)-1}")
+                        else:
+                            logger_.log("下载成功! 使用直接连接")
+                    return True
+                else:
+                    if logger_:
+                        logger_.log(f"文件未创建: {save_path}")
+            
+        except Exception as e:
+            if logger_:
+                logger_.log(f"下载失败 (URL {i+1}/{len(urls_to_try)}): {e}")
+                logger_.log_error(e)
+            
+            # 短暂延迟后重试
+            time.sleep(0.5)
+    
+    # 所有尝试都失败
+    if logger_:
+        logger_.log(f"所有下载尝试都失败: {asset.name}")
+    return False
 
 def calculate_sha256(file_path, logger_: LogManager=None):
     """

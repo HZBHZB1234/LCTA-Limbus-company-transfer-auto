@@ -241,6 +241,8 @@ class RequestConfig:
     enable_proper: bool = True
     enable_role: bool = True
     enable_skill: bool = True
+    max_length: int = 20000  # 最大允许长度
+    is_text_format: bool = False  # 是否使用文本格式
 
 @dataclass
 class PathConfig:
@@ -310,6 +312,7 @@ class RequestTextBuilder:
         
         # 用于存储构建结果
         self.unified_request = None
+        self.split_requests = []
         
         # 角色信息缓存
         self.role_model_cache = {}
@@ -454,7 +457,105 @@ class RequestTextBuilder:
             'text_blocks': text_items
         }
         
+        # 根据长度限制进行分割
+        self._split_by_length()
+        
         return self.unified_request
+    
+    def _split_by_length(self):
+        """根据最大长度限制分割请求"""
+        if self.unified_request is None:
+            return
+        
+        max_length = self.request_config.max_length
+        
+        # 生成请求文本并检查长度
+        request_text = self._get_request_text(self.unified_request)
+        
+        # 如果文本长度不超过限制，直接返回
+        if len(request_text) <= max_length:
+            self.split_requests = [self.unified_request]
+            return
+        
+        # 获取文本块
+        text_blocks = self.unified_request.get('text_blocks', [])
+        total_blocks = len(text_blocks)
+        
+        # 尝试不同的分割方式
+        for num_parts in range(2, min(10, total_blocks) + 1):  # 最多尝试分割成10部分
+            # 计算每部分的大小
+            part_size = total_blocks // num_parts
+            remainder = total_blocks % num_parts
+            
+            parts = []
+            start_idx = 0
+            
+            for i in range(num_parts):
+                # 计算当前部分的结束索引
+                end_idx = start_idx + part_size + (1 if i < remainder else 0)
+                
+                # 提取当前部分的文本块
+                part_text_blocks = text_blocks[start_idx:end_idx]
+                
+                # 创建部分请求，包含完整的参考信息
+                part_request = {
+                    'metadata': {
+                        'total_text_blocks': len(part_text_blocks),
+                        'proper_terms_count': len(self.unified_request['reference']['proper_terms']),
+                        'affects_count': len(self.unified_request['reference']['affects']),
+                        'models_count': len(self.unified_request['reference']['model_docs'])
+                    },
+                    'reference': self.unified_request['reference'],  # 完整的参考信息
+                    'text_blocks': part_text_blocks
+                }
+                
+                parts.append(part_request)
+                start_idx = end_idx
+            
+            # 检查所有部分是否都满足长度限制
+            all_valid = True
+            for part in parts:
+                part_text = self._get_request_text(part)
+                if len(part_text) > max_length:
+                    all_valid = False
+                    break
+            
+            if all_valid:
+                logger.info(f"文本过长，已分割成 {num_parts} 部分")
+                self.split_requests = parts
+                return
+        
+        # 如果无法分割成满足条件的部分，尝试更激进的分割
+        logger.warning(f"警告：文本过长且无法合理分割，尝试强制分割")
+        
+        # 简单按固定大小分割
+        parts = []
+        part_size = max(1, total_blocks // 5)  # 固定分成5部分
+        for i in range(0, total_blocks, part_size):
+            end_idx = min(i + part_size, total_blocks)
+            part_text_blocks = text_blocks[i:end_idx]
+            
+            part_request = {
+                'metadata': {
+                    'total_text_blocks': len(part_text_blocks),
+                    'proper_terms_count': len(self.unified_request['reference']['proper_terms']),
+                    'affects_count': len(self.unified_request['reference']['affects']),
+                    'models_count': len(self.unified_request['reference']['model_docs'])
+                },
+                'reference': self.unified_request['reference'],  # 完整的参考信息
+                'text_blocks': part_text_blocks
+            }
+            
+            parts.append(part_request)
+        
+        self.split_requests = parts
+    
+    def _get_request_text(self, request_data: Dict[str, Any]) -> str:
+        """获取请求文本（根据配置返回文本或JSON格式）"""
+        if self.request_config.is_text_format:
+            return self._make_text(request_data)
+        else:
+            return json.dumps(request_data, indent=2, ensure_ascii=False)
     
     def _get_role_docs(self) -> List[str]:
         """获取角色说话风格参考文档"""
@@ -625,12 +726,12 @@ class RequestTextBuilder:
         
         return "\n".join(result_lines)
     
-    def get_request_text(self, is_text_format: bool = False) -> str:
+    def get_request_text(self, is_text_format: Optional[bool] = None) -> str:
         """
         获取请求文本（JSON或纯文本格式）
         
         Args:
-            is_text_format: 是否返回纯文本格式
+            is_text_format: 是否返回纯文本格式，None则使用request_config中的配置
         
         Returns:
             格式化后的请求文本
@@ -638,12 +739,48 @@ class RequestTextBuilder:
         if self.unified_request is None:
             self.build()
             
-        if is_text_format:
-            # 返回纯文本格式
-            return self._make_text(self.unified_request)
+        # 确定使用哪种格式
+        if is_text_format is None:
+            is_text_format = self.request_config.is_text_format
+        
+        # 如果没有分割，返回完整的请求文本
+        if len(self.split_requests) <= 1:
+            if is_text_format:
+                return self._make_text(self.unified_request)
+            else:
+                return json.dumps(self.unified_request, indent=2, ensure_ascii=False)
         else:
-            # 返回JSON格式
-            return json.dumps(self.unified_request, indent=2, ensure_ascii=False)
+            # 返回第一个分割部分的请求文本
+            if is_text_format:
+                return self._make_text(self.split_requests[0])
+            else:
+                return json.dumps(self.split_requests[0], indent=2, ensure_ascii=False)
+    
+    def get_split_request_texts(self, is_text_format: Optional[bool] = None) -> List[str]:
+        """
+        获取所有分割部分的请求文本列表
+        
+        Args:
+            is_text_format: 是否返回纯文本格式，None则使用request_config中的配置
+        
+        Returns:
+            分割后的请求文本列表
+        """
+        if self.unified_request is None:
+            self.build()
+            
+        # 确定使用哪种格式
+        if is_text_format is None:
+            is_text_format = self.request_config.is_text_format
+        
+        result = []
+        for request in self.split_requests:
+            if is_text_format:
+                result.append(self._make_text(request))
+            else:
+                result.append(json.dumps(request, indent=2, ensure_ascii=False))
+        
+        return result
         
 class FileProcessor:
     def __init__(self, path_config: PathConfig, matcher: TextMatcher,
@@ -679,7 +816,8 @@ class FileProcessor:
                                      self.request_config, self.matcher_data)
         request_text = builder.build()
         
-        request_text = builder.get_request_text(is_text_format=True)
+        # 获取所有分割部分的请求文本
+        request_texts = builder.get_split_request_texts()
         
         pass
     

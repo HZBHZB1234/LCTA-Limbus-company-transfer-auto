@@ -1,4 +1,3 @@
-import translatekit as tkit
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 import json
@@ -7,7 +6,6 @@ import sys
 import shutil
 import os
 import warnings
-import jsonpointer
 import logging
 from dataclasses import dataclass, field
 from copy import deepcopy
@@ -728,36 +726,6 @@ class RequestTextBuilder:
     
     def get_request_text(self, is_text_format: Optional[bool] = None) -> str:
         """
-        获取请求文本（JSON或纯文本格式）
-        
-        Args:
-            is_text_format: 是否返回纯文本格式，None则使用request_config中的配置
-        
-        Returns:
-            格式化后的请求文本
-        """
-        if self.unified_request is None:
-            self.build()
-            
-        # 确定使用哪种格式
-        if is_text_format is None:
-            is_text_format = self.request_config.is_text_format
-        
-        # 如果没有分割，返回完整的请求文本
-        if len(self.split_requests) <= 1:
-            if is_text_format:
-                return self._make_text(self.unified_request)
-            else:
-                return json.dumps(self.unified_request, indent=2, ensure_ascii=False)
-        else:
-            # 返回第一个分割部分的请求文本
-            if is_text_format:
-                return self._make_text(self.split_requests[0])
-            else:
-                return json.dumps(self.split_requests[0], indent=2, ensure_ascii=False)
-    
-    def get_split_request_texts(self, is_text_format: Optional[bool] = None) -> List[str]:
-        """
         获取所有分割部分的请求文本列表
         
         Args:
@@ -781,7 +749,50 @@ class RequestTextBuilder:
                 result.append(json.dumps(request, indent=2, ensure_ascii=False))
         
         return result
+    
+class SimpleRequestTextBuilder():
+    def __init__(self, request_text: Dict[str, Dict[str, Dict[Tuple, str]]]):
+        """对于非LLM翻译器，无需添加描述和要求，直接返回需要翻译的文本列表"""
+        self.request_text = request_text
+    
+    def build(self) -> List:
+        """构建请求文本，返回需要翻译的文本列表"""
+        EN_result = []
+        KR_result = []
+        JP_result = []
         
+        # 获取所有语言的文本数据
+        kr_texts = self.request_text.get('kr', {})
+        jp_texts = self.request_text.get('jp', {})
+        en_texts = self.request_text.get('en', {})
+        
+        # 遍历所有ID，将各个语言的文本合并到结果列表中
+        for idx in kr_texts.keys():
+            kr_item = kr_texts.get(idx, {})
+            jp_item = jp_texts.get(idx, {})
+            en_item = en_texts.get(idx, {})
+            
+            # 提取所有文本内容
+            for path_tuple, text in kr_item.items():
+                KR_result.append(text)
+            for path_tuple, text in jp_item.items():
+                JP_result.append(text)
+            for path_tuple, text in en_item.items():
+                EN_result.append(text)
+        
+        empty_texts: List[int] = []
+        for index, KR, EN,JP in zip(range(len(KR_result)), KR_result, EN_result,JP_result):
+            if KR in EMPTY_TEXT and EN in EMPTY_TEXT and JP in EMPTY_TEXT:
+                empty_texts.append(index)
+        
+        self.EN_texts = EN_result
+        self.KR_texts = KR_result
+        self.JP_texts = JP_result
+        
+        self.KR_build = [i for idx, i in enumerate(KR_result) if index not in empty_texts]
+        self.EN_build = [i for idx, i in enumerate(EN_result) if index not in empty_texts]
+        self.JP_build = [i for idx, i in enumerate(JP_result) if index not in empty_texts]
+
 class FileProcessor:
     def __init__(self, path_config: PathConfig, matcher: TextMatcher,
                  request_config: RequestConfig = RequestConfig(),

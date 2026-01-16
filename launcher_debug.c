@@ -17,7 +17,7 @@ void set_steam_argv(int argc, char* argv[], int launcher_index);
 int calculate_file_hash(const char* file_path, char* hash_hex, size_t hex_size);
 int verify_embedded_python();
 
-#define EXPECTED_PYTHON_HASH "0FE699E2CB61A2CBE449A34EEE56BD6175FBEB6EE7DC1261B0C338574C010D2B"
+#define EXPECTED_PYTHON_HASH "0fe699e2cb61a2cbe449a34eee56bd6175fbeb6ee7dc1261b0c338574c010d2b"
 
 int main(int argc, char* argv[]) {
     printf("Starting LCTA Launcher...\n");

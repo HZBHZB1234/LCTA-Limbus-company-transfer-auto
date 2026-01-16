@@ -9,7 +9,7 @@ import os
 import warnings
 import jsonpointer
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from copy import deepcopy
 
 logging.basicConfig(level=logging.DEBUG)
@@ -20,11 +20,7 @@ project_root = Path(__file__).parent.parent
 print(project_root)
 sys.path.insert(0, str(project_root))
 
-from web_function.GithubDownload import asset
-import webutils.functions as functions
-import webutils.load as load_util
 import _feature.translate_doc as translate_doc
-import _feature.test_request as test_request
 
 EMPTY_DATA = [{'dataList': []}, {}, []]
 EMPTY_DATA_LIST = [[], [{}]]
@@ -248,40 +244,47 @@ class RequestConfig:
 
 @dataclass
 class PathConfig:
+    """
+    必需要提供以下参数  
+      game_path  
+      target_path  
+      KR_path  
+    """
     game_path: Path
-    llc_base_path: Path
     target_path: Path
-    assets_path: Path
-    EN_path: Path
     KR_path: Path
-    JP_path: Path
-    LLC_path: Path
-    rel_path: Path
-    real_name: str
-    target_file: Path
+    llc_base_path: Path = Path()
+    assets_path: Path = Path()
+    EN_path: Path = Path()
+    JP_path: Path = Path()
+    LLC_path: Path = Path()
+    rel_path: Path = Path()
+    rel_dir: Path = Path()
+    real_name: str = Path()
+    target_file: Path = Path()
     def __post_init__(self):
         self.assets_path = self.game_path / "LimbusCompany_Data" / "Assets" / "Resources_moved" / "Localize"
         self.llc_base_path = self.game_path / "LimbusCompany_Data" / "lang" / "LLC_zh-CN"
-        self.rel_path = self.KR_path.relative_to(self.assets_path)
+        self.rel_path = Path(*self.KR_path.relative_to(self.assets_path).parts[1:])
         self.real_name = self.rel_path.name[3:]
-        self.rel_path = self.rel_path.parent
-        self.EN_path = self.assets_path / "en" / self.rel_path / f"EN_{self.real_name}"
-        self.JP_path = self.assets_path / "jp" / self.rel_path / f"JP_{self.real_name}"
-        self.llc_path = self.llc_base_path / self.rel_path / self.real_name
-        self.target_file = self.target_path / self.rel_path / self.real_name
+        self.rel_dir = self.rel_path.parent
+        self.EN_path = self.assets_path / "en" / self.rel_dir / f"EN_{self.real_name}"
+        self.JP_path = self.assets_path / "jp" / self.rel_dir / f"JP_{self.real_name}"
+        self.LLC_path = self.llc_base_path / self.rel_dir / self.real_name
+        self.target_file = self.target_path / self.rel_dir / self.real_name
 
 @dataclass
 class MatcherData:
-    role_data: Dict[str, Dict]
-    affect_data: List[Dict[str, Dict]]
-    proper_data: List[Dict[str, str]]
+    role_data: Dict[str, Dict] = field(default_factory=dict)
+    affect_data: List[Dict[str, Dict]] = field(default_factory=list)
+    proper_data: List[Dict[str, str]] = field(default_factory=list)
 
 @dataclass
 class TextMatcher:
-    proper_matcher: SimpleMatcher
-    role_list: SimpleMatcher
-    affect_id_matcher: SimpleMatcher
-    affect_name_matcher: SimpleMatcher
+    proper_matcher: SimpleMatcher = SimpleMatcher([])
+    role_list: SimpleMatcher = SimpleMatcher([])
+    affect_id_matcher: SimpleMatcher = SimpleMatcher([])
+    affect_name_matcher: SimpleMatcher = SimpleMatcher([])
 
 class RequestTextBuilder:
     def __init__(self, request_text: Dict[str, Dict[str, Dict[Tuple, str]]],
@@ -293,7 +296,7 @@ class RequestTextBuilder:
         Args:
             request_text: 包含en, jp, kr三种语言的文本字典，结构为 {lang: {id: {path_tuple: text}}}
             matcher: 文本匹配器，包含专有名词和状态效果匹配器
-            request_config: 请求配置信息信息，包含is_story和is_skill等标志
+            request_config: 请求配置信息，包含is_story和is_skill等标志
             matcher_data: 匹配数据，包含角色数据，专有名词数据，状态效果数据
         """
         self.en_text = request_text['en']
@@ -493,6 +496,135 @@ class RequestTextBuilder:
                 return "技能翻译指南：请保持技能名称和描述的一致性，注意状态效果的准确翻译。"
         return ""
     
+    def _escape_text(self, text: str) -> str:
+        """转义文本中的特殊字符，方便LLM理解"""
+        if not isinstance(text, str):
+            return text
+        # 转义特殊字符
+        escape_map = {
+            '\n': '\\n',
+            '\t': '\\t',
+            '\r': '\\r',
+            '\"': '\\"',
+            '\'': '\\\'',
+            '\\': '\\\\',
+            '---': r'\-\-\-',
+        }
+        result = text
+        for old, new in escape_map.items():
+            result = result.replace(old, new)
+        return result
+    
+    def _format_section(self, title: str, content_lines: List[str], level: int = 1) -> List[str]:
+        """格式化一个区块"""
+        indent = "  " * (level - 1)
+        section_lines = []
+        section_lines.append(f"\n{indent}【{title}】")
+        section_lines.extend(content_lines)
+        return section_lines
+    
+    def _make_text(self, texts: Dict[str, Any]) -> str:
+        """
+        将统一结构的请求转换为纯文本格式，用于翻译请求
+        
+        Args:
+            texts: 统一结构化的请求字典
+        
+        Returns:
+            格式化后的纯文本字符串
+        """
+        result_lines = []
+        
+        # 添加元数据信息
+        metadata = texts.get('metadata', {})
+        result_lines.append("【翻译请求元数据】")
+        result_lines.append(f"文本块总数: {metadata.get('total_text_blocks', 0)}")
+        result_lines.append(f"专有名词数: {metadata.get('proper_terms_count', 0)}")
+        result_lines.append(f"状态效果数: {metadata.get('affects_count', 0)}")
+        result_lines.append(f"角色信息数: {metadata.get('models_count', 0)}")
+        
+        # 添加参考信息部分
+        reference = texts.get('reference', {})
+        
+        # 专有名词参考
+        if reference.get('proper_terms'):
+            result_lines.extend(self._format_section("专有名词术语表", [
+                f"{i+1}. {self._escape_text(item.get('term', ''))} → {self._escape_text(item.get('translation', ''))}" + 
+                (f" (备注: {self._escape_text(item.get('note', ''))})" if item.get('note') else "")
+                for i, item in enumerate(reference['proper_terms'])
+            ]))
+        
+        # 状态效果参考
+        if reference.get('affects'):
+            result_lines.extend(self._format_section("状态效果术语表", [
+                f"{i+1}. [ID: {item.get('id', '')}] {self._escape_text(item.get('KR-data', {}).get('name', ''))} → {self._escape_text(item.get('ZH-data', {}).get('name', ''))}"
+                for i, item in enumerate(reference['affects'])
+            ]))
+        
+        # 角色文档参考
+        if reference.get('model_docs'):
+            result_lines.extend(self._format_section("角色说话风格参考", [
+                f"- {self._escape_text(str(doc))}" for doc in reference['model_docs']
+            ]))
+        
+        # 技能文档参考
+        if reference.get('skill_doc'):
+            result_lines.extend(self._format_section("技能翻译指南", [
+                self._escape_text(reference['skill_doc'])
+            ]))
+        
+        # 添加分隔线
+        result_lines.append("\n" + "=" * 80)
+        result_lines.append("【以下为需要翻译的文本块】")
+        result_lines.append("=" * 80)
+        
+        # 添加文本块
+        text_blocks = texts.get('text_blocks', [])
+        for block in text_blocks:
+            # 添加文本块分隔符
+            if block['id'] > 1:
+                result_lines.append("\n" + "-" * 60 + "\n")
+            
+            result_lines.append(f"【文本块 {block['id']}】")
+            
+            # 核心文本内容
+            core_lines = [
+                f"韩文 (KR): {self._escape_text(block.get('kr', ''))}",
+                f"英文 (EN): {self._escape_text(block.get('en', ''))}",
+                f"日文 (JP): {self._escape_text(block.get('jp', ''))}"
+            ]
+            result_lines.extend(self._format_section("原文内容", core_lines, level=2))
+            
+            # 专有名词引用
+            if 'proper_refs' in block and block['proper_refs']:
+                ref_lines = [f"- 引用了术语表中的: {', '.join(block['proper_refs'])}"]
+                result_lines.extend(self._format_section("专有名词引用", ref_lines, level=2))
+            
+            # 状态效果引用
+            if 'affect_refs' in block and block['affect_refs']:
+                ref_lines = [f"- 引用了状态效果: {', '.join(block['affect_refs'])}"]
+                result_lines.extend(self._format_section("状态效果引用", ref_lines, level=2))
+            
+            # 角色信息
+            if 'model' in block and block['model']:
+                model_lines = []
+                for lang, model_info in block['model'].items():
+                    if model_info and model_info != '获取失败':
+                        escaped_info = self._escape_text(model_info)
+                        model_lines.append(f"{lang.upper()}: {escaped_info}")
+                
+                result_lines.extend(self._format_section("说话者信息", model_lines, level=2))
+            
+            result_lines.append(f"【文本块 {block['id']} 结束】")
+        
+        # 添加整体结束标记
+        if text_blocks:
+            result_lines.append("\n" + "*" * 80)
+            result_lines.append("【所有文本块已列出，请开始翻译】")
+            result_lines.append("【翻译时请参考上方的术语表和指南】")
+        
+        return "\n".join(result_lines)
+    
     def get_request_text(self, is_text_format: bool = False) -> str:
         """
         获取请求文本（JSON或纯文本格式）
@@ -507,20 +639,22 @@ class RequestTextBuilder:
             self.build()
             
         if is_text_format:
-            # 调用test_request.py中的make_text函数
-            import _feature.test_request as test_request
-            return test_request.make_text(self.unified_request)
+            # 返回纯文本格式
+            return self._make_text(self.unified_request)
         else:
+            # 返回JSON格式
             return json.dumps(self.unified_request, indent=2, ensure_ascii=False)
-
+        
 class FileProcessor:
     def __init__(self, path_config: PathConfig, matcher: TextMatcher,
-                 request_config: RequestConfig,
+                 request_config: RequestConfig = RequestConfig(),
+                 matcher_data: MatcherData = MatcherData(),
                  logger: logging.Logger = logging.getLogger(__name__)):
         self.path_config = path_config
         self.matcher = matcher
         self.logger = logger
         self.request_config = request_config
+        self.matcher_data = matcher_data
 
     def process_file(self):
         self._load_json()
@@ -533,14 +667,21 @@ class FileProcessor:
         
         self._check_translated()
         
+        self._get_translating()
+        
         request_text = {
             "kr": self._get_translating_text('kr'),
             "jp": self._get_translating_text('jp'),
             "en": self._get_translating_text('en')
         }
         
-        builder = RequestTextBuilder(request_text, self.matcher, self.request_config)
+        builder = RequestTextBuilder(request_text, self.matcher,
+                                     self.request_config, self.matcher_data)
         request_text = builder.build()
+        
+        request_text = builder.get_request_text(is_text_format=True)
+        
+        pass
     
     def _load_json(self):
         try:
@@ -618,7 +759,7 @@ class FileProcessor:
         self.jp_data = self.jp_json.get('dataList', [])
         self.llc_data = self.llc_json.get('dataList', [])
         
-        if self.path_config.rel_path.name == 'StoryData':
+        if self.path_config.rel_dir.name == 'StoryData':
             self.is_story = True
         else:
             self.is_story = False
@@ -695,9 +836,12 @@ class FileProcessor:
         for i in self.translating_list:
             flatten_item = flatten_dict_enhanced(lang_index[i],
                                          ignore_types=[None, int, float])
+            keys_to_delete = []
             for key in flatten_item:
                 if key[-1] in AVOID_PATH:
-                    del flatten_item[key]
+                    keys_to_delete.append(key)
+            for key in keys_to_delete:
+                del flatten_item[key]
             translating_text[i] = flatten_item
         
         return translating_text

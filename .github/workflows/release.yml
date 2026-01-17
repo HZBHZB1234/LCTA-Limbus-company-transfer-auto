@@ -30,6 +30,12 @@ jobs:
         mkdir release/${{ env.APP_NAME }}
         mkdir release/${{ env.APP_NAME }}/code
 
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+
     - name: create with pyinstaller
       run: |
         python -m pip install --upgrade pip
@@ -47,8 +53,6 @@ jobs:
         update: true
         install: >-
           mingw-w64-x86_64-toolchain
-          git
-          make
     
     - name: Compile C launcher
       run: |
@@ -73,6 +77,7 @@ jobs:
         New-Item -ItemType Directory -Path venv/Bins
         Expand-Archive -Path ../python.zip -DestinationPath venv/Bins
         Add-Content -Path venv/Bins/*._pth -Value "import site"
+        Remove-Item -Path venv/Scripts -Recurse -Force
     
     - name: copy files
       run: |

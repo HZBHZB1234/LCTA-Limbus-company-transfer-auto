@@ -343,7 +343,7 @@
                             <select id="ourplay-font-option">
                                 <option value="keep">保留原字体</option>
                                 <option value="simplify">精简字体</option>
-                                <option value="llc">从零协下载字体</option>
+                                <option value="llc">使用本地字体缓存</option>
                             </select>
                             <i class="fas fa-chevron-down"></i>
                         </div>
@@ -356,6 +356,14 @@
                             启用哈希校验
                         </label>
                         <small class="form-hint">确保下载文件的完整性</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="ourplay-use-api">
+                            <span class="checkmark"></span>
+                            使用API获取链接
+                        </label>
                     </div>
                     
                     <div class="action-area">
@@ -395,7 +403,7 @@
                     <i class="fas fa-broom"></i>
                     清除本地缓存
                 </h2>
-                <p class="section-subtitle">清理临时文件，释放磁盘空间</p>
+                <p class="section-subtitle">清理缓存文件，通过初始化解决一些问题</p>
             </div>
             
             <div class="settings-grid">
@@ -735,7 +743,7 @@
                         
                         <div class="about-footer">
                             <div class="contact-info">
-                                <h4>联系信息</h4>
+                                <h4>关于信息</h4>
                                 <p><i class="fas fa-envelope"></i> 邮箱: support@example.com</p>
                                 <p><i class="fas fa-globe"></i> 网站: https://example.com</p>
                             </div>

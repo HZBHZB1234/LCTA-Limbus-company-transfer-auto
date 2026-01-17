@@ -169,6 +169,7 @@ class ConfigManager {
             // OurPlay设置
             'ourplay-font-option': 'ui_default.ourplay.font_option',
             'ourplay-check-hash': 'ui_default.ourplay.check_hash',
+            'ourplay-use-api': 'ui_default.ourplay.use_api',
             
             // 零协设置
             'llc-zip-type': 'ui_default.zero.zip_type',
@@ -1686,16 +1687,19 @@ function fetchProperNouns() {
 function downloadOurplay() {
     const fontOption = document.getElementById('ourplay-font-option').value;
     const checkHash = document.getElementById('ourplay-check-hash').checked;
+    const useApi = document.getElementById('ourplay-use-api').checked;
     
     const modal = new ProgressModal('下载OurPlay汉化包');
     modal.addLog('开始下载OurPlay汉化包...');
     modal.addLog(`字体选项: ${fontOption}`);
     modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
+    modal.addLog(`使用API: ${useApi ? '启用' : '禁用'}`);
     
     // 批量更新配置
     const updates = {
         'ourplay-font-option': fontOption,
-        'ourplay-check-hash': checkHash
+        'ourplay-check-hash': checkHash,
+        'ourplay-use-api': useApi
     };
     
     configManager.updateConfigValues(updates)
@@ -2620,7 +2624,7 @@ window.addEventListener('pywebviewready', function() {
             checkGamePath();
             
             const autoCheckUpdate = configManager.getCachedValue('auto_check_update');
-            pywebview.api.run_func('init_github')
+            pywebview.api.init_github()
                 .then(function() {
                 if (autoCheckUpdate) {
                     autoCheckUpdates();

@@ -1,3 +1,4 @@
+from ..webFunc.GithubDownload import ProxyManager
 from .log_manage import LogManager
 import tempfile
 from .functions import *
@@ -5,6 +6,18 @@ import shutil
 from webFunc import *
 from pathlib import Path
 import json
+
+font_assets_raw = ReleaseAsset(
+    name="ChineseFont.ttf",size=23870096,
+    download_url="https://github.com/LocalizeLimbusCompany/LocalizeLimbusCompany/blob/main/Fonts/ChineseFont.ttf",
+    download_count=0, ProxyManager=None
+)
+
+font_assets_seven = ReleaseAsset(
+    name="LLCCN-Font.7z",size=9625672,
+    download_url="https://github.com/LocalizeLimbusCompany/LocalizeLimbusCompany/blob/main/Fonts/LLCCN-Font.7z",
+    download_count=0, ProxyManager=None
+)
 
 def check_ver_github(from_proxy):
     GithubRequester.update_config(from_proxy)
@@ -19,10 +32,11 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
     from_ = kwargs.get('download_source', 'github')  # 可选值: github, api
     from_proxy = kwargs.get('from_proxy', True)  # 是否使用代理
     zip_type = kwargs.get("zip_type", "zip")
-    use_cache = kwargs.get('use_cache', '')
+    use_cache = kwargs.get('use_cache', True)
+    cache_path = kwargs.get('cache_path', "")
     dump_default = kwargs.get("dump_default", False)
     
-    if use_cache and (not os.path.exists(use_cache)):
+    if use_cache and cache_path and (not os.path.exists(cache_path)):
         raise Exception("缓存文件不存在")
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -33,7 +47,8 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
         # 根据from_参数选择不同的下载源
         if from_ == 'api':
             logger_.log_modal_process("使用API模式下载", modal_id)
-            _download_from_api(temp_dir, logger_, modal_id, zip_type, from_proxy, dump_default, use_cache)
+            _download_from_api(temp_dir, logger_, modal_id, zip_type, from_proxy,
+                               dump_default, use_cache, cache_path)
         else:
             # 原有的GitHub下载逻辑
             GithubRequester.update_config(use_proxy=from_proxy)
@@ -78,14 +93,11 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
             save_path_font = f"{temp_dir}/LLCCN-Font.7z"
             
             if not use_cache:
-                if from_proxy:
-                    font_url = "https://gh-proxy.org/" + font_url
-                
                 logger_.log_modal_process("开始下载字体文件", modal_id)
                 logger_.log_modal_status("正在下载字体文件", modal_id)
 
-                if not download_with(
-                    font_url, save_path_font,
+                if not download_with_github(
+                    font_assets_seven, save_path_font,
                     chunk_size=1024 * 100, logger_=logger_,
                     modal_id=modal_id, progress_=[50, 70]
                 ):
@@ -124,11 +136,11 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
                     logger_.log_modal_process("成功解压字体文件", modal_id)
                     logger_.check_running(modal_id)
                 else:
-                    cache_path = f"{temp_dir}\\LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context"
-                    if not os.path.exists(cache_path):
-                        os.makedirs(cache_path)
-                    cache_path = f"{cache_path}\\{Path(use_cache).name}"
-                    shutil.copy2(use_cache, cache_path)
+                    font_path = f"{temp_dir}\\LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context"
+                    if not os.path.exists(font_path):
+                        os.makedirs(font_path)
+                    font_path = f"{font_path}\\{Path(cache_path).name}"
+                    shutil.copy2(cache_path, font_path)
                 
                 logger_.log_modal_status("正在打包文件", modal_id)
                 final_zip_path = last_zip.name.replace(".7z", ".zip")
@@ -147,7 +159,8 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
         logger_.log_modal_status("全部操作完成", modal_id)
 
 
-def _download_from_api(temp_dir, logger_: LogManager, modal_id, zip_type, from_proxy, dump_default, use_cache):
+def _download_from_api(temp_dir, logger_: LogManager, modal_id, zip_type,
+                       from_proxy, dump_default, use_cache, cache_path):
     """使用API下载文件"""
     # 初始化Note对象并获取API数据
     note_ = Note(address="062d22d6ecb233d1", pwd="AutoTranslate", read_only=True)
@@ -196,7 +209,6 @@ def _download_from_api(temp_dir, logger_: LogManager, modal_id, zip_type, from_p
     logger_.log("文本文件下载完成")
     logger_.log_modal_process("文本文件下载完成")
 
-    font_url = "https://raw.githubusercontent.com/LocalizeLimbusCompany/LocalizeLimbusCompany/refs/heads/main/Fonts/LLCCN-Font.7z"
     save_path_font = f"{temp_dir}/LLCCN-Font.7z"
     
     if not use_cache:
@@ -246,11 +258,11 @@ def _download_from_api(temp_dir, logger_: LogManager, modal_id, zip_type, from_p
             logger_.log_modal_process("成功解压字体文件", modal_id)
             logger_.check_running(modal_id)
         else:
-            cache_path = f"{temp_dir}\\LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context"
-            if not os.path.exists(cache_path):
-                os.makedirs(cache_path)
-            cache_path = f"{cache_path}\\{Path(use_cache).name}"
-            shutil.copy2(use_cache, cache_path)
+            font_path = f"{temp_dir}\\LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context"
+            if not os.path.exists(font_path):
+                os.makedirs(font_path)
+            font_path = f"{font_path}\\{Path(cache_path).name}"
+            shutil.copy2(cache_path, font_path)
         
         logger_.log_modal_status("正在打包文件", modal_id)
         final_zip_path = file_name.replace(".7z", ".zip")

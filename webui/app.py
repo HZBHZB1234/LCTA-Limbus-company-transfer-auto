@@ -8,13 +8,18 @@ import logging
 from logging.handlers import RotatingFileHandler
 import shutil
 import threading
+
+from webutils import function_llc
+
+from webutils.function_ourplay import function_ourplay_api
+from ..webutils.functions import get_cache_font
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
 import webutils
-from webFunc import init_request
+from webFunc import init_request, GithubRequester
 from webutils.log_manage import LogManager
 import webutils.load as load_util
 from webutils.update import Updater, get_app_version
@@ -62,7 +67,6 @@ class LCTA_API():
         self.validate_config = load_util.validate_config
         self.load_config_default = load_util.load_config_default
         self.fix_config = load_util.fix_config
-        self.init_github = init_request
 
     def run_func(self, func_name, *args):
         if hasattr(self, func_name):
@@ -94,6 +98,10 @@ class LCTA_API():
             self.log("配置文件格式错误")
             self.log("\n".join(self.config_error))
 
+    def init_github(self):
+        init_request()
+        function_llc.font_assets_seven.proxys = GithubRequester.proxy_manager
+        function_llc.font_assets_raw.proxys = GithubRequester.proxy_manager
     
     def use_inner(self):
         """使用默认配置并保存"""
@@ -386,7 +394,11 @@ class LCTA_API():
             # 从配置中读取字体处理选项
             font_option = self.config.get("ui_default", {}).get("ourplay", {}).get("font_option", "keep")
             check_hash = self.config.get("ui_default", {}).get("ourplay", {}).get("check_hash", True)
-            function_ourplay_main(modal_id, self.log_manager, font_option=font_option, check_hash=check_hash)
+            use_api = self.config.get("ui_default", {}).get("ourplay", {}).get("use_api", False)
+            if use_api:
+                function_ourplay_api(modal_id, self.log_manager, font_option=font_option, check_hash=check_hash)
+            else:
+                function_ourplay_main(modal_id, self.log_manager, font_option=font_option, check_hash=check_hash)
             
             self.add_modal_log("OurPlay汉化包下载成功", modal_id)
             return {"success": True, "message": "OurPlay汉化包下载成功"}
@@ -451,6 +463,7 @@ class LCTA_API():
             use_proxy = self.config.get("ui_default", {}).get("zero", {}).get("use_proxy", True)
             use_cache = self.config.get("ui_default", {}).get("zero", {}).get("use_cache", False)
             download_source = self.config.get("ui_default", {}).get("zero", {}).get("download_source", "github")
+            cache_path = get_cache_font(self.config)
             
             # 传递新参数给function_llc_main
             function_llc_main(
@@ -459,7 +472,9 @@ class LCTA_API():
                 dump_default=dump_default,
                 download_source=download_source,
                 from_proxy=use_proxy,
-                use_cache=self.config.get('game_path')+'LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf' if use_cache else False
+                zip_type=zip_type,
+                use_cache=use_cache,
+                cache_path=cache_path
             )
             self.add_modal_log("零协汉化包下载成功", modal_id)
             self.log_manager.log_modal_status("操作完成", modal_id)

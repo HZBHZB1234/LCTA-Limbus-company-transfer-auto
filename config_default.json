@@ -15,7 +15,7 @@
         "ourplay":{
             "font_option": "simplify",
             "check_hash": true,
-            "use_api": true
+            "use_api": false
         },
         "clean":{
             "clean_progress": false,
@@ -34,7 +34,7 @@
     "auto_check_update": true,
     "delete_updating": true,
     "update_use_proxy": true,
-    "update_only_stable": false,
+    "update_only_stable": true,
     "launcher": {
         "zero": {
             "zip_type": "seven",

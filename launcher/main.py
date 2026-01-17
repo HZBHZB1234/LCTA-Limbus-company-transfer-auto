@@ -24,6 +24,7 @@ from webFunc import *
 from webutils.log_manage import LogManager
 from webutils import *
 import webutils.load as LoadUtils
+import webutils.functions as func_utils
 
 config_whole = {}
 logger = None
@@ -90,7 +91,7 @@ def main_pre():
 
     update = config.get("work", {}).get("update", "no")
     last = config.get("last_install", {})
-    cache_font = config_whole.get('game_path')+'LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf'
+    cache_path = func_utils.get_cache_font(config_whole)
 
     if update == "llc":
         logger.log("启用LLC更新")
@@ -109,7 +110,7 @@ def main_pre():
                         download_source=zero.get("download_source", "github"),
                         from_proxy=zero.get("use_proxy", True),
                         zip_type=zero.get("zip_type", "zip"),
-                        use_cache=cache_font)
+                        use_cache=True, cache_path=cache_path)
         if not zip_path:
             logger.log(f"LLC更新包下载失败，路径: {zip_path}")
             return
@@ -208,7 +209,7 @@ def main_pre():
                             download_source=zero.get("download_source", "github"),
                             from_proxy=zero.get("use_proxy", True),
                             zip_type=zero.get("zip_type", "zip"),
-                            use_cache=cache_font)
+                            use_cache=True, cache_path=cache_path)
             if not zip_path:
                 logger.log(f"LLC更新包下载失败，路径: {zip_path}")
                 return

@@ -20,7 +20,7 @@ file_dir = Path(os.path.dirname(__file__)).parent
 print(f'\n\n{file_dir}')
 sys.path.insert(0, str(file_dir))
 
-from web_function import *
+from webFunc import *
 from webutils.log_manage import LogManager
 from webutils import *
 import webutils.load as LoadUtils

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from web_function.GithubDownload import *
+from webFunc.GithubDownload import *
 from webutils.log_manage import *
 from .log_manage import LogManager
 from .functions import download_with_github

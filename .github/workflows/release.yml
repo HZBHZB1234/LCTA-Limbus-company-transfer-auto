@@ -113,14 +113,14 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.APP_NAME }}-Folder
-        path: release/${{ env.APP_NAME }}_Folder.exe
+        path: release/${{ env.APP_NAME }}_Folder
         retention-days: 7
 
     - name: Upload Folder Debug executable
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.APP_NAME }}-Folder-Debug
-        path: release/${{ env.APP_NAME }}_Folder_Debug.exe
+        path: release/${{ env.APP_NAME }}_Folder_Debug
         retention-days: 7
 
     - name: Upload portable application folder

@@ -14,7 +14,7 @@ sys.path.insert(0, str(project_root))
 
 
 import webutils
-from web_function import init_request
+from webFunc import init_request
 from webutils.log_manage import LogManager
 import webutils.load as load_util
 from webutils.update import Updater, get_app_version

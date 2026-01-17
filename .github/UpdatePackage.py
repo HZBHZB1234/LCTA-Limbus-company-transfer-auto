@@ -11,7 +11,7 @@ project_root = Path(os.path.dirname(__file__)).parent
 print(project_root)
 sys.path.append(project_root.as_posix())
 
-from web_function import *
+from webFunc import *
 
 ADDRESS = os.getenv("ADDRESS")
 API_URL = "https://api.txttool.cn/netcut/note"

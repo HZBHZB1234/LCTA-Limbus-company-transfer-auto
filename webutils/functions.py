@@ -13,7 +13,7 @@ import shutil
 import base64
 from .log_manage import LogManager
 if TYPE_CHECKING:
-    from web_function.GithubDownload import ReleaseAsset
+    from webFunc.GithubDownload import ReleaseAsset
 
 def zip_folder(folder_path, output_path, logger_:LogManager=None):
     try:

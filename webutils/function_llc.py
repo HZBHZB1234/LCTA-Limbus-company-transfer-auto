@@ -2,7 +2,7 @@ from .log_manage import LogManager
 import tempfile
 from .functions import *
 import shutil
-from web_function import *
+from webFunc import *
 from pathlib import Path
 import json
 

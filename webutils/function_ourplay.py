@@ -6,7 +6,7 @@ import shutil
 import json
 import base64
 import os
-from web_function import Note
+from webFunc import Note
 
 def check_ver_ourplay(logger_: LogManager = None):
     headers = {

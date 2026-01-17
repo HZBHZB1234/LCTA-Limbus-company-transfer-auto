@@ -1,4 +1,3 @@
-from ..webFunc.GithubDownload import ProxyManager
 from .log_manage import LogManager
 import tempfile
 from .functions import *
@@ -8,15 +7,15 @@ from pathlib import Path
 import json
 
 font_assets_raw = ReleaseAsset(
-    name="ChineseFont.ttf",size=23870096,
+    name="ChineseFont.ttf",size=23870096,content_type='',
     download_url="https://github.com/LocalizeLimbusCompany/LocalizeLimbusCompany/blob/main/Fonts/ChineseFont.ttf",
-    download_count=0, ProxyManager=None
+    download_count=0, proxys=None
 )
 
 font_assets_seven = ReleaseAsset(
-    name="LLCCN-Font.7z",size=9625672,
+    name="LLCCN-Font.7z",size=9625672,content_type='',
     download_url="https://github.com/LocalizeLimbusCompany/LocalizeLimbusCompany/blob/main/Fonts/LLCCN-Font.7z",
-    download_count=0, ProxyManager=None
+    download_count=0, proxys=None
 )
 
 def check_ver_github(from_proxy):
@@ -36,7 +35,7 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
     cache_path = kwargs.get('cache_path', "")
     dump_default = kwargs.get("dump_default", False)
     
-    if use_cache and cache_path and (not os.path.exists(cache_path)):
+    if use_cache and not(cache_path and os.path.exists(cache_path)):
         raise Exception("缓存文件不存在")
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -89,7 +88,6 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
             logger_.log("文本文件下载完成")
             logger_.log_modal_process("文本文件下载完成")
 
-            font_url = "https://raw.githubusercontent.com/LocalizeLimbusCompany/LocalizeLimbusCompany/refs/heads/main/Fonts/LLCCN-Font.7z"
             save_path_font = f"{temp_dir}/LLCCN-Font.7z"
             
             if not use_cache:

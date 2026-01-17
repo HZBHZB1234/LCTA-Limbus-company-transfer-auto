@@ -179,34 +179,17 @@ def function_ourplay_main(modal_id, logger_: LogManager, **kwargs):
             logger_.log("已精简字体")
 
         if font_option == "llc":
-            logger_.log("正在下载 LLC 字体...")
+            logger_.log("使用缓存字体...")
+            cache_path = kwargs.get('cache_path', "")
             
-            # 下载LLC字体文件
-            font_url = "https://download.zeroasso.top/files/LLCCN-Font.7z"
-            save_path_font = f"{temp_dir}/LLCCN-Font.7z"
-            
-            logger_.log_modal_process("开始下载字体文件")
-            logger_.log_modal_status("正在下载字体文件")
-            
-            if not download_with(font_url, save_path_font,
-                                chunk_size=1024 * 100, logger_=logger_,
-                                modal_id=modal_id, progress_=[60, 75]):
-                logger_.log_modal_process("下载字体文件时出现错误", modal_id)
-                raise
-                
-            logger_.log("字体文件下载完成")
-            logger_.log_modal_process("字体文件下载完成")
-            
-            # 解压字体文件
-            if not decompress_7z(save_path_font, temp_dir, logger_=logger_):
-                logger_.log("字体文件解压失败")
-                raise
+            if not(cache_path and os.path.exists(cache_path)):
+                raise Exception("缓存文件不存在")
                 
             os.remove(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
                 
-            shutil.move(f'{temp_dir}\\LimbusCompany_Data\\Lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf',
+            shutil.copy2(cache_path,
                         f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
-            logger_.log("已替换为LLC字体")
+            logger_.log("已替换为缓存字体")
                 
         logger_.log("正在压缩文件...")
         if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua', 'ourplay.zip', logger_):
@@ -275,34 +258,17 @@ def function_ourplay_api(modal_id, logger_: LogManager, **kwargs):
             logger_.log("已精简字体")
 
         if font_option == "llc":
-            logger_.log("正在下载 LLC 字体...")
+            logger_.log("使用缓存字体...")
+            cache_path = kwargs.get('cache_path', "")
             
-            # 下载LLC字体文件
-            font_url = "https://download.zeroasso.top/files/LLCCN-Font.7z"
-            save_path_font = f"{temp_dir}/LLCCN-Font.7z"
-            
-            logger_.log_modal_process("开始下载字体文件")
-            logger_.log_modal_status("正在下载字体文件")
-            
-            if not download_with(font_url, save_path_font,
-                                chunk_size=1024 * 100, logger_=logger_,
-                                modal_id=modal_id, progress_=[60, 75]):
-                logger_.log_modal_process("下载字体文件时出现错误", modal_id)
-                raise
-                
-            logger_.log("字体文件下载完成")
-            logger_.log_modal_process("字体文件下载完成")
-            
-            # 解压字体文件
-            if not decompress_7z(save_path_font, temp_dir, logger_=logger_):
-                logger_.log("字体文件解压失败")
-                raise
+            if not(cache_path and os.path.exists(cache_path)):
+                raise Exception("缓存文件不存在")
                 
             os.remove(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
                 
-            shutil.move(f'{temp_dir}\\LimbusCompany_Data\\Lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf',
+            shutil.copy2(cache_path,
                         f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
-            logger_.log("已替换为LLC字体")
+            logger_.log("已替换为缓存字体")
                 
         logger_.log("正在压缩文件...")
         if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua', 'ourplay.zip', logger_):

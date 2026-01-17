@@ -8,24 +8,22 @@ import logging
 from logging.handlers import RotatingFileHandler
 import shutil
 import threading
-
-from webutils import function_llc
-
-from webutils.function_ourplay import function_ourplay_api
-from ..webutils.functions import get_cache_font
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
 import webutils
-from webFunc import init_request, GithubRequester
+import webFunc.GithubDownload as GithubDownload
 from webutils.log_manage import LogManager
 import webutils.load as load_util
+import webutils.function_llc as function_llc
+from webutils.functions import get_cache_font
 from webutils.update import Updater, get_app_version
 from webutils import (
     function_llc_main, 
     function_ourplay_main,
+    function_ourplay_api,
     find_translation_packages,
     delete_translation_package,
     change_font_for_package,
@@ -99,9 +97,9 @@ class LCTA_API():
             self.log("\n".join(self.config_error))
 
     def init_github(self):
-        init_request()
-        function_llc.font_assets_seven.proxys = GithubRequester.proxy_manager
-        function_llc.font_assets_raw.proxys = GithubRequester.proxy_manager
+        GithubDownload.init_request()
+        function_llc.font_assets_seven.proxys = GithubDownload.GithubRequester.proxy_manager
+        function_llc.font_assets_raw.proxys = GithubDownload.GithubRequester.proxy_manager
     
     def use_inner(self):
         """使用默认配置并保存"""

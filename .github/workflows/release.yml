@@ -23,6 +23,23 @@ jobs:
       with:
         path: LCTA
 
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install pyinstaller
+        python -m pip install -r LCTA/requirements.txt
+
+    - name: localize css
+      run: |
+        python .\LCTA\.github\Localize_CSS.py
+      env:
+        PYTHONIOENCODING: utf-8        
     - name: setup-path
       run: |
         Copy-Item -Path .\LCTA -Destination .\LCTA_backup -Recurse
@@ -30,17 +47,8 @@ jobs:
         mkdir release/${{ env.APP_NAME }}
         mkdir release/${{ env.APP_NAME }}/code
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.9'
-        cache: 'pip'
-
     - name: create with pyinstaller
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install pyinstaller
-        python -m pip install -r LCTA/requirements.txt
         pyinstaller --onefile -w --name ${{ env.APP_NAME }}_OneFile ${{ env.PYINSTALLER_ADD_DATA }} .\LCTA_backup/start_webui.py
         pyinstaller --onefile --name ${{ env.APP_NAME }}_OneFile_Debug ${{ env.PYINSTALLER_ADD_DATA }} .\LCTA_backup/start_webui.py
         pyinstaller -w --name ${{ env.APP_NAME }}_Folder ${{ env.PYINSTALLER_ADD_DATA }} .\LCTA_backup/start_webui.py
@@ -86,11 +94,39 @@ jobs:
         Copy-Item LCTA\* release\${{ env.APP_NAME }}\code\ -Recurse -Force
         Copy-Item venv release\${{ env.APP_NAME }}\code\venv -Recurse
 
-
-    - name: Upload build artifacts
+    # 上传便携版应用
+    - name: Upload OneFile executable
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ env.APP_NAME }}-windows-portable
+        name: ${{ env.APP_NAME }}-OneFile
+        path: release/${{ env.APP_NAME }}_OneFile.exe
+        retention-days: 7
+
+    - name: Upload OneFile Debug executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-OneFile-Debug
+        path: release/${{ env.APP_NAME }}_OneFile_Debug.exe
+        retention-days: 7
+
+    - name: Upload Folder executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Folder
+        path: release/${{ env.APP_NAME }}_Folder.exe
+        retention-days: 7
+
+    - name: Upload Folder Debug executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Folder-Debug
+        path: release/${{ env.APP_NAME }}_Folder_Debug.exe
+        retention-days: 7
+
+    - name: Upload portable application folder
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Portable-Full
         path: |
-          release
+          release/${{ env.APP_NAME }}
         retention-days: 7

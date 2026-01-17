@@ -399,7 +399,7 @@ class Updater:
 
 def get_app_version() -> str:
     """从获取当前应用版本"""
-    return os.getenv("version", "0.0.0")
+    return os.getenv("__version__", "0.0.0")
 
 def run_update_check(logger_: LogManager = LogManager(), only_stable: bool = True):
     """运行更新检查"""

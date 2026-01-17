@@ -73,7 +73,6 @@ jobs:
         New-Item -ItemType Directory -Path venv/Bins
         Expand-Archive -Path ../python.zip -DestinationPath venv/Bins
         Add-Content -Path venv/Bins/*._pth -Value "import site"
-        Remove-Item -Path venv/Scripts -Force -Recurse
     
     - name: copy files
       run: |

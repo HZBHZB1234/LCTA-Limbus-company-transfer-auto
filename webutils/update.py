@@ -13,6 +13,7 @@ from urllib3.util.retry import Retry
 from web_function.GithubDownload import *
 from webutils.log_manage import *
 from .log_manage import LogManager
+from .functions import download_with_github
 
 
 class Updater:
@@ -31,34 +32,7 @@ class Updater:
         
         GithubRequester.update_config(use_proxy)
         self.fetcher = GithubRequester
-        
-        self.session = self._create_session()
-        
-    def _create_session(self):
-        """创建一个带有重试策略的会话"""
-        session = requests.Session()
-        
-        # 定义重试策略
-        retry_strategy = Retry(
-            total=3,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-        )
-        
-        # 创建适配器并挂载到会话
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-        
-        # 禁用SSL验证以避免证书问题
-        session.verify = False
-        
-        # 禁用警告信息
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        
-        return session
-    
+
     def get_latest_version(self) -> Optional[str]:
         """获取最新版本号"""
         try:
@@ -107,10 +81,10 @@ class Updater:
                 self.logger_.log("获取最新发布信息失败")
                 return None
             
-            # 获取下载URL
-            download_url = self.get_release_download_url(release_info)
-            if not download_url:
-                self.logger_.log("未找到可下载的发布文件")
+            # 获取ReleaseAsset对象
+            asset = self.get_release_asset(release_info)
+            if not asset:
+                self.logger_.log("未找到可下载的发布文件（没有找到zip格式的asset）")
                 return None
             
             # 确保缓存目录存在
@@ -119,7 +93,17 @@ class Updater:
             # 下载文件
             zip_path = os.path.join(cache_dir, "latest_release.zip")
             
-            if self.download_file(download_url, zip_path):
+            # 使用download_with_github下载
+            success = download_with_github(
+                asset=asset,
+                save_path=zip_path,
+                logger_=self.logger_,
+                modal_id=None,  # 没有模态窗口
+                progress_=[0, 100],
+                use_proxy=self.use_proxy
+            )
+            
+            if success:
                 return zip_path
             else:
                 return None
@@ -129,55 +113,14 @@ class Updater:
             self.logger_.log_error(e)
             return None
     
-    def get_release_download_url(self, release_info: ReleaseInfo) -> Optional[str]:
-        """获取发布版本的下载URL"""
+    def get_release_asset(self, release_info: ReleaseInfo) -> Optional[ReleaseAsset]:
+        """获取发布版本的ReleaseAsset对象"""
         # 优先从assets中查找zip文件
         zip_assets = release_info.get_assets_by_extension('.zip')
         if zip_assets:
-            return zip_assets[0].download_url
-        
-        # 如果没有找到zip文件，尝试使用源码下载URL
-        download_url = release_info.source_code_urls['zip'].format(
-            owner=self.repo_owner, repo=self.repo_name
-        )
-        
-        return download_url
+            return zip_assets[0]
+        return None
 
-    def download_file(self, url: str, save_path: str) -> bool:
-        """下载文件到指定路径"""
-        try:
-            self.logger_.log(f"正在下载: {url}")
-            
-            # 如果使用代理，为下载URL添加代理前缀
-            if self.use_proxy and url.startswith("https://github.com/"):
-                proxy_url = self.proxy_url.rstrip('/')
-                url = f"{proxy_url}/{url}"
-                self.logger_.log(f"使用代理下载: {url}")
-            
-            response = self.session.get(url, stream=True)
-            response.raise_for_status()
-            
-            total_size = int(response.headers.get('content-length', 0))
-            downloaded_size = 0
-            
-            with open(save_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        
-                        # 显示下载进度
-                        if total_size > 0:
-                            percent = (downloaded_size / total_size) * 100
-                            self.logger_.log(f"\r下载进度: {percent:.1f}% ({downloaded_size}/{total_size} bytes)", end="")
-            self.logger_.log(f"下载完成: {save_path}")
-            return True
-            
-        except Exception as e:
-            self.logger_.log(f"下载文件失败: {e}")
-            self.logger_.log_error(e)
-            return False
-    
     def extract_release(self, zip_path: str, extract_to: str) -> Optional[str]:
         """解压下载的文件到缓存目录"""
         try:
@@ -411,22 +354,14 @@ class Updater:
             latest_version = release_info.tag_name
             has_update = self.compare_versions(current_version, latest_version)
             
-            # 获取下载URL和大小
-            download_url = self.get_release_download_url(release_info)
+            # 获取ReleaseAsset和大小
+            asset = self.get_release_asset(release_info)
+            download_url = ""
             size = 0
             
-            if download_url:
-                # 尝试获取文件大小
-                try:
-                    head_response = self.session.head(download_url)
-                    if head_response.status_code == 200:
-                        size_str = head_response.headers.get('Content-Length', '0')
-                        size = int(size_str)
-                except:
-                    # 如果HEAD请求失败，尝试从asset中获取大小
-                    zip_assets = release_info.get_assets_by_extension(".zip")
-                    if zip_assets:
-                        size = zip_assets[0].size
+            if asset:
+                download_url = asset.download_url
+                size = asset.size
             
             # 构建release页面URL
             release_url = f"https://github.com/{self.repo_owner}/{self.repo_name}/releases/tag/{latest_version}"

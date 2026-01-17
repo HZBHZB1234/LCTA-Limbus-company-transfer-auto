@@ -14,6 +14,7 @@ sys.path.insert(0, str(project_root))
 
 
 import webutils
+from web_function import init_request
 from webutils.log_manage import LogManager
 import webutils.load as load_util
 from webutils.update import Updater, get_app_version
@@ -61,6 +62,7 @@ class LCTA_API():
         self.validate_config = load_util.validate_config
         self.load_config_default = load_util.load_config_default
         self.fix_config = load_util.fix_config
+        self.init_github = init_request
 
     def run_func(self, func_name, *args):
         if hasattr(self, func_name):
@@ -760,9 +762,8 @@ class LCTA_API():
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
                 delete_old_files=self.config.get("delete_updating", True),
-                output_func=self.log,
+                logger_=self.log_manager,
                 use_proxy=self.config.get("update_use_proxy", True),
-                proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
                 only_stable=self.config.get("update_only_stable", False)
             )
             
@@ -784,7 +785,7 @@ class LCTA_API():
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
                 delete_old_files=self.config.get("delete_updating", True),
-                output_func=self.log,
+                logger=self.log_manager,
                 use_proxy=self.config.get("update_use_proxy", True),
                 proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
                 only_stable=self.config.get("update_only_stable", False)
@@ -811,7 +812,7 @@ class LCTA_API():
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
                 delete_old_files=self.config.get("delete_updating", True),
-                output_func=lambda msg: self.add_modal_log(msg, modal_id),
+                logger=self.log_manager,
                 use_proxy=self.config.get("update_use_proxy", True),
                 proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
                 only_stable=self.config.get("update_only_stable", False)

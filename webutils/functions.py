@@ -185,31 +185,17 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
     # 使用代理管理器
     proxy_manager = asset.proxys
     
-    # 准备尝试的URL列表：代理URL + 原始URL
-    urls_to_try = []
+    def _build_url(proxy_url: str):
+        proxy_url = proxy_url.rstrip('/') + '/' + asset.download_url.lstrip('/')
+        return proxy_url
     
-    # 如果有代理，先添加代理URL
-    if hasattr(proxy_manager, 'proxies') and proxy_manager.proxies:
-        for proxy in proxy_manager.proxies:
-            # 构建代理URL
-            proxy_url = proxy.rstrip('/') + '/' + asset.download_url.lstrip('/')
-            urls_to_try.append(proxy_url)
-    
-    # 最后添加原始URL作为备选
-    urls_to_try.append(asset.download_url)
-    
-    if logger_:
-        logger_.log(f"开始下载 {asset.name} (大小: {asset.size} bytes)")
-        logger_.log(f"将尝试 {len(urls_to_try)} 个URL")
+    logger_.log(f"开始下载 {asset.name} (大小: {asset.size} bytes)")
     
     # 尝试所有URL直到成功
-    for i, url in enumerate(urls_to_try):
+    for i in range(len(proxy_manager.proxies)):
         try:
-            if logger_:
-                if i < len(urls_to_try) - 1:
-                    logger_.log(f"尝试下载 (代理 {i+1}/{len(urls_to_try)-1}): {url}")
-                else:
-                    logger_.log(f"尝试直接下载 (不使用代理): {url}")
+            url = _build_url(proxy_manager.get_current_proxy())
+            logger_.log(f"尝试下载 (代理 {i+1}/{len(proxy_manager.proxies)}): {url}")
             
             # 使用download_with函数下载
             success = download_with(
@@ -233,27 +219,24 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
                         # 文件大小不匹配，继续尝试下一个URL
                         continue
                     
-                    if logger_:
-                        if i < len(urls_to_try) - 1:
-                            logger_.log(f"下载成功! 使用代理 {i+1}/{len(urls_to_try)-1}")
-                        else:
-                            logger_.log("下载成功! 使用直接连接")
+                    logger_.log(f"下载成功! 使用链接 {url}")
                     return True
                 else:
-                    if logger_:
-                        logger_.log(f"文件未创建: {save_path}")
+                    logger_.log(f"文件未创建: {save_path}")
+                    raise FileNotFoundError(f"文件未创建: {save_path}")
+            else:
+                logger_.log(f"下载失败 (URL {i+1}/{len(proxy_manager.proxies)}): {e}")
+                proxy_manager.next_proxy()
             
         except Exception as e:
-            if logger_:
-                logger_.log(f"下载失败 (URL {i+1}/{len(urls_to_try)}): {e}")
-                logger_.log_error(e)
+            logger_.log(f"下载失败 (URL {i+1}/{len(proxy_manager.proxies)}): {e}")
+            logger_.log_error(e)
             
             # 短暂延迟后重试
-            time.sleep(0.5)
+            time.sleep(0.1)
+            proxy_manager.next_proxy()
     
-    # 所有尝试都失败
-    if logger_:
-        logger_.log(f"所有下载尝试都失败: {asset.name}")
+    logger_.log(f"所有下载尝试都失败: {asset.name}")
     return False
 
 def calculate_sha256(file_path, logger_: LogManager=None):

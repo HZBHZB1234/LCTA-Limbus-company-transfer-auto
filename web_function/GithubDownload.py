@@ -158,6 +158,10 @@ class GitHubReleaseFetcher:
             self.session.verify = False
             warnings.filterwarnings('ignore', message='Unverified HTTPS request')
     
+    def update_config(self, use_proxy: bool = True, ignore_ssl: bool = False):
+        self.use_proxy = use_proxy
+        self.ignore_ssl = ignore_ssl
+    
     def _build_api_url(self, repo_owner: str, repo_name: str, endpoint: str, proxy_url: str = "") -> str:
         """构建API URL"""
         api_url = f"{self.github_api_base}/repos/{repo_owner}/{repo_name}/{endpoint}"
@@ -397,7 +401,10 @@ GithubRequester: GitHubReleaseFetcher = None
 def init_request():
     """初始化全局请求器"""
     global GithubRequester
-    GithubRequester = GitHubReleaseFetcher(use_proxy=True)
+    GithubRequester = GitHubReleaseFetcher(
+        use_proxy=True,
+        ignore_ssl=True
+        )
     print("GitHub请求器已初始化")
 
 

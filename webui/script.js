@@ -2620,8 +2620,12 @@ window.addEventListener('pywebviewready', function() {
             checkGamePath();
             
             const autoCheckUpdate = configManager.getCachedValue('auto_check_update');
-            if (autoCheckUpdate) {
-               autoCheckUpdates();
-            }
+            pywebview.api.run_func('init_github')
+                .then(function() {
+                if (autoCheckUpdate) {
+                    autoCheckUpdates();
+                    }
+                }
+            )
         });
 });

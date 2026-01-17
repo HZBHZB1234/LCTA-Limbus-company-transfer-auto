@@ -96,7 +96,7 @@ def main_pre():
         logger.log("启用LLC更新")
         zero = config.get("zero", {})
         if zero.get("download_source", "github") == "github":
-            latest_version = check_ver_github(zero.get("from_proxy", True))
+            latest_version = check_ver_github(zero.get("use_proxy", True))
         else:
             latest_version = str(get_note_content().get('llc_version', '0.0.0'))
         if latest_version == "0.0.0":
@@ -107,7 +107,7 @@ def main_pre():
             return
         zip_path = function_llc_main("llc_update", logger,
                         download_source=zero.get("download_source", "github"),
-                        from_proxy=zero.get("from_proxy", True),
+                        from_proxy=zero.get("use_proxy", True),
                         zip_type=zero.get("zip_type", "zip"),
                         use_cache=cache_font)
         if not zip_path:
@@ -206,7 +206,7 @@ def main_pre():
             zero = config.get("zero", {})
             zip_path = function_llc_main("llc_update", logger,
                             download_source=zero.get("download_source", "github"),
-                            from_proxy=zero.get("from_proxy", True),
+                            from_proxy=zero.get("use_proxy", True),
                             zip_type=zero.get("zip_type", "zip"),
                             use_cache=cache_font)
             if not zip_path:

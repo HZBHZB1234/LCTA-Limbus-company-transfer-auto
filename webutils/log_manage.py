@@ -16,8 +16,6 @@ class LogManager:
         self.log_callback: Optional[Callable] = None
         self.error_callback: Optional[Callable] = None
         self.ui_callback: Optional[Callable] = None
-        # 用于存储当前活动的模态窗口ID
-        self.current_modal_id: Optional[str] = None
         # 模态窗口相关回调
         self.modal_status_callback: Optional[Callable] = None
         self.modal_log_callback: Optional[Callable] = None
@@ -55,14 +53,6 @@ class LogManager:
         self.modal_log_callback = log_callback
         self.modal_progress_callback = progress_callback
         self.check_running = check_running
-
-    def set_current_modal(self, modal_id: str):
-        """设置当前活动的模态窗口ID"""
-        self.current_modal_id = modal_id
-
-    def clear_current_modal(self):
-        """清空当前活动的模态窗口ID"""
-        self.current_modal_id = None
 
     def log(self, message: str, *args, **kwargs):
         """记录普通日志"""
@@ -106,7 +96,7 @@ class LogManager:
 
     def log_modal_status(self, status: str, modal_id: str = None):
         """更新模态窗口状态"""
-        target_modal_id = modal_id or self.current_modal_id
+        target_modal_id = modal_id
         if target_modal_id and self.modal_status_callback:
             try:
                 self.executor.submit(
@@ -120,7 +110,7 @@ class LogManager:
 
     def log_modal_process(self, message: str, modal_id: str = None):
         """向模态窗口添加日志"""
-        target_modal_id = modal_id or self.current_modal_id
+        target_modal_id = modal_id
         if target_modal_id and self.modal_log_callback:
             try:
                 self.executor.submit(
@@ -139,7 +129,7 @@ class LogManager:
 
     def update_modal_progress(self, percent: int, text: str = "", modal_id: str = None, log: bool = True):
         """更新模态窗口进度"""
-        target_modal_id = modal_id or self.current_modal_id
+        target_modal_id = modal_id
         if target_modal_id and self.modal_progress_callback:
             try:
                 self.executor.submit(
@@ -148,5 +138,4 @@ class LogManager:
             except Exception as e:
                 self.log_error(e)
         else:
-            # 回退到常规UI日志
-            self.log_ui(f"Progress: {percent}% - {text}")
+            pass

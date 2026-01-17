@@ -7,14 +7,10 @@ from pathlib import Path
 import json
 
 def check_ver_github(from_proxy):
-    GithubDownloader = GitHubReleaseFetcher(
-        "LocalizeLimbusCompany",
-        "LocalizeLimbusCompany",
-        from_proxy,
-        ignore_ssl=True
-    )
+    GithubRequester.update_config(from_proxy)
 
-    return GithubDownloader.get_latest_release().tag_name
+    return GithubRequester.get_latest_release("LocalizeLimbusCompany",
+                                  "LocalizeLimbusCompany").tag_name
 
 def function_llc_main(modal_id, logger_: LogManager, **kwargs):
     logger_.log_modal_process("成功链接后端", modal_id)
@@ -40,17 +36,16 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
             _download_from_api(temp_dir, logger_, modal_id, zip_type, from_proxy, dump_default, use_cache)
         else:
             # 原有的GitHub下载逻辑
-            GithubDownloader = GitHubReleaseFetcher(
-                "LocalizeLimbusCompany",
-                "LocalizeLimbusCompany",
-                from_proxy,
-                ignore_ssl=True
-            )
+            GithubRequester.update_config(use_proxy=from_proxy)
+            GithubDownloader = GithubRequester
 
             logger_.log_modal_process("开始请求版本", modal_id)
             logger_.log_modal_status("正在请求版本", modal_id)
 
-            last_ver = GithubDownloader.get_latest_release()
+            last_ver = GithubDownloader.get_latest_release(
+                "LocalizeLimbusCompany",
+                "LocalizeLimbusCompany"
+            )
             last_zip = last_ver.get_assets_by_extension(".7z") if zip_type == "seven" else last_ver.get_assets_by_extension(".zip")
             if not last_zip:
                 logger_.log_modal_process("未找到合适的版本文件", modal_id)

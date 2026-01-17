@@ -5,16 +5,17 @@ import zipfile
 from shutil import rmtree, copytree,copyfile
 import time
 import sys
+from typing import Dict, List, Tuple, Union, Any, Optional
 
 from .log_manage import LogManager
 
-log:LogManager = None
+log: Optional[LogManager] = None
 
-def set_logger(logger_instance : LogManager):
+def set_logger(logger_instance : LogManager) -> None:
     """设置全局日志记录器实例"""
     global log
     log = logger_instance
-def find_lcb():
+def find_lcb() -> Optional[str]:
     """查找游戏安装路径"""
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'SOFTWARE\Valve\Steam')
@@ -36,7 +37,7 @@ def find_lcb():
         log.log_error(e)
         return None
 
-def load_config_types():
+def load_config_types() -> Dict[str, Any]:
     """
     加载配置类型定义
     """
@@ -44,7 +45,7 @@ def load_config_types():
     with open(config_types_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def validate_config_value(value, expected_type):
+def validate_config_value(value: Any, expected_type: Union[str, List[Any]]) -> bool:
     """
     验证单个配置值的类型
     
@@ -69,7 +70,7 @@ def validate_config_value(value, expected_type):
         return value in expected_type
     return False
 
-def validate_config(config, config_types=None):
+def validate_config(config: Dict[str, Any], config_types: Optional[Dict[str, Any]]=None) -> Tuple[bool, List[str]]:
     """
     验证配置对象是否符合类型定义
     
@@ -85,7 +86,7 @@ def validate_config(config, config_types=None):
     
     errors = []
     
-    def _validate_recursive(current_config, current_types, path=""):
+    def _validate_recursive(current_config: Dict[str, Any], current_types: Dict[str, Any], path: str=""):
         if not isinstance(current_types, dict):
             return
             
@@ -114,7 +115,7 @@ def validate_config(config, config_types=None):
     _validate_recursive(config, config_types)
     return len(errors) == 0, errors
 
-def check_config_type(key_path, value):
+def check_config_type(key_path: str, value: Any) -> Tuple[bool, Union[str, Dict[str, Any]], str]:
     """
     检查特定配置项的类型
     
@@ -140,7 +141,7 @@ def check_config_type(key_path, value):
     except KeyError:
         return False, "unknown", type(value).__name__
 
-def load_config():
+def load_config() -> Optional[Dict[str, Any]]:
     try:
         with open('config.json','r',encoding='utf-8') as f:
             config = json.load(f)
@@ -148,7 +149,7 @@ def load_config():
     except FileNotFoundError:
         return None
 
-def load_config_default():
+def load_config_default() -> Optional[Dict[str, Any]]:
     try:
         with open( os.getenv('path_') + '\\config_default.json','r',encoding='utf-8') as f:
             config = json.load(f)
@@ -156,10 +157,10 @@ def load_config_default():
     except FileNotFoundError:
         return None
     
-def check_game_path(game_path):
+def check_game_path(game_path: str) -> bool:
     return os.path.exists(game_path + 'LimbusCompany.exe')
 
-def fix_config(config, config_default=None, config_check=None):
+def fix_config(config: Dict[str, Any], config_default: Optional[Dict[str, Any]]=None, config_check: Optional[Dict[str, Any]]=None) -> Dict[str, Any]:
     """
     修复配置文件中的错误
     
@@ -182,7 +183,7 @@ def fix_config(config, config_default=None, config_check=None):
         log.log("警告: 无法加载默认配置或配置类型定义，跳过配置修复")
         return config
     
-    def _fix_recursive(current_config, current_default, current_check, path=""):
+    def _fix_recursive(current_config: Dict[str, Any], current_default: Dict[str, Any], current_check: Dict[str, Any], path: str=""):
         """
         递归修复配置
         """

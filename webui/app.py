@@ -101,6 +101,14 @@ class LCTA_API():
         function_llc.font_assets_seven.proxys = GithubDownload.GithubRequester.proxy_manager
         function_llc.font_assets_raw.proxys = GithubDownload.GithubRequester.proxy_manager
     
+    def init_cache(self):
+        if self.config.get('enable_cache', False):
+            os.makedirs(self.config.get('cache_path', ''), exist_ok=True)
+            if self.config.get('game_path', ''):
+                cache_path = Path(self.config.get('cache_path', '')) / 'ChineseFont.ttf'
+                if not cache_path.exists():
+                    shutil.copy2(get_cache_font(), cache_path)   
+
     def use_inner(self):
         """使用默认配置并保存"""
         with open("config.json", "w", encoding="utf-8") as f:
@@ -798,7 +806,7 @@ class LCTA_API():
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
                 delete_old_files=self.config.get("delete_updating", True),
-                logger=self.log_manager,
+                logger_=self.log_manager,
                 use_proxy=self.config.get("update_use_proxy", True),
                 proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
                 only_stable=self.config.get("update_only_stable", False)
@@ -825,7 +833,7 @@ class LCTA_API():
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
                 delete_old_files=self.config.get("delete_updating", True),
-                logger=self.log_manager,
+                logger_=self.log_manager,
                 use_proxy=self.config.get("update_use_proxy", True),
                 proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
                 only_stable=self.config.get("update_only_stable", False)

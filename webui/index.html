@@ -851,6 +851,24 @@
                         </label>
                     </div>
                     
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="enable-cache" onchange="toggleCachePathInput()">
+                            <span class="checkmark"></span>
+                            启用资源缓存
+                        </label>
+                        
+                        <div id="cache-path-group" class="sub-form-group" style="display: none; margin-top: 10px;">
+                            <label for="cache-path">缓存路径:</label>
+                            <div class="file-input-group">
+                                <input type="text" id="cache-path" placeholder="tmp" value="tmp">
+                                <button class="action-btn secondary" onclick="pywebview.api.browse_folder('cache-path')">
+                                    <i class="fas fa-folder-open"></i> 浏览
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="action-area">
                         <button class="primary-btn" onclick="saveSettings()">
                             <i class="fas fa-save"></i>

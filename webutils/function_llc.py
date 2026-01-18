@@ -3,6 +3,7 @@ import tempfile
 from .functions import *
 import shutil
 from webFunc import *
+import webFunc.GithubDownload as GithubFunc
 from pathlib import Path
 import json
 
@@ -50,8 +51,8 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
                                dump_default, use_cache, cache_path)
         else:
             # 原有的GitHub下载逻辑
-            GithubRequester.update_config(use_proxy=from_proxy)
-            GithubDownloader = GithubRequester
+            GithubFunc.GithubRequester.update_config(use_proxy=from_proxy)
+            GithubDownloader = GithubFunc.GithubRequester
 
             logger_.log_modal_process("开始请求版本", modal_id)
             logger_.log_modal_status("正在请求版本", modal_id)
@@ -77,8 +78,8 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
             logger_.log_modal_process("开始下载文本文件", modal_id)
             logger_.log_modal_status("正在下载文本文件", modal_id)
 
-            if not download_with(
-                last_zip.download_url, save_path_text,
+            if not download_with_github(
+                last_zip, save_path_text,
                 chunk_size=1024 * 100, logger_=logger_,
                 modal_id=modal_id, progress_=[20, 50]
             ):
@@ -210,14 +211,11 @@ def _download_from_api(temp_dir, logger_: LogManager, modal_id, zip_type,
     save_path_font = f"{temp_dir}/LLCCN-Font.7z"
     
     if not use_cache:
-        if from_proxy:
-            font_url = "https://gh-proxy.org/" + font_url
-        
         logger_.log_modal_process("开始下载字体文件", modal_id)
         logger_.log_modal_status("正在下载字体文件", modal_id)
 
-        if not download_with(
-            font_url, save_path_font,
+        if not download_with_github(
+            font_assets_seven, save_path_font,
             chunk_size=1024 * 100, logger_=logger_,
             modal_id=modal_id, progress_=[50, 70]
         ):

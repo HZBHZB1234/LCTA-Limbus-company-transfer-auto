@@ -161,6 +161,8 @@ class ConfigManager {
             'delete-updating': 'delete_updating',
             'update-use-proxy': 'update_use_proxy',
             'update-only-stable': 'update_only_stable',
+            'enable-cache': 'enable_cache',
+            'cache-path': 'cache_path',
             
             // 安装设置
             'install-package-directory': 'ui_default.install.package_directory',
@@ -560,7 +562,17 @@ function browseFolder(inputId) {
     pywebview.api.browse_folder(inputId);
 }
 
-// 浏览汉化包目录
+function toggleCachePathInput() {
+    const enableCacheCheckbox = document.getElementById('enable-cache');
+    const cachePathGroup = document.getElementById('cache-path-group');
+    
+    if (enableCacheCheckbox.checked) {
+        cachePathGroup.style.display = 'block';
+    } else {
+        cachePathGroup.style.display = 'none';
+    }
+}
+
 function browsePackageDirectory() {
     pywebview.api.browse_folder('package-directory').then(function(result) {
         const packageDirInput = document.getElementById('package-directory');
@@ -2619,6 +2631,8 @@ window.addEventListener('pywebviewready', function() {
                 
                 // 应用配置到UI
                 configManager.applyConfigToUI();
+
+                toggleCachePathInput();
             }
             
             checkGamePath();

@@ -315,8 +315,10 @@ def decompress_zip(file_path, output_dir='.', logger_: LogManager=None):
         return False
 
 def get_cache_font(config: dict = {}) -> str:
-    if os.path.exists('/tmp/ChineseFont.ttf'):
-        return '/tmp/ChineseFont.ttf'
+    if config.get('enable_cache', False):
+        cache_path = Path(config.get('cache_path', '')) / 'ChineseFont.ttf'
+        if cache_path.exists():
+            return cache_path
     try:
         return config['game_path']+'LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf'
     except:

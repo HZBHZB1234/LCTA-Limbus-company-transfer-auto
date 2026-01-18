@@ -34,6 +34,8 @@
     "delete_updating": "bool",
     "update_use_proxy": "bool",
     "update_only_stable": "bool",
+    "enable_cache": "bool",
+    "cache_path": "str",
     "launcher": {
         "zero": {
             "zip_type": "str",

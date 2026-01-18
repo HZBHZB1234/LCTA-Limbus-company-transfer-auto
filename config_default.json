@@ -35,6 +35,8 @@
     "delete_updating": true,
     "update_use_proxy": true,
     "update_only_stable": true,
+    "enable_cache": true,
+    "cache_path": "tmp",
     "launcher": {
         "zero": {
             "zip_type": "seven",

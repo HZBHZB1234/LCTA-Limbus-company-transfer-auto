@@ -21,7 +21,7 @@
 
 对于零协会汉化包下载，根据[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)许可协议使用。  
 
-对于使用该软件制作的汉化包数据，根据[MIT](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/blob/main/LICENSE)许可协议使用。您可以使用兼容MIT协议的任何许可协议进行分发和使用。  
+对于使用该软件制作的汉化包数据。您可以使用您想要使用的任何许可协议进行分发和使用。请注意，请兼容汉化包数据的基汉化包的许可协议。  
 
 对于自动汉化包下载，根据[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)许可协议传播。  
 

@@ -18,7 +18,8 @@ class Updater:
                  delete_old_files: bool = True, 
                  logger_: LogManager = LogManager(),
                  use_proxy: bool = True,
-                 only_stable: bool = True):
+                 only_stable: bool = True,
+                 modal_id: str = ''):
         self.repo_owner = repo_owner
         self.repo_name = repo_name
         self.repo_config = [repo_owner, repo_name]
@@ -26,6 +27,7 @@ class Updater:
         self.logger_ = logger_
         self.use_proxy = use_proxy
         self.only_stable = only_stable
+        self.modal_id = modal_id
 
     def fetcher(self) -> GitHubReleaseFetcher:
         GithubDownload.GithubRequester.update_config(self.use_proxy)
@@ -48,7 +50,7 @@ class Updater:
             return None
         except Exception as e:
             self.logger_.log(f"获取最新版本失败: {e}")
-            self.logger_.log_modal_process(f"获取最新版本失败: {e}")
+            self.logger_.log_modal_process(f"获取最新版本失败: {e}", self.modal_id)
             return None
     
     def compare_versions(self, current_version: str, latest_version: str) -> bool:
@@ -79,7 +81,7 @@ class Updater:
             asset=asset,
             save_path=zip_path,
             logger_=self.logger_,
-            modal_id=None,  # 没有模态窗口
+            modal_id=self.modal_id,  # 传递modal_id
             progress_=[0, 100],
             use_proxy=self.use_proxy
         )
@@ -100,7 +102,7 @@ class Updater:
         requirements_path = source_dir / "requirements.txt"
         if not os.path.exists(requirements_path):
             self.logger_.log("未找到requirements.txt文件")
-            self.logger_.log_modal_process("未找到requirements.txt文件")
+            self.logger_.log_modal_process("未找到requirements.txt文件", self.modal_id)
             return False
         try:
             with open(APPLICATION_PATH / "requirements.txt", 'r', encoding='utf-8') as file:
@@ -112,13 +114,13 @@ class Updater:
             for i in set(requirements_new) - set(requirements_old):
                 try:
                     self.logger_.log(f"执行安装 {i}")
-                    self.logger_.log_modal_process(f"执行安装 {i}")
+                    self.logger_.log_modal_process(f"执行安装 {i}", self.modal_id)
                     subprocess.check_call([sys.executable, "-m", "pip", "install", i])
                 except subprocess.CalledProcessError as e:
                     self.logger_.log(f"安装依赖错误: {e}")
-                    self.logger_.log_modal_process(f"安装依赖错误: {e}")
+                    self.logger_.log_modal_process(f"安装依赖错误: {e}", self.modal_id)
                     self.logger_.log(f"退出码: {e.returncode}，错误输出{e.stderr}")
-                    self.logger_.log_modal_process(f"退出码: {e.returncode}，错误输出{e.stderr}")
+                    self.logger_.log_modal_process(f"退出码: {e.returncode}，错误输出{e.stderr}", self.modal_id)
 
             if not self.delete_old_files:
                 return True
@@ -126,17 +128,17 @@ class Updater:
             for i in set(requirements_old) - set(requirements_new):
                 try:
                     self.logger_.log(f"执行卸载 {i}")
-                    self.logger_.log_modal_process(f"执行卸载 {i}")
-                    subprocess.check_call([sys.executable, "-m", "pip", "uninstall", i])
+                    self.logger_.log_modal_process(f"执行卸载 {i}", self.modal_id)
+                    subprocess.check_call([sys.executable, "-m", "pip", "uninstall", i, "-y"])
                 except subprocess.CalledProcessError as e:
-                    self.logger_.log(f"安装依赖错误: {e}")
-                    self.logger_.log_modal_process(f"安装依赖错误: {e}")
+                    self.logger_.log(f"卸载依赖错误: {e}")
+                    self.logger_.log_modal_process(f"卸载依赖错误: {e}", self.modal_id)
                     self.logger_.log(f"退出码: {e.returncode}，错误输出{e.stderr}")
-                    self.logger_.log_modal_process(f"退出码: {e.returncode}，错误输出{e.stderr}")
+                    self.logger_.log_modal_process(f"退出码: {e.returncode}，错误输出{e.stderr}", self.modal_id)
                 return True
         except Exception as e:
             self.logger_.log(f"安装依赖失败: {e}")
-            self.logger_.log_modal_process(f"安装依赖失败: {e}")
+            self.logger_.log_modal_process(f"安装依赖失败: {e}", self.modal_id)
             self.logger_.log_error(e)
             return False
     
@@ -147,44 +149,35 @@ class Updater:
                 if item.is_file():
                     item.unlink()
                     self.logger_.log(f"删除文件 {item.name}")
-                    self.logger_.log_modal_process(f"删除文件 {item.name}")
+                    self.logger_.log_modal_process(f"删除文件 {item.name}", self.modal_id)
                 elif item.is_dir() and not item.name == 'venv':
                     shutil.rmtree(item)
                     self.logger_.log(f"删除目录 {item.name}")
-                    self.logger_.log_modal_process(f"删除目录 {item.name}")
+                    self.logger_.log_modal_process(f"删除目录 {item.name}", self.modal_id)
                     
             for item in source_dir.iterdir():
                 if item.is_file():
                     shutil.copy(item, APPLICATION_PATH)
                     self.logger_.log(f"复制文件 {item.name}")
-                    self.logger_.log_modal_process(f"复制文件 {item.name}")
+                    self.logger_.log_modal_process(f"复制文件 {item.name}", self.modal_id)
                 elif item.is_dir():
                     shutil.copytree(item, APPLICATION_PATH / item.name)
                     self.logger_.log(f"复制目录 {item.name}")
-                    self.logger_.log_modal_process(f"复制目录 {item.name}")
+                    self.logger_.log_modal_process(f"复制目录 {item.name}", self.modal_id)
             return True
         except Exception as e:
             self.logger_.log(f"更新文件失败: {e}")
-            self.logger_.log_modal_process(f"更新文件失败: {e}")
+            self.logger_.log_modal_process(f"更新文件失败: {e}", self.modal_id)
             self.logger_.log_error(e)
             return False
-    
-    def restart_application(self):
-        """重新启动应用"""
-        try:
-            os.execv('launcher.exe')
-        except Exception as e:
-            self.logger_.log(f"重启应用失败: {e}")
-            self.logger_.log_modal_process(f"重启应用失败: {e}")
-            self.logger_.log_error(e)
     
     def check_and_update(self, current_version: str, _cache_dir: str = "updateCache") -> bool:
         """检查并执行更新"""
         self.logger_.log("开始检查更新...")
-        self.logger_.log_modal_process("开始检查更新...")
-        self.logger_.log_modal_status("正在检查更新...")
+        self.logger_.log_modal_process("开始检查更新...", self.modal_id)
+        self.logger_.log_modal_status("正在检查更新...", self.modal_id)
         
-        cache_dir = APPLICATION_PATH / _cache_dir
+        cache_dir = Path(_cache_dir)
         
         # 清理缓存目录
         try:
@@ -192,7 +185,7 @@ class Updater:
                 shutil.rmtree(str(cache_dir))
         except Exception as e:
             self.logger_.log(f"清理缓存目录失败: {e}")
-            self.logger_.log_modal_process(f"清理缓存目录失败: {e}")
+            self.logger_.log_modal_process(f"清理缓存目录失败: {e}", self.modal_id)
             self.logger_.log_error(e)
         
         # 根据only_stable参数决定获取最新版本还是稳定版本
@@ -207,33 +200,33 @@ class Updater:
             
         if not release_info:
             self.logger_.log("获取最新版本信息失败")
-            self.logger_.log_modal_process("获取最新版本信息失败")
+            self.logger_.log_modal_process("获取最新版本信息失败", self.modal_id)
             return False
         
         latest_version = release_info.tag_name
         self.logger_.log(f"当前版本: {current_version}, 最新版本: {latest_version}")
-        self.logger_.log_modal_process(f"当前版本: {current_version}, 最新版本: {latest_version}")
+        self.logger_.log_modal_process(f"当前版本: {current_version}, 最新版本: {latest_version}", self.modal_id)
         
         # 比较版本
         if not self.compare_versions(current_version, latest_version):
             self.logger_.log("当前已是最新版本")
-            self.logger_.log_modal_process("当前已是最新版本")
+            self.logger_.log_modal_process("当前已是最新版本", self.modal_id)
             return False
         
         self.logger_.log("发现新版本，开始更新...")
-        self.logger_.log_modal_process("发现新版本，开始更新...")
-        self.logger_.log_modal_status("正在更新...")
+        self.logger_.log_modal_process("发现新版本，开始更新...", self.modal_id)
+        self.logger_.log_modal_status("正在更新...", self.modal_id)
         self.logger_.log(f"更新内容: {release_info.name}")
-        self.logger_.log_modal_process(f"更新内容: {release_info.name}")
+        self.logger_.log_modal_process(f"更新内容: {release_info.name}", self.modal_id)
         if release_info.body:
             self.logger_.log(f"更新详情: {release_info.body[:200]}...")
-            self.logger_.log_modal_process(f"更新详情: {release_info.body[:200]}...")
+            self.logger_.log_modal_process(f"更新详情: {release_info.body[:200]}...", self.modal_id)
         
         # 下载最新版本
         zip_path = self.download_latest_release(cache_dir, release_info)
         if not zip_path:
             self.logger_.log("下载最新版本失败")
-            self.logger_.log_modal_process("下载最新版本失败")
+            self.logger_.log_modal_process("下载最新版本失败", self.modal_id)
             return False
         
         # 解压文件
@@ -243,39 +236,37 @@ class Updater:
                 zip_file.extractall(extract_to)
         except Exception as e:
             self.logger_.log(f"解压更新包失败: {e}")
-            self.logger_.log_modal_process(f"解压更新包失败: {e}")
+            self.logger_.log_modal_process(f"解压更新包失败: {e}", self.modal_id)
             self.logger_.log_error(e)
             return False
         
         # 安装新依赖
         self.logger_.log("正在检查依赖更新...")
-        self.logger_.log_modal_process("正在检查依赖更新...")
-        self.logger_.log_modal_status("正在安装新依赖...")
+        self.logger_.log_modal_process("正在检查依赖更新...", self.modal_id)
+        self.logger_.log_modal_status("正在安装新依赖...", self.modal_id)
         if not self.install_requirements(extract_to):
             self.logger_.log("安装新依赖失败")
-            self.logger_.log_modal_process("安装新依赖失败")
+            self.logger_.log_modal_process("安装新依赖失败", self.modal_id)
             # 继续执行，依赖更新不是致命错误
         
         # 更新文件
         self.logger_.log("正在更新文件...")
-        self.logger_.log_modal_process("正在更新文件...")
-        self.logger_.log_modal_status("正在替换文件...")
+        self.logger_.log_modal_process("正在更新文件...", self.modal_id)
+        self.logger_.log_modal_status("正在替换文件...", self.modal_id)
         if not self.update_files(extract_to):
             self.logger_.log("更新文件失败")
-            self.logger_.log_modal_process("更新文件失败")
+            self.logger_.log_modal_process("更新文件失败", self.modal_id)
             return False
         
         self.logger_.log("更新完成！")
-        self.logger_.log_modal_process("更新完成！")
-        self.logger_.log_modal_status("更新完成！")
+        self.logger_.log_modal_process("更新完成！", self.modal_id)
+        self.logger_.log_modal_status("更新完成！", self.modal_id)
         
         # 清理缓存
         try:
             shutil.rmtree(cache_dir)
         except:
             pass
-
-        self.restart_application()
         
         return True
 
@@ -316,7 +307,7 @@ class Updater:
             if not release_info:
                 raise Exception("无法获取release信息")
             self.logger_.log(f"获取最新版本信息成功: {release_info.tag_name}")
-            self.logger_.log_modal_process(f"获取最新版本信息成功: {release_info.tag_name}")
+            self.logger_.log_modal_process(f"获取最新版本信息成功: {release_info.tag_name}", self.modal_id)
             
             latest_version = release_info.tag_name
             has_update = self.compare_versions(current_version, latest_version)
@@ -368,10 +359,10 @@ def get_app_version() -> str:
     """从获取当前应用版本"""
     return os.getenv("__version__", "0.0.0")
 
-def run_update_check(logger_: LogManager = LogManager(), only_stable: bool = True):
+def run_update_check(logger_: LogManager = LogManager(), only_stable: bool = True, modal_id: str = ''):
     """运行更新检查"""
     updater = Updater("HZBHZB1234", "LCTA-Limbus-company-transfer-auto", 
-                      logger_=logger_, only_stable=only_stable)
+                      logger_=logger_, only_stable=only_stable, modal_id=modal_id)
     current_version = get_app_version()
     if not current_version:
         logger_.log("无法获取当前版本信息，请检查版本文件或配置文件")

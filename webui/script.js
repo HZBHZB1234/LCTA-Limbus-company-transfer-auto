@@ -2298,8 +2298,24 @@ function showUpdateInfo(update_info) {
         '发现新版本',
         '',
         function() {
+            this.close();
             const progressModal = new ProgressModal('更新程序');
             progressModal.addLog('开始下载并安装更新...');
+            pywebview.api.perform_update_in_modal(progressModal.id)
+                .then(function(result) {
+                    if (!result) {
+                        progressModal.addLog('更新失败');
+                        progressModal.complete(false, '更新失败');
+                        return;
+                    }
+                    progressModal.addLog('更新完成');
+                    progressModal.addLog('正在重新启动程序...');
+                    progressModal.complete(true, '更新完成');
+                })
+                .catch(function(error) {
+                    progressModal.addLog('更新失败: ' + error);
+                    progressModal.complete(false, '更新失败');
+                });
         },
         function() {
             addLogMessage('用户取消了更新');

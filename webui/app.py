@@ -808,7 +808,6 @@ class LCTA_API():
                 delete_old_files=self.config.get("delete_updating", True),
                 logger_=self.log_manager,
                 use_proxy=self.config.get("update_use_proxy", True),
-                proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
                 only_stable=self.config.get("update_only_stable", False)
             )
             
@@ -835,7 +834,6 @@ class LCTA_API():
                 delete_old_files=self.config.get("delete_updating", True),
                 logger_=self.log_manager,
                 use_proxy=self.config.get("update_use_proxy", True),
-                proxy_url=self.config.get("update_proxy_url", "https://gh-proxy.org/"),
                 only_stable=self.config.get("update_only_stable", False)
             )
             

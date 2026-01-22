@@ -43,6 +43,7 @@ jobs:
     - name: setup-path
       run: |
         Copy-Item -Path .\LCTA -Destination .\LCTA_backup -Recurse
+        Copy-Item -Path .\LCTA -Destination .\LCTA_update -Recurse
         mkdir release
         mkdir release/${{ env.APP_NAME }}
         mkdir release/${{ env.APP_NAME }}/code
@@ -129,4 +130,12 @@ jobs:
         name: ${{ env.APP_NAME }}-Portable-Full
         path: |
           release/${{ env.APP_NAME }}
+        retention-days: 7
+
+    - name: Upload update folder
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-update
+        path: |
+          ./LCTA_update
         retention-days: 7

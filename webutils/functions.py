@@ -192,10 +192,11 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
     logger_.log(f"开始下载 {asset.name} (大小: {asset.size} bytes)")
     
     # 尝试所有URL直到成功
-    for i in range(len(proxy_manager.proxies)):
+    len_proxies = len(proxy_manager.proxies)
+    for i, proxy in enumerate(proxy_manager.get_proxies()):
         try:
-            url = _build_url(proxy_manager.get_current_proxy())
-            logger_.log(f"尝试下载 (代理 {i+1}/{len(proxy_manager.proxies)}): {url}")
+            url = _build_url(proxy)
+            logger_.log(f"尝试下载 (代理 {i+1}/{len_proxies}): {url}")
             
             # 使用download_with函数下载
             success = download_with(
@@ -220,21 +221,20 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
                         continue
                     
                     logger_.log(f"下载成功! 使用链接 {url}")
+                    proxy_manager.set_proxy_by_url(proxy)
                     return True
                 else:
                     logger_.log(f"文件未创建: {save_path}")
                     raise FileNotFoundError(f"文件未创建: {save_path}")
             else:
-                logger_.log(f"下载失败 (URL {i+1}/{len(proxy_manager.proxies)}): {e}")
-                proxy_manager.next_proxy()
+                logger_.log(f"下载失败 (URL {i+1}/{len_proxies}): {e}")
             
         except Exception as e:
-            logger_.log(f"下载失败 (URL {i+1}/{len(proxy_manager.proxies)}): {e}")
+            logger_.log(f"下载失败 (URL {i+1}/{len_proxies}): {e}")
             logger_.log_error(e)
             
             # 短暂延迟后重试
             time.sleep(0.1)
-            proxy_manager.next_proxy()
     
     logger_.log(f"所有下载尝试都失败: {asset.name}")
     return False

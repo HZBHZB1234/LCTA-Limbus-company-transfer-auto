@@ -5,6 +5,7 @@ import threading
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 from copy import deepcopy
+from contextlib import contextmanager, suppress
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -114,22 +115,6 @@ class ProxyManager:
         except Exception as e:
             print(f"获取代理列表失败: {e}")
     
-    def get_current_proxy(self) -> str:
-        """获取当前代理"""
-        if not self.proxies:
-            return ""
-        
-        # 如果上一次成功的代理存在且在列表中，优先使用它
-        if self.last_successful_proxy and self.last_successful_proxy in self.proxies:
-            self.current_index = self.proxies.index(self.last_successful_proxy)
-        
-        return self.proxies[self.current_index]
-    
-    def next_proxy(self):
-        """切换到下一个代理"""
-        if len(self.proxies) > 1:
-            self.current_index = (self.current_index + 1) % len(self.proxies)
-    
     def set_proxy_by_url(self, proxy_url: str):
         """根据代理URL设置当前代理，并记录为成功代理"""
         if proxy_url in self.proxies:
@@ -138,27 +123,11 @@ class ProxyManager:
             return True
         return False
     
-    def set_last_successful_proxy(self, proxy_url: str):
-        """直接设置上一次成功的代理（即使不在当前列表中）"""
-        self.last_successful_proxy = proxy_url
-    
-    def get_priority_proxies(self) -> List[str]:
+    def get_proxies(self) -> List[str]:
         """获取优先代理列表：上一次成功代理优先，然后是其他代理"""
-        if not self.proxies:
-            return []
+        result = self.proxies[self.current_index:] + self.proxies[:self.current_index]
         
-        priority_list = []
-        
-        # 如果有上一次成功的代理且在列表中，把它放在第一位
-        if self.last_successful_proxy and self.last_successful_proxy in self.proxies:
-            priority_list.append(self.last_successful_proxy)
-        
-        # 添加其他代理（排除已添加的上一次成功代理）
-        for proxy in self.proxies:
-            if proxy not in priority_list:
-                priority_list.append(proxy)
-        
-        return priority_list
+        return result
 
 class GitHubReleaseFetcher:
     """
@@ -193,7 +162,6 @@ class GitHubReleaseFetcher:
         # 线程池配置
         self.max_workers = 3  # 最大并发线程数
         self.request_timeout = 8  # 单个请求超时时间
-        self.overall_timeout = 15  # 整体超时时间
         
         # 忽略SSL警告
         if self.ignore_ssl:
@@ -253,10 +221,7 @@ class GitHubReleaseFetcher:
                 return None
         
         # 使用优先代理列表
-        if hasattr(self.proxy_manager, 'get_priority_proxies'):
-            proxies = self.proxy_manager.get_priority_proxies()
-        else:
-            proxies = self.proxy_manager.proxies
+        proxies = self.proxy_manager.get_proxies()
         
         if not proxies:
             print("没有可用的代理")
@@ -264,8 +229,22 @@ class GitHubReleaseFetcher:
         
         print(f"使用线程池（最大 {self.max_workers} 个线程）尝试 {len(proxies)} 个代理...")
         
+        executor = ThreadPoolExecutor(max_workers=self.max_workers)
+        
+        @contextmanager
+        def auto_shutdown_pool():
+            yield
+            try:
+                executor.shutdown(wait=False, cancel_futures=True)
+            except:
+                for _future in future:
+                    with suppress(Exception):
+                        if not _future.done():
+                            _future.cancel()
+                executor.shutdown(wait=False)
+        
         # 创建线程池
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+        with auto_shutdown_pool():
             # 提交所有代理请求任务
             future_to_proxy = {}
             for proxy_url in proxies:
@@ -275,38 +254,24 @@ class GitHubReleaseFetcher:
                 )
                 future_to_proxy[future] = proxy_url
             
-            # 记录开始时间用于超时控制
-            start_time = time.time()
-            
             try:
                 # 遍历完成的任务
-                for future in as_completed(future_to_proxy, timeout=self.overall_timeout):
+                for future in as_completed(future_to_proxy):
                     try:
                         data, used_proxy = future.result()
-                        
-                        # 检查是否超时
-                        if time.time() - start_time > self.overall_timeout:
-                            print("整体请求超时")
-                            break
                         
                         if data is not None:
                             # 找到可用的代理
                             self.proxy_manager.set_proxy_by_url(used_proxy)
                             print(f"成功使用代理: {used_proxy}")
-                            executor.shutdown(wait=False, cancel_futures=True)
                             return data
                             
                     except Exception as e:
                         proxy_url = future_to_proxy[future]
                         print(f"代理 {proxy_url} 任务异常: {e}")
                         
-                    # 检查是否超时
-                    if time.time() - start_time > self.overall_timeout:
-                        print("整体请求超时")
-                        break
-                        
             except TimeoutError:
-                print(f"请求超时（{self.overall_timeout}秒）")
+                print(f"请求超时")
         
         print("所有代理尝试均失败")
         return None    

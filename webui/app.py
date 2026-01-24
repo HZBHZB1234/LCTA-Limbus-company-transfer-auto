@@ -9,6 +9,9 @@ from logging.handlers import RotatingFileHandler
 import shutil
 import threading
 import atexit
+from typing import Optional, List, Dict, TYPE_CHECKING
+if TYPE_CHECKING:
+    from translatekit.base import TranslatorBase
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -526,6 +529,28 @@ class LCTA_API():
             )
             self.add_modal_log("专有词汇抓取成功", modal_id)
             return {"success": True, "message": "专有词汇抓取成功"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+        
+    def test_api(self, key: str, api_settings: dict) -> dict:
+        """测试API密钥是否有效"""
+        try:
+            self.log(f"开始测试API密钥: {key}")
+            translator: 'TranslatorBase' = self.TKIT_MACHINE[key]['translator'](
+                api_setting=api_settings, debug_mode=True)
+            lang_dict = self.TKIT_MACHINE[key]['langCode']
+            kr_result = translator.translate("안녕", lang_dict['kr'], lang_dict['zh']) if lang_dict['kr'] else '暂不支持该语言'
+            en_result = translator.translate("Hello", lang_dict['en'], lang_dict['zh']) if lang_dict['en'] else '暂不支持该语言'
+            jp_result = translator.translate("こんにちは", lang_dict['jp'], lang_dict['zh']) if lang_dict['jp'] else '暂不支持该语言'
+            self.log("API密钥测试成功")
+            result_dict = {
+                'kr': kr_result,
+                'en': en_result,
+                'jp': jp_result
+            }
+            self.log(f'结果:{result_dict}')
+            return {"success": True, "message": result_dict}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}

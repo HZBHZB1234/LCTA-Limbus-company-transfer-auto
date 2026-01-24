@@ -971,9 +971,22 @@ class APIConfigManager {
         }
         
         const service = this.apiServices[this.selectedService];
-        if (!service || !service['api-setting']) {
-            showMessage('提示', '此服务无需配置');
+        if (!service) {
+            showMessage('错误', '未找到选中的服务');
             return false;
+        }
+        
+        // 检查是否有 api-setting 配置
+        const apiSetting = service['api-setting'];
+        if (!apiSetting || !Array.isArray(apiSetting) || apiSetting.length === 0) {
+            showMessage('提示', '此服务无需配置');
+            
+            // 如果服务没有配置，保存空对象
+            this.currentSettings[this.selectedService] = {};
+            
+            // 发送到后端
+            this.updateSettings();
+            return true;
         }
         
         const settings = {};
@@ -981,7 +994,7 @@ class APIConfigManager {
         const missingFields = [];
         
         // 收集所有设置值
-        service['api-setting'].forEach(setting => {
+        apiSetting.forEach(setting => {
             const input = document.getElementById(`api-${setting.id}`);
             if (input) {
                 let value;
@@ -1028,7 +1041,66 @@ class APIConfigManager {
             return false;
         }
     }
-    
+
+    collectCurrentSettings() {
+        if (!this.selectedService) {
+            showMessage('错误', '请先选择翻译服务');
+            return false;
+        }
+        
+        const service = this.apiServices[this.selectedService];
+        if (!service) {
+            showMessage('错误', '未找到选中的服务');
+            return false;
+        }
+        
+        // 检查是否有 api-setting 配置
+        const apiSetting = service['api-setting'];
+        if (!apiSetting || !Array.isArray(apiSetting) || apiSetting.length === 0) {
+            // 返回空对象表示没有配置
+            return {};
+        }
+        
+        const settings = {};
+        let isValid = true;
+        const missingFields = [];
+        
+        // 收集所有设置值
+        apiSetting.forEach(setting => {
+            const input = document.getElementById(`api-${setting.id}`);
+            if (input) {
+                let value;
+                
+                if (input.type === 'checkbox') {
+                    value = input.checked;
+                } else if (input.tagName === 'SELECT') {
+                    value = input.value;
+                } else {
+                    value = input.value.trim();
+                }
+                
+                // 验证必填字段
+                if (setting.required && (!value || value === '')) {
+                    isValid = false;
+                    missingFields.push(setting.name);
+                    
+                    // 添加错误样式
+                    input.classList.add('error');
+                } else {
+                    input.classList.remove('error');
+                }
+                
+                settings[setting.id] = value;
+            }
+        });
+        
+        if (!isValid) {
+            showMessage('错误', `以下必填字段未填写：${missingFields.join(', ')}`);
+            return false;
+        }
+        
+        return settings;
+    }    
     async loadSettings() { 
         try {
             const savedSettings = configManager.getCachedValue('api_config');
@@ -1192,6 +1264,34 @@ class APIConfigManager {
     // 获取特定服务的设置
     getServiceSettings(serviceKey) {
         return this.currentSettings[serviceKey] || {};
+    }
+
+    async testAPIConfig() {
+        const modal = new ProgressModal('测试API配置');
+        modal.addLog('正在测试API配置...')
+        const apiConfig = this.collectCurrentSettings();
+
+        if (apiConfig === false) {
+            modal.complete(false, '测试失败');
+            return;
+        }
+        const result = await pywebview.api.test_api(
+            this.selectedService, apiConfig
+        )
+
+        if (result.success) {
+            modal.addLog('API配置测试成功！');
+            modal.addLog('测试信息如下');
+            const result_json = result.message;
+            modal.addLog(`韩文：안녕 -> ${result_json.kr}`);
+            modal.addLog(`英文：hello -> ${result_json.en}`);
+            modal.addLog(`日文：こんにちは -> ${result_json.jp}`);
+            modal.complete(true, '测试成功');
+        } else {
+            modal.addLog('API配置测试失败！');
+            modal.addLog(result.message);
+            modal.complete(false, '测试失败');
+        }
     }
 }
 
@@ -2661,6 +2761,9 @@ function saveLauncherConfig() {
                     .then(() => {
                         modal.complete(true, 'Launcher配置保存成功');
                         pywebview.api.save_config_to_file();
+                        setTimeout(function() {
+                            modal.close();
+                        }, 1000)
                     });
             } else {
                 modal.complete(false, '部分配置保存失败');
@@ -2683,6 +2786,9 @@ function useDefaultConfig() {
                 if (configManager) {
                     configManager.applyConfigToUI();
                 }
+                setTimeout(function() {
+                    modal.close();
+                }, 1000)
             } else {
                 modal.complete(false, '配置重置失败: ' + result.message);
             }
@@ -2707,6 +2813,9 @@ function resetConfig() {
                         if (configManager) {
                             configManager.applyConfigToUI();
                             modal.complete(true, '配置已重置');
+                            setTimeout(function() {
+                                modal.close();
+                            }, 1000)
                         }
                     } else {
                         modal.complete(false, '配置重置失败: ' + result.message);
@@ -3254,11 +3363,10 @@ window.addEventListener('pywebviewready', function() {
                 setConfigToCache(config);
                 
                 // 应用配置到UI
-                configManager.applyConfigToUI();
-
-                toggleCachePathInput();
+                configManager.applyConfigToUI().then(function() {
+                    toggleCachePathInput()
+                })
             }
-            
             checkGamePath();
             
             const autoCheckUpdate = configManager.getCachedValue('auto_check_update');

@@ -1,5 +1,6 @@
 import translatekit as tkit
 from typing import Dict, List, Type, TYPE_CHECKING
+from copy import deepcopy
 if TYPE_CHECKING:
     from translatekit.base import Metadata
 
@@ -124,7 +125,7 @@ TKIT_MACHINE = {
         "api-setting": tkit.LingueeTranslator.DESCRIBE_API_KEY,
         "translator": tkit.LingueeTranslator,
         "langCode": {
-            'zh': 'chinese','en': 'english', 'kr': '', 'jp': 'japanese'
+            'zh': 'chinese','en': 'english', 'kr': '', 'jp': ''
             }},
     "腾讯翻译服务": {
         "metadata": get_dict_by_matadata(tkit.TencentTranslator.METADATA),
@@ -165,7 +166,7 @@ TKIT_MACHINE = {
 
 LLM_TRANSLATOR: Dict[str, dict] = tkit.LLMGeneralTranslator.INNER_API
 
-TKIT_MACHINE_OBJECT = TKIT_MACHINE.copy()
+TKIT_MACHINE_OBJECT = deepcopy(TKIT_MACHINE)
 
 for value in TKIT_MACHINE_OBJECT.values():
     value.pop("translator")

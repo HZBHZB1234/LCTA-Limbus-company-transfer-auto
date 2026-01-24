@@ -841,13 +841,13 @@ class FileProcessor:
                     self.en_json:Dict = json.load(f)
             except FileNotFoundError:
                 self.logger.warning(f"{self.path_config.real_name}不存在en文件，使用kr文件")
-                self.en_json = self.kr_json.copy()
+                self.en_json = deepcopy(self.kr_json)
             try:
                 with open(self.path_config.JP_path, 'r', encoding='utf-8-sig') as f:
                     self.jp_json: Dict = json.load(f)
             except FileNotFoundError:
                 self.logger.warning(f"{self.path_config.real_name}不存在jp文件，跳过jp文件处理")
-                self.jp_json = self.kr_json.copy()
+                self.jp_json = deepcopy(self.kr_json)
             try:
                 with open(self.path_config.LLC_path, 'r', encoding='utf-8-sig') as f:
                     self.llc_json = json.load(f)

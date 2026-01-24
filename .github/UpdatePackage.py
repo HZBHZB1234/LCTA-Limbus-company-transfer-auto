@@ -93,12 +93,12 @@ def get_llc():
     
     try:
         GithubDownloader = GitHubReleaseFetcher(
-            "LocalizeLimbusCompany",
-            "LocalizeLimbusCompany",
             False,
             ignore_ssl=True
         )
-        last_ver = GithubDownloader.get_latest_release()
+        last_ver = GithubDownloader.get_latest_release(
+            "LocalizeLimbusCompany", "LocalizeLimbusCompany"
+        )
         return last_ver.tag_name, last_ver
 
     except Exception as e:

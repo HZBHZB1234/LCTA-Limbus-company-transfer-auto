@@ -891,7 +891,7 @@ class LCTA_API():
 
 def setup_logging():
     """
-    配置日志系统，使5KB作为轮换大小
+    配置日志系统
     """
     # 创建logs目录（如果不存在）
     if not os.path.exists('logs'):
@@ -901,11 +901,10 @@ def setup_logging():
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     
-    # 创建轮转文件处理器，最大25KB，保留10个备份文件
     handler = RotatingFileHandler(
         'logs/app.log', 
-        maxBytes=1024*25,  # 25kb
-        backupCount=10,       # 保留5个旧日志文件
+        maxBytes=1024*100,
+        backupCount=5,
         encoding='utf-8'
     )
     

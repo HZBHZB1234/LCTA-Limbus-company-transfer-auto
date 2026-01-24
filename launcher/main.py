@@ -1,5 +1,3 @@
-import atexit
-import signal
 import subprocess
 import sys
 import tempfile
@@ -13,6 +11,8 @@ import socket
 import os
 
 import logging
+# 导入 RotatingFileHandler 用于日志文件轮换
+from logging.handlers import RotatingFileHandler
 
 # DO NOT IMPORT ANY FILES BEFORE THESE TWO LINES
 print('开始')
@@ -21,6 +21,7 @@ print(f'\n\n{file_dir}')
 sys.path.insert(0, str(file_dir))
 
 from webFunc import *
+from webFunc import GithubDownload
 from webutils.log_manage import LogManager
 from webutils import *
 import webutils.load as LoadUtils
@@ -55,11 +56,14 @@ def main_pre():
     global config_whole
     global logger
     global steam_argv
+    # 使用 RotatingFileHandler 实现日志文件轮换，最大100KB，保留5个备份文件
+    rotating_handler = RotatingFileHandler(".\\logs\\launcher.log", maxBytes=1024*100,
+                                           backupCount=5, encoding='utf-8')
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[
-            logging.FileHandler(".\\logs\\launcher.log", encoding='utf-8'),
+            rotating_handler,
             logging.StreamHandler(stream=sys.stdout)
         ]
     )
@@ -92,6 +96,8 @@ def main_pre():
     update = config.get("work", {}).get("update", "no")
     last = config.get("last_install", {})
     cache_path = func_utils.get_cache_font(config_whole)
+    
+    GithubDownload.init_request()
 
     if update == "llc":
         logger.log("启用LLC更新")
@@ -253,10 +259,7 @@ def main_after_mod():
     try:
         logging.info("Limbus args: %s", sys.argv)
         cleanup_assets()
-        atexit.register(cleanup_assets)
-        signal.signal(signal.SIGINT, kill_handler)
-        signal.signal(signal.SIGTERM, kill_handler)
-
+        #atexit.register(cleanup_assets)
         logging.info("Detecting lunartique mods")
         patch.detect_lunartique_mods(mod_zips_root_path)
         tmp_asset_root = tempfile.mkdtemp()
@@ -268,6 +271,7 @@ def main_after_mod():
         sound.replace_sound(mod_zips_root_path,steam_argv)
         logging.info("Starting game")
         subprocess.call(steam_argv)
+        cleanup_assets()
 
     except Exception as e:
         logging.error("Error: %s", e)

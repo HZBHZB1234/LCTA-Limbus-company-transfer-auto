@@ -50,7 +50,7 @@ def start_launcher():
     """启动Launcher界面"""
     try:
         os.environ['path_'] = str(get_resource_path())
-        os.environ['steam_argv'] = ' '.join(sys.argv[1:].remove('-launcher'))
+        os.environ['steam_argv'] = ' '.join(sys.argv[1:].remove('-launcher')) if len(sys.argv) >=3 else ''
         # 判断是否为打包环境
         is_frozen = hasattr(sys, 'frozen') or hasattr(sys, '_MEIPASS')
         os.environ['is_frozen'] = str(is_frozen).lower()

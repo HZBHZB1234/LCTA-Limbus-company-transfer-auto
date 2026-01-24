@@ -3,16 +3,18 @@ import logging
 import os
 import shutil
 import time
+import shlex
+from pathlib import Path
 from threading import Thread
 
 from launcher.modfolder import get_mod_folder
 
 _game_path = None
 def sound_folder():
-    return os.path.join(os.path.split(_game_path)[0], "../LimbusCompany_Data/StreamingAssets/Assets/Sound/FMODBuilds/Desktop")
+    return Path(_game_path).parent / "LimbusCompany_Data/StreamingAssets/Assets/Sound/FMODBuilds/Desktop"
 
 def sound_data_paths():
-    return map(os.path.normpath, glob.glob(sound_folder() + "/*.bank"))
+    return map(os.path.normpath, glob.glob(str(sound_folder()) + "/*.bank"))
 
 def smallest_sound_file():
     return min(sound_data_paths(), key=os.path.getsize)
@@ -43,7 +45,7 @@ def restore_sound():
 def replace_sound(mod_folder: str, game_path: str):
     mod_zips_root_path = get_mod_folder()
     global _game_path
-    _game_path = game_path
+    _game_path = shlex.split(game_path)[0]
     if any(file_name.endswith(".bank") for file_name in os.listdir(mod_zips_root_path)):
         Thread(target=sound_replace_thread, args=(mod_folder,)).start()
     else:

@@ -21,6 +21,9 @@
             "clean_notice": "bool",
             "clean_mods": "bool"
         },
+        "api_config": { 
+            "key": "str"
+        },
         "proper": {
             "join_char": "str",
             "disable_space": "bool",
@@ -28,6 +31,9 @@
             "output_type": "str"
         }
     },
+    "api_config": "str",
+    "api_crypto": "bool",
+    "theme": "str",
     "game_path": "str",
     "debug": "bool",
     "auto_check_update": "bool",

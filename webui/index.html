@@ -24,7 +24,7 @@
         <div class="sidebar-header">
             <div class="logo">
                 <i class="fas fa-language"></i>
-                <h2>LCTA <span class="version">v3.1.0</span></h2>
+                <h2>LCTA <span class="version">v4.0.5</span></h2>
             </div>
             <p class="subtitle">边狱公司汉化工具箱</p>
         </div>
@@ -571,45 +571,16 @@
                     <h3 class="setting-title">API配置</h3>
                     <div class="form-group">
                         <label for="api-service">选择翻译服务:</label>
-                        <div class="select-wrapper">
-                            <select id="api-service">
-                                <option value="baidu">百度翻译</option>
-                                <option value="tencent">腾讯翻译</option>
-                                <option value="youdao">有道翻译</option>
-                                <option value="caiyun">彩云翻译</option>
-                                <option value="xiaoniu">小牛翻译</option>
-                                <option value="aliyun">阿里云翻译</option>
-                                <option value="huoshan">火山翻译</option>
-                                <option value="chatgpt">ChatGPT翻译</option>
-                            </select>
-                            <i class="fas fa-chevron-down"></i>
+                        <!-- 配置API选择容器 -->
+                        <div class="api-select">
                         </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="api-key">API密钥:</label>
-                        <div class="input-with-icon">
-                            <i class="fas fa-key"></i>
-                            <input type="password" id="api-key" placeholder="输入API密钥">
-                            <button class="toggle-password" type="button">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="api-secret">密钥密文 (如需要):</label>
-                        <div class="input-with-icon">
-                            <i class="fas fa-lock"></i>
-                            <input type="password" id="api-secret" placeholder="输入密钥密文">
-                            <button class="toggle-password" type="button">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                    </div>
+                    <!-- API设置容器 -->
+                    <div class="api-settings"></div>
                     
                     <div class="action-area">
-                        <button class="primary-btn" onclick="saveAPIConfig()">
+                        <button class="primary-btn" onclick="apiConfigManager.saveCurrentSettings()">
                             <i class="fas fa-save"></i>
                             保存配置
                         </button>
@@ -618,26 +589,8 @@
                 
                 <div class="setting-card">
                     <h3 class="setting-title">服务状态</h3>
+                    <!-- API状态容器 -->
                     <div class="api-status-grid">
-                        <div class="api-status-item active">
-                            <div class="api-icon">
-                                <i class="fas fa-check-circle"></i>
-                            </div>
-                            <div class="api-info">
-                                <h4>百度翻译</h4>
-                                <p>状态正常</p>
-                            </div>
-                        </div>
-                        
-                        <div class="api-status-item">
-                            <div class="api-icon">
-                                <i class="fas fa-circle"></i>
-                            </div>
-                            <div class="api-info">
-                                <h4>腾讯翻译</h4>
-                                <p>未配置</p>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -848,6 +801,14 @@
                             <input type="checkbox" id="update-only-stable" checked>
                             <span class="checkmark"></span>
                             仅更新稳定版本
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="api-crypto" checked>
+                            <span class="checkmark"></span>
+                            加密api配置
                         </label>
                     </div>
                     

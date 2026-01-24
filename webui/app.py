@@ -8,6 +8,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import shutil
 import threading
+import atexit
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -20,6 +21,9 @@ import webutils.load as load_util
 import webutils.function_llc as function_llc
 from webutils.functions import get_cache_font
 from webutils.update import Updater, get_app_version
+from webutils.const_apiConfig import (
+    LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
+)
 from webutils import (
     function_llc_main, 
     function_ourplay_main,
@@ -54,6 +58,9 @@ class LCTA_API():
         self.log(f"当前运行环境: {'打包环境' if self.is_frozen else '开发环境'}")
         self.log(f"当前运行目录：{ os.getenv('path_') }")
 
+        self.TKIT_MACHINE = TKIT_MACHINE
+        self.TKIT_MACHINE_OBJECT = TKIT_MACHINE_OBJECT
+        self.LLM_TRANSLATOR = LLM_TRANSLATOR
         self.set_function()
         self.init_config()
 
@@ -602,6 +609,17 @@ class LCTA_API():
         except Exception as e:
             self.log_error(e)
             return False
+        
+    def save_setting_from(self):
+        js_code = '''
+                const updates = configManager.collectConfigFromUI();
+    configManager.updateConfigValues(updates)
+        .then(function(result) {
+                configManager.flushPendingUpdates()
+            });
+
+            '''
+        self._window.evaluate_js(js_code)
     
     def update_config_value(self, key_path, value, create_missing=True):
         """
@@ -839,11 +857,6 @@ class LCTA_API():
             
             # 执行更新
             result = updater.check_and_update(self.current_version)
-            
-            if result:
-                self.add_modal_log("更新完成，即将重启应用...", modal_id)
-            else:
-                self.add_modal_log("更新失败", modal_id)
                 
             return result
         except Exception as e:
@@ -908,7 +921,8 @@ def main():
     )
     
     api.set_window(window)
-    window.events.closed += api.save_config_to_file
+    window.events.closed += api.save_setting_from
+    atexit.register(api.save_config_to_file)
     # 设置模态窗口相关的回调
     api.log_manager.set_modal_callbacks(
         status_callback=api.set_modal_status,

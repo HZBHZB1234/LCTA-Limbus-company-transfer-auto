@@ -17,6 +17,9 @@
             "check_hash": true,
             "use_api": false
         },
+        "api_config": { 
+            "key": ""
+        },
         "clean":{
             "clean_progress": false,
             "clean_notice": false,
@@ -29,6 +32,9 @@
             "output_type":"text_one"
         }
     },
+    "api_config": "",
+    "api_crypto": true,
+    "theme": "light",
     "game_path":"",
     "debug":false,
     "auto_check_update": true,

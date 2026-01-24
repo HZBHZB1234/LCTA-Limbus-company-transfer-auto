@@ -1662,3 +1662,214 @@ button {
         break-inside: avoid;
     }
 }
+
+.api-select {
+    margin-bottom: 20px;
+}
+
+.api-service-select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-bg-input);
+    color: var(--color-text);
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.api-service-select:focus {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+/* API设置表单样式 */
+.api-settings-form {
+    background-color: var(--color-bg-card);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid var(--color-border);
+}
+
+.api-settings-form h4 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: var(--color-text);
+    border-bottom: 2px solid var(--color-primary);
+    padding-bottom: 10px;
+}
+
+.api-setting-field {
+    margin-bottom: 15px;
+}
+
+.api-setting-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: var(--color-text);
+}
+
+.api-setting-field .required {
+    color: #ff4757;
+}
+
+.api-setting-field input[type="text"],
+.api-setting-field input[type="password"],
+.api-setting-field select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-bg-input);
+    color: var(--color-text);
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.api-setting-field input:focus,
+.api-setting-field select:focus {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+.api-setting-field input.error {
+    border-color: #ff4757;
+}
+
+.password-input-group {
+    position: relative;
+    display: flex;
+}
+
+.password-input-group input {
+    flex: 1;
+    padding-right: 40px;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    width: 40px;
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toggle-password:hover {
+    color: var(--color-primary);
+}
+
+/* API状态卡片样式 */
+.api-status-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+}
+
+.api-status-card {
+    background-color: var(--color-bg-card);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.api-status-card h4 {
+    margin-top: 0;
+    color: var(--color-primary);
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.api-description {
+    color: var(--color-text);
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+.api-usage-documentation {
+    color: var(--color-text);
+}
+
+.api-short-desc {
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    margin-bottom: 15px;
+    font-style: italic;
+}
+
+.api-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.api-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    padding: 5px 10px;
+    background-color: rgba(var(--color-primary-rgb), 0.1);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.api-link:hover {
+    background-color: rgba(var(--color-primary-rgb), 0.2);
+    text-decoration: underline;
+}
+
+.api-lang-codes h5 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: var(--color-text);
+    font-size: 14px;
+}
+
+.lang-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lang-item {
+    background-color: var(--color-bg-input);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+}
+
+/* 无设置提示 */
+.no-settings {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--color-text-secondary);
+    background-color: var(--color-bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px dashed var(--color-border);
+}
+
+/* 响应式调整 */
+@media (min-width: 768px) {
+    .api-status-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1200px) {
+    .api-status-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}

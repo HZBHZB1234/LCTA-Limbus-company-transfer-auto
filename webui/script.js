@@ -694,8 +694,10 @@ class APIConfigManager {
         try {
             // 从后端获取API服务数据
             const tkitMachine = await pywebview.api.get_attr('TKIT_MACHINE_OBJECT');
-            if (tkitMachine) {
+            const LLM_TRANSLATOR = await pywebview.api.get_attr('LLM_TRANSLATOR');
+            if (tkitMachine && LLM_TRANSLATOR) {
                 this.apiServices = tkitMachine;
+                this.llmTranslator = LLM_TRANSLATOR;
                 this.initialized = true;
                 console.log('API服务数据加载成功');
             };
@@ -727,12 +729,6 @@ class APIConfigManager {
         const selectElement = document.createElement('select');
         selectElement.id = 'api-service-select';
         selectElement.className = 'api-service-select';
-        
-        // 添加默认选项
-        //const defaultOption = document.createElement('option');
-        //defaultOption.value = '';
-        //defaultOption.textContent = '选择翻译服务...';
-        //selectElement.appendChild(defaultOption);
         
         // 添加所有API服务选项
         Object.keys(this.apiServices).forEach(serviceName => {
@@ -769,6 +765,102 @@ class APIConfigManager {
         
         // 生成设置表单
         this.generateSettingsForm(serviceKey, service);
+
+        if (serviceKey === 'LLM通用翻译服务') {
+            this.addLLMServiceSelector();
+        }
+    }
+    
+    // 添加LLM服务选择器到表单
+    addLLMServiceSelector() {
+        if (!this.initialized || !this.llmTranslator) {
+            console.error('LLM翻译器未初始化');
+            return;
+        }
+        
+        const apiSettingsContainer = document.querySelector('.api-settings-form');
+        if (!apiSettingsContainer) {
+            console.error('找不到.api-settings-form容器');
+            return;
+        }
+
+        // 找到第一个设置字段容器，在其前面插入LLM选择器
+        const firstField = apiSettingsContainer.querySelector('.api-setting-field');
+        
+        // 创建LLM选择器容器
+        const selectorContainer = document.createElement('div');
+        selectorContainer.className = 'api-setting-field';
+        
+        // 创建标签
+        const label = document.createElement('label');
+        label.htmlFor = 'api-llm-service-selector';
+        label.textContent = '选择LLM服务';
+        selectorContainer.appendChild(label);
+        
+        // 创建选择框
+        const selectWrapper = document.createElement('div');
+        selectWrapper.className = 'select-wrapper';
+        
+        const select = document.createElement('select');
+        select.id = 'api-llm-service-selector';
+        select.name = 'llm_service_selector';
+        
+        // 添加默认选项
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '选择以使用预设LLM服务地址...';
+        select.appendChild(defaultOption);
+        
+        // 添加所有LLM服务选项
+        Object.keys(this.llmTranslator).forEach(serviceName => {
+            const option = document.createElement('option');
+            option.value = serviceName;
+            option.textContent = serviceName;
+            select.appendChild(option);
+        });
+        
+        // 添加图标
+        const chevronIcon = document.createElement('i');
+        chevronIcon.className = 'fas fa-chevron-down';
+        
+        selectWrapper.appendChild(select);
+        selectWrapper.appendChild(chevronIcon);
+        selectorContainer.appendChild(selectWrapper);
+        
+        // 添加帮助文本
+        const helpText = document.createElement('small');
+        helpText.className = 'form-hint';
+        helpText.textContent = '选择预设的LLM服务，将自动填充基础地址和模型名称参数';
+        selectorContainer.appendChild(helpText);
+        
+        // 插入到表单顶部
+        if (firstField) {
+            apiSettingsContainer.insertBefore(selectorContainer, firstField);
+        }
+        
+        // 添加选择事件监听
+        select.addEventListener('change', (e) => {
+            this.onLLMSelected(e.target.value);
+        });
+    }
+
+    onLLMSelected(serviceKey) {
+        if (!serviceKey || !this.llmTranslator[serviceKey]) {
+            return;
+        }
+        
+        const service = this.llmTranslator[serviceKey];
+        
+        // 填充对应的表单字段
+        const baseURLElement = document.getElementById('api-base_url');
+        const modelElement = document.getElementById('api-model_name');
+        
+        if (baseURLElement) {
+            baseURLElement.value = service.base_url || '';
+        }
+        if (modelElement) {
+            modelElement.value = service.model || '';
+        }
     }
     
     // 生成API设置表单
@@ -813,12 +905,12 @@ class APIConfigManager {
         this.loadSavedSettings(serviceKey);
     }
     
-    // 创建单个设置字段
+    // 创建单个设置字段 - 简化版
     createSettingField(setting) {
         const fieldGroup = document.createElement('div');
         fieldGroup.className = 'api-setting-field';
         
-        // 创建标签
+        // 创建标签（boolean类型不需要单独的标签）
         if (setting.type !== 'boolean') {
             const label = document.createElement('label');
             label.htmlFor = `api-${setting.id}`;
@@ -830,92 +922,32 @@ class APIConfigManager {
                 label.appendChild(requiredSpan);
             }
             fieldGroup.appendChild(label);
-        }        
+        }
+        
         // 根据类型创建输入控件
         let inputElement;
         
         switch(setting.type) {
-        case 'boolean':
-            // 将整个复选框结构作为 label
-            inputElement = document.createElement('label');
-            inputElement.className = 'checkbox-container';
-            inputElement.htmlFor = `api-${setting.id}`;
-            
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.id = `api-${setting.id}`;
-            checkbox.name = setting.id;
-            
-            const checkmark = document.createElement('span');
-            checkmark.className = 'checkmark';
-            
-            const labelText = document.createElement('span');
-            labelText.textContent = setting.name || '';
-            
-            inputElement.appendChild(checkbox);
-            inputElement.appendChild(checkmark);
-            inputElement.appendChild(labelText);
-            break;                
-            case 'select':
-                // 下拉选择框
-                inputElement = document.createElement('div');
-                inputElement.className = 'select-wrapper';
+            case 'boolean':
+                // 创建复选框结构
+                inputElement = document.createElement('label');
+                inputElement.className = 'checkbox-container';
+                inputElement.htmlFor = `api-${setting.id}`;
                 
-                const select = document.createElement('select');
-                select.id = `api-${setting.id}`;
-                select.name = setting.id;
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `api-${setting.id}`;
+                checkbox.name = setting.id;
                 
-                // 添加选项（这里需要根据实际情况获取选项）
-                if (setting.options && Array.isArray(setting.options)) {
-                    setting.options.forEach(option => {
-                        const optionElement = document.createElement('option');
-                        optionElement.value = option.value;
-                        optionElement.textContent = option.label;
-                        select.appendChild(optionElement);
-                    });
-                }
+                const checkmark = document.createElement('span');
+                checkmark.className = 'checkmark';
                 
-                const chevronIcon = document.createElement('i');
-                chevronIcon.className = 'fas fa-chevron-down';
+                const labelText = document.createElement('span');
+                labelText.textContent = setting.name || '';
                 
-                inputElement.appendChild(select);
-                inputElement.appendChild(chevronIcon);
-                break;
-                
-            case 'password':
-                // 密码框（带显示/隐藏按钮）
-                inputElement = document.createElement('div');
-                inputElement.className = 'password-input-group';
-                
-                const passwordInput = document.createElement('input');
-                passwordInput.type = 'password';
-                passwordInput.id = `api-${setting.id}`;
-                passwordInput.name = setting.id;
-                passwordInput.placeholder = setting.description || '';
-                
-                const toggleButton = document.createElement('button');
-                toggleButton.type = 'button';
-                toggleButton.className = 'toggle-password';
-                toggleButton.innerHTML = '<i class="fas fa-eye"></i>';
-                
-                // 添加显示/隐藏功能
-                toggleButton.addEventListener('click', function() {
-                    const input = this.parentElement.querySelector('input');
-                    const icon = this.querySelector('i');
-                    
-                    if (input.type === 'password') {
-                        input.type = 'text';
-                        icon.classList.remove('fa-eye');
-                        icon.classList.add('fa-eye-slash');
-                    } else {
-                        input.type = 'password';
-                        icon.classList.remove('fa-eye-slash');
-                        icon.classList.add('fa-eye');
-                    }
-                });
-                
-                inputElement.appendChild(passwordInput);
-                inputElement.appendChild(toggleButton);
+                inputElement.appendChild(checkbox);
+                inputElement.appendChild(checkmark);
+                inputElement.appendChild(labelText);
                 break;
                 
             default:
@@ -930,8 +962,8 @@ class APIConfigManager {
         
         fieldGroup.appendChild(inputElement);
         
-        // 添加帮助文本
-        if (setting.description) {
+        // 添加帮助文本（非boolean类型）
+        if (setting.description && setting.type !== 'boolean') {
             const helpText = document.createElement('small');
             helpText.className = 'form-hint';
             helpText.textContent = setting.description;

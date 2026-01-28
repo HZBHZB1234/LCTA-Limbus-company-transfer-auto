@@ -164,7 +164,52 @@ TKIT_MACHINE = {
             }}
 }
 
-LLM_TRANSLATOR: Dict[str, dict] = tkit.LLMGeneralTranslator.INNER_API
+LLM_TRANSLATOR: Dict[str, dict] = {
+    # 官方平台
+    "OpenAI 官方": {
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o"
+    },
+    # 微软 Azure 托管 OpenAI
+    "Azure OpenAI": {
+        "base_url": "https://{your-resource-name}.openai.azure.com/openai/deployments/{your-deployment-name}/v1",
+        "model": "gpt-4o"
+    },
+    # 国内主流平台
+    "智谱 AI（ChatGLM）": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-4"
+    },
+    "字节跳动 火山引擎（豆包）": {
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "model": "doubao-pro"
+    },
+    "百度 文心一言（千帆平台）": {
+        "base_url": "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions",
+        "model": "ernie-4.0-turbo"
+    },
+    "阿里云 通义千问（灵积平台）": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-turbo"
+    },
+    "腾讯云 混元大模型": {
+        "base_url": "https://hunyuan.cloud.tencent.com/v1",
+        "model": "hunyuan-pro"
+    },
+    "DeepSeek（深度求索）": {
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat"
+    },
+    # 国外其他知名平台
+    "Anthropic（Claude）": {
+        "base_url": "https://api.anthropic.com/v1",  # 注：原生API略有差异，第三方兼容层可使用 https://api.chatanywhere.tech/v1
+        "model": "claude-3-opus"
+    },
+    "Groq（高速推理）": {
+        "base_url": "https://api.groq.com/openai/v1",
+        "model": "llama3-70b-8192"
+    }
+}
 
 TKIT_MACHINE_OBJECT = deepcopy(TKIT_MACHINE)
 

@@ -47,7 +47,6 @@ class CancelRunning(Exception):
 class LCTA_API():
     def __init__(self,logger:logging):
         self._window = None
-        self.game_path = None
         # 初始化日志管理器
         self.logger =logger
         self.log_manager = LogManager()

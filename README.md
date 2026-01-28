@@ -1,13 +1,20 @@
 # LCTA-Limbus-company-transfer-auto
 较为全面的边狱公司工具箱
-目前在写v4.0.1，由于进行了重构，现在只有ui，start_webui.py是主程序，感兴趣的可以自己先看看，等我写完再来改readme  
-# 重点:项目还在重构，请勿使用(LCTA1.0的翻译功能有点问题，不过急着用就去1.0分支里自己改)(v3.0.0 beta 版本在分支old中)。  
+当前版本v4.0.5，重构进行中  
 ## TODO:  
-- 添加汉化API配置界面  
+- 完成翻译逻辑  
 
-  
 ## 已知问题:
 > 已解决
+
+## 相关链接:
+- B站作者链接: [ygdtpnn](https://space.bilibili.com/3493119444126599)  
+- 最晚B站视频: [LCTA-Limbus-company-transfer-auto](https://www.bilibili.com/video/BV1v54y1X7jY) 注：B站视频大概率不是最新，请以当前项目进度为准  
+- Github作者链接: [HZBHZB1234](https://github.com/HZBHZB1234)
+- Github项目链接: [HZBHZB1234/LCTA-Limbus-company-transfer-auto](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto)  
+- Github意见箱链接: [HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues)
+- QQ群聊: 1081988645
+- 贴吧昵称: HZBHZB31415926
 
 ## 许可证:
 本项目基于[MIT](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/blob/main/LICENSE)许可协议进行分发。您可以在此许可协议下使用本项目，以下资源除外。  

@@ -1330,6 +1330,67 @@ class APIConfigManager {
 // 初始化API配置管理器
 let apiConfigManager;
 
+async function loadAndRenderMarkdown() {
+  try {
+    // 定义要加载的文件路径
+    const files = [
+      { url: '/assets/README.md', className: 'about-content' },
+      { url: '/assets/update.md', className: 'update-content' }
+    ];
+
+    // 并发请求所有文件
+    const promises = files.map(async ({ url, className }) => {
+      try {
+        // 请求Markdown文件
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
+        }
+        
+        // 获取文本内容
+        const markdownText = await response.text();
+        
+        // 检查simpleMarkdownToHtml函数是否存在
+        if (typeof simpleMarkdownToHtml !== 'function') {
+          throw new Error('simpleMarkdownToHtml函数未定义');
+        }
+        
+        // 转换Markdown为HTML
+        const htmlContent = simpleMarkdownToHtml(markdownText);
+        
+        // 找到目标div元素
+        const targetDiv = document.querySelector(`.${className}`);
+        
+        if (!targetDiv) {
+          console.warn(`未找到class为${className}的元素`);
+          return;
+        }
+        
+        // 插入HTML内容
+        targetDiv.innerHTML = htmlContent;
+        
+        console.log(`成功加载并渲染: ${url}`);
+        
+      } catch (error) {
+        console.error(`处理 ${url} 时出错:`, error);
+        // 可以选择在对应的div中显示错误信息
+        const targetDiv = document.querySelector(`.${className}`);
+        if (targetDiv) {
+          targetDiv.innerHTML = `<p class="error">加载内容失败: ${error.message}</p>`;
+        }
+      }
+    });
+
+    // 等待所有文件加载完成
+    await Promise.allSettled(promises);
+    
+    console.log('所有Markdown文件加载完成');
+    
+  } catch (error) {
+    console.error('加载Markdown文件过程中发生错误:', error);
+  }
+}
 
 // 浏览文件函数
 function browseFile(inputId) {
@@ -3274,6 +3335,7 @@ function requestGamePath() {
 document.addEventListener('DOMContentLoaded', function() {
     init();
     setupGlobalErrorHandling();
+    loadAndRenderMarkdown();
 });
 
 // 与后端通信的初始化

@@ -1208,6 +1208,7 @@ button {
     padding: var(--spacing-xl);
     box-shadow: var(--shadow-md);
     border: 1px solid var(--color-border);
+    margin-bottom: var(--spacing-lg);
 }
 
 .about-header {
@@ -1251,6 +1252,27 @@ button {
     line-height: 1.6;
 }
 
+.about-content a,
+.update-content a {
+    color: var(--color-primary);
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    padding: 2px 4px;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.about-content a:hover,
+.update-content a:hover {
+    color: white;
+    background-color: var(--color-primary);
+    text-decoration: none;
+}
+
+.update-content {
+    line-height: 1.6;
+}
+
 .description {
     margin-bottom: var(--spacing-xl);
     color: var(--color-text-secondary);
@@ -1285,12 +1307,6 @@ button {
 
 .feature-list i {
     color: var(--color-success);
-}
-
-.about-footer {
-    margin-top: var(--spacing-xl);
-    padding-top: var(--spacing-lg);
-    border-top: 2px solid var(--color-border-light);
 }
 
 .contact-info h4 {

@@ -10,6 +10,10 @@ os.chdir(projext_path)
 shutil.copy2("favicon.ico", "webui/favicon.ico")
 print('复制图标文件完成')
 
+print('开始复制README文件')
+shutil.copy2("README.md", "webui/assets/README.md")
+print('复制README文件完成')
+
 print("开始本地化CSS资源...")
 os.chdir(projext_path / "webui")
 print(f"切换工作目录至: {os.getcwd()}")

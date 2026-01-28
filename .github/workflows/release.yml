@@ -11,7 +11,7 @@ on:
 env:
   PYTHON_VERSION: 3.9.6  # 使用嵌入式Python版本
   APP_NAME: "LCTA"
-  PYINSTALLER_ADD_DATA: "--add-data \"LCTA_backup/config_default.json;.\" --add-data \"LCTA_backup/config_check.json;.\" --add-data \"LCTA_backup/webui;webui\""
+  PYINSTALLER_ARGU: "--add-data \"LCTA_backup/config_default.json;.\" --add-data \"LCTA_backup/config_check.json;.\" --add-data \"LCTA_backup/webui;webui\" -i \"LCTA_backup/favicon.ico;.\""
 
 jobs:
   build:
@@ -35,9 +35,9 @@ jobs:
         python -m pip install pyinstaller
         python -m pip install -r LCTA/requirements.txt
 
-    - name: localize css
+    - name: Init code for release
       run: |
-        python .\LCTA\.github\Localize_CSS.py
+        python .\LCTA\.github\InitCode.py
       env:
         PYTHONIOENCODING: utf-8        
     - name: setup-path
@@ -50,10 +50,10 @@ jobs:
 
     - name: create with pyinstaller
       run: |
-        pyinstaller --onefile -w --name ${{ env.APP_NAME }}_OneFile ${{ env.PYINSTALLER_ADD_DATA }} .\LCTA_backup/start_webui.py
-        pyinstaller --onefile --name ${{ env.APP_NAME }}_OneFile_Debug ${{ env.PYINSTALLER_ADD_DATA }} .\LCTA_backup/start_webui.py
-        pyinstaller -w --name ${{ env.APP_NAME }}_Folder ${{ env.PYINSTALLER_ADD_DATA }} .\LCTA_backup/start_webui.py
-        pyinstaller --name ${{ env.APP_NAME }}_Folder_Debug ${{ env.PYINSTALLER_ADD_DATA }} .\LCTA_backup/start_webui.py
+        pyinstaller --onefile -w --name ${{ env.APP_NAME }}_OneFile ${{ env.PYINSTALLER_ARGU }} .\LCTA_backup/start_webui.py
+        pyinstaller --onefile --name ${{ env.APP_NAME }}_OneFile_Debug ${{ env.PYINSTALLER_ARGU }} .\LCTA_backup/start_webui.py
+        pyinstaller -w --name ${{ env.APP_NAME }}_Folder ${{ env.PYINSTALLER_ARGU }} .\LCTA_backup/start_webui.py
+        pyinstaller --name ${{ env.APP_NAME }}_Folder_Debug ${{ env.PYINSTALLER_ARGU }} .\LCTA_backup/start_webui.py
         mv dist/* release/
     
     - name: Setup MSYS2 and MinGW (for C compilation)

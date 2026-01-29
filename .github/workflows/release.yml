@@ -11,7 +11,7 @@ on:
 env:
   PYTHON_VERSION: 3.9.6  # 使用嵌入式Python版本
   APP_NAME: "LCTA"
-  PYINSTALLER_ARGU: "--add-data \"LCTA_backup/config_default.json;.\" --add-data \"LCTA_backup/config_check.json;.\" --add-data \"LCTA_backup/webui;webui\" -i \"LCTA_backup/favicon.ico;.\""
+  PYINSTALLER_ARGU: "--add-data \"LCTA_backup/config_default.json;.\" --add-data \"LCTA_backup/config_check.json;.\" --add-data \"LCTA_backup/webui;webui\" -i \"LCTA_backup/favicon.ico\""
 
 jobs:
   build:

@@ -3016,58 +3016,8 @@ function addLogMessage(message, level = 'info') {
 
 // 简单Markdown转HTML
 function simpleMarkdownToHtml(text) {
-    if (!text) return '';
-    
-    const htmlTagRegex = /(<[^>]+>)/g;
-    const htmlTags = [];
-    let processedText = text.replace(htmlTagRegex, function(match) {
-        htmlTags.push(match);
-        return `\x01${htmlTags.length - 1}\x01`;
-    });
-    
-    processedText = processedText.replace(/```(\w*)\n([\s\S]*?)```/g, function(match, lang, code) {
-        const escapedCode = code.replace(/&/g, '&amp;')
-                               .replace(/</g, '&lt;')
-                               .replace(/>/g, '&gt;')
-                               .trim();
-        return `<pre><code class="language-${lang || 'text'}">${escapedCode}</code></pre>`;
-    });
-    
-    processedText = processedText.replace(/`([^`]+)`/g, '<code>$1</code>');
-    processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    processedText = processedText.replace(/__(.*?)__/g, '<strong>$1</strong>');
-    processedText = processedText.replace(/(?:^|\s)\*([^\*]+)\*(?:\s|$)/g, ' <em>$1</em> ');
-    processedText = processedText.replace(/(?:^|\s)_([^_]+)_(?:\s|$)/g, ' <em>$1</em> ');
-    processedText = processedText.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-    processedText = processedText.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%;">');
-    
-    processedText = processedText.replace(/^###### (.*$)/gm, '<h6>$1</h6>');
-    processedText = processedText.replace(/^##### (.*$)/gm, '<h5>$1</h5>');
-    processedText = processedText.replace(/^#### (.*$)/gm, '<h4>$1</h4>');
-    processedText = processedText.replace(/^### (.*$)/gm, '<h3>$1</h3>');
-    processedText = processedText.replace(/^## (.*$)/gm, '<h2>$1</h2>');
-    processedText = processedText.replace(/^# (.*$)/gm, '<h1>$1</h1>');
-    
-    processedText = processedText.replace(/^[*-] (.*$)/gm, '<li>$1</li>');
-    processedText = processedText.replace(/(<li>.*<\/li>)+/gs, function(match) {
-        return '<ul>' + match.replace(/<\/li><li>/g, '</li>\n<li>') + '</ul>';
-    });
-    
-    processedText = processedText.replace(/\x01(\d+)\x01/g, function(match, index) {
-        return htmlTags[index];
-    });
-    
-    const paragraphs = processedText.split(/\n\s*\n/);
-    const processedParagraphs = paragraphs.map(paragraph => {
-        paragraph = paragraph.trim();
-        if (paragraph && !paragraph.match(/^<(h[1-6]|ul|ol|li|pre|div|blockquote)/)) {
-            paragraph = paragraph.replace(/\n/g, '<br>');
-            return '<p>' + paragraph + '</p>';
-        }
-        return paragraph;
-    });
-    
-    return processedParagraphs.filter(p => p !== '').join('\n');
+    const html = marked.parse(text);
+    return html;
 }
 
 // 添加一个变量来跟踪是否已经显示了更新窗口
@@ -3092,7 +3042,7 @@ function showUpdateInfo(update_info) {
         let body = update_info.body.trim();
         const bodyHtml = simpleMarkdownToHtml(body);
         htmlMessage += `<div><strong>更新详情:</strong></div>`;
-        htmlMessage += `<div style="margin: 10px 0; padding: 10px; background: var(--color-bg-input); border-radius: var(--radius-md); max-height: 300px; overflow-y: auto;">${bodyHtml}</div>`;
+        htmlMessage += `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`;
     }
     
     if (update_info.published_at) {

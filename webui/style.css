@@ -1889,3 +1889,205 @@ button {
         grid-template-columns: repeat(3, 1fr);
     }
 }
+
+/* GitHub Markdown样式主题适配 */
+.markdown-body {
+    background-color: var(--color-bg-card) !important;
+    color: var(--color-text-primary) !important;
+    font-family: inherit !important;
+    transition: background-color 0.3s var(--transition-easing), 
+                color 0.3s var(--transition-easing) !important;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    color: var(--color-text-primary) !important;
+    border-bottom-color: var(--color-border) !important;
+}
+
+.markdown-body a {
+    color: var(--color-primary) !important;
+}
+
+.markdown-body a:hover {
+    color: var(--color-primary-dark) !important;
+    text-decoration: underline !important;
+}
+
+.markdown-body code {
+    background-color: var(--color-bg-input) !important;
+    color: var(--color-text-primary) !important;
+    border: 1px solid var(--color-border) !important;
+}
+
+.markdown-body pre {
+    background-color: var(--color-bg-input) !important;
+    border: 1px solid var(--color-border) !important;
+}
+
+.markdown-body pre code {
+    background-color: transparent !important;
+    border: none !important;
+}
+
+.markdown-body blockquote {
+    color: var(--color-text-secondary) !important;
+    border-left-color: var(--color-primary) !important;
+    background-color: var(--color-bg-primary) !important;
+}
+
+.markdown-body table {
+    border-color: var(--color-border) !important;
+}
+
+.markdown-body table th,
+.markdown-body table td {
+    border-color: var(--color-border) !important;
+}
+
+.markdown-body table tr {
+    background-color: var(--color-bg-card) !important;
+}
+
+.markdown-body table tr:nth-child(2n) {
+    background-color: var(--color-bg-primary) !important;
+}
+
+.markdown-body img {
+    background-color: var(--color-bg-primary) !important;
+    border: 1px solid var(--color-border) !important;
+}
+
+.markdown-body hr {
+    background-color: var(--color-border) !important;
+}
+
+.markdown-body kbd {
+    background-color: var(--color-bg-input) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+    box-shadow: inset 0 -1px 0 var(--color-border-dark) !important;
+}
+
+.markdown-body .highlight pre,
+.markdown-body pre {
+    background-color: var(--color-bg-input) !important;
+}
+
+.markdown-body .pl-c,
+.markdown-body .pl-c1,
+.markdown-body .pl-s .pl-v {
+    color: var(--color-primary) !important;
+}
+
+.markdown-body .pl-ent {
+    color: var(--color-success) !important;
+}
+
+.markdown-body .pl-k {
+    color: var(--color-danger) !important;
+}
+
+.markdown-body .pl-s,
+.markdown-body .pl-pds,
+.markdown-body .pl-s .pl-pse .pl-s1,
+.markdown-body .pl-sr,
+.markdown-body .pl-sr .pl-cce,
+.markdown-body .pl-sr .pl-sre,
+.markdown-body .pl-sr .pl-sra {
+    color: var(--color-warning) !important;
+}
+
+.markdown-body .pl-v {
+    color: var(--color-info) !important;
+}
+
+.markdown-body .pl-e,
+.markdown-body .pl-en {
+    color: var(--color-secondary) !important;
+}
+
+/* 覆盖GitHub Markdown自带的亮色/暗色样式 */
+.markdown-body.markdown-body {
+    --color-prettylights-syntax-comment: var(--color-text-secondary);
+    --color-prettylights-syntax-constant: var(--color-primary);
+    --color-prettylights-syntax-entity: var(--color-success);
+    --color-prettylights-syntax-storage-modifier-import: var(--color-text-primary);
+    --color-prettylights-syntax-entity-tag: var(--color-info);
+    --color-prettylights-syntax-keyword: var(--color-danger);
+    --color-prettylights-syntax-string: var(--color-warning);
+    --color-prettylights-syntax-variable: var(--color-info);
+    --color-prettylights-syntax-brackethighlighter-unmatched: var(--color-danger);
+    --color-prettylights-syntax-invalid-illegal-text: var(--color-bg-card);
+    --color-prettylights-syntax-invalid-illegal-bg: var(--color-danger);
+    --color-prettylights-syntax-carriage-return-text: var(--color-bg-card);
+    --color-prettylights-syntax-carriage-return-bg: var(--color-danger);
+    --color-prettylights-syntax-string-regexp: var(--color-success);
+    --color-prettylights-syntax-markup-list: var(--color-warning);
+    --color-prettylights-syntax-markup-heading: var(--color-primary);
+    --color-prettylights-syntax-markup-italic: var(--color-text-primary);
+    --color-prettylights-syntax-markup-bold: var(--color-text-primary);
+    --color-prettylights-syntax-markup-deleted-text: var(--color-danger);
+    --color-prettylights-syntax-markup-deleted-bg: rgba(var(--color-danger), 0.15);
+    --color-prettylights-syntax-markup-inserted-text: var(--color-success);
+    --color-prettylights-syntax-markup-inserted-bg: rgba(var(--color-success), 0.15);
+    --color-prettylights-syntax-markup-changed-text: var(--color-warning);
+    --color-prettylights-syntax-markup-changed-bg: rgba(var(--color-warning), 0.15);
+    --color-prettylights-syntax-markup-ignored-text: var(--color-text-secondary);
+    --color-prettylights-syntax-markup-ignored-bg: var(--color-primary);
+    --color-prettylights-syntax-meta-diff-range: var(--color-secondary);
+    --color-prettylights-syntax-brackethighlighter-angle: var(--color-text-secondary);
+    --color-prettylights-syntax-sublimelinter-gutter-mark: var(--color-border);
+    --color-prettylights-syntax-constant-other-reference-link: var(--color-warning);
+    --color-fg-default: var(--color-text-primary);
+    --color-fg-muted: var(--color-text-secondary);
+    --color-fg-subtle: var(--color-text-placeholder);
+    --color-canvas-default: var(--color-bg-card);
+    --color-canvas-subtle: var(--color-bg-primary);
+    --color-border-default: var(--color-border);
+    --color-border-muted: var(--color-border-light);
+    --color-neutral-muted: rgba(var(--color-text-secondary), 0.2);
+    --color-accent-fg: var(--color-primary);
+    --color-accent-emphasis: var(--color-primary);
+    --color-success-fg: var(--color-success);
+    --color-success-emphasis: var(--color-success);
+    --color-attention-fg: var(--color-warning);
+    --color-attention-emphasis: var(--color-warning);
+    --color-danger-fg: var(--color-danger);
+    --color-danger-emphasis: var(--color-danger);
+    --color-done-fg: var(--color-info);
+    --color-done-emphasis: var(--color-info);
+}
+
+/* Modal中Markdown内容的适配样式 */
+.modal-body .markdown-body {
+    background-color: transparent !important;
+    max-height: 60vh !important;
+    overflow-y: auto !important;
+    padding: var(--spacing-lg) !important;
+    margin: calc(-1 * var(--spacing-lg)) !important;
+    border-radius: var(--radius-md) !important;
+    transition: background-color 0.3s var(--transition-easing), 
+                color 0.3s var(--transition-easing) !important;
+}
+
+/* 调整modal-body以容纳markdown滚动 */
+.modal-body {
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important; /* 允许内容收缩 */
+}
+
+/* 为小屏幕调整modal中的markdown */
+@media (max-width: 768px) {
+    .modal-body .markdown-body {
+        max-height: 50vh !important;
+        padding: var(--spacing-md) !important;
+        margin: calc(-1 * var(--spacing-md)) !important;
+    }
+}

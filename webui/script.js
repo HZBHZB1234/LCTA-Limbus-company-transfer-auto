@@ -3032,7 +3032,7 @@ function showUpdateInfo(update_info) {
     updateModalShown = true;
     
     let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-    htmlMessage += `<p><strong>当前版本:</strong> ${update_info.current_version || 'unknown'}</p>`;
+    htmlMessage += `<p><strong>当前版本:</strong> v4.0.6</p>`;
     
     if (update_info.title) {
         htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;

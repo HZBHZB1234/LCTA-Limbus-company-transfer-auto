@@ -1,6 +1,6 @@
 # LCTA-Limbus-company-transfer-auto
 较为全面的边狱公司工具箱
-当前版本v4.0.5，重构进行中  
+当前版本v4.0.6，重构进行中  
 ## TODO:  
 - 完成翻译逻辑  
 

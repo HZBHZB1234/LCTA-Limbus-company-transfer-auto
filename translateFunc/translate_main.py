@@ -1,11 +1,8 @@
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
 import json
-import tempfile
 import sys
 import shutil
-import os
-import warnings
 import logging
 from dataclasses import dataclass, field
 from copy import deepcopy
@@ -74,142 +71,73 @@ def flatten_dict_enhanced(d, parent_key=(), ignore_types=None, max_depth=None):
     _flatten(d, parent_key)
     return dict(items)
 
-def unflatten_dict_enhanced(original_dict, flat_dict, ignore_types=None):
+def update_dict_with_flattened(original_dict, flat_updates):
     """
-    将扁平化的字典还原为嵌套字典
+    使用扁平化字典更新原始字典
     
     参数:
-        original_dict: 原始字典结构模板，用于确定字典/列表类型
-        flat_dict: 扁平化的字典（键为元组）
-        ignore_types: 要忽略的值的类型列表，与flatten_dict_enhanced中的一致
+        original_dict: 要更新的原始字典
+        flat_updates: 扁平化字典，键为元组形式的路径，值为要更新的值
     
     返回:
-        还原后的嵌套字典
+        更新后的原始字典（原地更新）
     """
-    # 创建原始结构的深拷贝
-    result = deepcopy(original_dict)
-    
-    def _set_nested(obj, keys, value, original_template, index=0):
-        """
-        递归设置嵌套字典/列表中的值
+    for path, value in flat_updates.items():
+        # 确保路径是元组
+        if not isinstance(path, tuple):
+            path = (path,)
         
-        参数:
-            obj: 当前处理的字典或列表
-            keys: 剩余的键序列
-            value: 要设置的值
-            original_template: 原始结构模板中对应的部分
-            index: 当前处理的键索引
-        """
-        if index >= len(keys):
-            return
-        
-        key = keys[index]
-        
-        # 如果是最后一个键，直接设置值
-        if index == len(keys) - 1:
-            # 检查是否需要忽略该值
-            if ignore_types:
-                should_ignore = False
-                for ignore_type in ignore_types:
-                    if isinstance(ignore_type, type):
-                        if isinstance(value, ignore_type):
-                            should_ignore = True
-                            break
+        # 遍历到路径的倒数第二个元素
+        current = original_dict
+        for i, key in enumerate(path[:-1]):
+            # 如果是列表/元组索引
+            if isinstance(key, int):
+                # 确保当前位置是列表或元组
+                if isinstance(current, (list, tuple)):
+                    # 如果是元组，需要转换为列表才能修改
+                    if isinstance(current, tuple):
+                        # 这里假设我们不允许修改元组，跳过或抛异常
+                        # 但为了通用性，我们可以转换为列表
+                        raise TypeError(f"Cannot update tuple at path {path[:i+1]}")
+                    # 确保索引有效
+                    if key < len(current):
+                        current = current[key]
                     else:
-                        if value == ignore_type:
-                            should_ignore = True
-                            break
-                
-                if should_ignore:
-                    return
-            
-            # 根据原始模板确定数据类型
-            if isinstance(obj, dict):
-                # 如果原始模板中该键不存在，使用字符串键
-                if key not in original_template:
-                    # 尝试将整数键转换为字符串
-                    obj[str(key)] = value
+                        raise IndexError(f"Index {key} out of range at path {path[:i+1]}")
                 else:
-                    obj[key] = value
-            elif isinstance(obj, list):
-                # 确保索引在列表范围内
-                while len(obj) <= key:
-                    if isinstance(original_template, list) and len(original_template) > len(obj):
-                        # 使用原始模板中的对应值作为占位符
-                        obj.append(deepcopy(original_template[len(obj)]))
-                    else:
-                        obj.append(None)
-                obj[key] = value
-            return
-        
-        # 如果不是最后一个键，继续递归
-        if isinstance(obj, dict):
-            # 检查原始模板中对应位置的数据类型
-            if key in original_template:
-                next_original = original_template[key]
+                    raise TypeError(f"Expected list/tuple at {path[:i+1]}, got {type(current)}")
+            # 如果是字典键
             else:
-                # 尝试将整数键转换为字符串
-                str_key = str(key)
-                if str_key in original_template:
-                    next_original = original_template[str_key]
-                    key = str_key  # 使用字符串键
+                if isinstance(current, dict):
+                    if key not in current:
+                        # 如果键不存在，创建新字典
+                        current[key] = {}
+                    current = current[key]
                 else:
-                    # 如果原始模板中没有该键，根据下一个键的类型推断
-                    if index + 1 < len(keys):
-                        next_key = keys[index + 1]
-                        if isinstance(next_key, int):
-                            # 下一个键是整数，可能是列表
-                            next_original = []
-                        else:
-                            # 下一个键是字符串，可能是字典
-                            next_original = {}
-                    else:
-                        next_original = {}
-            
-            # 如果当前键不存在，根据原始模板或下一个键的类型创建
-            if key not in obj:
-                if isinstance(next_original, dict):
-                    obj[key] = {}
-                elif isinstance(next_original, list):
-                    obj[key] = []
+                    raise TypeError(f"Expected dict at {path[:i+1]}, got {type(current)}")
+        
+        # 设置最终值
+        last_key = path[-1]
+        if isinstance(last_key, int):
+            if isinstance(current, (list, tuple)):
+                if isinstance(current, tuple):
+                    raise TypeError(f"Cannot update tuple at path {path}")
+                if last_key < len(current):
+                    current[last_key] = value
                 else:
-                    # 如果下一个键是整数，创建列表
-                    if index + 1 < len(keys) and isinstance(keys[index + 1], int):
-                        obj[key] = []
-                    else:
-                        obj[key] = {}
-            
-            _set_nested(obj[key], keys, value, next_original, index + 1)
-            
-        elif isinstance(obj, list):
-            # 确保索引在列表范围内
-            while len(obj) <= key:
-                if isinstance(original_template, list) and len(original_template) > len(obj):
-                    obj.append(deepcopy(original_template[len(obj)]))
-                else:
-                    # 根据下一个键的类型创建占位符
-                    if index + 1 < len(keys):
-                        next_key = keys[index + 1]
-                        if isinstance(next_key, int):
-                            obj.append([])
-                        else:
-                            obj.append({})
-                    else:
-                        obj.append(None)
-            
-            # 获取原始模板中对应位置的数据类型
-            if isinstance(original_template, list) and key < len(original_template):
-                next_original = original_template[key]
+                    # 如果索引超出范围，扩展列表
+                    if last_key >= len(current):
+                        current.extend([None] * (last_key - len(current) + 1))
+                    current[last_key] = value
             else:
-                next_original = {}
-            
-            _set_nested(obj[key], keys, value, next_original, index + 1)
+                raise TypeError(f"Expected list/tuple at {path[:-1]}, got {type(current)}")
+        else:
+            if isinstance(current, dict):
+                current[last_key] = value
+            else:
+                raise TypeError(f"Expected dict at {path[:-1]}, got {type(current)}")
     
-    # 遍历扁平化字典，设置值
-    for key_tuple, value in flat_dict.items():
-        _set_nested(result, key_tuple, value, original_dict)
-    
-    return result
+    return original_dict
 
 class ProcesserExit(Exception):
     def __init__(self, exit_type):
@@ -744,10 +672,48 @@ class RequestTextBuilder:
         
         return result
     
+    def deBuild(self, translated_texts: List[str]) -> Dict[str, Dict[Tuple, str]]:
+        """
+        将翻译后的文本列表还原为原始结构
+        """
+        translated_texts_iter = iter(translated_texts)
+        result_dict = deepcopy(self.kr_text)
+        # 实现还原逻辑
+        for idx in result_dict.keys():
+            # 获取当前ID对应的文本
+            kr_item = self.kr_text.get(idx, {})
+            en_item = self.en_text.get(idx, {})
+            jp_item = self.jp_text.get(idx, {})
+            
+            # 合并所有路径的文本（用换行符连接）
+            kr_paths_item = list(kr_item.keys())
+
+            # 过滤空文本
+            for i in kr_paths_item:
+                JP = jp_item[i] if i in jp_item else ''
+                EN = en_item[i] if i in en_item else ''
+                KR = kr_item[i] if i in kr_item else ''
+                if not (JP in EMPTY_TEXT and EN in EMPTY_TEXT and KR in EMPTY_TEXT):
+                    result_dict[idx][i] = next(translated_texts_iter)
+        
+        ok_flag = True
+        try:
+            next(translated_texts_iter)
+            logger.warning("警告：翻译文本数量多于预期，可能有多个多余的翻译文本")
+            ok_flag = False
+        except StopIteration:
+            pass
+        if ok_flag:
+            raise StopIteration("翻译文本数量少于预期，可能缺少翻译文本")
+        return result_dict
+
+
 class SimpleRequestTextBuilder():
     def __init__(self, request_text: Dict[str, Dict[str, Dict[Tuple, str]]]):
         """对于非LLM翻译器，无需添加描述和要求，直接返回需要翻译的文本列表"""
-        self.request_text = request_text
+        self.en_texts = request_text['en']
+        self.kr_texts = request_text['kr']
+        self.jp_texts = request_text['jp']
     
     def build(self) -> List:
         """构建请求文本，返回需要翻译的文本列表"""
@@ -755,16 +721,11 @@ class SimpleRequestTextBuilder():
         KR_result = []
         JP_result = []
         
-        # 获取所有语言的文本数据
-        kr_texts = self.request_text.get('kr', {})
-        jp_texts = self.request_text.get('jp', {})
-        en_texts = self.request_text.get('en', {})
-        
         # 遍历所有ID，将各个语言的文本合并到结果列表中
-        for idx in kr_texts.keys():
-            kr_item = kr_texts.get(idx, {})
-            jp_item = jp_texts.get(idx, {})
-            en_item = en_texts.get(idx, {})
+        for idx in self.kr_texts.keys():
+            kr_item = self.kr_texts.get(idx, {})
+            jp_item = self.jp_texts.get(idx, {})
+            en_item = self.en_texts.get(idx, {})
             
             # 提取所有文本内容
             for path_tuple, text in kr_item.items():
@@ -779,19 +740,50 @@ class SimpleRequestTextBuilder():
             if KR in EMPTY_TEXT and EN in EMPTY_TEXT and JP in EMPTY_TEXT:
                 empty_texts.append(index)
         
-        self.EN_texts = EN_result
-        self.KR_texts = KR_result
-        self.JP_texts = JP_result
-        
-        self.KR_build = [i for idx, i in enumerate(KR_result) if index not in empty_texts]
-        self.EN_build = [i for idx, i in enumerate(EN_result) if index not in empty_texts]
-        self.JP_build = [i for idx, i in enumerate(JP_result) if index not in empty_texts]
+        self.KR_build = [i for idx, i in enumerate(KR_result) if idx not in empty_texts]
+        self.EN_build = [i for idx, i in enumerate(EN_result) if idx not in empty_texts]
+        self.JP_build = [i for idx, i in enumerate(JP_result) if idx not in empty_texts]
         
     def get_request_text(self, from_lang: str = 'KR') -> List[str]:
         """获取文本列表"""
         return getattr(self, f"{from_lang}_build")
+    
+    def deBuild(self, translated_texts: List[str], from_lang: str = 'KR') -> Dict[str, Dict[Tuple, str]]:
+        """将翻译后的文本还原为原始结构"""
+        original_texts: Dict[str, Dict[Tuple, str]] = deepcopy(getattr(self, f"{from_lang}_texts"))
+        translated_iter = iter(translated_texts)
+        
+        # 实现还原逻辑
+        for idx in original_texts.keys():
+            # 获取当前ID对应的文本
+            kr_item = self.kr_texts.get(idx, {})
+            en_item = self.en_texts.get(idx, {})
+            jp_item = self.jp_texts.get(idx, {})
+            
+            # 合并所有路径的文本（用换行符连接）
+            kr_paths_item = list(kr_item.keys())
+
+            # 过滤空文本
+            for i in kr_paths_item:
+                JP = jp_item[i] if i in jp_item else ''
+                EN = en_item[i] if i in en_item else ''
+                KR = kr_item[i] if i in kr_item else ''
+                if not (JP in EMPTY_TEXT and EN in EMPTY_TEXT and KR in EMPTY_TEXT):
+                    original_texts[idx][i] = next(translated_iter)
+        
+        ok_flag = True
+        try:
+            next(translated_iter)
+            logger.warning("警告：翻译文本数量多于预期，可能有多个多余的翻译文本")
+            ok_flag = False
+        except StopIteration:
+            pass
+        if ok_flag:
+            raise StopIteration("翻译文本数量少于预期，可能缺少翻译文本")
+        return original_texts
 
 class FileProcessor:
+    
     def __init__(self, path_config: FilePathConfig, matcher: TextMatcher,
                  request_config: RequestConfig = RequestConfig(),
                  matcher_data: MatcherData = MatcherData(),
@@ -803,58 +795,120 @@ class FileProcessor:
         self.matcher_data = matcher_data
 
     def process_file(self):
+        # 1. 加载JSON文件
+        # 创建成员变量：self.kr_json, self.en_json, self.jp_json, self.llc_json
+        # 格式：字典类型，存储从对应语言JSON文件加载的数据
         self._load_json()
         
+        # 2. 初始化基础数据
+        # 创建成员变量：self.en_data, self.kr_data, self.jp_data, self.llc_data
+        # 格式：列表类型，从JSON中提取的dataList字段内容
+        # 创建成员变量：self.is_story, self.is_skill
+        # 格式：布尔类型，根据文件路径判断是否为故事文件或技能文件
+        # 修改成员变量：self.request_config.is_story, self.request_config.is_skill
+        # 格式：布尔类型，更新请求配置中的故事和技能标志
         self._init_base_data()
         
+        # 3. 创建数据索引
+        # 创建成员变量：self.en_index, self.kr_index, self.jp_index, self.llc_index
+        # 格式：字典类型，将数据列表转换为字典索引，便于快速查找
+        # 如果是故事文件：键为列表索引(i)，值为对应数据项
+        # 如果不是故事文件：键为数据项中的id字段，值为对应数据项
         self._make_data_index()
         
+        # 4. 检查空文件
+        # 如果韩文数据为空，根据是否有llc文件进行不同处理
+        # 可能抛出ProcesserExit异常并终止处理
         self._check_empty()
         
+        # 5. 检查翻译状态
+        # 检查各语言文件长度是否一致，如果不一致则进行适配
+        # 检查是否已经翻译过（llc_index与kr_index的键是否完全一致）
+        # 如果已经翻译，保存llc文件并抛出ProcesserExit异常
         self._check_translated()
         
+        # 6. 获取需要翻译的条目
+        # 创建成员变量：self.translating_list
+        # 格式：列表类型，包含所有在kr_index中存在但不在llc_index中的键
+        # 这些是需要翻译的数据项标识
         self._get_translating()
         
+        # 7. 构建翻译请求文本
+        # 创建变量：request_text
+        # 格式：字典类型，包含kr、jp、en三种语言的翻译文本
+        # 结构：{"kr": {id: {path_tuple: text}}, "jp": ..., "en": ...}
+        # path_tuple是扁平化后的路径元组，text是对应的文本内容
         request_text = {
             "kr": self._get_translating_text('kr'),
             "jp": self._get_translating_text('jp'),
             "en": self._get_translating_text('en')
         }
+        self._base_index = deepcopy(request_text['en'])
         
+        # 8. 根据配置选择翻译构建器并进行翻译
+        # 创建变量：builder, request_texts, result
         if self.request_config.is_llm:
+            # 使用LLM翻译器
+            # 创建RequestTextBuilder实例，用于构建结构化翻译请求
             builder = RequestTextBuilder(request_text, self.matcher,
                                         self.request_config, self.matcher_data)
+            # 构建统一请求结构
             request_text = builder.build()
         
+            # 获取分割后的请求文本（可能因文本过长而分割成多个部分）
             request_texts = builder.get_request_text()
             result = list()
-            for i in request_texts:                
-                # 计算超时时间
-                timeout = max(len(request_text) // 200 + 1, 40)
+            
+            # 遍历每个分割部分进行翻译
+            for i, request_part in enumerate(request_texts):                
+                # 根据文本长度计算超时时间
+                timeout = max(len(request_part) // 200 + 1, 40)
                 
-                # 翻译当前部分
-                result = self.request_config.translator.translate(
-                    i, timeout=timeout)
+                # 调用翻译器进行翻译
+                # result_part: 字符串类型，翻译器返回的翻译结果
+                result_part = self.request_config.translator.translate(
+                    request_part, timeout=timeout)
                 
+                # 根据格式解析结果
                 if self.request_config.is_text_format:
-                    result_list = result.split('\n\n')
+                    # 文本格式：按双换行符分割，处理转义字符
+                    result_list = result_part.split('\n\n')
                     result_list = [item.replace('\\n', '\n').replace('\\t', '\t').replace('\\r', '\r') for item in result_list]
                 else:
-                    result_list = json.loads(result).get('translations', [])
+                    # JSON格式：解析JSON并提取translations字段
+                    result_list = json.loads(result_part).get('translations', [])
                 
+                # 将当前部分的结果添加到总结果中
                 result.extend(result_list)
                 
                 self.logger.info(f"第 {i+1} 部分翻译完成，获得 {len(result_list)} 条结果")
+            
         else:
+            # 使用非LLM翻译器
+            # 创建SimpleRequestTextBuilder实例，用于构建简单文本列表
             builder = SimpleRequestTextBuilder(request_text)
+            # 构建文本列表
             builder.build()
+            # 获取指定语言的文本列表
             request_texts = builder.get_request_text(
                 from_lang=self.request_config.from_lang)
+            # 调用翻译器进行批量翻译
             result = self.request_config.translator.translate(request_texts)
             self.logger.info(f"获得 {len(result)} 条结果")
+            
+        try:
+            translated_text = builder.deBuild(result)
+        except StopIteration as e:
+            self.logger.warning(f"翻译结果还原时出现问题：返回值长度问题")
+            raise ProcesserExit("translation_length_error")
         
-        pass
-    
+        self._de_get_translating_text(translated_text)
+        
+        result = self._de_get_translating()
+        
+        with open(self.path_config.target_file, 'w', encoding='utf-8-sig') as f:
+            json.dump(result, f, ensure_ascii=False, indent=4)
+          
     def _load_json(self):
         try:
             with open(self.path_config.KR_path, 'r', encoding='utf-8-sig') as f:
@@ -989,7 +1043,7 @@ class FileProcessor:
                 translating_list.append(i)
         self.translating_list = translating_list
                 
-    def _get_translating_text(self, lang='kr') -> Dict[str, Dict[Tuple, str]]:
+    def _get_translating_text(self, lang='KR') -> Dict[str, Dict[Tuple, str]]:
         """
         返回值说明:
           {
@@ -999,9 +1053,9 @@ class FileProcessor:
           }
         """
         translating_text = dict()
-        if lang == 'kr':
+        if lang == 'KR':
             lang_index = self.kr_index
-        elif lang == 'jp':
+        elif lang == 'JP':
             lang_index = self.jp_index
         else:
             lang_index = self.en_index
@@ -1012,8 +1066,36 @@ class FileProcessor:
             for key in flatten_item:
                 if key[-1] in AVOID_PATH:
                     keys_to_delete.append(key)
+            self.get_translating_removement = keys_to_delete
             for key in keys_to_delete:
                 del flatten_item[key]
             translating_text[i] = flatten_item
         
         return translating_text
+    
+    def _de_get_translating_text(self, translated_text: Dict[str, Dict[Tuple, str]]):
+        """
+        返回值说明:
+            {
+                "key的内容，大概率是id":{
+                  ("索引", "格式", "元组"): "字符串信息"
+                }
+            }
+        """
+        for i in self.translating_list:
+            trans_item = self._base_index[i]
+            translated_item = translated_text[i]
+            update_dict_with_flattened(trans_item, translated_item)
+        return self._base_index
+    
+    def _de_get_translating(self):
+        result = list()
+        for i in self.kr_index:
+            if i in self.llc_index:
+                result.append(self.llc_data[i])
+            else:
+                result.append(self._base_index[i])
+                
+        result = {"dataList": result}
+            
+        return result

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
 import json
 import tempfile
 import sys
@@ -9,6 +9,8 @@ import warnings
 import logging
 from dataclasses import dataclass, field
 from copy import deepcopy
+if TYPE_CHECKING:
+    from translatekit import TranslatorBase
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -241,37 +243,29 @@ class RequestConfig:
     enable_skill: bool = True
     max_length: int = 20000  # 最大允许长度
     is_text_format: bool = False  # 是否使用文本格式
+    is_llm: bool = True
+    translator: Optional['TranslatorBase'] = None  # 使用的翻译器实例
+    from_lang: str = 'KR'
 
 @dataclass
 class PathConfig:
-    """
-    必需要提供以下参数  
-      game_path  
-      target_path  
-      KR_path  
-    """
-    game_path: Path
-    target_path: Path
-    KR_path: Path
+    target_path: Path = Path()
     llc_base_path: Path = Path()
-    assets_path: Path = Path()
-    EN_path: Path = Path()
-    JP_path: Path = Path()
-    LLC_path: Path = Path()
-    rel_path: Path = Path()
-    rel_dir: Path = Path()
-    real_name: str = Path()
-    target_file: Path = Path()
-    def __post_init__(self):
-        self.assets_path = self.game_path / "LimbusCompany_Data" / "Assets" / "Resources_moved" / "Localize"
-        self.llc_base_path = self.game_path / "LimbusCompany_Data" / "lang" / "LLC_zh-CN"
-        self.rel_path = Path(*self.KR_path.relative_to(self.assets_path).parts[1:])
+    KR_base_path: Path = Path()
+    EN_base_path: Path = Path()
+    JP_base_path: Path = Path()
+
+class FilePathConfig:
+    def __init__(self, KR_path: Path, _PathConfig: PathConfig):
+        self.KR_path = KR_path
+        self.rel_path = Path(KR_path.relative_to(_PathConfig.KR_base_path))
         self.real_name = self.rel_path.name[3:]
         self.rel_dir = self.rel_path.parent
-        self.EN_path = self.assets_path / "en" / self.rel_dir / f"EN_{self.real_name}"
-        self.JP_path = self.assets_path / "jp" / self.rel_dir / f"JP_{self.real_name}"
-        self.LLC_path = self.llc_base_path / self.rel_dir / self.real_name
-        self.target_file = self.target_path / self.rel_dir / self.real_name
+        self.real_name = self.rel_path.name[3:]
+        self.EN_path = _PathConfig.EN_base_path / self.rel_dir / f"EN_{self.real_name}"
+        self.JP_path = _PathConfig.JP_base_path / self.rel_dir / f"JP_{self.real_name}"
+        self.LLC_path = _PathConfig.llc_base_path / self.rel_dir / self.real_name
+        self.target_file = _PathConfig.target_path / self.rel_dir / self.real_name
 
 @dataclass
 class MatcherData:
@@ -792,9 +786,13 @@ class SimpleRequestTextBuilder():
         self.KR_build = [i for idx, i in enumerate(KR_result) if index not in empty_texts]
         self.EN_build = [i for idx, i in enumerate(EN_result) if index not in empty_texts]
         self.JP_build = [i for idx, i in enumerate(JP_result) if index not in empty_texts]
+        
+    def get_request_text(self, from_lang: str = 'KR') -> List[str]:
+        """获取文本列表"""
+        return getattr(self, f"{from_lang}_build")
 
 class FileProcessor:
-    def __init__(self, path_config: PathConfig, matcher: TextMatcher,
+    def __init__(self, path_config: FilePathConfig, matcher: TextMatcher,
                  request_config: RequestConfig = RequestConfig(),
                  matcher_data: MatcherData = MatcherData(),
                  logger: logging.Logger = logging.getLogger(__name__)):
@@ -823,12 +821,37 @@ class FileProcessor:
             "en": self._get_translating_text('en')
         }
         
-        builder = RequestTextBuilder(request_text, self.matcher,
-                                     self.request_config, self.matcher_data)
-        request_text = builder.build()
+        if self.request_config.is_llm:
+            builder = RequestTextBuilder(request_text, self.matcher,
+                                        self.request_config, self.matcher_data)
+            request_text = builder.build()
         
-        # 获取所有分割部分的请求文本
-        request_texts = builder.get_split_request_texts()
+            request_texts = builder.get_request_text()
+            result = list()
+            for i in request_texts:                
+                # 计算超时时间
+                timeout = max(len(request_text) // 200 + 1, 40)
+                
+                # 翻译当前部分
+                result = self.request_config.translator.translate(
+                    i, timeout=timeout)
+                
+                if self.request_config.is_text_format:
+                    result_list = result.split('\n\n')
+                    result_list = [item.replace('\\n', '\n').replace('\\t', '\t').replace('\\r', '\r') for item in result_list]
+                else:
+                    result_list = json.loads(result).get('translations', [])
+                
+                result.extend(result_list)
+                
+                self.logger.info(f"第 {i+1} 部分翻译完成，获得 {len(result_list)} 条结果")
+        else:
+            builder = SimpleRequestTextBuilder(request_text)
+            builder.build()
+            request_texts = builder.get_request_text(
+                from_lang=self.request_config.from_lang)
+            result = self.request_config.translator.translate(request_texts)
+            self.logger.info(f"获得 {len(result)} 条结果")
         
         pass
     

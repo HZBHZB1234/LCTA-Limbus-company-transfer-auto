@@ -22,7 +22,7 @@ import translateFunc.translate_doc as translate_doc
 EMPTY_DATA = [{'dataList': []}, {}, []]
 EMPTY_DATA_LIST = [[], [{}]]
 EMPTY_TEXT = ['', '-']
-AVOID_PATH = ['usage', 'id']
+AVOID_PATH = ['usage', 'id', 'model']
 
 def flatten_dict_enhanced(d, parent_key=(), ignore_types=None, max_depth=None):
     """
@@ -174,6 +174,7 @@ class RequestConfig:
     is_llm: bool = True
     translator: Optional['TranslatorBase'] = None  # 使用的翻译器实例
     from_lang: str = 'KR'
+    save_result:bool = True
 
 @dataclass
 class PathConfig:
@@ -182,6 +183,16 @@ class PathConfig:
     KR_base_path: Path = Path()
     EN_base_path: Path = Path()
     JP_base_path: Path = Path()
+    
+    def get_need_dirs(self):
+        return [i.relative_to(self.KR_base_path)
+                for i in self.KR_base_path.glob('*') if i.is_dir()]
+    
+    def create_need_dirs(self):
+        for dir_path in self.get_need_dirs():
+            target_dir = self.target_path / dir_path
+            target_dir.mkdir(parents=True, exist_ok=True)
+        
 
 class FilePathConfig:
     def __init__(self, KR_path: Path, _PathConfig: PathConfig):
@@ -703,7 +714,7 @@ class RequestTextBuilder:
             ok_flag = False
         except StopIteration:
             pass
-        if ok_flag:
+        if not ok_flag:
             raise StopIteration("翻译文本数量少于预期，可能缺少翻译文本")
         return result_dict
 
@@ -748,7 +759,7 @@ class SimpleRequestTextBuilder():
         """获取文本列表"""
         return getattr(self, f"{from_lang}_build")
     
-    def deBuild(self, translated_texts: List[str], from_lang: str = 'KR') -> Dict[str, Dict[Tuple, str]]:
+    def deBuild(self, translated_texts: List[str], from_lang: str = 'kr') -> Dict[str, Dict[Tuple, str]]:
         """将翻译后的文本还原为原始结构"""
         original_texts: Dict[str, Dict[Tuple, str]] = deepcopy(getattr(self, f"{from_lang}_texts"))
         translated_iter = iter(translated_texts)
@@ -778,7 +789,7 @@ class SimpleRequestTextBuilder():
             ok_flag = False
         except StopIteration:
             pass
-        if ok_flag:
+        if not ok_flag:
             raise StopIteration("翻译文本数量少于预期，可能缺少翻译文本")
         return original_texts
 
@@ -800,7 +811,12 @@ class FileProcessor:
         # 格式：字典类型，存储从对应语言JSON文件加载的数据
         self._load_json()
         
-        # 2. 初始化基础数据
+        # 2. 检查空文件
+        # 如果韩文数据为空，根据是否有llc文件进行不同处理
+        # 可能抛出ProcesserExit异常并终止处理
+        self._check_empty()
+        
+        # 3. 初始化基础数据
         # 创建成员变量：self.en_data, self.kr_data, self.jp_data, self.llc_data
         # 格式：列表类型，从JSON中提取的dataList字段内容
         # 创建成员变量：self.is_story, self.is_skill
@@ -809,17 +825,12 @@ class FileProcessor:
         # 格式：布尔类型，更新请求配置中的故事和技能标志
         self._init_base_data()
         
-        # 3. 创建数据索引
+        # 4. 创建数据索引
         # 创建成员变量：self.en_index, self.kr_index, self.jp_index, self.llc_index
         # 格式：字典类型，将数据列表转换为字典索引，便于快速查找
         # 如果是故事文件：键为列表索引(i)，值为对应数据项
         # 如果不是故事文件：键为数据项中的id字段，值为对应数据项
         self._make_data_index()
-        
-        # 4. 检查空文件
-        # 如果韩文数据为空，根据是否有llc文件进行不同处理
-        # 可能抛出ProcesserExit异常并终止处理
-        self._check_empty()
         
         # 5. 检查翻译状态
         # 检查各语言文件长度是否一致，如果不一致则进行适配
@@ -843,7 +854,6 @@ class FileProcessor:
             "jp": self._get_translating_text('jp'),
             "en": self._get_translating_text('en')
         }
-        self._base_index = deepcopy(request_text['en'])
         
         # 8. 根据配置选择翻译构建器并进行翻译
         # 创建变量：builder, request_texts, result
@@ -898,7 +908,7 @@ class FileProcessor:
             
         try:
             translated_text = builder.deBuild(result)
-        except StopIteration as e:
+        except StopIteration:
             self.logger.warning(f"翻译结果还原时出现问题：返回值长度问题")
             raise ProcesserExit("translation_length_error")
         
@@ -906,8 +916,7 @@ class FileProcessor:
         
         result = self._de_get_translating()
         
-        with open(self.path_config.target_file, 'w', encoding='utf-8-sig') as f:
-            json.dump(result, f, ensure_ascii=False, indent=4)
+        self._save_result(result)
           
     def _load_json(self):
         try:
@@ -948,6 +957,8 @@ class FileProcessor:
         shutil.copy2(self.path_config.KR_path, self.path_config.target_file)
         
     def _save_except(self):
+        if not self.request_config.save_result:
+            raise ProcesserExit("no_save_except")
         try:
             self._save_llc()
         except:
@@ -962,18 +973,21 @@ class FileProcessor:
                     except:
                         self.logger.error(f"保存文件{self.path_config.real_name}，请检查文件路径")
                         raise ProcesserExit("save_except_except")
+        raise ProcesserExit("save_except_success")
     
-    def _save_json(self, json_data):
+    def _save_result(self, json_data):
+        if not self.request_config.save_result:
+            raise ProcesserExit("no_save_success")
         try:
             with open(self.path_config.target_file, 'w', encoding='utf-8-sig') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=4)
         except:
-            raise ProcesserExit("save_json_except")
+            raise ProcesserExit("success_save")
             
     def _check_empty(self):
         if self.kr_json in EMPTY_DATA or self.kr_json.get('dataList', []) in EMPTY_DATA_LIST:
             self.logger.warning(f"{self.path_config.real_name}文件为空，跳过")
-            if self.path_config.llc_path.exists():
+            if self.path_config.LLC_path.exists():
                 self._save_llc()
                 raise ProcesserExit("empty_llc")
             else:
@@ -1043,7 +1057,7 @@ class FileProcessor:
                 translating_list.append(i)
         self.translating_list = translating_list
                 
-    def _get_translating_text(self, lang='KR') -> Dict[str, Dict[Tuple, str]]:
+    def _get_translating_text(self, lang='kr') -> Dict[str, Dict[Tuple, str]]:
         """
         返回值说明:
           {
@@ -1053,9 +1067,9 @@ class FileProcessor:
           }
         """
         translating_text = dict()
-        if lang == 'KR':
+        if lang == 'kr':
             lang_index = self.kr_index
-        elif lang == 'JP':
+        elif lang == 'jp':
             lang_index = self.jp_index
         else:
             lang_index = self.en_index
@@ -1082,6 +1096,7 @@ class FileProcessor:
                 }
             }
         """
+        self._base_index = deepcopy(self.kr_index)
         for i in self.translating_list:
             trans_item = self._base_index[i]
             translated_item = translated_text[i]
@@ -1092,7 +1107,7 @@ class FileProcessor:
         result = list()
         for i in self.kr_index:
             if i in self.llc_index:
-                result.append(self.llc_data[i])
+                result.append(self.llc_index[i])
             else:
                 result.append(self._base_index[i])
                 

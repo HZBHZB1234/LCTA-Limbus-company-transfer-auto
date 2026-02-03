@@ -6,6 +6,7 @@ import shutil
 import logging
 from dataclasses import dataclass, field
 from copy import deepcopy
+from contextlib import suppress
 if TYPE_CHECKING:
     from translatekit import TranslatorBase
 
@@ -208,21 +209,24 @@ class FilePathConfig:
 
 @dataclass
 class MatcherData:
-    role_data: Dict[str, Dict] = field(default_factory=dict)
-    affect_data: List[Dict[str, Dict]] = field(default_factory=list)
+    role_data: List[Dict[str, str]] = field(default_factory=list)
+    affect_data: List[Dict[str, str]] = field(default_factory=list)
     proper_data: List[Dict[str, str]] = field(default_factory=list)
+    role_refer: List[str] = field(default_factory=list)
+    affect_refer: List[Dict[str, str]] = field(default_factory=list)
+    proper_refer: List[str] = field(default_factory=list)
 
 @dataclass
 class TextMatcher:
     proper_matcher: SimpleMatcher = SimpleMatcher([])
-    role_list: SimpleMatcher = SimpleMatcher([])
+    role_matcher: SimpleMatcher = SimpleMatcher([])
     affect_id_matcher: SimpleMatcher = SimpleMatcher([])
     affect_name_matcher: SimpleMatcher = SimpleMatcher([])
 
 class RequestTextBuilder:
     def __init__(self, request_text: Dict[str, Dict[str, Dict[Tuple, str]]],
-                 matcher: TextMatcher, request_config: RequestConfig,
-                 matcher_data: MatcherData):
+                 matcher: 'MatcherOrganizer', request_config: RequestConfig,
+                 formal: Dict[Tuple, str]):
         """
         初始化请求文本构建器
         
@@ -237,16 +241,11 @@ class RequestTextBuilder:
         self.jp_text = request_text['jp']
         self.matcher = matcher
         self.request_config = request_config
-        self.role_data = matcher_data.role_data
-        self.proper_data = matcher_data.proper_data
-        self.affect_data = matcher_data.affect_data
+        self.formal = formal
         
         # 用于存储构建结果
         self.unified_request = None
         self.split_requests = []
-        
-        # 角色信息缓存
-        self.role_model_cache = {}
         
     def build(self) -> Dict[str, Any]:
         """
@@ -297,77 +296,38 @@ class RequestTextBuilder:
                 }
                 
                 # 专有名词匹配
-                proper_matches = self.matcher.proper_matcher.match([text_info['kr']])[0]
+                proper_matches = self.matcher.tMatcher.proper_matcher.match([text_info['kr']])[0]
                 if proper_matches:
                     text_block['proper_refs'] = []
                     for match_idx in proper_matches:
-                        if match_idx < len(self.proper_data):
-                            term_info = self.proper_data[match_idx]
-                            term = term_info.get('term', '')
-                            if term:
-                                text_block['proper_refs'].append(term)
-                                # 添加到全局专有名词
-                                if term not in all_proper_terms:
-                                    all_proper_terms[term] = {
-                                        'term': term,
-                                        'translation': term_info.get('translation', ''),
-                                        'note': term_info.get('note', '')
-                                    }
+                        term_info = self.matcher.mData.proper_data[match_idx]
+                        term_refer = self.matcher.mData.proper_refer[match_idx]
+                        text_block['proper_refs'].append(term_refer)
+                        all_proper_terms[term_refer] = term_info
                 
                 # 状态效果匹配（如果是技能文件）
-                if self.request_config.is_skill and self.affect_data:
-                    affect_id_matches = self.matcher.affect_id_matcher.match([text_info['kr']])[0]
-                    affect_name_matches = self.matcher.affect_name_matcher.match([text_info['kr']])[0]
-                    affect_matches = list(set(affect_id_matches + affect_name_matches))
+                if self.request_config.is_skill:
+                    affect_matches = self.matcher.tMatcher.affect_name_matcher.match([text_info['kr']])[0] \
+                        .extend(self.matcher.tMatcher.affect_id_matcher.match([text_info['kr']])[0])
                     
                     if affect_matches:
                         text_block['affect_refs'] = []
                         for match_idx in affect_matches:
-                            if match_idx < len(self.affect_data):
-                                affect_info = self.affect_data[match_idx]
-                                affect_id = affect_info.get('id', '')
-                                if affect_id:
-                                    text_block['affect_refs'].append(affect_id)
-                                    # 添加到全局状态效果
-                                    if affect_id not in all_affects:
-                                        all_affects[affect_id] = {
-                                            'id': affect_id,
-                                            'ZH-data': affect_info.get('ZH-data', {}),
-                                            'KR-data': affect_info.get('KR-data', {})
-                                        }
+                            affect_info = self.matcher.mData.affect_data[match_idx]
+                            affect_refer = self.matcher.mData.affect_refer[match_idx]
+                            if affect_refer:
+                                text_block['affect_refs'].append(affect_refer)
+                                all_affects[affect_refer] = affect_info
                 
                 # 角色信息（如果是故事文件）
                 if self.request_config.is_story:
-                    # 尝试从role_data中获取角色信息
-                    model_key = str(idx)
-                    if model_key in self.role_model_cache:
-                        model_info = self.role_model_cache[model_key]
-                    else:
-                        # 尝试从role_data中查找
-                        model_info = {}
-                        for lang, lang_data in self.role_data.items():
-                            if str(idx) in lang_data:
-                                model_info[lang] = lang_data[str(idx)]
-                            elif idx in lang_data:  # 尝试不转换idx为字符串的情况
-                                model_info[lang] = lang_data[idx]
-                        
-                        # 如果没有找到，使用默认值
-                        if not model_info:
-                            model_info = {
-                                'kr': '获取失败',
-                                'en': '获取失败', 
-                                'jp': '获取失败',
-                                'zh': '获取失败'
-                            }
-                        
-                        self.role_model_cache[model_key] = model_info
-                    
-                    text_block['model'] = model_info
-                    
-                    # 添加到全局模型
-                    for lang, info in model_info.items():
-                        if info and info != '获取失败' and info not in all_models:
-                            all_models[info] = info
+                    with suppress(Exception):
+                        raw = self.formal[idx]
+                        model = raw['model']
+                        model_index = self.matcher.tMatcher.role_matcher.match_equal(model)
+                        model_info = self.matcher.mData.role_data[model_index]
+                        all_models[model] = model_info
+                        text_block['role_ref'] = model
                 
                 text_items.append(text_block)
         
@@ -382,7 +342,8 @@ class RequestTextBuilder:
             'reference': {
                 'proper_terms': list(all_proper_terms.values()) if all_proper_terms else [],
                 'affects': list(all_affects.values()) if all_affects else [],
-                'model_docs': self._get_role_docs(),
+                'models': list(all_models.values()) if all_models else [],
+                'model_docs': self._get_role_docs(all_models),
                 'skill_doc': self._get_skill_doc()
             },
             'text_blocks': text_items
@@ -488,33 +449,19 @@ class RequestTextBuilder:
         else:
             return json.dumps(request_data, indent=2, ensure_ascii=False)
     
-    def _get_role_docs(self) -> List[str]:
+    def _get_role_docs(self, role_list: Dict[str, dict]) -> List[dict]:
         """获取角色说话风格参考文档"""
         if not self.request_config.is_story:
             return []
         
-        # 从role_data中提取角色ID并生成文档
         role_docs = []
-        kr_roles = self.role_data.get('kr', {})
         
-        for role_id, role_info in kr_roles.items():
-            if role_info and role_info != '获取失败':
-                # 尝试从translate_doc中获取角色风格
-                try:
-                    # 检查是否有对应的角色
-                    if hasattr(translate_doc, 'RLOE_COMPARE') and role_id in translate_doc.RLOE_COMPARE:
-                        role_name = translate_doc.RLOE_COMPARE[role_id]
-                        if hasattr(translate_doc, 'ROLE_STYLE') and role_name in translate_doc.ROLE_STYLE:
-                            role_style = translate_doc.ROLE_STYLE[role_name]
-                            role_doc = f"角色: {role_style.get('角色', role_name)}, " \
-                                       f"语言风格: {role_style.get('语言风格', '无特殊说明')}, " \
-                                       f"称呼习惯: {role_style.get('称呼习惯', '无特殊说明')}"
-                            role_docs.append(role_doc)
-                except Exception as e:
-                    logger.warning(f"获取角色风格时出现错误: {e}")
-                    # 退回到基本格式
-                    role_doc = f"角色ID: {role_id}, 描述: {role_info}"
-                    role_docs.append(role_doc)
+        for role_id in role_list.keys():
+            with suppress(Exception):
+                if role_id in translate_doc.RLOE_COMPARE:
+                    true_role = translate_doc.RLOE_COMPARE[role_id]
+                    style = translate_doc.ROLE_STYLE[true_role]
+                    role_docs.append(style)
         
         return role_docs
     
@@ -572,8 +519,10 @@ class RequestTextBuilder:
         result_lines.append("【翻译请求元数据】")
         result_lines.append(f"文本块总数: {metadata.get('total_text_blocks', 0)}")
         result_lines.append(f"专有名词数: {metadata.get('proper_terms_count', 0)}")
-        result_lines.append(f"状态效果数: {metadata.get('affects_count', 0)}")
-        result_lines.append(f"角色信息数: {metadata.get('models_count', 0)}")
+        if self.request_config.is_skill:
+            result_lines.append(f"状态效果数: {metadata.get('affects_count', 0)}")
+        if self.request_config.is_story:
+            result_lines.append(f"角色信息数: {metadata.get('models_count', 0)}")
         
         # 添加参考信息部分
         reference = texts.get('reference', {})
@@ -589,33 +538,42 @@ class RequestTextBuilder:
         # 状态效果参考
         if reference.get('affects'):
             result_lines.extend(self._format_section("状态效果术语表", [
-                f"{i+1}. [ID: {item.get('id', '')}] {self._escape_text(item.get('KR-data', {}).get('name', ''))} → {self._escape_text(item.get('ZH-data', {}).get('name', ''))}"
+                f"{i+1}. [ID: {item.get('id', '')}] {self._escape_text(item.get('kr', '获取失败'))} → {self._escape_text(item.get('cn', '获取失败'))}"
                 for i, item in enumerate(reference['affects'])
+            ]))
+            
+        if reference.get('models'):
+            result_lines.extend(self._format_section("角色信息表", [
+                f"{i+1}. {self._escape_text(item.get('kr', '获取失败'))}\
+/ {self._escape_text(item.get('cn', '获取失败'))} \
+描述: {self._escape_text(item.get('nickName', '获取失败'))}"
+                for i, item in enumerate(reference['models'])
             ]))
         
         # 角色文档参考
-        if reference.get('model_docs'):
+        if self.request_config.is_story and reference.get('model_docs'):
             result_lines.extend(self._format_section("角色说话风格参考", [
-                f"- {self._escape_text(str(doc))}" for doc in reference['model_docs']
+                '\n'.join([': '.join(k,v) for k, v in doc.values()])
+                 for doc in reference['model_docs']
             ]))
         
         # 技能文档参考
-        if reference.get('skill_doc'):
+        if self.request_config.is_skill and reference.get('skill_doc'):
             result_lines.extend(self._format_section("技能翻译指南", [
                 self._escape_text(reference['skill_doc'])
             ]))
         
         # 添加分隔线
-        result_lines.append("\n" + "=" * 80)
+        result_lines.append("\n" + "=" * 30)
         result_lines.append("【以下为需要翻译的文本块】")
-        result_lines.append("=" * 80)
+        result_lines.append("=" * 30)
         
         # 添加文本块
         text_blocks = texts.get('text_blocks', [])
         for block in text_blocks:
             # 添加文本块分隔符
             if block['id'] > 1:
-                result_lines.append("\n" + "-" * 60 + "\n")
+                result_lines.append("\n" + "-" * 20 + "\n")
             
             result_lines.append(f"【文本块 {block['id']}】")
             
@@ -629,23 +587,20 @@ class RequestTextBuilder:
             
             # 专有名词引用
             if 'proper_refs' in block and block['proper_refs']:
-                ref_lines = [f"- 引用了术语表中的: {', '.join(block['proper_refs'])}"]
+                ref_lines = [f"- 包含术语: {', '.join(block['proper_refs'])}"]
                 result_lines.extend(self._format_section("专有名词引用", ref_lines, level=2))
             
             # 状态效果引用
             if 'affect_refs' in block and block['affect_refs']:
-                ref_lines = [f"- 引用了状态效果: {', '.join(block['affect_refs'])}"]
+                ref_lines = [f"- 包含状态效果: {', '.join(block['affect_refs'])}"]
                 result_lines.extend(self._format_section("状态效果引用", ref_lines, level=2))
             
             # 角色信息
             if 'model' in block and block['model']:
-                model_lines = []
-                for lang, model_info in block['model'].items():
-                    if model_info and model_info != '获取失败':
-                        escaped_info = self._escape_text(model_info)
-                        model_lines.append(f"{lang.upper()}: {escaped_info}")
-                
-                result_lines.extend(self._format_section("说话者信息", model_lines, level=2))
+                model = block['model']
+                model_content = f'{model} / {reference.get('models', {})\
+                .get(model, {}).get('cn', '获取失败')}'
+                result_lines.extend(self._format_section("说话者信息", [model_content], level=2))
             
             result_lines.append(f"【文本块 {block['id']} 结束】")
         
@@ -793,17 +748,67 @@ class SimpleRequestTextBuilder():
             raise StopIteration("翻译文本数量少于预期，可能缺少翻译文本")
         return original_texts
 
+class MatcherOrganizer:
+    def __init__(self):
+        self.mData = MatcherData()
+        self.tMatcher = TextMatcher()
+        
+    def update_proper(self, proper_data: List[Dict[str, str]]):
+        self.mData.proper_data = proper_data
+        proper_terms = [item['term'] for item in proper_data if 'term' in item]
+        self.tMatcher.proper_matcher = SimpleMatcher(proper_terms)
+        self.mData.proper_refer = proper_terms
+        
+    def update_models(self,kr_role: List[Dict[str, str]],
+                      cn_role: List[Dict[str, str]]):
+        with suppress(Exception):
+            kr_role = kr_role['dataList']
+        with suppress(Exception):
+            cn_role = cn_role['dataList']
+        role_data = [
+            {'id': KRitem['id'], 'kr': KRitem['name'],
+             'cn': CNitem['name'], 'nickName': CNitem.get('nickName', '')
+             } for KRitem, CNitem in zip(kr_role, cn_role)
+        ]
+        
+        role_id = [item['id'] for item in role_data]
+        
+        self.mData.role_data = role_data
+        self.tMatcher.role_matcher = SimpleMatcher(role_id)
+        self.mData.role_refer = role_id
+    
+    def update_efects(self, KRaffect: List[Dict[str, str]],
+                       CNaffect: List[Dict[str, str]]):
+        with suppress(Exception):
+            KRaffect = KRaffect['dataList']
+        with suppress(Exception):
+            CNaffect = CNaffect['dataList']
+        
+        affectData = [
+            {'id': KRitem['id'], 'kr': KRitem['name'],
+             'cn': CNitem['name'], 'desc': CNitem.get('desc', '')
+             } for KRitem, CNitem in zip(KRaffect, CNaffect)
+        ]
+        
+        ids = [f'[{item["id"]}]' for item in affectData]
+        names = [f'{item["kr"]} ' for item in affectData]
+        
+        self.mData.affect_data = affectData
+        self.tMatcher.affect_id_matcher = SimpleMatcher(ids)
+        self.tMatcher.affect_name_matcher = SimpleMatcher(names)
+        self.mData.affect_refer = [{'id': _id, 'name': name}
+                                   for _id, name in zip(ids, names)]
+
+
 class FileProcessor:
     
-    def __init__(self, path_config: FilePathConfig, matcher: TextMatcher,
+    def __init__(self, path_config: FilePathConfig, matcher: MatcherOrganizer,
                  request_config: RequestConfig = RequestConfig(),
-                 matcher_data: MatcherData = MatcherData(),
                  logger: logging.Logger = logging.getLogger(__name__)):
         self.path_config = path_config
         self.matcher = matcher
         self.logger = logger
         self.request_config = request_config
-        self.matcher_data = matcher_data
 
     def process_file(self):
         # 1. 加载JSON文件
@@ -861,7 +866,7 @@ class FileProcessor:
             # 使用LLM翻译器
             # 创建RequestTextBuilder实例，用于构建结构化翻译请求
             builder = RequestTextBuilder(request_text, self.matcher,
-                                        self.request_config, self.matcher_data)
+                                        self.request_config, self.formal_flatten_item)
             # 构建统一请求结构
             request_text = builder.build()
         
@@ -1076,6 +1081,7 @@ class FileProcessor:
         for i in self.translating_list:
             flatten_item = flatten_dict_enhanced(lang_index[i],
                                          ignore_types=[None, int, float])
+            self.formal_flatten_item = deepcopy(flatten_item)
             keys_to_delete = []
             for key in flatten_item:
                 if key[-1] in AVOID_PATH:

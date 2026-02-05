@@ -1,6 +1,15 @@
 {
     "ui_default":{
         "translator":{
+            "translator": "LLM通用翻译服务",
+            "fallback": true,
+            "is_text": true,
+            "enable_dev_settings": false,
+            "en_path": "",
+            "kr_path": "",
+            "jp_path": "",
+            "llc_path": "",
+            "has_prefix": true
         },
         "install":{
             "package_directory": ""

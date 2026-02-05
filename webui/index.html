@@ -113,53 +113,63 @@
                     <h3 class="setting-title">翻译选项</h3>
                     <div class="form-group">
                         <label class="checkbox-container">
-                            <input type="checkbox" id="custom-script">
+                            <input type="checkbox" id="enable-dev-settings" onchange="toggleDevelopSettings()">
                             <span class="checkmark"></span>
-                            使用自定义翻译脚本
+                            启用高级选项
                         </label>
                     </div>
-                    
-                    <div class="form-group" id="script-path-group" style="display: none;">
-                        <label for="script-path">脚本路径:</label>
-                        <div class="file-input-group">
-                            <input type="text" id="script-path" placeholder="选择自定义脚本文件">
-                            <button class="action-btn secondary" onclick="browseFile('script-path')">
-                                <i class="fas fa-folder-open"></i> 浏览
-                            </button>
+                    <div id="dev-settings" style="display: none;">
+                        <div class="form-group" id="kr-path-text">
+                            <label for="kr-path-text">韩文文本路径</label>
+                            <div class="file-input-group">
+                                <input type="text" id="kr-path" placeholder="选择韩文文本文件夹">
+                                <button class="action-btn secondary" 
+                                onclick="pywebview.api.browse_folder('kr-path')">
+                                    <i class="fas fa-folder-open"></i> 浏览
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="cache-trans">
-                            <span class="checkmark"></span>
-                            启用翻译缓存
-                        </label>
-                        <small class="form-hint">启用后可加快重复翻译速度</small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="team-trans">
-                            <span class="checkmark"></span>
-                            团队翻译模式
-                        </label>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="excel-output">
-                            <span class="checkmark"></span>
-                            输出至Excel文件
-                        </label>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="log-enabled" checked>
-                            <span class="checkmark"></span>
-                            启用日志
-                        </label>
+
+                        <div class="form-group" id="jp-path-text">
+                            <label for="jp-path-text">日文文本路径</label>
+                            <div class="file-input-group">
+                                <input type="text" id="jp-path" placeholder="选择日文文本文件夹">
+                                <button class="action-btn secondary"
+                                 onclick="pywebview.api.browse_folder('jp-path')">
+                                    <i class="fas fa-folder-open"></i> 浏览
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="en-path-text">
+                            <label for="en-path-text">英文文本路径</label>
+                            <div class="file-input-group">
+                                <input type="text" id="en-path" placeholder="选择英文文本文件夹">
+                                <button class="action-btn secondary"
+                                 onclick="pywebview.api.browse_folder('en-path')">
+                                    <i class="fas fa-folder-open"></i> 浏览
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="llc-path-text">
+                            <label for="llc-path-text">中文文本路径</label>
+                            <div class="file-input-group">
+                                <input type="text" id="llc-path" placeholder="选择中文文本文件夹">
+                                <button class="action-btn secondary"
+                                 onclick="pywebview.api.browse_folder('llc-path')">
+                                    <i class="fas fa-folder-open"></i> 浏览
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="has-prefix" checked>
+                                <span class="checkmark"></span>
+                                文件名存在前缀
+                            </label>
+                        </div>
                     </div>
                 </div>
                 
@@ -167,55 +177,24 @@
                     <h3 class="setting-title">翻译服务配置</h3>
                     <div class="form-group">
                         <label for="translation-service">翻译服务:</label>
-                        <div class="select-wrapper">
-                            <select id="translation-service">
-                                <option value="baidu">百度翻译</option>
-                                <option value="tencent">腾讯翻译</option>
-                                <option value="youdao">有道翻译</option>
-                                <option value="caiyun">彩云翻译</option>
-                                <option value="xiaoniu">小牛翻译</option>
-                                <option value="aliyun">阿里云翻译</option>
-                                <option value="huoshan">火山翻译</option>
-                                <option value="chatgpt">ChatGPT翻译</option>
-                            </select>
-                            <i class="fas fa-chevron-down"></i>
+                        <div class="translator-services">
                         </div>
                     </div>
                     
                     <div class="form-group">
                         <label class="checkbox-container">
-                            <input type="checkbox" id="half-trans">
+                            <input type="checkbox" id="fallback" checked>
                             <span class="checkmark"></span>
-                            使用翻译至一半的项目
+                            失败时进行相反重试 (LLM翻译专用)
                         </label>
-                    </div>
-                    
-                    <div class="form-group" id="half-trans-path-group" style="display: none;">
-                        <label for="half-trans-path">项目路径:</label>
-                        <div class="file-input-group">
-                            <input type="text" id="half-trans-path" placeholder="选择半翻译项目路径">
-                            <button class="action-btn secondary" onclick="browseFile('half-trans-path')">
-                                <i class="fas fa-folder-open"></i> 浏览
-                            </button>
-                        </div>
                     </div>
                     
                     <div class="form-group">
                         <label class="checkbox-container">
-                            <input type="checkbox" id="backup">
+                            <input type="checkbox" id="is-text" checked>
                             <span class="checkmark"></span>
-                            使用上版本备份原文
+                            使用文本格式进行请求 (LLM翻译专用)
                         </label>
-                    </div>
-                    
-                    <div class="form-group" id="backup-path-group" style="display: none;">
-                        <label for="backup-path">备份路径:</label>
-                        <div class="file-input-group">
-                            <input type="text" id="backup-path" placeholder="选择备份文件路径">
-                            <button class="action-btn secondary" onclick="browseFile('backup-path')">
-                                <i class="fas fa-folder-open"></i> 浏览
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -225,17 +204,6 @@
                     <i class="fas fa-play"></i>
                     开始翻译
                 </button>
-            </div>
-            
-            <div class="progress-container" id="translation-progress" style="display: none;">
-                <div class="progress-info">
-                    <div class="progress-text" id="progress-text">准备开始...</div>
-                    <div class="progress-percent" id="progress-percent">0%</div>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-bar-fill" id="progress-fill"></div>
-                    <div class="progress-bar-pulse"></div>
-                </div>
             </div>
         </div>
 

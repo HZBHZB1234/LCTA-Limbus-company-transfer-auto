@@ -1,6 +1,16 @@
 {
     "ui_default": {
-        "translator": "dict",
+        "translator":{
+            "translator": "str",
+            "fallback": "bool",
+            "is_text": "bool",
+            "enable_dev_settings": "bool",
+            "en_path": "str",
+            "kr_path": "str",
+            "jp_path": "str",
+            "llc_path": "str",
+            "has_prefix": "bool"
+        },
         "install":{
             "package_directory": "str"
         },

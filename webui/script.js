@@ -165,6 +165,17 @@ class ConfigManager {
             'cache-path': 'cache_path',
             'api-crypto': 'api_crypto',
             '--theme': 'theme',
+
+            // 翻译设置
+            "translator-service-select": "ui_default.translator.translator",
+            "fallback": 'ui_default.translator.fallback',
+            "is-text": 'ui_default.translator.is_text',
+            'enable-dev-settings': 'ui_default.translator.enable_dev_settings',
+            "en-path": "ui_default.translator.en_path",
+            "kr-path": "ui_default.translator.kr_path",
+            "jp-path": "ui_default.translator.jp_path",
+            "llc-path": "ui_default.translator.llc_path",
+            "has-prefix": "ui_default.translator.has_prefix",
             
             // 安装设置
             'install-package-directory': 'ui_default.install.package_directory',
@@ -493,42 +504,6 @@ function scrollLogToBottom() {
             logDisplay.scrollTop = logDisplay.scrollHeight;
         }, 100);
     }
-}
-
-// 复选框逻辑
-function initCheckboxes() {
-    document.getElementById('custom-script')?.addEventListener('change', function() {
-        const group = document.getElementById('script-path-group');
-        if (group) {
-            if (this.checked) {
-                AnimationManager.fadeIn(group);
-            } else {
-                AnimationManager.fadeOut(group);
-            }
-        }
-    });
-
-    document.getElementById('half-trans')?.addEventListener('change', function() {
-        const group = document.getElementById('half-trans-path-group');
-        if (group) {
-            if (this.checked) {
-                AnimationManager.fadeIn(group);
-            } else {
-                AnimationManager.fadeOut(group);
-            }
-        }
-    });
-
-    document.getElementById('backup')?.addEventListener('change', function() {
-        const group = document.getElementById('backup-path-group');
-        if (group) {
-            if (this.checked) {
-                AnimationManager.fadeIn(group);
-            } else {
-                AnimationManager.fadeOut(group);
-            }
-        }
-    });
 }
 
 // 密码显示/隐藏切换
@@ -861,6 +836,39 @@ class APIConfigManager {
         if (modelElement) {
             modelElement.value = service.model || '';
         }
+    }
+
+    // 加载API服务到翻译下拉框
+    loadAPIServicesTranslator() {
+        if (!this.initialized || !this.apiServices) {
+            console.error('API服务未初始化');
+            return;
+        }
+        
+        const apiSelectContainer = document.querySelector('.translator-services');
+        if (!apiSelectContainer) {
+            console.error('找不到.translator-services容器');
+            return;
+        }
+        
+        // 清空容器
+        apiSelectContainer.innerHTML = '';
+        
+        // 创建下拉框
+        const selectElement = document.createElement('select');
+        selectElement.id = 'translator-service-select';
+        selectElement.className = 'translator-service-select';
+        
+        // 添加所有API服务选项
+        Object.keys(this.apiServices).forEach(serviceName => {
+            const option = document.createElement('option');
+            option.value = serviceName;
+            option.textContent = serviceName;
+            selectElement.appendChild(option);
+        });
+        
+        // 添加到容器
+        apiSelectContainer.appendChild(selectElement);
     }
     
     // 生成API设置表单
@@ -1411,6 +1419,17 @@ function toggleCachePathInput() {
         cachePathGroup.style.display = 'none';
     }
 }
+
+function toggleDevelopSettings() {
+    const group = document.getElementById('dev-settings');
+    const enable = document.getElementById('enable-dev-settings');
+    if (enable.checked) {
+        group.style.display = 'block';
+    } 
+    else {
+        group.style.display = 'none';
+    }
+};
 
 function browsePackageDirectory() {
     pywebview.api.browse_folder('package-directory').then(function(result) {
@@ -3108,9 +3127,6 @@ function init() {
     // 初始化导航
     initNavigation();
     
-    // 初始化复选框
-    initCheckboxes();
-    
     // 初始化密码切换
     initPasswordToggles();
     
@@ -3408,7 +3424,8 @@ window.addEventListener('pywebviewready', function() {
                 
                 // 应用配置到UI
                 configManager.applyConfigToUI().then(function() {
-                    toggleCachePathInput()
+                    toggleCachePathInput();
+                    toggleDevelopSettings()
                 })
             }
             checkGamePath();
@@ -3445,6 +3462,26 @@ window.addEventListener('pywebviewready', function() {
                         });
                         
                         selectBox.dispatchEvent(changeEvent);
+                    };
+
+                    apiConfigManager.loadAPIServicesTranslator();
+
+                    let current_select_translator = configManager.getCachedValue('ui_default.translator.translator')
+                    if (!current_select_translator) {
+                        current_select_translator = Object.keys(apiConfigManager.apiServices)[0];
+                    }
+                    // 获取选择框元素
+                    const selectBoxtranslator = document.querySelector('.translator-service-select');
+
+                    if (selectBoxtranslator) {
+                        selectBoxtranslator.value = current_select_translator;
+                        
+                        const changeEvent = new Event('change', {
+                            bubbles: true,
+                            cancelable: true
+                        });
+                        
+                        selectBoxtranslator.dispatchEvent(changeEvent);
                     };
                 }
             });

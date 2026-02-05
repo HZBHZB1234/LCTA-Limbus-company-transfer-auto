@@ -4,6 +4,7 @@ import json
 import sys
 import shutil
 import logging
+import re
 from dataclasses import dataclass, field
 from copy import deepcopy
 from contextlib import suppress
@@ -14,9 +15,9 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 print(sys.path)
-project_root = Path(__file__).parent.parent
-print(project_root)
-sys.path.insert(0, str(project_root))
+_project_root = Path(__file__).parent.parent
+print(_project_root)
+sys.path.insert(0, str(_project_root))
 
 import translateFunc.translate_doc as translate_doc
 
@@ -196,14 +197,18 @@ class PathConfig:
         
 
 class FilePathConfig:
-    def __init__(self, KR_path: Path, _PathConfig: PathConfig):
+    def __init__(self, KR_path: Path, _PathConfig: PathConfig, has_prefix: bool = True):
         self.KR_path = KR_path
         self.rel_path = Path(KR_path.relative_to(_PathConfig.KR_base_path))
-        self.real_name = self.rel_path.name[3:]
         self.rel_dir = self.rel_path.parent
-        self.real_name = self.rel_path.name[3:]
-        self.EN_path = _PathConfig.EN_base_path / self.rel_dir / f"EN_{self.real_name}"
-        self.JP_path = _PathConfig.JP_base_path / self.rel_dir / f"JP_{self.real_name}"
+        if has_prefix:
+            self.real_name = self.rel_path.name[3:]
+            self.EN_path = _PathConfig.EN_base_path / self.rel_dir / f"EN_{self.real_name}"
+            self.JP_path = _PathConfig.JP_base_path / self.rel_dir / f"JP_{self.real_name}"
+        else:
+            self.real_name = self.rel_path.name
+            self.EN_path = _PathConfig.EN_base_path / self.rel_dir / self.real_name
+            self.JP_path = _PathConfig.JP_base_path / self.rel_dir / self.real_name
         self.LLC_path = _PathConfig.llc_base_path / self.rel_dir / self.real_name
         self.target_file = _PathConfig.target_path / self.rel_dir / self.real_name
 
@@ -598,8 +603,7 @@ class RequestTextBuilder:
             # 角色信息
             if 'model' in block and block['model']:
                 model = block['model']
-                model_content = f'{model} / {reference.get('models', {})\
-                .get(model, {}).get('cn', '获取失败')}'
+                model_content = f"{model} / {reference.get('models', {}).get(model, {}).get('cn', '获取失败')}"
                 result_lines.extend(self._format_section("说话者信息", [model_content], level=2))
             
             result_lines.append(f"【文本块 {block['id']} 结束】")
@@ -888,7 +892,8 @@ class FileProcessor:
                 if self.request_config.is_text_format:
                     # 文本格式：按双换行符分割，处理转义字符
                     result_list = result_part.split('\n\n')
-                    result_list = [item.replace('\\n', '\n').replace('\\t', '\t').replace('\\r', '\r') for item in result_list]
+                    result_list = [re.sub(r'^\s?【文本块\s?\d+】[\s\n]?', '',
+                        item.replace('\\n', '\n').replace('\\t', '\t').replace('\\r', '\r')) for item in result_list]
                 else:
                     # JSON格式：解析JSON并提取translations字段
                     result_list = json.loads(result_part).get('translations', [])

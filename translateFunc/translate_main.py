@@ -565,7 +565,7 @@ class RequestTextBuilder:
         # 技能文档参考
         if self.request_config.is_skill and reference.get('skill_doc'):
             result_lines.extend(self._format_section("技能翻译指南", [
-                self._escape_text(reference['skill_doc'])
+                reference['skill_doc']
             ]))
         
         # 添加分隔线
@@ -575,12 +575,12 @@ class RequestTextBuilder:
         
         # 添加文本块
         text_blocks = texts.get('text_blocks', [])
-        for block in text_blocks:
+        for idx, block in enumerate(text_blocks):
             # 添加文本块分隔符
-            if block['id'] > 1:
+            if idx > 0:
                 result_lines.append("\n" + "-" * 20 + "\n")
             
-            result_lines.append(f"【文本块 {block['id']}】")
+            result_lines.append(f"【文本块 {idx+1}】")
             
             # 核心文本内容
             core_lines = [
@@ -606,7 +606,7 @@ class RequestTextBuilder:
                 model_content = f"{model} / {reference.get('models', {}).get(model, {}).get('cn', '获取失败')}"
                 result_lines.extend(self._format_section("说话者信息", [model_content], level=2))
             
-            result_lines.append(f"【文本块 {block['id']} 结束】")
+            result_lines.append(f"【文本块 {idx+1} 结束】")
         
         # 添加整体结束标记
         if text_blocks:
@@ -920,6 +920,7 @@ class FileProcessor:
             translated_text = builder.deBuild(result)
         except StopIteration:
             self.logger.warning(f"翻译结果还原时出现问题：返回值长度问题")
+            self._save_except()
             raise ProcesserExit("translation_length_error")
         
         self._de_get_translating_text(translated_text)
@@ -953,6 +954,7 @@ class FileProcessor:
         except json.JSONDecodeError:
             self.logger.warning(f"{self.path_config.real_name}文件解析错误，跳过")
             self._save_except()
+            raise ProcesserExit("json_decode_error")
 
     def _save_llc(self):
         shutil.copy2(self.path_config.LLC_path, self.path_config.target_file)
@@ -967,8 +969,6 @@ class FileProcessor:
         shutil.copy2(self.path_config.KR_path, self.path_config.target_file)
         
     def _save_except(self):
-        if not self.request_config.save_result:
-            raise ProcesserExit("no_save_except")
         try:
             self._save_llc()
         except:
@@ -983,7 +983,6 @@ class FileProcessor:
                     except:
                         self.logger.error(f"保存文件{self.path_config.real_name}，请检查文件路径")
                         raise ProcesserExit("save_except_except")
-        raise ProcesserExit("save_except_success")
     
     def _save_result(self, json_data):
         if not self.request_config.save_result:
@@ -991,8 +990,9 @@ class FileProcessor:
         try:
             with open(self.path_config.target_file, 'w', encoding='utf-8-sig') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=4)
+                raise ProcesserExit("success_save")
         except:
-            raise ProcesserExit("success_save")
+            raise ProcesserExit("success_save_error")
             
     def _check_empty(self):
         if self.kr_json in EMPTY_DATA or self.kr_json.get('dataList', []) in EMPTY_DATA_LIST:

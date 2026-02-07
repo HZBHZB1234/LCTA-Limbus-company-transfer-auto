@@ -27,6 +27,7 @@ from webutils.update import Updater, get_app_version
 from webutils.const_apiConfig import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
 )
+from webutils.function_translate import translate_main
 from webutils import (
     function_llc_main, 
     function_ourplay_main,
@@ -254,12 +255,13 @@ class LCTA_API():
                 break
 
     # 以下为新添加的API方法，用于支持模态窗口功能
-    def start_translation(self, modal_id= "false"):
+    def start_translation(self, translator_config: dict, modal_id= "false"):
         """开始翻译"""
         try:
             # 这里应该调用实际的翻译逻辑
             self.add_modal_log("开始翻译...", modal_id)
-            time.sleep(2)  # 模拟翻译过程
+            translate_main(modal_id, self.log_manager,
+                           self.config, translator_config)
             self.add_modal_log("翻译完成", modal_id)
             return {"success": True, "message": "翻译完成"}
         except Exception as e:
@@ -503,17 +505,6 @@ class LCTA_API():
             self.log_error(e)
             self.log_manager.update_modal_progress(0, "下载失败", modal_id)
             self.log_manager.log_modal_status("下载失败", modal_id)
-            return {"success": False, "message": str(e)}
-
-    def save_api_config(self, modal_id= "false"):
-        """保存API配置"""
-        try:
-            self.add_modal_log("正在保存API配置...", modal_id)
-            time.sleep(1)  # 模拟保存过程
-            self.add_modal_log("API配置保存成功", modal_id)
-            return {"success": True, "message": "API配置保存成功"}
-        except Exception as e:
-            self.log_error(e)
             return {"success": False, "message": str(e)}
 
     def fetch_proper_nouns(self, modal_id= "false"):

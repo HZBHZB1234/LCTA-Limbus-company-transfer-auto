@@ -17,5 +17,6 @@ TRANSLATOR_TRANS = {
     '腾讯翻译服务': tkit.TencentTranslator,
     '有道翻译服务': tkit.YoudaoTranslator,
     '思知对话翻译服务': tkit.SizhiTranslator,
-    '空翻译器(使用原文)': tkit.NullTranslator
+    '空翻译器(使用原文)': tkit.NullTranslator,
+    "LLM通用翻译服务": tkit.LLMGeneralTranslator
 }

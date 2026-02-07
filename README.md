@@ -1,8 +1,18 @@
 # LCTA-Limbus-company-transfer-auto
+LCTA工具箱
+
+## 介绍:
 较为全面的边狱公司工具箱
-当前版本v4.0.6，重构进行中  
+包含汉化安装，自动汉化，api配置测试，下载零协会汉化包，下载ourplay汉化包，启动器，缓存清理，零协会专有名词抓取等等的功能
+
 ## TODO:  
-- 统一配置与函数调用逻辑  
+- 统一配置与函数调用逻辑
+- 统一日志逻辑，使用单例化日志管理器  
+- 添加mod制作器
+- 添加mod管理界面
+- 添加c盘链接创建功能
+- 优化界面，合并重复页面
+- 添加气泡mod下载功能
 
 ## 已知问题:
 > 已解决
@@ -13,6 +23,8 @@
 - Github作者链接: [HZBHZB1234](https://github.com/HZBHZB1234)
 - Github项目链接: [HZBHZB1234/LCTA-Limbus-company-transfer-auto](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto)  
 - Github意见箱链接: [HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues)
+- 自动汉化更新仓库: [HZBHZB1234/LCTA_auto_update](https://github.com/HZBHZB1234/LCTA_auto_update)
+- 使用翻译库: [HZBHZB1234/Py-Translate-Kit](https://github.com/HZBHZB1234/Py-Translate-Kit)
 - QQ群聊: 1081988645
 - 贴吧昵称: HZBHZB31415926
 

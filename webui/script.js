@@ -172,7 +172,7 @@ class ConfigManager {
             "is-text": 'ui_default.translator.is_text',
             'from-lang': 'ui_default.translator.from_lang',
             'enable-proper': 'ui_default.translator.enable_proper',
-            'aoto-fetch-proper': 'ui_default.translator.auto_fetch_proper',
+            'auto-fetch-proper': 'ui_default.translator.auto_fetch_proper',
             'proper-path': 'ui_default.translator.proper_path',
             'enable-role': 'ui_default.translator.enable_role',
             'enable-skill': 'ui_default.translator.enable_skill',
@@ -2003,8 +2003,8 @@ function startTranslation() {
     modal.addLog('开始翻译任务');
     configManager.flushPendingUpdates();
     
-    pywebview.api.start_translation(modal.id,
-         apiConfigManager.currentSettings).then(function(result) {
+    pywebview.api.start_translation(apiConfigManager.currentSettings,
+        modal.id).then(function(result) {
         if (result.success) {
             modal.complete(true, '翻译任务已完成');
         } else {
@@ -3075,7 +3075,10 @@ function addLogMessage(message, level = 'info') {
         logDisplay.appendChild(logEntry);
         logDisplay.scrollTop = logDisplay.scrollHeight;
     };
-    pywebview.api.log(message)
+    if (window.apiReady) {
+        pywebview.api.log(message).catch(
+            function(error) { console.log(error); })
+    };
 }
 
 // 简单Markdown转HTML
@@ -3470,7 +3473,8 @@ window.addEventListener('pywebviewready', function() {
                 // 应用配置到UI
                 configManager.applyConfigToUI().then(function() {
                     toggleCachePathInput();
-                    toggleDevelopSettings()
+                    toggleDevelopSettings();
+                    toggleAutoProper()
                 })
             }
             checkGamePath();

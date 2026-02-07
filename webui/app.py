@@ -5,10 +5,11 @@ from pathlib import Path
 import json
 import time
 import logging
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 import shutil
 import threading
 import atexit
+from contextlib import suppress
 from typing import Optional, List, Dict, TYPE_CHECKING
 if TYPE_CHECKING:
     from translatekit.base import TranslatorBase
@@ -39,7 +40,7 @@ from webutils import (
     get_system_fonts,
     export_system_font,
     function_fetch_main,
-    function_LCTA_auto,
+    function_LCTA_auto_main,
     clean_config_main
 )
 
@@ -261,7 +262,8 @@ class LCTA_API():
         try:
             self.add_modal_log("开始翻译...", modal_id)
             translate_main(modal_id, self.log_manager,
-                           self.config, translator_config)
+                           self.config, translator_config,
+                           formating_function=self.format_api_settings)
             self.add_modal_log("翻译完成", modal_id)
             return {"success": True, "message": "翻译完成"}
         except CancelRunning:
@@ -515,7 +517,7 @@ class LCTA_API():
         """开始翻译"""
         try:
             self.add_modal_log("开始翻译...", modal_id)
-            function_LCTA_auto(modal_id, self.log_manager,self.config)
+            function_LCTA_auto_main(modal_id, self.log_manager,self.config)
             self.add_modal_log("翻译完成", modal_id)
             return {"success": True, "message": "翻译完成"}
         except CancelRunning:
@@ -542,11 +544,23 @@ class LCTA_API():
             self.log_error(e)
             return {"success": False, "message": str(e)}
         
+    def format_api_settings(self, api_settings: dict, default_setting: dict) -> dict:
+        result_settings = default_setting.copy()
+        for key, value in api_settings.items():
+            if key in result_settings and value != "":
+                with suppress(Exception):
+                    value = float(value)
+                result_settings[key] = value
+        return result_settings
+        
     def test_api(self, key: str, api_settings: dict) -> dict:
         """测试API密钥是否有效"""
         try:
             self.log(f"开始测试API密钥: {key}")
-            translator: 'TranslatorBase' = self.TKIT_MACHINE[key]['translator'](
+            translator: 'TranslatorBase' = self.TKIT_MACHINE[key]['translator']
+            api_settings = self.format_api_settings(
+                api_settings, translator.DEFAULT_API_KEY)
+            translator = translator(
                 api_setting=api_settings, debug_mode=True)
             lang_dict = self.TKIT_MACHINE[key]['langCode']
             kr_result = translator.translate("안녕", lang_dict['kr'], lang_dict['zh']) if lang_dict['kr'] else '暂不支持该语言'
@@ -900,7 +914,7 @@ class LCTA_API():
 
 def setup_logging():
     """
-    配置日志系统
+    配置日志系统，使用TimedRotatingFileHandler按时间轮转日志
     """
     # 创建logs目录（如果不存在）
     if not os.path.exists('logs'):
@@ -910,11 +924,15 @@ def setup_logging():
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     
-    handler = RotatingFileHandler(
+    # 使用TimedRotatingFileHandler按天轮转日志
+    handler = TimedRotatingFileHandler(
         'logs/app.log', 
-        maxBytes=1024*100,
-        backupCount=5,
-        encoding='utf-8'
+        when='midnight',     # 每天午夜轮转
+        interval=1,          # 间隔1天
+        encoding='utf-8',
+        utc=False,           # 使用本地时间
+        delay=False,
+        atTime=None          # 午夜轮转
     )
     
     # 设置日志格式

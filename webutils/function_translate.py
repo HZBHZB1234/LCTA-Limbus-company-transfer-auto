@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 import shutil
 import tempfile
-import datetime
+from datetime import datetime
+from typing import Callable
 from translateFunc.translate_main import *
 from translateFunc.translate_doc import *
 from translateFunc.translate_request import *
@@ -14,7 +15,8 @@ from webutils.log_manage import LogManager
 from webutils.functions import get_cache_font, zip_folder
 
 def translate_main(modal_id, logger_: LogManager,
-                   whole_configs: dict, translator_config: dict):
+                   whole_configs: dict, translator_config: dict,
+                   formating_function: Callable[[dict, dict], dict],):
     with tempfile.TemporaryDirectory() as tmpdir:
         logger_.log_modal_process("开始初始化", modal_id)
         logger_.log_modal_status("正在初始化", modal_id)
@@ -52,6 +54,11 @@ def translate_main(modal_id, logger_: LogManager,
             api_settings['response_format'] = "text" \
                 if is_text else "json_object"
         
+        
+        translator: TranslatorBase = TRANSLATOR_TRANS[translator_text]
+        
+        api_settings = formating_function(api_settings, translator.DEFAULT_API_KEY)
+        
         translate_config = TranslationConfig(
             api_setting=api_settings,
             debug_mode=True,
@@ -60,9 +67,9 @@ def translate_main(modal_id, logger_: LogManager,
         )
         
         if is_llm:
-            request_config.text_max_length = 20000
-        
-        translator: TranslatorBase = TRANSLATOR_TRANS[translator_text]()
+            translate_config.text_max_length = 20000
+            
+        translator: TranslatorBase = translator(translate_config)
         
         lang_path = game_path / 'LimbusCompany_Data' / "lang"
         assets_path = game_path / "LimbusCompany_Data" / "Assets" /\
@@ -101,7 +108,7 @@ def translate_main(modal_id, logger_: LogManager,
         target_files = list(base_path_config.KR_base_path.rglob("*.json"))
         len_target_file = len(target_files)
         logger_.log(f"找到 {len_target_file} 个文件。")
-        logger_.log_modal_process(f"找到 {len_target_file} 个文件。")
+        logger_.log_modal_process(f"找到 {len_target_file} 个文件。", modal_id)
         try:
             if HAS_PREFIX:
                 model_file = base_path_config.KR_base_path / \
@@ -132,8 +139,8 @@ def translate_main(modal_id, logger_: LogManager,
         
             matcher.update_proper(proper_data)
         
-        logger_.log_modal_status("正在执行翻译...")
-        logger_.update_modal_progress(10, "正在执行翻译...")
+        logger_.log_modal_status("正在执行翻译...", modal_id)
+        logger_.update_modal_progress(10, "正在执行翻译...", modal_id)
         logger_.log_modal_process("开始执行翻译...", modal_id)
         
         for idx, file in enumerate(target_files):
@@ -159,6 +166,7 @@ def translate_main(modal_id, logger_: LogManager,
                         logger_.log_modal_process(f"文件{file_path_config.rel_path}处理完毕，退出码{e.exit_type} ", modal_id)
                         logger_.update_modal_progress(int(10+(idx//len_target_file)/4*5),
                                                       f"文件{file_path_config.real_name}操作完成", modal_id)
+                        logger_.check_running(modal_id)
                     if e.exit_type == 'translation_length_error':
                         raise
             except Exception as e:
@@ -192,8 +200,6 @@ def translate_main(modal_id, logger_: LogManager,
                             system_prompt=TEXT_SYSTEM_PROMPT if is_text else JSON_SYSTEM_PROMPT,
                             response_format="text" if is_text else "json_object")
             
-            logger_.check_running()
-            
             if file_path_config.KR_path == model_file and enable_role:
                 matcher.update_models(kr_role=json.loads(
                         file_path_config.KR_path.read_text(encoding='utf-8-sig')),
@@ -211,7 +217,7 @@ def translate_main(modal_id, logger_: LogManager,
         usage = translator.get_performance_metrics()
         logger_.log_modal_process(f"""翻译完成，本次翻译开销:
 请求数量: {usage.get('request_count', '获取失败')}
-请求字符数: {usage.get('chars_translated', '获取失败')}""")
+请求字符数: {usage.get('chars_translated', '获取失败')}""", modal_id)
         logger_.log_modal_process("开始打包...", modal_id)
         logger_.log_modal_status('正在打包汉化包', modal_id)
         
@@ -282,6 +288,6 @@ def translate_main(modal_id, logger_: LogManager,
             logger_.log_modal_status("操作失败", modal_id)
             logger_.update_modal_progress(100, "操作失败", modal_id)
             os.system(f'explorer "{tmp}"')
-            logger_.log_modal_process('目前已打开产物文件夹，如果有需要，请在60秒内保存数据')
+            logger_.log_modal_process('目前已打开产物文件夹，如果有需要，请在60秒内保存数据', modal_id)
             time.sleep(60)
 

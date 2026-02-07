@@ -27,6 +27,10 @@
             "dump_default": false,
             "download_source": "github"
         },
+        "machine": {
+            "use_proxy": true,
+            "download_source": "github"
+        },
         "ourplay":{
             "font_option": "simplify",
             "check_hash": true,

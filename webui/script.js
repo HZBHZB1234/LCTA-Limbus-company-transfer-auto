@@ -198,6 +198,10 @@ class ConfigManager {
             'llc-use-proxy': 'ui_default.zero.use_proxy',
             'llc-use-cache': 'ui_default.zero.use_cache',
             'llc-dump-default': 'ui_default.zero.dump_default',
+
+            // LCTA-auto-update配置
+            'machine-download-source': 'ui_default.machine.download_source',
+            'machine-use-proxy': 'ui_default.machine.use_proxy',
             
             // 清理设置
             'clean-progress': 'ui_default.clean.clean_progress',

@@ -27,6 +27,10 @@
             "dump_default": "bool",
             "download_source": "str"
         },
+        "machine": {
+            "use_proxy": "bool",
+            "download_source": "str"
+        },
         "ourplay": {
             "font_option": "str",
             "check_hash": "bool",

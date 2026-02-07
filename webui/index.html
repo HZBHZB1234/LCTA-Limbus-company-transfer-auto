@@ -57,6 +57,11 @@
                 <i class="fas fa-users"></i>
                 <span>从零协下载汉化</span>
             </button>
+
+            <button id="machine-btn" class="nav-btn">
+                <i class="fas fa-users"></i>
+                <span>从LCTA-auto-update下载汉化</span>
+            </button>
         
             <button id="launcher-config-btn" class="nav-btn">
                 <i class="fas fa-rocket"></i>
@@ -579,6 +584,49 @@
                         <button class="primary-btn" onclick="downloadLLC()">
                             <i class="fas fa-download"></i>
                             下载零协汉化包
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 自动翻译库下载界面-->
+        <div id="machine-section" class="content-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-users"></i>
+                    从LCTA-auto-update下载汉化
+                </h2>
+                <p class="section-subtitle">下载自动翻译汉化包</p>
+            </div>
+            
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <h3 class="setting-title">下载配置</h3>
+                    
+                    <div class="form-group">
+                        <label for="machine-download-source">文本下载来源:</label>
+                        <div class="select-wrapper">
+                            <select id="machine-download-source">
+                                <option value="github">从github下载</option>
+                                <option value="mirror">从公益镜像下载 beta</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="machine-use-proxy" checked>
+                            <span class="checkmark"></span>
+                            使用代理加速下载
+                        </label>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="downloadMachine()">
+                            <i class="fas fa-download"></i>
+                            下载LCTA-auto-update汉化包
                         </button>
                     </div>
                 </div>

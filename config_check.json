@@ -8,6 +8,8 @@
             "enable_proper": "bool",
             "auto_fetch_proper": "bool",
             "proper_path": "str",
+            "enable_role": "bool",
+            "enable_skill": "bool",
             "enable_dev_settings": "bool",
             "en_path": "str",
             "kr_path": "str",

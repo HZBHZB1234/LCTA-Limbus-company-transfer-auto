@@ -174,6 +174,8 @@ class ConfigManager {
             'enable-proper': 'ui_default.translator.enable_proper',
             'aoto-fetch-proper': 'ui_default.translator.auto_fetch_proper',
             'proper-path': 'ui_default.translator.proper_path',
+            'enable-role': 'ui_default.translator.enable_role',
+            'enable-skill': 'ui_default.translator.enable_skill',
             'enable-dev-settings': 'ui_default.translator.enable_dev_settings',
             "en-path": "ui_default.translator.en_path",
             "kr-path": "ui_default.translator.kr_path",

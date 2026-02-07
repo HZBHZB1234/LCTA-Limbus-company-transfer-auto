@@ -8,6 +8,8 @@
             "enable_proper": true,
             "aoto_fetch_proper": true,
             "proper_path": "",
+            "enable_role": true,
+            "enable_skill": true,
             "enable_dev_settings": false,
             "en_path": "",
             "kr_path": "",

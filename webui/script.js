@@ -171,6 +171,9 @@ class ConfigManager {
             "fallback": 'ui_default.translator.fallback',
             "is-text": 'ui_default.translator.is_text',
             'from-lang': 'ui_default.translator.from_lang',
+            'enable-proper': 'ui_default.translator.enable_proper',
+            'aoto-fetch-proper': 'ui_default.translator.auto_fetch_proper',
+            'proper-path': 'ui_default.translator.proper_path',
             'enable-dev-settings': 'ui_default.translator.enable_dev_settings',
             "en-path": "ui_default.translator.en_path",
             "kr-path": "ui_default.translator.kr_path",
@@ -1429,6 +1432,28 @@ function toggleDevelopSettings() {
     } 
     else {
         group.style.display = 'none';
+    }
+};
+
+function toggleProper() {
+    const group = document.getElementById('proper-settings');
+    const enable = document.getElementById('enable-proper');
+    if (enable.checked) {
+        group.style.display = 'block';
+    } 
+    else {
+        group.style.display = 'none';
+    }
+};
+
+function toggleAutoProper() {
+    const group = document.getElementById('proper-path-text');
+    const enable = document.getElementById('auto-fetch-proper');
+    if (enable.checked) {
+        group.style.display = 'none';
+    } 
+    else {
+        group.style.display = 'block';
     }
 };
 

@@ -111,6 +111,36 @@
             <div class="settings-grid">
                 <div class="setting-card">
                     <h3 class="setting-title">翻译选项</h3>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="enable-proper" onchange="toggleProper()">
+                            <span class="checkmark"></span>
+                            启用专有名词
+                        </label>
+                    </div>
+
+                    <div id="proper-settings">
+                        <div class="form-group">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="auto-fetch-proper" onchange="toggleAutoProper()">
+                                <span class="checkmark"></span>
+                                在进行翻译时自动抓取专有词汇 (无法使用自定义设置)
+                            </label>
+                        </div>
+                        
+                        <div class="form-group" id="proper-path-text">
+                            <label for="proper-path-text">专有名词json路径</label>
+                            <div class="file-input-group">
+                                <input type="text" id="proper-path" placeholder="选择专有名词json文件">
+                                <button class="action-btn secondary" 
+                                onclick="pywebview.api.browse_file('proper-path')">
+                                    <i class="fas fa-folder-open"></i> 浏览
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="form-group">
                         <label class="checkbox-container">
                             <input type="checkbox" id="enable-dev-settings" onchange="toggleDevelopSettings()">
@@ -118,6 +148,7 @@
                             启用高级选项
                         </label>
                     </div>
+
                     <div id="dev-settings" style="display: none;">
                         <div class="form-group" id="kr-path-text">
                             <label for="kr-path-text">韩文文本路径</label>

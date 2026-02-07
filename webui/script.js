@@ -2870,67 +2870,6 @@ function saveSettings() {
             modal.complete(false, '保存过程中发生错误: ' + error);
         });
 }
-// 保存launcher配置
-function saveLauncherConfig() {
-    if (typeof pywebview === 'undefined' || !pywebview.api) {
-        showMessage('错误', 'API尚未准备就绪');
-        return;
-    }
-    
-    const modal = new ProgressModal('保存Launcher配置');
-    modal.addLog('正在保存Launcher配置...');
-    
-    if (!configManager) {
-        modal.complete(false, '配置管理器未初始化');
-        return;
-    }
-    
-    // 收集launcher相关配置更新
-    const launcherIds = [
-        'launcher-zero-zip-type',
-        'launcher-zero-download-source',
-        'launcher-zero-use-proxy',
-        'launcher-zero-use-cache',
-        'launcher-ourplay-font-option',
-        'launcher-ourplay-use-api',
-        'launcher-work-update',
-        'launcher-work-mod'
-    ];
-    
-    const updates = {};
-    launcherIds.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            let value;
-            if (element.type === 'checkbox') {
-                value = element.checked;
-            } else {
-                value = element.value;
-            }
-            updates[id] = value;
-        }
-    });
-    
-    // 批量更新配置
-    configManager.updateConfigValues(updates)
-        .then(function(result) {
-            if (result.success) {
-                configManager.flushPendingUpdates()
-                    .then(() => {
-                        modal.complete(true, 'Launcher配置保存成功');
-                        pywebview.api.save_config_to_file();
-                        setTimeout(function() {
-                            modal.close();
-                        }, 1000)
-                    });
-            } else {
-                modal.complete(false, '部分配置保存失败');
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '保存配置时发生错误: ' + error);
-        });
-}
 
 function useDefaultConfig() {
     const modal = new ProgressModal('使用默认配置');

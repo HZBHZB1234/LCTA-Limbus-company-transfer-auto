@@ -65,13 +65,26 @@ jobs:
     
     - name: Compile C launcher
       run: |
-        # 编译C启动器
+        # 使用现有的favicon.ico作为图标
+        Copy-Item .\LCTA_backup\favicon.ico .\launcher.ico
+        
+        # 创建资源文件
+        echo "1 ICON \"launcher.ico\"" > launcher.rc
+        # 编译资源文件为目标文件
+        windres launcher.rc -o launcher_res.o
+        
+        # 编译C启动器并链接图标资源
         Copy-Item .\LCTA\launcher.c .\
-        gcc -O2 -o launcher.exe launcher.c -lshlwapi
+        gcc -O2 -o launcher.exe launcher.c launcher_res.o -lshlwapi
         strip launcher.exe
         mv launcher.exe release\${{ env.APP_NAME }}\launcher.exe
+        
+        # 为debug版本也创建资源文件
+        echo "1 ICON \"launcher.ico\"" > launcher_debug.rc
+        windres launcher_debug.rc -o launcher_debug_res.o
+        
         Copy-Item .\LCTA\launcher_debug.c .\
-        gcc -O2 -o launcher_debug.exe launcher_debug.c -lshlwapi
+        gcc -O2 -o launcher_debug.exe launcher_debug.c launcher_debug_res.o -lshlwapi
         strip launcher_debug.exe
         mv launcher_debug.exe release\${{ env.APP_NAME }}\launcher_debug.exe
     - name: Install Dependencies

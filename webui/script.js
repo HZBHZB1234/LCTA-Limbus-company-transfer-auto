@@ -160,6 +160,8 @@ class ConfigManager {
             'auto-check-update': 'auto_check_update',
             'delete-updating': 'delete_updating',
             'update-use-proxy': 'update_use_proxy',
+            'github-max-workers': 'github_max_workers',
+            'github-timeout': 'github_timeout',
             'update-only-stable': 'update_only_stable',
             'enable-cache': 'enable_cache',
             'cache-path': 'cache_path',
@@ -214,10 +216,10 @@ class ConfigManager {
 
             // 抓取设置
             'proper-join-char': 'ui_default.proper.join_char',
-            'proper-disable-space': 'ui_default.proper.disable_space',
-            'proper-max_length': 'ui_default.proper.max_length',
-            'proper-min_length': 'ui_default.proper.min_length',
-            'proper-output-type': 'ui_default.proper.output_type',
+            'proper-skip-space': 'ui_default.proper.disable_space',
+            'proper-max-count': 'ui_default.proper.max_length',
+            'proper-min-count': 'ui_default.proper.min_length',
+            'proper-output': 'ui_default.proper.output_type',
             
             // Launcher设置
             'launcher-zero-zip-type': 'launcher.zero.zip_type',

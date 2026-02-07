@@ -135,7 +135,8 @@ class GitHubReleaseFetcher:
     现在可以在请求时指定仓库，提高复用性
     """
     
-    def __init__(self, use_proxy: bool = True, ignore_ssl: bool = False):
+    def __init__(self, use_proxy: bool = True, ignore_ssl: bool = False,
+                 max_workers: int = 4, timeout: int = 8):
         """
         初始化获取器
         
@@ -160,8 +161,8 @@ class GitHubReleaseFetcher:
         })
         
         # 线程池配置
-        self.max_workers = 3  # 最大并发线程数
-        self.request_timeout = 8  # 单个请求超时时间
+        self.max_workers = max_workers  # 最大并发线程数
+        self.request_timeout = timeout  # 单个请求超时时间
         
         # 忽略SSL警告
         if self.ignore_ssl:
@@ -457,12 +458,14 @@ def print_release_summary(release_info: ReleaseInfo) -> None:
 # 全局请求器实例
 GithubRequester: GitHubReleaseFetcher = None
 
-def init_request():
+def init_request(max_workers=4, timeout=8):
     """初始化全局请求器"""
     global GithubRequester
     GithubRequester = GitHubReleaseFetcher(
         use_proxy=True,
-        ignore_ssl=True
+        ignore_ssl=True,
+        max_workers=max_workers,
+        timeout=timeout
         )
     print("GitHub请求器已初始化")
 

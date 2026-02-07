@@ -109,7 +109,12 @@ class LCTA_API():
             self.log("\n".join(self.config_error))
 
     def init_github(self):
-        GithubDownload.init_request()
+        max_workers:str = self.config.get('github_max_workers', "4")
+        timeout:str = self.config.get('github_timeout', "8")
+        GithubDownload.init_request(
+            max_workers=int(max_workers) if max_workers.isdigit() else 4,
+            timeout=int(timeout) if timeout.isdigit() else 8
+        )
         function_llc.font_assets_seven.proxys = GithubDownload.GithubRequester.proxy_manager
         function_llc.font_assets_raw.proxys = GithubDownload.GithubRequester.proxy_manager
     

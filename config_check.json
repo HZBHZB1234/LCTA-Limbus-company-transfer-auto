@@ -60,6 +60,8 @@
     "auto_check_update": "bool",
     "delete_updating": "bool",
     "update_use_proxy": "bool",
+    "github_max_workers": "str",
+    "github_timeout": "str",
     "update_only_stable": "bool",
     "enable_cache": "bool",
     "cache_path": "str",

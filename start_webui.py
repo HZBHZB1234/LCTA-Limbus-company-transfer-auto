@@ -38,9 +38,6 @@ def start_webui():
         print("正在启动LCTA WebUI...")
         print("请稍候，界面即将打开...")
         main()
-    except ImportError as e:
-        print(f"启动WebUI失败: {e}")
-        print("请确保已安装pywebview: pip install pywebview")
     except Exception as e:
         print(f"启动WebUI时发生错误: {e}")
         import traceback

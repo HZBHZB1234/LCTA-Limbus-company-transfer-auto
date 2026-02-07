@@ -89,6 +89,7 @@ class LogManager:
                 )
             except Exception as e:
                 self.log_error(e)
+            self.log(message)
         else:
             # 默认输出到控制台
             level_name = logging.getLevelName(level)

@@ -3058,7 +3058,8 @@ function addLogMessage(message, level = 'info') {
         
         logDisplay.appendChild(logEntry);
         logDisplay.scrollTop = logDisplay.scrollHeight;
-    }
+    };
+    pywebview.api.log(message)
 }
 
 // 简单Markdown转HTML

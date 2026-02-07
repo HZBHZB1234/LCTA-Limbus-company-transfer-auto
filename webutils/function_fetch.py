@@ -20,12 +20,13 @@ def function_fetch_main(modal_id, logger_: LogManager, **kwargs):
     logger_.log_modal_process("数据获取完成", modal_id)
     logger_.log_modal_process("开始处理数据", modal_id)
     logger_.log_modal_status("正在处理数据", modal_id)
+    min_lenth = int(kwargs.get("min_lenth", 0))
     json_data = [
         {
             'term': i.get('term', ''),
             'translation': i.get('translation', ''),
             'note': i.get('note', '')
-        } for i in data
+        } for i in data if len(i.get('term', '')) >= min_lenth
     ]
     if kwargs.get('disable_space', False):
         json_data = [i for i in json_data if ' ' not in i['term']]

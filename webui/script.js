@@ -212,6 +212,7 @@ class ConfigManager {
             'proper-join-char': 'ui_default.proper.join_char',
             'proper-disable-space': 'ui_default.proper.disable_space',
             'proper-max_length': 'ui_default.proper.max_length',
+            'proper-min_length': 'ui_default.proper.min_length',
             'proper-output-type': 'ui_default.proper.output_type',
             
             // Launcher设置
@@ -2546,11 +2547,13 @@ function fetchProperNouns() {
     const outputFormat = document.getElementById('proper-output').value;
     const skipSpace = document.getElementById('proper-skip-space').checked;
     const maxCount = document.getElementById('proper-max-count').value;
+    const minCount = document.getElementById('proper-min-count').value;
     const joinChar = document.getElementById('proper-join-char').value;
     
     const updates = {
         'proper-join-char': joinChar,
         'proper-max-lenth': maxCount,
+        'proper-min-lenth': minCount,
         'proper-output-type': outputFormat,
         'proper-disable-space': skipSpace
     };
@@ -2559,6 +2562,7 @@ function fetchProperNouns() {
     modal.addLog('开始抓取专有词汇...');
     modal.addLog(`输出格式: ${outputFormat}`);
     modal.addLog(`跳过含空格词汇: ${skipSpace ? '是' : '否'}`);
+    modal.addLog(`最短长度: ${minCount}`);
     if (maxCount) {
         modal.addLog(`最大词汇数量: ${maxCount}`);
     }

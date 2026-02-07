@@ -44,6 +44,7 @@
             "join_char": "str",
             "disable_space": "bool",
             "max_length": "int",
+            "min_length": "int",            
             "output_type": "str"
         }
     },

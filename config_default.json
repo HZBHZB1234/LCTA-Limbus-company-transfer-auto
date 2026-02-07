@@ -44,6 +44,7 @@
             "join_char":"|||",
             "disable_space":false,
             "max_length":0,
+            "min_length":0,
             "output_type":"text_one"
         }
     },

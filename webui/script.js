@@ -2001,26 +2001,17 @@ function startTranslation() {
     const modal = new ProgressModal('开始翻译');
     modal.setStatus('正在初始化翻译过程...');
     modal.addLog('开始翻译任务');
+    configManager.flushPendingUpdates();
     
-    const progressContainer = document.getElementById('translation-progress');
-    progressContainer.style.display = 'block';
-    
-    pywebview.api.start_translation(modal.id).then(function(result) {
+    pywebview.api.start_translation(modal.id,
+         apiConfigManager.currentSettings).then(function(result) {
         if (result.success) {
             modal.complete(true, '翻译任务已完成');
         } else {
             modal.complete(false, '翻译失败: ' + result.message);
         }
-        
-        setTimeout(() => {
-            progressContainer.style.display = 'none';
-        }, 2000);
     }).catch(function(error) {
         modal.complete(false, '翻译过程中发生错误: ' + error);
-        
-        setTimeout(() => {
-            progressContainer.style.display = 'none';
-        }, 2000);
     });
 }
 
@@ -2807,6 +2798,23 @@ function downloadLLC() {
                 modal.complete(false, '下载过程中发生错误: ' + error);
             });
         });
+}
+
+function downloadMachine() {
+    const modal = new ProgressModal('开始下载');
+    modal.setStatus('正在初始化下载过程...');
+    modal.addLog('开始下载任务');
+    configManager.flushPendingUpdates();
+    
+    pywebview.api.download_LCTA_auto(modal.id).then(function(result) {
+        if (result.success) {
+            modal.complete(true, '下载任务已完成');
+        } else {
+            modal.complete(false, '下载失败: ' + result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '下载过程中发生错误: ' + error);
+    });
 }
 
 // ================================

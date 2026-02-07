@@ -39,6 +39,7 @@ from webutils import (
     get_system_fonts,
     export_system_font,
     function_fetch_main,
+    function_LCTA_auto,
     clean_config_main
 )
 
@@ -258,12 +259,15 @@ class LCTA_API():
     def start_translation(self, translator_config: dict, modal_id= "false"):
         """开始翻译"""
         try:
-            # 这里应该调用实际的翻译逻辑
             self.add_modal_log("开始翻译...", modal_id)
             translate_main(modal_id, self.log_manager,
                            self.config, translator_config)
             self.add_modal_log("翻译完成", modal_id)
             return {"success": True, "message": "翻译完成"}
+        except CancelRunning:
+            self.log('用户已取消翻译流程')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
@@ -505,6 +509,21 @@ class LCTA_API():
             self.log_error(e)
             self.log_manager.update_modal_progress(0, "下载失败", modal_id)
             self.log_manager.log_modal_status("下载失败", modal_id)
+            return {"success": False, "message": str(e)}
+        
+    def download_LCTA_auto(self, modal_id= "false"):
+        """开始翻译"""
+        try:
+            self.add_modal_log("开始翻译...", modal_id)
+            function_LCTA_auto(modal_id, self.log_manager,self.config)
+            self.add_modal_log("翻译完成", modal_id)
+            return {"success": True, "message": "翻译完成"}
+        except CancelRunning:
+            self.log('用户已取消翻译流程')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
+        except Exception as e:
+            self.log_error(e)
             return {"success": False, "message": str(e)}
 
     def fetch_proper_nouns(self, modal_id= "false"):

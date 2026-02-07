@@ -215,7 +215,7 @@ def function_ourplay_api(modal_id, logger_: LogManager, **kwargs):
         logger_.log_modal_process("开始下载 OurPlay 汉化包", modal_id)
         logger_.log_modal_status("正在初始化链接", modal_id)
         
-        note_ = Note(address="062d22d6ecb233d1", pwd="AutoTranslate", read_only=True)
+        note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
         note_.fetch_note_info()
         url = json.loads(note_.note_content).get("ourplay_download_url")
         save_path = f"{temp_dir}/transfile.zip"

@@ -18,7 +18,7 @@ def _LCTA_auto_github(modal_id, logger_: LogManager, use_proxy):
         logger_.log_modal_status("下载失败", modal_id)
     
 def _LCTA_auto_api(modal_id, logger_: LogManager):
-    note_ = Note(address="062d22d6ecb233d1", pwd="AutoTranslate", read_only=True)
+    note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
     note_.fetch_note_info()
     
     try:

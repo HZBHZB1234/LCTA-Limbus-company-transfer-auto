@@ -40,7 +40,7 @@ def check_network():
     return False
 
 def get_note_content():
-    note_ = Note(address="062d22d6ecb233d1", pwd="AutoTranslate", read_only=True)
+    note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
     note_.fetch_note_info()
     note_content = note_.note_content
     note_content = json.loads(note_content)

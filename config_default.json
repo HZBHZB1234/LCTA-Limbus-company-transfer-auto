@@ -72,6 +72,10 @@
             "use_cache": true,
             "download_source": "github"
         },
+        "machine": {
+            "use_proxy": true,
+            "download_source": "github"
+        },
         "ourplay":{
             "font_option": "simplify",
             "use_api": true

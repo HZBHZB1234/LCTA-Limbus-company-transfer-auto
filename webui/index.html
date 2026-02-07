@@ -1030,6 +1030,30 @@
                         </label>
                     </div>
                 </div>
+
+                <div class="setting-card">
+                    <h3 class="setting-title">LCTA-AU汉化配置</h3>
+                    
+                    <div class="form-group">
+                        <label for="launcher-machine-download-source">文本下载来源:</label>
+                        <div class="select-wrapper">
+                            <select id="launcher-machine-download-source">
+                                <option value="github">从github下载</option>
+                                <option value="mirror">从公益镜像下载 beta</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="launcher-zero-use-proxy" checked>
+                            <span class="checkmark"></span>
+                            使用代理加速下载
+                        </label>
+                    </div>
+                    
+                </div>
                 
                 <div class="setting-card">
                     <h3 class="setting-title">工作模式配置</h3>
@@ -1040,7 +1064,8 @@
                                 <option value="no">不自动更新</option>
                                 <option value="llc">仅零协更新</option>
                                 <option value="ourplay">仅ourplay更新</option>
-                                <option value="all">两者都更新</option>
+                                <option value="LO">更新llc+ourplay</option>
+                                <option value="LM">更新llc+LCTA-AU</option>
                             </select>
                             <i class="fas fa-chevron-down"></i>
                         </div>

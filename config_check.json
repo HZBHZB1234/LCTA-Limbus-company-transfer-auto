@@ -47,8 +47,8 @@
         "proper": {
             "join_char": "str",
             "disable_space": "bool",
-            "max_length": "int",
-            "min_length": "int",            
+            "max_length": "str",
+            "min_length": "str",            
             "output_type": "str"
         }
     },
@@ -70,6 +70,10 @@
             "zip_type": "str",
             "use_proxy": "bool",
             "use_cache": "bool",
+            "download_source": "str"
+        },
+        "machine": {
+            "use_proxy": "bool",
             "download_source": "str"
         },
         "ourplay": {

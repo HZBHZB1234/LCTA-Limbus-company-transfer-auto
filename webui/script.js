@@ -226,6 +226,8 @@ class ConfigManager {
             'launcher-zero-download-source': 'launcher.zero.download_source',
             'launcher-zero-use-proxy': 'launcher.zero.use_proxy',
             'launcher-zero-use-cache': 'launcher.zero.use_cache',
+            'machine-zero-download-source': 'launcher.machine.download_source',
+            'machine-zero-use-proxy': 'launcher.machine.use_proxy',
             'launcher-ourplay-font-option': 'launcher.ourplay.font_option',
             'launcher-ourplay-use-api': 'launcher.ourplay.use_api',
             'launcher-work-update': 'launcher.work.update',

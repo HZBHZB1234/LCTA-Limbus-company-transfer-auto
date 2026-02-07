@@ -4,6 +4,7 @@
             "translator": "str",
             "fallback": "bool",
             "is_text": "bool",
+            "from_lang": "str",
             "enable_dev_settings": "bool",
             "en_path": "str",
             "kr_path": "str",

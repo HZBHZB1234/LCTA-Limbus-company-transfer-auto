@@ -170,6 +170,7 @@ class ConfigManager {
             "translator-service-select": "ui_default.translator.translator",
             "fallback": 'ui_default.translator.fallback',
             "is-text": 'ui_default.translator.is_text',
+            'from-lang': 'ui_default.translator.from_lang',
             'enable-dev-settings': 'ui_default.translator.enable_dev_settings',
             "en-path": "ui_default.translator.en_path",
             "kr-path": "ui_default.translator.kr_path",

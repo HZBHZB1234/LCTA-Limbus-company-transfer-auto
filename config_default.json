@@ -4,6 +4,7 @@
             "translator": "LLM通用翻译服务",
             "fallback": true,
             "is_text": true,
+            "from_lang": "EN",
             "enable_dev_settings": false,
             "en_path": "",
             "kr_path": "",

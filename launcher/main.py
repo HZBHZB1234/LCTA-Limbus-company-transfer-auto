@@ -1,11 +1,12 @@
 import subprocess
 import sys
 import tempfile
-from typing import List
+from typing import List, Dict, Optional, Any
 from pathlib import Path
 import json
 from datetime import datetime, timedelta
 import socket
+from abc import ABC, abstractmethod
 
 # Needed for embedded python
 import os
@@ -39,9 +40,21 @@ def check_network():
         pass
     return False
 
+class CustomNote(Note):
+    _cache_instance = {}
+    @classmethod
+    def create(cls, address, pwd, read_only) -> Note:
+        argu = (address, pwd, read_only)
+        if argu in cls._cache_instance:
+            return cls._cache_instance[argu]
+        else:
+            note = cls(address, pwd, read_only)
+            note.fetch_note_info()
+            cls._cache_instance[argu] = note
+            return note
+
 def get_note_content():
-    note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
-    note_.fetch_note_info()
+    note_ = CustomNote.create(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
     note_content = note_.note_content
     note_content = json.loads(note_content)
     return note_content
@@ -51,6 +64,367 @@ def update_config_last(name, version):
     config_whole['launcher']['last_install'][name] = str(version)
     with open("config.json", 'w', encoding='utf-8') as f:
         json.dump(config_whole, f, indent=4, ensure_ascii=False)
+
+class UpdateBase(ABC):
+    """更新基类，定义更新操作的通用接口"""
+    
+    def __init__(self, logger: LogManager):
+        self.logger = logger
+        self.config_whole = config_whole
+        self.launcher_config: dict = config_whole.get('launcher', {})
+        self.cache_path = func_utils.get_cache_font(config_whole)
+    
+    def check_network_available(self) -> bool:
+        """检查网络是否可用"""
+        return check_network()
+    
+    def get_last_installed_version(self, name) -> str:
+        """获取最后安装的版本"""
+        last_config = self.config_whole.get("launcher", {}).get("last_install", {})
+        return last_config.get(name, "0.0.0")
+    
+    def download_and_install(self, zip_path: str) -> bool:
+        """下载并安装更新包"""
+        package_list = find_translation_packages('.')
+        if zip_path not in package_list:
+            self.logger.log(f"更新包 {zip_path} 不在安装包列表中，请检查安装包")
+            return False
+            
+        self.logger.log(f"更新包 {zip_path} 已在安装包列表中")
+        install_translation_package(zip_path, self.config_whole.get("game_path", ""), 
+                                   self.logger, f"update_install")
+        return True
+    
+    @abstractmethod
+    def check_update(self) -> bool:
+        pass
+    
+    @abstractmethod
+    def perform_update(self) -> Optional[str]:
+        """执行更新操作，返回更新包路径"""
+        pass
+    
+    @abstractmethod
+    def update_config(self) -> bool:
+        """更新配置文件"""
+        pass
+    
+    def run(self) -> bool:
+        """执行完整的更新流程"""
+        if not self.check_network_available():
+            self.logger.log("当前网络不可用，无法检查更新")
+            return False
+            
+        if not self.check_update():
+            self.logger.log("当前版本已经是最新版本")
+            return False
+            
+        zip_path = self.perform_update()
+        
+        if not zip_path:
+            self.logger.log(f"更新包下载失败")
+            return False
+            
+        self.logger.log(f"更新包下载成功，路径: {zip_path}")
+        
+        if not self.download_and_install(zip_path):
+            return False
+            
+        self.update_config()
+        self.logger.log(f"汉化包更新完成")
+        return True
+
+class NoUpdate(UpdateBase):
+    """不执行任何更新"""
+    def check_update(self) -> bool:
+        self.logger.log("未启用任何更新选项，跳过更新检查")
+        return False
+    
+    def perform_update(self) -> Optional[str]:
+        self.logger.log("你是怎么触发这条日志的？")
+        return None
+    
+    def update_config(self):
+        pass
+    
+class MachineUpdate(UpdateBase):
+    """LCTA-AU更新类"""
+    
+    def __init__(self, logger: LogManager):
+        super().__init__(logger)
+        self.config: dict = self.launcher_config.get("machine", {})
+    
+    def get_latest_version(self) -> str:
+        """获取LCTA-AU最新版本号"""
+        download_source = self.config.get("download_source", "github")
+        
+        if download_source == "github":
+            return check_ver_github_M(self.config.get("use_proxy", True))
+        else:
+            note_content = get_note_content()
+            return str(note_content.get('machine_version', '0.0.0'))
+        
+    def check_update(self) -> bool:
+        last_version = self.get_last_installed_version('machine')
+        self.latest_version = self.get_latest_version()
+        return last_version != self.latest_version
+        
+    def perform_update(self) -> Optional[str]:
+        """执行LCTA-AU更新"""
+        return function_llc_main(
+            "LCTA-AU_update", 
+            self.logger,
+            download_source=self.config.get("download_source", "github"),
+            from_proxy=self.config.get("use_proxy", True)
+        )
+        
+    def update_config(self) -> bool:
+        update_config_last('machine', self.latest_version)
+
+class LLCUpdate(UpdateBase):
+    """LLC更新类"""
+    
+    def __init__(self, logger: LogManager):
+        super().__init__(logger)
+        self.config: dict = self.launcher_config.get("zero", {})
+    
+    def get_latest_version(self) -> str:
+        """获取LLC最新版本号"""
+        download_source = self.config.get("download_source", "github")
+        
+        if download_source == "github":
+            return check_ver_github(self.config.get("use_proxy", True))
+        else:
+            note_content = get_note_content()
+            return str(note_content.get('llc_version', '0.0.0'))
+        
+    def check_update(self) -> bool:
+        last_version = self.get_last_installed_version('llc')
+        self.latest_version = self.get_latest_version()
+        return last_version != self.latest_version
+        
+    def perform_update(self) -> Optional[str]:
+        """执行LLC更新"""
+        return function_llc_main(
+            "llc_update", 
+            self.logger,
+            download_source=self.config.get("download_source", "github"),
+            from_proxy=self.config.get("use_proxy", True),
+            zip_type=self.config.get("zip_type", "zip"),
+            use_cache=True,
+            cache_path=self.cache_path
+        )
+        
+    def update_config(self) -> bool:
+        update_config_last('llc', self.latest_version)
+
+class OurPlayUpdate(UpdateBase):
+    """OurPlay更新类"""
+    
+    def __init__(self, logger: LogManager):
+        super().__init__(logger)
+        self.config: dict = self.config_whole.get("ourplay", {})
+    
+    def get_latest_version(self) -> str:
+        """获取OurPlay最新版本号"""
+        if self.config.get("use_api", True):
+            note_content = get_note_content()
+            return str(note_content.get('ourplay_version', '0.0.0'))
+        else:
+            return str(check_ver_ourplay(self.logger))
+        
+    def check_update(self) -> bool:
+        last_version = self.get_last_installed_version('ourplay')
+        self.latest_version = self.get_latest_version()
+        return last_version != self.latest_version
+        
+    def update_config(self) -> bool:
+        update_config_last('ourplay', self.latest_version)
+    
+    def perform_update(self) -> Optional[str]:
+        """执行OurPlay更新"""
+        if not self.config.get("use_api", True):
+            function_ourplay_main(
+                "ourplay_update", 
+                self.logger,
+                check_hash=self.config.get("check_hash", True),
+                font_option=self.config.get("font_option", "simplify")
+            )
+        else:
+            function_ourplay_api(
+                "ourplay_update", 
+                self.logger,
+                check_hash=self.config.get("check_hash", True),
+                font_option=self.config.get("font_option", "simplify")
+            )
+        return "ourplay.zip"
+
+class LOUpdate(UpdateBase):
+    """同时更新LLC和OurPlay（根据时间戳选择最新的一个）"""
+    
+    def __init__(self, logger: LogManager):
+        super().__init__(logger)
+        self.llc_update = LLCUpdate(logger)
+        self.ourplay_update = OurPlayUpdate(logger)
+    
+    def get_latest_type(self) -> str:
+        """获取最新源"""
+        note_content = get_note_content()
+        
+        try:
+            ourplay_last_update = datetime.fromisoformat(
+                note_content.get('ourplay_last_update_time', '1970-01-01T00:00:00')
+            )
+        except (ValueError, TypeError):
+            ourplay_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
+            
+        try:
+            llc_last_update = datetime.fromisoformat(
+                note_content.get('llc_last_update_time', '1970-01-01T00:00:00')
+            )
+        except (ValueError, TypeError):
+            llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
+        
+        # 返回时间戳较新的版本类型
+        return "ourplay" if llc_last_update < ourplay_last_update else "llc"
+    
+    def perform_update(self) -> Optional[str]:
+        """根据时间戳选择执行哪个更新"""
+        select_type = self.get_latest_type()
+        if select_type == "ourplay":
+            self.ourplay_update.run()
+        elif select_type == "llc":
+            self.llc_update.run()
+        else:
+            return False
+        
+    def check_update(self) -> bool:
+        logger.log('尝试进行检查')
+        return True
+        
+    def update_config(self) -> bool:
+        return True
+
+class LMAUpdate(UpdateBase):
+    """同时更新LLC和LCTA-AU（通过api根据时间戳选择最新的一个）"""
+    
+    def __init__(self, logger: LogManager):
+        super().__init__(logger)
+        self.llc_update = LLCUpdate(logger)
+        self.LCTA_AU_update = MachineUpdate(logger)
+    
+    def get_latest_type(self) -> str:
+        """获取最新源"""
+        note_content = get_note_content()
+        
+        try:
+            machine_last_update = datetime.fromisoformat(
+                note_content.get('machine_last_update_time', '1970-01-01T00:00:00')
+            )
+        except (ValueError, TypeError):
+            machine_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
+            
+        try:
+            llc_last_update = datetime.fromisoformat(
+                note_content.get('llc_last_update_time', '1970-01-01T00:00:00')
+            )
+        except (ValueError, TypeError):
+            llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
+        
+        # 返回时间戳较新的版本类型
+        return "machine" if llc_last_update < machine_last_update else "llc"
+    
+    def perform_update(self) -> Optional[str]:
+        """根据时间戳选择执行哪个更新"""
+        select_type = self.get_latest_type()
+        if select_type == "machine":
+            self.LCTA_AU_update.run()
+        elif select_type == "llc":
+            self.llc_update.run()
+        else:
+            return False
+        
+    def check_update(self) -> bool:
+        logger.log('尝试进行检查')
+        return True
+        
+    def update_config(self) -> bool:
+        return True
+
+class LMGUpdate(UpdateBase):
+    """同时更新LLC和LCTA-AU（通过github根据时间戳选择最新的一个）"""
+    
+    def __init__(self, logger: LogManager):
+        super().__init__(logger)
+        self.llc_update = LLCUpdate(logger)
+        self.LCTA_AU_update = MachineUpdate(logger)
+    
+    def get_latest_type(self) -> str:
+        """获取最新源"""
+        use_proxy = self.launcher_config.get('zero', {}).get('use_proxy', True)
+        
+        try:
+            GithubDownload.GithubRequester.update_config(use_proxy)
+
+            machine_last_update = GithubDownload.GithubRequester.get_latest_release("HZBHZB1234",
+                                        "LCTA_auto_update").published_at
+
+            machine_last_update = datetime.fromisoformat(machine_last_update.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            machine_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
+            
+        try:
+            GithubDownload.GithubRequester.update_config(use_proxy)
+
+            llc_last_update = GithubDownload.GithubRequester.get_latest_release("HZBHZB1234",
+                                        "LCTA_auto_update").published_at
+
+            llc_last_update = datetime.fromisoformat(llc_last_update.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
+        
+        # 返回时间戳较新的版本类型
+        return "machine" if llc_last_update < machine_last_update else "llc"
+    
+    def perform_update(self) -> Optional[str]:
+        """根据时间戳选择执行哪个更新"""
+        select_type = self.get_latest_type()
+        if select_type == "machine":
+            self.LCTA_AU_update.run()
+        elif select_type == "llc":
+            self.llc_update.run()
+        else:
+            return False
+        
+    def check_update(self) -> bool:
+        logger.log('尝试进行检查')
+        return True
+        
+    def update_config(self) -> bool:
+        return True
+
+class UpdateFactory:
+    """更新工厂类，根据配置创建对应的更新对象"""
+    
+    @staticmethod
+    def create_update(config: Dict[str, Any], logger: LogManager) -> UpdateBase:
+        """根据配置创建更新对象"""
+        update_type = config.get("work", {}).get("update", "no")
+        
+        if update_type == "llc":
+            return LLCUpdate(logger)
+        elif update_type == "ourplay":
+            return OurPlayUpdate(logger)
+        elif update_type == "LCTA-AU":
+            return MachineUpdate(logger)
+        elif update_type == "LO":
+            return LOUpdate(logger)
+        elif update_type == "LM-A":
+            return LMAUpdate(logger)
+        elif update_type == "LM-G":
+            return LMGUpdate(logger)
+        else:  # "no" or any other value
+            return NoUpdate(logger)
 
 def main_pre():
     global config_whole
@@ -88,148 +462,11 @@ def main_pre():
         steam_argv = config_whole.get("game_path", "")+'LimbusCompany.exe'
     logger.log(f"steam_argv: {steam_argv}")
     
-    config = config_whole.get("launcher", {})
-    if not check_network():
-        logger.log("当前网络不可用，无法检查更新")
-        return
-
-    update = config.get("work", {}).get("update", "no")
-    last = config.get("last_install", {})
-    cache_path = func_utils.get_cache_font(config_whole)
-    
     GithubDownload.init_request()
-
-    if update == "llc":
-        logger.log("启用LLC更新")
-        zero = config.get("zero", {})
-        if zero.get("download_source", "github") == "github":
-            latest_version = check_ver_github(zero.get("use_proxy", True))
-        else:
-            latest_version = str(get_note_content().get('llc_version', '0.0.0'))
-        if latest_version == "0.0.0":
-            logger.log("无法获取到最新版本，请检查网络连接")
-            return
-        if latest_version == last.get("llc", "0.0.0"):
-            logger.log(f"当前已是最新版本 {latest_version}，无需更新")
-            return
-        zip_path = function_llc_main("llc_update", logger,
-                        download_source=zero.get("download_source", "github"),
-                        from_proxy=zero.get("use_proxy", True),
-                        zip_type=zero.get("zip_type", "zip"),
-                        use_cache=True, cache_path=cache_path)
-        if not zip_path:
-            logger.log(f"LLC更新包下载失败，路径: {zip_path}")
-            return
-        logger.log(f"LLC更新包下载成功，路径: {zip_path}")
-        package_list = find_translation_packages('.')
-        if not zip_path in package_list:
-            logger.log(f"LLC更新包 {zip_path} 不在安装包列表中，请检查安装包")
-            return
-        logger.log(f"LLC更新包 {zip_path} 已在安装包列表中")
-        install_translation_package(zip_path, config_whole.get("game_path", ""), logger, "llc_update_install")
-        logger.log("LLC更新完成")
-        update_config_last("llc", latest_version)
-        return
     
-    elif update == "ourplay":
-        logger.log("启用ourplay更新")
-        ourplay = config.get("ourplay", {})
-        if ourplay.get("use_api", True):
-            latest_version = str(get_note_content().get('ourplay_version', '0.0.0'))
-        else:
-            latest_version = str(check_ver_ourplay(logger))
-        if latest_version == "0.0.0":
-            logger.log("无法获取到最新版本，请检查网络连接")
-            return
-        if latest_version == last.get("ourplay", "0.0.0"):
-            logger.log(f"当前已是最新版本 {latest_version}，无需更新")
-            return
-        if not ourplay.get("use_api", True):
-            function_ourplay_main("llc_update", logger,
-                        check_hash=ourplay.get("check_hash", True),
-                        font_option=ourplay.get("font_option", "simplify")
-                        )
-        else:
-            function_ourplay_api("llc_update", logger,
-                        check_hash=ourplay.get("check_hash", True),
-                        font_option=ourplay.get("font_option", "simplify")
-                        )
-        zip_path = "ourplay.zip"
-        logger.log(f"ourplay更新包下载成功，路径: {zip_path}")
-        package_list = find_translation_packages('.')
-        if not zip_path in package_list:
-            logger.log(f"ourplay更新包 {zip_path} 不在安装包列表中，请检查安装包")
-            return
-        logger.log(f"ourplay更新包 {zip_path} 已在安装包列表中")
-        install_translation_package(zip_path, config_whole.get("game_path", ""), logger, "llc_update_install")
-        logger.log("ourplay更新完成")
-        update_config_last("ourplay", latest_version)
-        return
-    
-    elif update == "all":
-        logger.log("启用LLC和ourplay更新")
-        note_content = get_note_content()
-        try:
-            ourplay_last_update = datetime.fromisoformat(note_content.get('ourplay_last_update_time', '1970-01-01T00:00:00'))
-        except (ValueError, TypeError):
-            ourplay_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
-            
-        try:
-            llc_last_update = datetime.fromisoformat(note_content.get('llc_last_update_time', '1970-01-01T00:00:00'))
-        except (ValueError, TypeError):
-            llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
-
-        if llc_last_update < ourplay_last_update:
-            logger.log("ourplay更新时间较新，执行ourplay更新")
-            ourplay = config.get("ourplay", {})
-            if str(note_content.get('ourplay_version', '0.0.0')) == last.get("ourplay", "0.0.0"):
-                logger.log(f"当前已是最新版本 {note_content.get('ourplay_version', '0.0.0')}，无需更新")
-                return
-            if not ourplay.get("use_api", True):
-                function_ourplay_main("llc_update", logger,
-                            check_hash=ourplay.get("check_hash", True),
-                            font_option=ourplay.get("font_option", "simplify")
-                            )
-            else:
-                function_ourplay_api("llc_update", logger,
-                            check_hash=ourplay.get("check_hash", True),
-                            font_option=ourplay.get("font_option", "simplify")
-                            )
-            zip_path = "ourplay.zip"
-            logger.log(f"ourplay更新包下载成功，路径: {zip_path}")
-            package_list = find_translation_packages('.')
-            if not zip_path in package_list:
-                logger.log(f"ourplay更新包 {zip_path} 不在安装包列表中，请检查安装包")
-                return
-            logger.log(f"ourplay更新包 {zip_path} 已在安装包列表中")
-            install_translation_package(zip_path, config_whole.get("game_path", ""), logger, "llc_update_install")
-            logger.log("ourplay更新完成")
-            update_config_last("ourplay", note_content.get('ourplay_version', '0.0.0'))
-        else:
-            logger.log("LLC更新时间较新，执行LLC更新")
-            if str(note_content.get('llc_version', '0.0.0')) == last.get("llc", "0.0.0"):
-                logger.log(f"当前已是最新版本 {last.get('llc', '0.0.0')}，无需更新")
-                return
-            zero = config.get("zero", {})
-            zip_path = function_llc_main("llc_update", logger,
-                            download_source=zero.get("download_source", "github"),
-                            from_proxy=zero.get("use_proxy", True),
-                            zip_type=zero.get("zip_type", "zip"),
-                            use_cache=True, cache_path=cache_path)
-            if not zip_path:
-                logger.log(f"LLC更新包下载失败，路径: {zip_path}")
-                return
-            logger.log(f"LLC更新包下载成功，路径: {zip_path}")
-            package_list = find_translation_packages('.')
-            if not zip_path in package_list:
-                logger.log(f"LLC更新包 {zip_path} 不在安装包列表中，请检查安装包")
-                return
-            logger.log(f"LLC更新包 {zip_path} 已在安装包列表中")
-            install_translation_package(zip_path, config_whole.get("game_path", ""), logger, "llc_update_install")
-            logger.log("LLC更新完成")
-            update_config_last("llc", note_content.get('llc_version', '0.0.0'))
-    else:
-        logger.log("未启用任何更新选项，跳过更新检查")
+    # 使用工厂模式创建更新对象并执行更新
+    update_obj = UpdateFactory.create_update(logger)
+    update_obj.run()
 
 def main_after_mod():
     from launcher.modfolder import get_mod_folder
@@ -239,14 +476,10 @@ def main_after_mod():
     mod_zips_root_path = get_mod_folder()
     os.makedirs(mod_zips_root_path, exist_ok=True)
 
-
-
     logging.info("Limbus Mod Loader version: v1.8")
-
 
     def kill_handler(*args) -> None:
         sys.exit(0)
-
 
     def cleanup_assets():
         try:
@@ -284,15 +517,22 @@ def main():
     try:
         main_pre()
     except Exception as e:
-        logger.log_error(e)
+        if logger:
+            logger.log_error(e)
+        else:
+            print(f"Error in main_pre: {e}")
     try:
         if config_whole.get("launcher", {}).get("work", {}).get("mod", False):
             main_after_mod()
         else:
             main_after_game()
     except Exception as e:
-        logger.log_error(e)
-    logger.log('正常退出')
+        if logger:
+            logger.log_error(e)
+        else:
+            print(f"Error in main_after: {e}")
+    if logger:
+        logger.log('正常退出')
 
 if __name__ == '__main__':
     main()

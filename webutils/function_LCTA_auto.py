@@ -4,7 +4,13 @@ from webFunc import GithubDownload
 from webFunc import Note
 from webutils.functions import download_with_github, download_with
 
-def _LCTA_auto_github(modal_id, logger_: LogManager, use_proxy):
+def check_ver_github_M(from_proxy):
+    GithubDownload.GithubRequester.update_config(from_proxy)
+
+    return GithubDownload.GithubRequester.get_latest_release("HZBHZB1234",
+                                  "LCTA_auto_update").tag_name
+
+def _LCTA_auto_github(modal_id, logger_: LogManager, use_proxy) -> str:
     release = GithubDownload.GithubRequester.get_latest_release(
         "HZBHZB1234", "LCTA_auto_update")
     assets = release.get_assets_by_extension(".zip")[0]
@@ -13,11 +19,12 @@ def _LCTA_auto_github(modal_id, logger_: LogManager, use_proxy):
     if r:
         logger_.log_modal_process("下载完成", modal_id)
         logger_.log_modal_status("下载完成", modal_id)
+        return assets.name
     else:
         logger_.log_modal_process("下载失败", modal_id)
         logger_.log_modal_status("下载失败", modal_id)
     
-def _LCTA_auto_api(modal_id, logger_: LogManager):
+def _LCTA_auto_api(modal_id, logger_: LogManager) -> str:
     note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
     note_.fetch_note_info()
     
@@ -43,6 +50,7 @@ def _LCTA_auto_api(modal_id, logger_: LogManager):
     if r:
         logger_.log_modal_process("下载完成", modal_id)
         logger_.log_modal_status("下载完成", modal_id)
+        return 'LCTA_auto.zip'
     else:
         logger_.log_modal_process("下载失败", modal_id)
         logger_.log_modal_status("下载失败", modal_id)
@@ -55,6 +63,6 @@ def function_LCTA_auto_main(modal_id, logger_: LogManager, whole_config):
     download_source = config.get('download_source', 'github')
     
     if download_source == 'github':
-        _LCTA_auto_github(modal_id, logger_, use_proxy)
+        return _LCTA_auto_github(modal_id, logger_, use_proxy)
     else:
-        _LCTA_auto_api(modal_id, logger_)
+        return _LCTA_auto_api(modal_id, logger_)

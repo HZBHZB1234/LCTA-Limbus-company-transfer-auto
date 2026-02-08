@@ -20,9 +20,9 @@ font_assets_seven = ReleaseAsset(
 )
 
 def check_ver_github(from_proxy):
-    GithubRequester.update_config(from_proxy)
+    GithubFunc.GithubRequester.update_config(from_proxy)
 
-    return GithubRequester.get_latest_release("LocalizeLimbusCompany",
+    return GithubFunc.GithubRequester.get_latest_release("LocalizeLimbusCompany",
                                   "LocalizeLimbusCompany").tag_name
 
 def function_llc_main(modal_id, logger_: LogManager, **kwargs):

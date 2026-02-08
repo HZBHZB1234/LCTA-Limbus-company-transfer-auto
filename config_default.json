@@ -86,7 +86,8 @@
         },
         "last_install": {
             "llc" : "0",
-            "ourplay": "0"
+            "ourplay": "0",
+            "machine": "0"
         }
     }
 }

@@ -47,8 +47,8 @@
         "proper":{
             "join_char":"|||",
             "disable_space":false,
-            "max_length":0,
-            "min_length":0,
+            "max_length":"0",
+            "min_length":"0",
             "output_type":"text_one"
         }
     },
@@ -81,7 +81,7 @@
             "use_api": true
         },
         "work":{
-            "update": "all",
+            "update": "LM-G",
             "mod": false
         },
         "last_install": {

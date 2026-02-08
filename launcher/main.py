@@ -72,7 +72,7 @@ class UpdateBase(ABC):
         self.logger = logger
         self.config_whole = config_whole
         self.launcher_config: dict = config_whole.get('launcher', {})
-        self.cache_path = func_utils.get_cache_font(config_whole)
+        self.cache_path = func_utils.get_cache_font(config_whole, logger)
     
     def check_network_available(self) -> bool:
         """检查网络是否可用"""

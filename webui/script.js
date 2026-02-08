@@ -3266,7 +3266,8 @@ function checkGamePath() {
                     confirmGamePath(foundPath);
                 } else {
                     requestGamePath();
-                }
+                };
+                configManager.applyConfigToUI();
             })
             .catch(function(error) {
                 addLogMessage('检查游戏路径时发生错误: ' + error, 'error');
@@ -3358,6 +3359,18 @@ window.addEventListener('pywebviewready', function() {
             showMessage(message_config[0], message_config[1]);
             }
         });
+
+    pywebview.api.run_func('change_icon').catch(
+        function(error) {
+            console.log(error)
+        }
+    );
+
+    pywebview.api.init_cache().catch(
+        function(error) {
+            console.log(error)
+        }
+    );
     
     pywebview.api.get_attr('config_ok')
         .then(function(config_ok) {

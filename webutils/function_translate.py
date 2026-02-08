@@ -268,7 +268,7 @@ def translate_main(modal_id, logger_: LogManager,
             logger.exception(e)
             
         try:
-            font_project = get_cache_font(whole_configs)
+            font_project = get_cache_font(whole_configs, logger_)
             font_target = target_dir / 'Fonts' / 'Context'
             font_target.mkdir(parents=True, exist_ok=True)
             font_target = font_target / 'ChineseFont.ttf'

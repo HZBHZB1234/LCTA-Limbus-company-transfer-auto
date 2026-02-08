@@ -22,7 +22,7 @@ import webFunc.GithubDownload as GithubDownload
 from webutils.log_manage import LogManager
 import webutils.load as load_util
 import webutils.function_llc as function_llc
-from webutils.functions import get_cache_font, get_steam_command
+from webutils.functions import get_cache_font, get_steam_command, change_icon
 from webutils.update import Updater, get_app_version
 from webutils.const_apiConfig import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
@@ -77,6 +77,7 @@ class LCTA_API():
         self.load_config_default = load_util.load_config_default
         self.fix_config = load_util.fix_config
         self.get_steam_command = get_steam_command
+        self.change_icon = change_icon
 
     def run_func(self, func_name, *args):
         if hasattr(self, func_name):
@@ -124,7 +125,7 @@ class LCTA_API():
             if self.config.get('game_path', ''):
                 cache_path = Path(self.config.get('cache_path', '')) / 'ChineseFont.ttf'
                 if not cache_path.exists():
-                    shutil.copy2(get_cache_font(), cache_path)   
+                    shutil.copy2(get_cache_font(self.config, self.log_manager), cache_path)   
 
     def use_inner(self):
         """使用默认配置并保存"""
@@ -491,7 +492,7 @@ class LCTA_API():
             use_proxy = self.config.get("ui_default", {}).get("zero", {}).get("use_proxy", True)
             use_cache = self.config.get("ui_default", {}).get("zero", {}).get("use_cache", False)
             download_source = self.config.get("ui_default", {}).get("zero", {}).get("download_source", "github")
-            cache_path = get_cache_font(self.config)
+            cache_path = get_cache_font(self.config, self.log_manager)
             
             # 传递新参数给function_llc_main
             function_llc_main(

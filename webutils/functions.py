@@ -7,10 +7,11 @@ import os
 import time
 import zipfile
 import hashlib
+import ctypes
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Set
 import shutil
-import base64
+import tempfile
 from .log_manage import LogManager
 if TYPE_CHECKING:
     from webFunc.GithubDownload import ReleaseAsset
@@ -314,14 +315,33 @@ def decompress_zip(file_path, output_dir='.', logger_: LogManager=None):
         logger_.log_error(e)
         return False
 
-def get_cache_font(config: dict = {}) -> str:
+def get_cache_font(config: dict = {}, logger_: LogManager = LogManager()) -> str:
+    cache_normal = config['game_path']+'LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf'
     if config.get('enable_cache', False):
         cache_path = Path(config.get('cache_path', '')) / 'ChineseFont.ttf'
         if cache_path.exists():
             return cache_path
-    try:
-        return config['game_path']+'LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context\\ChineseFont.ttf'
-    except:
+        else:
+            cache_path = Path(cache_normal)
+            if cache_path.exists():
+                return cache_path
+            try:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    from .function_llc import font_assets_seven
+                    download_with_github(
+                    font_assets_seven, Path(temp_dir) / 'font.7z',
+                    chunk_size=1024 * 100, logger_=logger_
+                    )
+                    decompress_7z(Path(temp_dir) / 'font.7z', config.get('cache_path', '.'))
+                    return get_cache_font(config, logger_)
+            except Exception as e:
+                logger_.log_error(e)
+                return cache_normal
+            
+    cache_path = Path(cache_normal)
+    if cache_path.exists():
+        return cache_path
+    else:
         return ''
 
 def decompress_by_extension(file_path, output_dir='.', logger_: LogManager=None):
@@ -344,3 +364,46 @@ def get_steam_command():
         raise
     cmd = f'"{this_launcher}" -launcher %command%'
     return cmd
+
+def change_icon():
+    '''暂未实现'''
+    return
+    # 定义Windows API函数
+    user32 = ctypes.windll.user32
+
+    # 查找窗口
+    window_title = "LCTA - 边狱公司汉化工具箱"
+    hwnd = user32.FindWindowW(None, window_title)
+
+    if hwnd:
+        # 加载图标
+        GCL_HICON = -14
+        GCL_HICONSM = -34
+        
+        # 从文件加载图标
+        icon_big = ctypes.windll.user32.LoadImageW(
+            0,
+            "dev_assets\\r\\favicon.ico",
+            1,  # IMAGE_ICON
+            0, 0,
+            0x00000010  # LR_LOADFROMFILE
+        )
+        
+        icon_small = ctypes.windll.user32.LoadImageW(
+            0,
+            "dev_assets\\r\\favicon.ico",
+            1,
+            0, 0,  # 小图标尺寸
+            0x00000010
+        )
+        
+        # 设置图标
+        user32.SendMessageW(hwnd, 0x0080, 0, icon_big)  # WM_SETICON, ICON_BIG
+        user32.SendMessageW(hwnd, 0x0080, 1, icon_small)  # WM_SETICON, ICON_SMALL
+        
+    ctypes.windll.user32.SendMessageW(
+        0xFFFF,  # HWND_BROADCAST
+        0x001A,  # WM_SETTINGCHANGE
+        0, 
+        "TraySettings"
+    )

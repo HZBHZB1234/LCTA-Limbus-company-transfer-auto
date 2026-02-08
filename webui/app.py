@@ -18,12 +18,11 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
-import webutils
 import webFunc.GithubDownload as GithubDownload
 from webutils.log_manage import LogManager
 import webutils.load as load_util
 import webutils.function_llc as function_llc
-from webutils.functions import get_cache_font
+from webutils.functions import get_cache_font, get_steam_command
 from webutils.update import Updater, get_app_version
 from webutils.const_apiConfig import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
@@ -77,6 +76,7 @@ class LCTA_API():
         self.validate_config = load_util.validate_config
         self.load_config_default = load_util.load_config_default
         self.fix_config = load_util.fix_config
+        self.get_steam_command = get_steam_command
 
     def run_func(self, func_name, *args):
         if hasattr(self, func_name):

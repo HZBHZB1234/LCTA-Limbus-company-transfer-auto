@@ -331,3 +331,16 @@ def decompress_by_extension(file_path, output_dir='.', logger_: LogManager=None)
         return decompress_7z(file_path, output_dir, logger_=logger_)
     else:
         return False
+    
+def get_steam_command():
+    froze = os.getenv('is_frozen', '')
+    if froze == 'true':
+        this_launcher = list(Path(os.getcwd()).glob('LCTA*.exe'))[0]
+    elif froze == 'false':
+        this_launcher = Path(os.getcwd()) / 'launcher.exe'
+        if not this_launcher.exists():
+            raise
+    else:
+        raise
+    cmd = f'"{this_launcher}" -launcher %command%'
+    return cmd

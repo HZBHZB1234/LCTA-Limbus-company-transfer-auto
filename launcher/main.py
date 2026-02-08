@@ -403,28 +403,24 @@ class LMGUpdate(UpdateBase):
     def update_config(self) -> bool:
         return True
 
-class UpdateFactory:
-    """更新工厂类，根据配置创建对应的更新对象"""
+def create_update(logger: LogManager) -> UpdateBase:
+    """根据配置创建更新对象"""
+    update_type = config_whole.get('launcher', {}).get("work", {}).get("update", "no")
     
-    @staticmethod
-    def create_update(config: Dict[str, Any], logger: LogManager) -> UpdateBase:
-        """根据配置创建更新对象"""
-        update_type = config.get("work", {}).get("update", "no")
-        
-        if update_type == "llc":
-            return LLCUpdate(logger)
-        elif update_type == "ourplay":
-            return OurPlayUpdate(logger)
-        elif update_type == "LCTA-AU":
-            return MachineUpdate(logger)
-        elif update_type == "LO":
-            return LOUpdate(logger)
-        elif update_type == "LM-A":
-            return LMAUpdate(logger)
-        elif update_type == "LM-G":
-            return LMGUpdate(logger)
-        else:  # "no" or any other value
-            return NoUpdate(logger)
+    if update_type == "llc":
+        return LLCUpdate(logger)
+    elif update_type == "ourplay":
+        return OurPlayUpdate(logger)
+    elif update_type == "LCTA-AU":
+        return MachineUpdate(logger)
+    elif update_type == "LO":
+        return LOUpdate(logger)
+    elif update_type == "LM-A":
+        return LMAUpdate(logger)
+    elif update_type == "LM-G":
+        return LMGUpdate(logger)
+    else:  # "no" or any other value
+        return NoUpdate(logger)
 
 def main_pre():
     global config_whole
@@ -465,7 +461,7 @@ def main_pre():
     GithubDownload.init_request()
     
     # 使用工厂模式创建更新对象并执行更新
-    update_obj = UpdateFactory.create_update(logger)
+    update_obj = create_update(logger)
     update_obj.run()
 
 def main_after_mod():

@@ -1081,6 +1081,17 @@
                         </label>
                         <small class="form-hint">启用后将加载MOD并启动游戏</small>
                     </div>
+
+                    <div class="form-group" id="steam-command">
+                        <label for="steam-command">steam命令</label>
+                        <div class="steam-command-group" style="display: flex; align-items: center; gap: 8px;">
+                            <input type="text" id="steam-cmd" placeholder="复制steam命令" readonly 
+                                style="flex: 1; min-width: 0;">
+                            <button class="action-btn secondary" onclick="copySteamPath()">
+                                <i class="fas fa-folder-open"></i> 复制
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
             

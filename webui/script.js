@@ -1468,6 +1468,29 @@ function toggleAutoProper() {
     }
 };
 
+function toggleSteamCommand() {
+    let command
+    pywebview.api.run_func('get_steam_command').then(function(result) {
+        command=result;
+        const cmdElement = document.getElementById('steam-cmd');
+        cmdElement.value = command;
+    }).catch(function(error) {
+        command=`获取失败 ${error}`;
+        const cmdElement = document.getElementById('steam-cmd');
+        cmdElement.value = command;
+    });
+}
+
+function copySteamPath() {
+    const cmdElement = document.getElementById('steam-cmd');
+
+    cmdElement.select();
+    cmdElement.setSelectionRange(0, 99999); /* 为移动设备设置 */
+
+    /* 复制内容到文本域 */
+    navigator.clipboard.writeText(cmdElement.value);
+}
+
 function browsePackageDirectory() {
     pywebview.api.browse_folder('package-directory').then(function(result) {
         const packageDirInput = document.getElementById('package-directory');
@@ -3417,7 +3440,8 @@ window.addEventListener('pywebviewready', function() {
                 configManager.applyConfigToUI().then(function() {
                     toggleCachePathInput();
                     toggleDevelopSettings();
-                    toggleAutoProper()
+                    toggleAutoProper();
+                    toggleSteamCommand()
                 })
             }
             checkGamePath();

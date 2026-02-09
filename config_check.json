@@ -82,7 +82,8 @@
         },
         "work": {
             "update": "str",
-            "mod": "bool"
+            "mod": "bool",
+            "bubble": "bool"
         },
         "last_install": {
             "llc" : "str",

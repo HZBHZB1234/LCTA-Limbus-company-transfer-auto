@@ -26,7 +26,7 @@
         <div class="sidebar-header">
             <div class="logo">
                 <i class="fas fa-language"></i>
-                <h2>LCTA <span class="version">v4.0.6</span></h2>
+                <h2>LCTA <span class="version">v4.0.7</span></h2>
             </div>
             <p class="subtitle">边狱公司汉化工具箱</p>
         </div>
@@ -43,9 +43,9 @@
                 <span>安装已有汉化</span>
             </button>
             
-            <button id="ourplay-btn" class="nav-btn">
-                <i class="fab fa-google-play"></i>
-                <span>从ourplay下载汉化</span>
+            <button id="download-btn" class="nav-btn">
+                <i class="fas fa-users"></i>
+                <span>汉化包下载</span>
             </button>
             
             <button id="clean-btn" class="nav-btn">
@@ -53,16 +53,6 @@
                 <span>清除本地缓存</span>
             </button>
             
-            <button id="llc-btn" class="nav-btn">
-                <i class="fas fa-users"></i>
-                <span>从零协下载汉化</span>
-            </button>
-
-            <button id="machine-btn" class="nav-btn">
-                <i class="fas fa-sync-alt"></i>
-                <span>从LCTA-AU下载汉化</span>
-            </button>
-        
             <button id="launcher-config-btn" class="nav-btn">
                 <i class="fas fa-rocket"></i>
                 <span>Launcher配置</span>
@@ -358,19 +348,19 @@
             </div>
         </div>
 
-        <!-- OurPlay下载界面 -->
-        <div id="ourplay-section" class="content-section">
+        <!-- 下载界面 -->
+        <div id="download-section" class="content-section">
             <div class="section-header">
                 <h2 class="section-title">
                     <i class="fab fa-google-play"></i>
-                    从ourplay下载汉化
+                    从各个平台下载汉化
                 </h2>
-                <p class="section-subtitle">下载OurPlay提供的最新汉化包</p>
+                <p class="section-subtitle">下载各个来源的汉化包</p>
             </div>
             
             <div class="settings-grid">
                 <div class="setting-card">
-                    <h3 class="setting-title">下载配置</h3>
+                    <h3 class="setting-title">ourplay下载配置</h3>
                     <div class="form-group">
                         <label for="ourplay-font-option">字体处理选项:</label>
                         <div class="select-wrapper">
@@ -409,22 +399,90 @@
                 </div>
                 
                 <div class="setting-card">
-                    <h3 class="setting-title">下载信息</h3>
-                    <div class="info-card">
-                        <div class="info-item">
-                            <i class="fas fa-info-circle"></i>
-                            <div>
-                                <h4>说明</h4>
-                                <p>从OurPlay平台下载最新的汉化包文件</p>
-                            </div>
+                    <h3 class="setting-title">零协会下载配置</h3>
+                    <div class="form-group">
+                        <label for="llc-zip-type">压缩格式:</label>
+                        <div class="select-wrapper">
+                            <select id="llc-zip-type">
+                                <option value="zip">ZIP格式</option>
+                                <option value="seven">7Z格式</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
                         </div>
-                        <div class="info-item">
-                            <i class="fas fa-shield-alt"></i>
-                            <div>
-                                <h4>安全提示</h4>
-                                <p>建议启用哈希校验以确保文件完整性</p>
-                            </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="llc-download-source">文本下载来源:</label>
+                        <div class="select-wrapper">
+                            <select id="llc-download-source">
+                                <option value="github">从github下载</option>
+                                <option value="mirror">从公益镜像下载 beta</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
                         </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="llc-use-proxy" checked>
+                            <span class="checkmark"></span>
+                            使用代理加速下载
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="llc-use-cache">
+                            <span class="checkmark"></span>
+                            使用本地字体缓存
+                        </label>
+                        <small class="form-hint">使用本地已有的字体文件，加快下载速度</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="llc-dump-default">
+                            <span class="checkmark"></span>
+                            保存原始文件而不打包
+                        </label>
+                        <small class="form-hint">保存解压后的原始文件而非打包格式</small>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="downloadLLC()">
+                            <i class="fas fa-download"></i>
+                            下载零协汉化包
+                        </button>
+                    </div>
+                </div>
+
+                <div class="setting-card">
+                    <h3 class="setting-title">LCTA-AU下载配置</h3>
+                    
+                    <div class="form-group">
+                        <label for="machine-download-source">文本下载来源:</label>
+                        <div class="select-wrapper">
+                            <select id="machine-download-source">
+                                <option value="github">从github下载</option>
+                                <option value="mirror">从公益镜像下载 beta</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="machine-use-proxy" checked>
+                            <span class="checkmark"></span>
+                            使用代理加速下载
+                        </label>
+                    </div>
+                    
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="downloadMachine()">
+                            <i class="fas fa-download"></i>
+                            下载LCTA-AU汉化包
+                        </button>
                     </div>
                 </div>
             </div>
@@ -513,120 +571,6 @@
                         <button class="action-btn danger" onclick="cleanCache()">
                             <i class="fas fa-trash-alt"></i>
                             清除缓存
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 零协下载界面 -->
-        <div id="llc-section" class="content-section">
-            <div class="section-header">
-                <h2 class="section-title">
-                    <i class="fas fa-users"></i>
-                    从零协下载汉化
-                </h2>
-                <p class="section-subtitle">下载零协汉化包</p>
-            </div>
-            
-            <div class="settings-grid">
-                <div class="setting-card">
-                    <h3 class="setting-title">下载配置</h3>
-                    <div class="form-group">
-                        <label for="llc-zip-type">压缩格式:</label>
-                        <div class="select-wrapper">
-                            <select id="llc-zip-type">
-                                <option value="zip">ZIP格式</option>
-                                <option value="seven">7Z格式</option>
-                            </select>
-                            <i class="fas fa-chevron-down"></i>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="llc-download-source">文本下载来源:</label>
-                        <div class="select-wrapper">
-                            <select id="llc-download-source">
-                                <option value="github">从github下载</option>
-                                <option value="mirror">从公益镜像下载 beta</option>
-                            </select>
-                            <i class="fas fa-chevron-down"></i>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="llc-use-proxy" checked>
-                            <span class="checkmark"></span>
-                            使用代理加速下载
-                        </label>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="llc-use-cache">
-                            <span class="checkmark"></span>
-                            使用本地字体缓存
-                        </label>
-                        <small class="form-hint">使用本地已有的字体文件，加快下载速度</small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="llc-dump-default">
-                            <span class="checkmark"></span>
-                            保存原始文件而不打包
-                        </label>
-                        <small class="form-hint">保存解压后的原始文件而非打包格式</small>
-                    </div>
-                    
-                    <div class="action-area">
-                        <button class="primary-btn" onclick="downloadLLC()">
-                            <i class="fas fa-download"></i>
-                            下载零协汉化包
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 自动翻译库下载界面-->
-        <div id="machine-section" class="content-section">
-            <div class="section-header">
-                <h2 class="section-title">
-                    <i class="fas fa-users"></i>
-                    从LCTA-AU下载汉化
-                </h2>
-                <p class="section-subtitle">下载自动翻译汉化包</p>
-            </div>
-            
-            <div class="settings-grid">
-                <div class="setting-card">
-                    <h3 class="setting-title">下载配置</h3>
-                    
-                    <div class="form-group">
-                        <label for="machine-download-source">文本下载来源:</label>
-                        <div class="select-wrapper">
-                            <select id="machine-download-source">
-                                <option value="github">从github下载</option>
-                                <option value="mirror">从公益镜像下载 beta</option>
-                            </select>
-                            <i class="fas fa-chevron-down"></i>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="machine-use-proxy" checked>
-                            <span class="checkmark"></span>
-                            使用代理加速下载
-                        </label>
-                    </div>
-                    
-                    <div class="action-area">
-                        <button class="primary-btn" onclick="downloadMachine()">
-                            <i class="fas fa-download"></i>
-                            下载LCTA-AU汉化包
                         </button>
                     </div>
                 </div>
@@ -766,7 +710,7 @@
                         </div>
                         <div class="about-title">
                             <h3>LCTA - 边狱公司汉化工具箱</h3>
-                            <p class="version-badge">版本 4.0.6</p>
+                            <p class="version-badge">版本 4.0.7</p>
                         </div>
                     </div>
                     
@@ -782,7 +726,7 @@
                         </div>
                         <div class="about-title">
                             <h3>更新内容</h3>
-                            <p class="version-badge">版本 4.0.6</p>
+                            <p class="version-badge">版本 4.0.7</p>
                         </div>
                     </div>
                     
@@ -798,7 +742,7 @@
                         </div>
                         <div class="about-title">
                             <h3>引导</h3>
-                            <p class="version-badge">版本 4.0.6</p>
+                            <p class="version-badge">版本 4.0.7</p>
                         </div>
                     </div>
                     
@@ -1096,6 +1040,15 @@
                             启用MOD支持
                         </label>
                         <small class="form-hint">启用后将加载MOD并启动游戏</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="launcher-work-bubble" checked>
+                            <span class="checkmark"></span>
+                            启用气泡文本
+                        </label>
+                        <small class="form-hint">启用后将自动更新气泡文本模组</small>
                     </div>
 
                     <div class="form-group" id="steam-command">

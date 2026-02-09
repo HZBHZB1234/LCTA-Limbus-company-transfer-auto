@@ -82,7 +82,8 @@
         },
         "work":{
             "update": "LM-G",
-            "mod": false
+            "mod": false,
+            "bubble": false
         },
         "last_install": {
             "llc" : "0",

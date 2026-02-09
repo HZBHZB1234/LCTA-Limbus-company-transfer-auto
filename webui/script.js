@@ -231,7 +231,8 @@ class ConfigManager {
             'launcher-ourplay-font-option': 'launcher.ourplay.font_option',
             'launcher-ourplay-use-api': 'launcher.ourplay.use_api',
             'launcher-work-update': 'launcher.work.update',
-            'launcher-work-mod': 'launcher.work.mod'
+            'launcher-work-mod': 'launcher.work.mod',
+            'launcher-work-bubble': 'launcher.bubble'
         };
         
         this.configCache = {}; // 配置缓存
@@ -3066,7 +3067,7 @@ function showUpdateInfo(update_info) {
     updateModalShown = true;
     
     let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-    htmlMessage += `<p><strong>当前版本:</strong> v4.0.6</p>`;
+    htmlMessage += `<p><strong>当前版本:</strong> v4.0.7</p>`;
     
     if (update_info.title) {
         htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;

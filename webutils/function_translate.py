@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Callable
 from translateFunc.translate_main import *
@@ -48,6 +49,16 @@ def translate_main(modal_id, logger_: LogManager,
         
         game_path = Path(whole_configs.get("game_path", ""))
         
+        debug_mode = whole_configs.get("debug", False)
+        @contextmanager
+        def protect_secret():
+            if not debug_mode:
+                logger_c = logging.getLogger('translatekit')
+                logger_c.setLevel(logging.INFO)
+            yield
+            if not debug_mode:
+                logger_c.setLevel(logging.DEBUG)
+        
         if is_llm:
             api_settings['system_prompt'] = TEXT_SYSTEM_PROMPT \
                 if is_text else JSON_SYSTEM_PROMPT
@@ -57,7 +68,7 @@ def translate_main(modal_id, logger_: LogManager,
         
         translator: TranslatorBase = TRANSLATOR_TRANS[translator_text]
         
-        api_settings = formating_function(api_settings, translator.DEFAULT_API_KEY)
+        api_settings = formating_function(api_settings, translator)
         
         translate_config = TranslationConfig(
             api_setting=api_settings,
@@ -69,7 +80,8 @@ def translate_main(modal_id, logger_: LogManager,
         if is_llm:
             translate_config.text_max_length = 20000
             
-        translator: TranslatorBase = translator(translate_config)
+        with protect_secret():
+            translator: TranslatorBase = translator(translate_config)
         
         lang_path = game_path / 'LimbusCompany_Data' / "lang"
         assets_path = game_path / "LimbusCompany_Data" / "Assets" /\
@@ -236,7 +248,7 @@ def translate_main(modal_id, logger_: LogManager,
 
         try:
             # 提取上一个版本号的日期部分和序号部分
-            prev_date = previous_version[:8]  # 前8位是日期
+            prev_date = str(previous_version)[:8]  # 前8位是日期
             prev_sequence = int(previous_version[8:])  # 后2位是序号
             
             if prev_date == current_date:

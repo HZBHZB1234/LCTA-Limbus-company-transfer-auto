@@ -89,6 +89,7 @@ class LCTA_API():
         
     def init_config(self):
         self.config = self.load_config()
+        self.first_use = False
         if self.config is None:
             self.log("在初始化时未找到配置文件")
             self.config = self.load_config_default()
@@ -99,7 +100,7 @@ class LCTA_API():
                 try:
                     self.use_default()
                     self.log("已生成默认配置文件")
-                    self.message_config=(["提示","配置文件不存在，已生成默认配置文件"])
+                    self.first_use = True
                 except Exception as e:
                     self.log("生成默认配置文件时出现问题")
                     self.message_config=(["错误","生成默认配置文件时出现问题"])
@@ -108,6 +109,7 @@ class LCTA_API():
         if not self.config_ok:
             self.log("配置文件格式错误")
             self.log("\n".join(self.config_error))
+        self.debug_mode = self.config.get('debug', False)
 
     def init_github(self):
         max_workers:str = self.config.get('github_max_workers', "4")
@@ -550,13 +552,25 @@ class LCTA_API():
             self.log_error(e)
             return {"success": False, "message": str(e)}
         
-    def format_api_settings(self, api_settings: dict, default_setting: dict) -> dict:
+    def format_api_settings(self, api_settings: dict, translator: 'TranslatorBase') -> dict:
+        default_setting = translator.DEFAULT_API_KEY
         result_settings = default_setting.copy()
         for key, value in api_settings.items():
             if key in result_settings and value != "":
-                with suppress(Exception):
-                    value = float(value)
                 result_settings[key] = value
+        describe_settings = translator.DESCRIBE_API_KEY
+        for i in describe_settings:
+            setting_id = i.get('id')
+            if setting_id in result_settings:
+                setting_type = i.get('type')
+                if setting_type == 'string':
+                    result_settings[setting_id] = str(result_settings[setting_id])
+                elif setting_type == 'number':
+                    if isinstance(result_settings[setting_id], str):
+                        if result_settings[setting_id].isdigit():
+                            result_settings[setting_id] = int(result_settings[setting_id])
+                        else:
+                            result_settings[setting_id] = float(result_settings[setting_id])
         return result_settings
         
     def test_api(self, key: str, api_settings: dict) -> dict:
@@ -565,9 +579,15 @@ class LCTA_API():
             self.log(f"开始测试API密钥: {key}")
             translator: 'TranslatorBase' = self.TKIT_MACHINE[key]['translator']
             api_settings = self.format_api_settings(
-                api_settings, translator.DEFAULT_API_KEY)
+                api_settings, translator)
+            if not self.debug_mode:
+                logger_c = logging.getLogger('translatekit')
+                logger_c.setLevel(logging.INFO)
+                self.log_manager.log('隐藏参数输出')
             translator = translator(
                 api_setting=api_settings, debug_mode=True)
+            if not self.debug_mode:
+                logger_c.setLevel(logging.DEBUG)
             lang_dict = self.TKIT_MACHINE[key]['langCode']
             kr_result = translator.translate("안녕", lang_dict['kr'], lang_dict['zh']) if lang_dict['kr'] else '暂不支持该语言'
             en_result = translator.translate("Hello", lang_dict['en'], lang_dict['zh']) if lang_dict['en'] else '暂不支持该语言'
@@ -993,6 +1013,10 @@ def main():
     debug_mode = api.config.get("debug", False)
 
     webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
+    
+    if not debug_mode:
+        logger_c = logging.getLogger('urllib3.connectionpool')
+        logger_c.setLevel(logging.INFO)
 
     # 启动应用
     webview.start(

@@ -1169,7 +1169,7 @@ class APIConfigManager {
             this.currentSettings = api_settings;
         } catch (error) {
             console.error('加载设置失败:', error);
-            showMessage('错误', '加载api设置时发生错误，清空api设置');
+            addLogMessage('加载api设置时发生错误，清空api设置');
             this.updateSettings();
             return false;
         }
@@ -1358,7 +1358,8 @@ async function loadAndRenderMarkdown() {
     // 定义要加载的文件路径
     const files = [
       { url: '/assets/README.md', className: 'about-content' },
-      { url: '/assets/update.md', className: 'update-content' }
+      { url: '/assets/update.md', className: 'update-content' },
+      { url: '/assets/firstUse.md', className: 'use-help' }
     ];
 
     // 并发请求所有文件
@@ -3210,6 +3211,31 @@ function removeConnectionMask() {
     }
 }
 
+async function showFirstUseWindows() {
+
+    const modal = showMessage('欢迎使用LCTA', '正在加载数据内容')
+
+    const response = await fetch('assets/firstUse.md');
+
+    let markdownText
+    
+    if (!response.ok) {
+        markdownText = `加载 使用须知 失败: ${response.status} ${response.statusText}`;
+    } else {
+        markdownText = await response.text();
+    };
+    
+    const bodyHtml = simpleMarkdownToHtml(markdownText);
+    const showing = `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`
+
+    setTimeout(() => {
+        const statusElement = document.getElementById(`modal-status-${modal.id}`);
+        if (statusElement) {
+            statusElement.innerHTML = showing;
+        }
+    }, 100);
+}
+
 function setupGlobalErrorHandling() {
     window.preApiErrors = [];
     window.preApiRejections = [];
@@ -3360,6 +3386,16 @@ window.addEventListener('pywebviewready', function() {
             }
         });
 
+    let first_use
+    pywebview.api.get_attr('first_use').then(
+        function(result) {
+            first_use = result
+            if (result) {
+                showFirstUseWindows();
+            }
+        }
+    );
+
     pywebview.api.run_func('change_icon').catch(
         function(error) {
             console.log(error)
@@ -3377,54 +3413,40 @@ window.addEventListener('pywebviewready', function() {
             if (config_ok === false) {
                 pywebview.api.get_attr('config_error')
                     .then(function(config_error) {
-                        let errorMessage = "配置项格式错误，是否尝试修复?\n否则将会使用默认配置";
+                        let errorMessage = "配置项格式错误，尝试修复?\n失败将会使用默认配置";
                         if (config_error && Array.isArray(config_error) && config_error.length > 0) {
                             errorMessage += "\n\n详细错误信息:\n" + config_error.join("\n");
                         }
-                        
-                        showConfirm(
-                            "警告",
-                            errorMessage,
-                            () => {
-                                pywebview.api.get_attr("config")
-                                    .then(function(config) {
-                                        return pywebview.api.run_func('fix_config', config);
-                                    })
-                                    .then(function(fixed_config) {
-                                        return pywebview.api.set_attr("config", fixed_config);
-                                    })
+
+                        addLogMessage(errorMessage);
+
+                        {
+                            pywebview.api.get_attr("config")
+                                .then(function(config) {
+                                    return pywebview.api.run_func('fix_config', config);
+                                })
+                                .then(function(fixed_config) {
+                                    return pywebview.api.set_attr("config", fixed_config);
+                                })
+                                .then(function() {
+                                    return pywebview.api.use_inner();
+                                })
+                                .catch(function(error) {
+                                    showMessage("错误", "修复配置时出错，使用默认配置: " + error);
+                                    pywebview.api.use_default()
                                     .then(function() {
-                                        return pywebview.api.use_inner();
-                                    })
-                                    .then(function() {
-                                        showMessage("提示", "配置已修复并保存，请重新启动程序");
-                                    })
-                                    .catch(function(error) {
-                                        showMessage("错误", "修复配置时出错: " + error);
-                                    });
-                            },
-                            () => {
-                                pywebview.api.use_default()
-                                    .then(function() {
-                                        showMessage("提示", "已使用默认配置，请重新启动程序");
                                     })
                                     .catch(function(error) {
                                         showMessage("错误", "使用默认配置时出错: " + error);
                                     });
-                            }
-                        );
+                                });
+                        }
                     })
-                    .catch(function(error) {
-                        showMessage(
-                            "错误",
-                            "未知错误，可能导致未知后果。错误信息:\n" + error
-                        );
-                    });
             }
-        })
-        .catch(function(error) {
-            addLogMessage('检查配置时出错: ' + error, 'error');
-        });
+            })
+            .catch(function(error) {
+                addLogMessage('检查配置时出错: ' + error, 'error');
+            });
     
     pywebview.api.get_attr('config')
         .then(function(config) {
@@ -3462,7 +3484,7 @@ window.addEventListener('pywebviewready', function() {
             const autoCheckUpdate = configManager.getCachedValue('auto_check_update');
             pywebview.api.init_github()
                 .then(function() {
-                if (autoCheckUpdate) {
+                if (autoCheckUpdate && !first_use) {
                     autoCheckUpdates();
                     }
                 }

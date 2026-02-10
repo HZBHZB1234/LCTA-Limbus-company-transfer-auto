@@ -138,6 +138,16 @@ class UpdateBase(ABC):
             self.config_whole['ui_default']['bubble']['install'] = True
             function_bubble_main('安装气泡mod', self.logger, self.config_whole)
         return True
+    
+    def special_run(self) -> bool:
+        """执行完整的更新流程"""
+        if not self.check_network_available():
+            self.logger.log("当前网络不可用，无法检查更新")
+            return False
+            
+        self.check_update()
+            
+        self.perform_update()
 
 class NoUpdate(UpdateBase):
     """不执行任何更新"""
@@ -304,11 +314,13 @@ class LOUpdate(UpdateBase):
             return False
         
     def check_update(self) -> bool:
-        logger.log('尝试进行检查')
         return True
         
     def update_config(self) -> bool:
         return True
+    
+    def run(self):
+        self.special_run()
 
 class LMAUpdate(UpdateBase):
     """同时更新LLC和LCTA-AU（通过api根据时间戳选择最新的一个）"""
@@ -350,11 +362,13 @@ class LMAUpdate(UpdateBase):
             return False
         
     def check_update(self) -> bool:
-        logger.log('尝试进行检查')
         return True
         
     def update_config(self) -> bool:
         return True
+    
+    def run(self):
+        self.special_run()
 
 class LMGUpdate(UpdateBase):
     """同时更新LLC和LCTA-AU（通过github根据时间戳选择最新的一个）"""
@@ -407,6 +421,9 @@ class LMGUpdate(UpdateBase):
         
     def update_config(self) -> bool:
         return True
+    
+    def run(self):
+        self.special_run()
 
 def create_update(logger: LogManager) -> UpdateBase:
     """根据配置创建更新对象"""
@@ -442,7 +459,6 @@ def main_pre():
             logging.StreamHandler(stream=sys.stdout)
         ]
     )
-    LoadUtils.set_logger(logger)
     logger = LogManager()
     logger.set_log_callback(logging.info)
     logger.set_error_callback(logging.exception)
@@ -451,6 +467,7 @@ def main_pre():
                             log_callback=lambda message, modal_id: logging.info(f"{modal_id}: {message}"), 
                             progress_callback=lambda percent, text, modal_id: logging.info(f"{modal_id}: {text} {percent}%"),
                             check_running=lambda modal_id, log=True: (logging.info(f"{modal_id} 阶段正在运行")) if log else None)
+    LoadUtils.set_logger(logger)
 
     steam_argv = os.getenv('steam_argv', '')
 

@@ -135,7 +135,7 @@ class UpdateBase(ABC):
         
         run_bubble = self.launcher_config.get('bubble', False)
         if run_bubble:
-            self.config_whole['bubble']['install'] = True
+            self.config_whole['ui_default']['bubble']['install'] = True
             function_bubble_main('安装气泡mod', self.logger, self.config_whole)
         return True
 

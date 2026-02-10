@@ -333,7 +333,8 @@ def get_cache_font(config: dict = {}, logger_: LogManager = LogManager()) -> str
                     font_assets_seven, Path(temp_dir) / 'font.7z',
                     chunk_size=1024 * 100, logger_=logger_
                     )
-                    decompress_7z(Path(temp_dir) / 'font.7z', config.get('cache_path', '.'))
+                    decompress_7z(Path(temp_dir) / 'font.7z',
+                                  config.get('cache_path', '.'), logger_)
                     return get_cache_font(config, logger_)
             except Exception as e:
                 logger_.log_error(e)

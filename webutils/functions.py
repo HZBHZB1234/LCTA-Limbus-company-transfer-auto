@@ -110,9 +110,10 @@ def decompress_7z(file_path, output_dir='.', logger_: LogManager=None):
         logger_.log_error(e)
         return False
 
-def download_with(url, save_path, size=0, chunk_size=1024*100, logger_: LogManager=None, modal_id=None, progress_=[0,100], headers={}):
+def download_with(url, save_path, size=0, chunk_size=1024*100, logger_: LogManager=None,
+                  modal_id=None, progress_=[0,100], headers={}, validate = True):
     try:
-        with requests.get(url, stream=True, headers=headers) as r:
+        with requests.get(url, stream=True, headers=headers, verify=validate) as r:
             r.raise_for_status()  # 检查请求是否成功
             
             # 获取文件总大小

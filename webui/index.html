@@ -485,6 +485,56 @@
                         </button>
                     </div>
                 </div>
+
+                <div class="setting-card">
+                    <h3 class="setting-title">气泡Mod下载配置</h3>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="bubble-color">
+                            <span class="checkmark"></span>
+                            下载有颜色的气泡Mod
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="bubble-enable-screen" onchange="toggleEnableScreen()">
+                            <span class="checkmark"></span>
+                            使用零协会加载文本
+                        </label>
+                        <small class="form-hint">请确保您全屏游玩</small>
+                    </div>
+                    
+                    <div id="bubble-screen-group" class="sub-form-group" style="display: none;">
+                        <div class="form-group">
+                            <label for="bubble-screen">请填入您的屏幕尺寸:</label>
+                            <div class="select-wrapper">
+                                <select id="bubble-screen">
+                                    <option value="16:9">16:9</option>
+                                    <option value="21:9">21:9</option>
+                                    <option value="16:10">16:10</option>
+                                </select>
+                                <i class="fas fa-chevron-down"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="bubble-install">
+                            <span class="checkmark"></span>
+                            立即安装，不保存文件
+                        </label>
+                    </div>
+
+                    <div class="action-area">
+                        <button class="primary-btn" onclick="downloadBubble()">
+                            <i class="fas fa-download"></i>
+                            下载(安装)气泡mod
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 

@@ -204,6 +204,12 @@ class ConfigManager {
             // LCTA-auto-update配置
             'machine-download-source': 'ui_default.machine.download_source',
             'machine-use-proxy': 'ui_default.machine.use_proxy',
+
+            // 气泡文本mod配置
+            'bubble-color': 'ui_default.bubble.color',
+            'bubble-enable-screen': 'ui_default.bubble.enable_screen',
+            'bubble-screen': 'ui_default.bubble.screen',
+            'bubble-install': 'ui_default.bubble.install',
             
             // 清理设置
             'clean-progress': 'ui_default.clean.clean_progress',
@@ -1470,6 +1476,17 @@ function toggleAutoProper() {
     }
 };
 
+function toggleEnableScreen() {
+    const group = document.getElementById('bubble-screen-group');
+    const enable = document.getElementById('bubble-enable-screen');
+    if (enable.checked) {
+        group.style.display = 'block';
+    } 
+    else {
+        group.style.display = 'none';
+    }
+};
+
 function toggleSteamCommand() {
     let command
     pywebview.api.run_func('get_steam_command').then(function(result) {
@@ -2026,11 +2043,11 @@ function showProgress(title) {
 }
 
 // 各功能函数
-function startTranslation() {
+async function startTranslation() {
     const modal = new ProgressModal('开始翻译');
     modal.setStatus('正在初始化翻译过程...');
     modal.addLog('开始翻译任务');
-    configManager.flushPendingUpdates();
+    await configManager.updateConfigValues(configManager.collectConfigFromUI());
     
     pywebview.api.start_translation(apiConfigManager.currentSettings,
         modal.id).then(function(result) {
@@ -2646,6 +2663,24 @@ function downloadOurplay() {
         });
 }
 
+async function downloadBubble() {
+    const modal = new ProgressModal('开始下载');
+    modal.setStatus('正在初始化...');
+    modal.addLog('开始下载任务');
+    await configManager.updateConfigValues(configManager.collectConfigFromUI());
+    
+    pywebview.api.download_bubble(
+        modal.id).then(function(result) {
+        if (result.success) {
+            modal.complete(true, '下载任务已完成');
+        } else {
+            modal.complete(false, '下载失败: ' + result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '下载过程中发生错误: ' + error);
+    });
+}
+
 function cleanCache() {
     const modal = new ProgressModal('清除缓存');
     
@@ -2829,11 +2864,11 @@ function downloadLLC() {
         });
 }
 
-function downloadMachine() {
+async function downloadMachine() {
     const modal = new ProgressModal('开始下载');
     modal.setStatus('正在初始化下载过程...');
     modal.addLog('开始下载任务');
-    configManager.flushPendingUpdates();
+    await configManager.updateConfigValues(configManager.collectConfigFromUI());
     
     pywebview.api.download_LCTA_auto(modal.id).then(function(result) {
         if (result.success) {
@@ -3477,7 +3512,8 @@ window.addEventListener('pywebviewready', function() {
                     toggleCachePathInput();
                     toggleDevelopSettings();
                     toggleAutoProper();
-                    toggleSteamCommand()
+                    toggleSteamCommand();
+                    toggleEnableScreen()
                 })
             }
             checkGamePath();

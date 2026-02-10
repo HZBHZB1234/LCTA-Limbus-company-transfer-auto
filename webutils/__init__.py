@@ -10,6 +10,7 @@ from .function_install import (
 )
 from .function_fetch import function_fetch_main
 from .function_LCTA_auto import function_LCTA_auto_main, check_ver_github_M
+from .function_bubble import function_bubble_main
 from webutils.function_clean import clean_config_main
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     'function_fetch_main',
     'function_LCTA_auto_main',
     'check_ver_github_M',
-    'clean_config_main'
+    'clean_config_main',
+    'function_bubble_main'
 ]

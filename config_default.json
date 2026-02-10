@@ -36,6 +36,12 @@
             "check_hash": true,
             "use_api": false
         },
+        "bubble": {
+            "color": false,
+            "enable_screen": false,
+            "screen": "16:9",
+            "install": false
+        },
         "api_config": { 
             "key": ""
         },

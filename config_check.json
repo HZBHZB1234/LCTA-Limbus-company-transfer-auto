@@ -44,6 +44,12 @@
         "api_config": { 
             "key": "str"
         },
+        "bubble": {
+            "color": "bool",
+            "enable_screen": "bool",
+            "screen": "str",
+            "install": "bool"
+        },
         "proper": {
             "join_char": "str",
             "disable_space": "bool",

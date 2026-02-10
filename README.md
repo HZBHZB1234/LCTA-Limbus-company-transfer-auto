@@ -54,6 +54,7 @@
 - 优化界面布局，合并重复页面  
 - 添加气泡 MOD 下载功能  
 - 集成letheLauncher功能
+- 下载气泡自动Fallback
 
 ---
 
@@ -91,6 +92,7 @@
 - `favicon.ico` 来自 [边狱公司中文维基](https://limbuscompany.huijiwiki.com/wiki/%E9%A6%96%E9%A1%B5)，遵循其原有使用条款。
 - `launcher` 文件夹内的部分代码基于 [LimbusModLoader](https://github.com/LEAGUE-OF-NINE/LimbusModLoader) 实现，遵循 **[GPL-3.0 许可证](https://github.com/LEAGUE-OF-NINE/LimbusModLoader/blob/master/LICENSE)**。  
   > 💡 注意：`launcher` 目录下的所有代码均遵循 GPL-3.0。LCTA 主程序与启动器之间仅为配置与调用关系，无代码依赖，因此主程序不受 GPL-3.0 约束。
+- `webFunc/LanzouFolder.py` 来自互联网 *吾爱破解* 论坛。经过修改。[原文链接](https://www.52pojie.cn/thread-2005690-1-1.html)
 
 ### 数据许可
 - **零协会汉化包**：遵循 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) 许可。

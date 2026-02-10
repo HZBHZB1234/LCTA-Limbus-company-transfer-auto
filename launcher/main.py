@@ -132,6 +132,11 @@ class UpdateBase(ABC):
             
         self.update_config()
         self.logger.log(f"汉化包更新完成")
+        
+        run_bubble = self.launcher_config.get('bubble', False)
+        if run_bubble:
+            self.config_whole['bubble']['install'] = True
+            function_bubble_main('安装气泡mod', self.logger, self.config_whole)
         return True
 
 class NoUpdate(UpdateBase):

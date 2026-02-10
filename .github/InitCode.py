@@ -6,6 +6,30 @@ import warnings
 
 projext_path = Path(__file__).parent.parent
 
+print('开始撰写Release Note')
+update_note = projext_path / 'webui' / 'assets' / "update.md"
+ABOUT = '''
+## 文件下载指导  
+- LCTA-Portable-Full.zip 完整版全功能，空间占用较大。推荐下载此版本  
+- LCTA-Folder.zip 兼容版文件夹版  
+- LCTA-Folder-Debug.zip 兼容调试版，显示命令窗口  
+- LCTA-OneFile.zip 兼容版单文件版  
+- LCTA-OneFile-Debug.zip 兼容调试版，显示命令窗口  
+- LCTA-update.zip 完整版自动更新功能需求文件，包含项目源码 
+'''
+update_note = update_note.read_text(encoding='utf-8').split('\n')
+r = []
+flag = False
+for i in update_note:
+    if i.startswith('##'):
+        if flag:break
+        else:flag = True
+    r.append(i)
+r = '\n'.join(r)
+release_note = r + '\n' + ABOUT
+Path('update.md').write_text(release_note, encoding='utf-8')
+print('生成更新日志成功')
+
 print('开始复制图标文件')
 os.chdir(projext_path)
 shutil.copy2("favicon.ico", "webui/favicon.ico")

@@ -186,3 +186,5 @@ jobs:
           release/${{ env.APP_NAME }}-Portable.zip
           release/${{ env.APP_NAME }}-update.zip
         tag_name: ${{ github.ref_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.LCTA_RELEASER }}

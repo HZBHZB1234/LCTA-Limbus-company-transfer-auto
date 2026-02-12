@@ -512,6 +512,10 @@ function initNavigation() {
                     if (sectionId === 'install-section') {
                         refreshInstallPackageList();
                     }
+
+                    if (sectionId !== 'test-section') {
+                        goTestSection(false);
+                    }
                 }, 150);
             }
         });
@@ -1499,6 +1503,17 @@ function toggleSteamCommand() {
         cmdElement.value = command;
     });
 }
+
+function goTestSection(DIEPLAY){
+    const testButton = document.getElementById('test-btn');
+    if (DIEPLAY) {
+        testButton.style.display = 'block';
+        testButton.click();
+    } 
+    else {
+        testButton.style.display = 'none';
+    }
+};
 
 function copySteamPath() {
     const cmdElement = document.getElementById('steam-cmd');
@@ -3443,6 +3458,8 @@ window.addEventListener('pywebviewready', function() {
             console.log(error)
         }
     );
+
+    pywebview.api.set_attr('http_port', window.location.port);
     
     pywebview.api.get_attr('config_ok')
         .then(function(config_ok) {

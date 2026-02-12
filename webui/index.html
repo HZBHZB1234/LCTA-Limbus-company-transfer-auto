@@ -82,6 +82,11 @@
                 <i class="fas fa-sliders-h"></i>
                 <span>设置</span>
             </button>
+
+            <button id="test-btn" class="nav-btn" style="display: none;">
+                <i class="fas fa-sliders-h"></i>
+                <span>测试界面</span>
+            </button>
         </div>
 
         <div class="sidebar-footer">
@@ -961,6 +966,13 @@
                             检查更新
                         </button>
                     </div>
+
+                    <div class="action-grid">
+                        <button class="action-btn" onclick="goTestSection(true)">
+                            <i class="fas fa-sync-alt"></i>
+                            进入调试页面
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1121,7 +1133,37 @@
                 </button>
             </div>
         </div>
+
+        <!-- 测试界面 -->
+        <div id="test-section" class="content-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-cog"></i>
+                    调试界面
+                </h2>
+                <p class="section-subtitle">测试使用</p>
+            </div>
+
+            <div class="action-area">
+                <button class="primary-btn" onclick="pywebview.api.startTest()">
+                    <i class="fas fa-play"></i>
+                    开始启动
+                </button>
+
+                <button class="primary-btn" onclick="pywebview.api.eval_skip()">
+                    <i class="fas fa-play"></i>
+                    注入js
+                </button>
+
+                <button class="primary-btn" onclick="pywebview.api.sign_eval_js()">
+                    <i class="fas fa-play"></i>
+                    为窗口订阅js
+                </button>
+            </div>
+        </div>
     </div>
+
+    
 
     <!-- 模态窗口容器 -->
     <div id="modal-container"></div>

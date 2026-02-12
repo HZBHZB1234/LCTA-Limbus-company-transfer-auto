@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 import json
+import socket
 import time
 import logging
 from logging.handlers import TimedRotatingFileHandler
@@ -57,6 +58,7 @@ class LCTA_API():
         self.log_manager.set_error_callback(self.logger.exception)
         self.log_manager.set_ui_callback(self.log_ui)
         self.modal_list = []
+        self.http_port = 0
 
         # 判断是否为打包环境
         self.is_frozen = os.getenv('is_frozen', 'false').lower() == 'true'
@@ -620,6 +622,21 @@ class LCTA_API():
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
+        
+    def startTest(self):
+        self._window_test = webview.create_window("模组下载测试窗口", url="https://www.nexusmods.com/games/limbuscompany")
+        
+    def eval_skip(self):
+        js_path = Path(os.getenv('path_')) / 'webui' / 'nexus'
+        self._window_test.run_js(f"window.DICTIONARY_URL = 'http://127.0.0.1:{self.http_port}/nexus/dict.js'")
+        #jss = list(js_path.glob('*.js'))
+        jss = [js_path / 'dict.js', js_path / 'cn.js', js_path / 'skip.js']
+        for i in jss:
+            js_code = i.read_text(encoding='utf-8')
+            self._window_test.run_js(js_code)
+    
+    def sign_eval_js(self):
+        self._window_test.events.loaded += self.eval_skip
 
     # 模态窗口相关API方法
     def set_modal_status(self, status, modal_id):

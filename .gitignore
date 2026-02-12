@@ -1,6 +1,7 @@
 *\__pycache__/
 dev_cache/
-*\nexus
+webui/nexus/*.js
+!webui/nexus/simulation.js
 tmp
 .rmv
 *.pyc

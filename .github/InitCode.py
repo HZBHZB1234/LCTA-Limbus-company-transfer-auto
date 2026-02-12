@@ -61,7 +61,13 @@ FILES = [
     ("https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css",
         'css/github-markdown-light.min.css'),
     ("https://cdn.jsdelivr.net/npm/marked/marked.min.js",
-        'marked/marked.min.js')
+        'marked/marked.min.js'),
+    ("https://web-static-res-edge-speedtest-b1-hk.dahi.edu.eu.org/scripts/556780/1710242/NexusMods%20%E4%B8%AD%E6%96%87%E5%8C%96-%E8%AF%8D%E5%BA%93.js",
+        'nexus/dict.js'),
+    ("https://update.greasyfork.org.cn/scripts/556781/NexusMods%20%E4%B8%AD%E6%96%87%E5%8C%96%E6%8F%92%E4%BB%B6.user.js",
+        'nexus/cn.js'),
+    ("https://update.greasyfork.org.cn/scripts/519037/Nexus%20No%20Wait%20%2B%2B.user.js",
+        'nexus/skip.js')
 ]
 
 print("修改index.html文件，替换CDN链接为本地链接...")

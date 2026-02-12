@@ -71,6 +71,8 @@
     "update_only_stable": "bool",
     "enable_cache": "bool",
     "cache_path": "str",
+    "enable_storage": "bool",
+    "storage_path": "str",
     "launcher": {
         "zero": {
             "zip_type": "str",

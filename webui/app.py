@@ -627,15 +627,17 @@ class LCTA_API():
         self._window_test = webview.create_window("模组下载测试窗口", url="https://www.nexusmods.com/games/limbuscompany")
         
     def eval_skip(self):
+        self.log_manager.log('开始执行js')
         js_path = Path(os.getenv('path_')) / 'webui' / 'nexus'
         self._window_test.run_js(f"window.DICTIONARY_URL = 'http://127.0.0.1:{self.http_port}/nexus/dict.js'")
         #jss = list(js_path.glob('*.js'))
-        jss = [js_path / 'dict.js', js_path / 'cn.js', js_path / 'skip.js']
+        jss = [js_path / 'simulation.js', js_path / 'dict.js', js_path / 'cn.js', js_path / 'skip.js']
         for i in jss:
             js_code = i.read_text(encoding='utf-8')
             self._window_test.run_js(js_code)
     
     def sign_eval_js(self):
+        self.log_manager.log('已订阅事件')
         self._window_test.events.loaded += self.eval_skip
 
     # 模态窗口相关API方法
@@ -700,13 +702,6 @@ class LCTA_API():
         except Exception as e:
             self.log(f"更新模态窗口进度失败: {e}")
             self.log_error(e)
-
-
-    def get_game_path(self):
-        """获取游戏路径"""
-        if self.config and "game_path" in self.config:
-            return self.config["game_path"]
-        return ""
 
     def save_config_to_file(self):
         """将当前配置保存到文件"""
@@ -1045,18 +1040,28 @@ def main():
     logger.info("WebUI窗口已创建")
 
     debug_mode = api.config.get("debug", False)
+    enable_storage = api.config.get('enable_storage', False)
 
     webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
+    webview.settings['ALLOW_DOWNLOADS'] = True
     
     if not debug_mode:
         logger_c = logging.getLogger('urllib3.connectionpool')
         logger_c.setLevel(logging.INFO)
 
-    # 启动应用
-    webview.start(
-        debug=debug_mode,
-        http_server=True  # 使用内置HTTP服务器
-    )
+    if enable_storage:
+        stPath = api.config.get('storage_path', 'tmp')
+        webview.start(
+            debug=debug_mode,
+            http_server=True,
+            storage_path=str(Path(stPath)),
+            private_mode=False
+        )
+    else:
+        webview.start(
+            debug=debug_mode,
+            http_server=True
+        )
 
 if __name__ == "__main__":
     main()

@@ -935,6 +935,24 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="enable-storage" onchange="toggleStoragePathInput()">
+                            <span class="checkmark"></span>
+                            启用数据持久化
+                        </label>
+                        
+                        <div id="storage-path-group" class="sub-form-group" style="display: none; margin-top: 10px;">
+                            <label for="storage-path">缓存路径:</label>
+                            <div class="file-input-group">
+                                <input type="text" id="storage-path" placeholder="tmp" value="tmp">
+                                <button class="action-btn secondary" onclick="pywebview.api.browse_folder('storage-path')">
+                                    <i class="fas fa-folder-open"></i> 浏览
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                     
                     <div class="action-area">
                         <button class="primary-btn" onclick="saveSettings()">

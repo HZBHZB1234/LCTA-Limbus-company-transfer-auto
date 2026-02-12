@@ -71,6 +71,8 @@
     "github_timeout": "8",
     "enable_cache": true,
     "cache_path": "tmp",
+    "enable_storage": false,
+    "storage_path": "tmp",
     "launcher": {
         "zero": {
             "zip_type": "seven",

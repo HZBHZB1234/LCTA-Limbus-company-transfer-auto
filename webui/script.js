@@ -166,6 +166,8 @@ class ConfigManager {
             'enable-cache': 'enable_cache',
             'cache-path': 'cache_path',
             'api-crypto': 'api_crypto',
+            'enable-storage': 'enable_storage',
+            'storage-path': 'storage_path',
             '--theme': 'theme',
 
             // 翻译设置
@@ -1444,6 +1446,17 @@ function toggleCachePathInput() {
         cachePathGroup.style.display = 'block';
     } else {
         cachePathGroup.style.display = 'none';
+    }
+}
+
+function toggleStoragePathInput() {
+    const enableStorageCheckbox = document.getElementById('enable-storage');
+    const storagePathGroup = document.getElementById('storage-path-group');
+    
+    if (enableStorageCheckbox.checked) {
+        storagePathGroup.style.display = 'block';
+    } else {
+        storagePathGroup.style.display = 'none';
     }
 }
 
@@ -3527,6 +3540,7 @@ window.addEventListener('pywebviewready', function() {
                 // 应用配置到UI
                 configManager.applyConfigToUI().then(function() {
                     toggleCachePathInput();
+                    toggleStoragePathInput();
                     toggleDevelopSettings();
                     toggleAutoProper();
                     toggleSteamCommand();

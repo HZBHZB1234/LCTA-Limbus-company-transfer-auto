@@ -2089,187 +2089,210 @@ async function startTranslation() {
     });
 }
 
-class ItemListManager{
-    constructor(containerElement) {
-        this.containerElement = document.getElementById(containerElement);
+// ================================
+// 通用列表管理器（支持多实例、选中状态、自定义回调）
+// ================================
+class ItemListManager {
+    /**
+     * @param {string} containerId - 容器元素ID
+     * @param {Object} options - 配置选项
+     * @param {function} options.onSelect - 当项目被选中时的回调 (item) => {}
+     * @param {string} options.emptyMessage - 列表为空时显示的消息
+     * @param {string} options.itemIcon - 项目图标类名
+     */
+    constructor(containerId, options = {}) {
+        this.containerElement = document.getElementById(containerId);
+        if (!this.containerElement) {
+            console.error(`容器元素未找到: #${containerId}`);
+        }
         this.items = [];
+        this.selectedItem = null;
+        this.onSelect = options.onSelect || null;
+        this.emptyMessage = options.emptyMessage || '未找到可用的项目';
+        this.itemIcon = options.itemIcon || 'fa-box';
     }
 
+    // 显示加载中
     waitList() {
-        const itemList = this.containerElement;
-        if (!itemList) return;
-        
-        itemList.innerHTML = `
+        if (!this.containerElement) return;
+        this.containerElement.innerHTML = `
             <div class="list-empty">
                 <i class="fas fa-spinner fa-spin"></i>
                 <p>正在加载中...</p>
             </div>
         `;
     }
-        
+
+    // 刷新整个列表（根据 items 数组）
     updateList() {
-        const itemList = this.containerElement;
-        itemList.innerHTML = '';
-        
+        if (!this.containerElement) return;
+        this.containerElement.innerHTML = '';
+
         if (this.items.length > 0) {
-            this.items.forEach(function(itm) {
-                const packageItem = document.createElement('div');
-                packageItem.className = 'list-item';
-                packageItem.innerHTML = `
-                    <div class="list-item-content">
-                        <i class="fas fa-box"></i>
-                        <span>${itm}</span>
-                    </div>
-                    <div class="list-item-actions">
-                        <button class="list-action-btn" title="选择">
-                            <i class="fas fa-check"></i>
-                        </button>
-                    </div>
-                `;
-                
-                const selectButton = packageItem.querySelector('.list-action-btn');
-                selectButton.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    selectPackage(pkg);
-                });
-                
-                itemList.appendChild(packageItem);
+            this.items.forEach(item => {
+                const itemElement = this._createItemElement(item);
+                this.containerElement.appendChild(itemElement);
             });
         } else {
-            const emptyItem = document.createElement('div');
-            emptyItem.className = 'list-empty';
-            emptyItem.innerHTML = `
+            const emptyDiv = document.createElement('div');
+            emptyDiv.className = 'list-empty';
+            emptyDiv.innerHTML = `
                 <i class="fas fa-box-open"></i>
-                <p>未找到可用的汉化包</p>
+                <p>${this.emptyMessage}</p>
             `;
-            itemList.appendChild(emptyItem);
+            this.containerElement.appendChild(emptyDiv);
         }
     }
 
-    shoeErrorList(error) {
-        const itemList = this.containerElement;
-        console.error('获取失败:', error);
-        itemList.innerHTML = '';
-        const errorItem = document.createElement('div');
-        errorItem.className = 'list-empty';
-        errorItem.innerHTML = `
-            <i class="fas fa-exclamation-triangle"></i>
-            <p>获取列表失败: ${error.message || '未知错误'}</p>
+    // 创建单个列表项 DOM
+    _createItemElement(item) {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'list-item';
+        if (this.selectedItem === item) {
+            itemDiv.classList.add('selected');
+            itemDiv.setAttribute('data-selected', 'true');
+        }
+
+        itemDiv.innerHTML = `
+            <div class="list-item-content">
+                <i class="fas ${this.itemIcon}"></i>
+                <span>${item}</span>
+            </div>
+            <div class="list-item-actions">
+                <button class="list-action-btn" title="选择">
+                    <i class="fas fa-check"></i>
+                </button>
+            </div>
         `;
-        itemList.appendChild(errorItem);
+
+        // 绑定选择按钮事件
+        const selectBtn = itemDiv.querySelector('.list-action-btn');
+        selectBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.setSelectedItem(item);
+            if (this.onSelect && typeof this.onSelect === 'function') {
+                this.onSelect(item);
+            }
+        });
+
+        return itemDiv;
+    }
+
+    // ----- 数据操作方法 -----
+    setItems(items) {
+        this.items = items;
+        // 如果之前选中的项目已不存在，清空选中
+        if (this.selectedItem && !this.items.includes(this.selectedItem)) {
+            this.selectedItem = null;
+        }
+        this.updateList();
     }
 
     addItem(item) {
-        this.items.push(item);
-        this.updateList();
+        if (!this.items.includes(item)) {
+            this.items.push(item);
+            this.updateList();
+        }
     }
 
     removeItem(item) {
         const index = this.items.indexOf(item);
         if (index !== -1) {
             this.items.splice(index, 1);
-        };
-        this.updateList();
+            if (this.selectedItem === item) {
+                this.selectedItem = null;
+            }
+            this.updateList();
+        }
+    }
+
+    // ----- 选中状态管理 -----
+    setSelectedItem(item) {
+        if (this.items.includes(item)) {
+            this.selectedItem = item;
+        } else {
+            this.selectedItem = null;
+        }
+        this.updateList(); // 重新渲染以高亮选中项
+    }
+
+    getSelectedItem() {
+        return this.selectedItem;
+    }
+
+    // ----- 错误显示 -----
+    showErrorList(error) {
+        if (!this.containerElement) return;
+        console.error('获取列表失败:', error);
+        this.containerElement.innerHTML = '';
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'list-empty';
+        errorDiv.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>获取列表失败: ${error.message || '未知错误'}</p>
+        `;
+        this.containerElement.appendChild(errorDiv);
     }
 }
 
-let packageItemManager = ItemListManager('install-package-list');
 
+// 创建汉化包列表管理器实例
+let packageItemManager = new ItemListManager('install-package-list', {
+    emptyMessage: '未找到可用的汉化包',
+    itemIcon: 'fa-box',
+    onSelect: (item) => {
+        addLogMessage(`已选中汉化包: ${item}`, 'info');
+    }
+});
+
+/**
+ * 刷新汉化包列表
+ * 从后端获取数据后调用管理器的 setItems 和 updateList 进行渲染
+ */
 function refreshInstallPackageList() {
     const packageList = document.getElementById('install-package-list');
     if (!packageList) return;
-    
-    packageList.innerHTML = `
-        <div class="list-empty">
-            <i class="fas fa-spinner fa-spin"></i>
-            <p>正在加载汉化包列表...</p>
-        </div>
-    `;
-    
+
+    // 显示加载状态
+    packageItemManager.waitList();
+
     pywebview.api.get_translation_packages()
         .then(function(result) {
-            packageList.innerHTML = '';
-            
             if (result.success && result.packages && result.packages.length > 0) {
-                result.packages.forEach(function(pkg) {
-                    const packageItem = document.createElement('div');
-                    packageItem.className = 'list-item';
-                    packageItem.innerHTML = `
-                        <div class="list-item-content">
-                            <i class="fas fa-box"></i>
-                            <span>${pkg}</span>
-                        </div>
-                        <div class="list-item-actions">
-                            <button class="list-action-btn" title="选择">
-                                <i class="fas fa-check"></i>
-                            </button>
-                        </div>
-                    `;
-                    
-                    const selectButton = packageItem.querySelector('.list-action-btn');
-                    selectButton.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        selectPackage(pkg);
-                    });
-                    
-                    packageList.appendChild(packageItem);
-                });
+                // 设置数据并更新列表
+                packageItemManager.setItems(result.packages);
             } else {
-                const emptyItem = document.createElement('div');
-                emptyItem.className = 'list-empty';
-                emptyItem.innerHTML = `
-                    <i class="fas fa-box-open"></i>
-                    <p>未找到可用的汉化包</p>
-                `;
-                packageList.appendChild(emptyItem);
+                // 空列表也会自动显示 emptyMessage
+                packageItemManager.setItems([]);
             }
         })
         .catch(function(error) {
             console.error('获取汉化包列表失败:', error);
-            packageList.innerHTML = '';
-            const errorItem = document.createElement('div');
-            errorItem.className = 'list-empty';
-            errorItem.innerHTML = `
-                <i class="fas fa-exclamation-triangle"></i>
-                <p>获取列表失败: ${error.message || '未知错误'}</p>
-            `;
-            packageList.appendChild(errorItem);
+            packageItemManager.showErrorList(error);
         });
 }
 
+/**
+ * 手动选择某个包（若需外部调用）
+ * @param {string} packageName - 汉化包名称
+ */
 function selectPackage(packageName) {
-    document.querySelectorAll('.list-item').forEach(item => {
-        item.classList.remove('selected');
-        item.removeAttribute('data-selected');
-    });
-    
-    const items = document.querySelectorAll('.list-item');
-    for (let item of items) {
-        const span = item.querySelector('span');
-        if (span && span.textContent === packageName) {
-            item.classList.add('selected');
-            item.setAttribute('data-selected', 'true');
-            break;
-        }
-    }
+    packageItemManager.setSelectedItem(packageName);
 }
 
+/**
+ * 安装选中的汉化包
+ */
 function installSelectedPackage() {
-    const selectedItem = document.querySelector('.list-item[data-selected="true"]');
-    if (!selectedItem) {
+    const packageName = packageItemManager.getSelectedItem();
+    if (!packageName) {
         showMessage('提示', '请先选择一个汉化包');
         return;
     }
-    
-    const packageName = selectedItem.querySelector('span')?.textContent;
-    if (!packageName) {
-        showMessage('错误', '无法获取选中汉化包的名称');
-        return;
-    }
-    
+
     const modal = new ProgressModal('安装汉化包');
     modal.addLog(`开始安装汉化包: ${packageName}`);
-    
+
     pywebview.api.install_translation(packageName, modal.id)
         .then(function(result) {
             if (result.success) {
@@ -2283,14 +2306,40 @@ function installSelectedPackage() {
         });
 }
 
-function changeFontForPackage() {
-    const selectedItem = document.querySelector('.list-item[data-selected="true"]');
-    if (!selectedItem) {
+/**
+ * 删除选中的汉化包
+ */
+function deleteSelectedPackage() {
+    const packageName = packageItemManager.getSelectedItem();
+    if (!packageName) {
         showMessage('提示', '请先选择一个汉化包');
         return;
     }
-    
-    const packageName = selectedItem.querySelector('span')?.textContent;
+
+    showConfirm('确认删除', `确定要删除汉化包 "${packageName}" 吗？此操作不可撤销。`,
+        function() {
+            pywebview.api.delete_translation_package(packageName)
+                .then(function(result) {
+                    if (result.success) {
+                        // 从管理器中移除该项，自动更新列表并清空选中状态
+                        packageItemManager.removeItem(packageName);
+                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
+                    } else {
+                        showMessage('删除失败', `删除汉化包失败: ${result.message}`);
+                    }
+                })
+                .catch(function(error) {
+                    showMessage('删除失败', `删除过程中发生错误: ${error}`);
+                });
+        },
+        function() {
+            // 取消删除，无操作
+        }
+    );
+}
+
+function changeFontForPackage() {
+    const packageName = packageItemManager.getSelectedItem();
     if (!packageName) {
         showMessage('错误', '无法获取选中汉化包的名称');
         return;
@@ -2597,55 +2646,6 @@ function getFontFromInstalled() {
         .catch(function(error) {
             showMessage('错误', '获取系统字体列表时发生错误: ' + error);
         });
-}
-
-function deleteSelectedPackage() {
-    const selectedItem = document.querySelector('.list-item[data-selected="true"]');
-    if (!selectedItem) {
-        showMessage('提示', '请先选择一个汉化包');
-        return;
-    }
-    
-    const packageName = selectedItem.querySelector('span')?.textContent;
-    if (!packageName) {
-        showMessage('错误', '无法获取选中汉化包的名称');
-        return;
-    }
-    
-    showConfirm('确认删除', `确定要删除汉化包 "${packageName}" 吗？此操作不可撤销。`, 
-        function() {
-            pywebview.api.delete_translation_package(packageName).then(function(result) {
-                if (result.success) {
-                    selectedItem.style.opacity = '0.5';
-                    selectedItem.style.textDecoration = 'line-through';
-                    
-                    setTimeout(() => {
-                        selectedItem.remove();
-                        
-                        const packageList = document.getElementById('install-package-list');
-                        if (!packageList.children.length || (packageList.children.length === 1 && packageList.children[0].classList.contains('list-empty'))) {
-                            const emptyItem = document.createElement('div');
-                            emptyItem.className = 'list-empty';
-                            emptyItem.innerHTML = `
-                                <i class="fas fa-box-open"></i>
-                                <p>未找到可用的汉化包</p>
-                            `;
-                            packageList.appendChild(emptyItem);
-                        }
-                        
-                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
-                    }, 300);
-                } else {
-                    showMessage('删除失败', `删除汉化包失败: ${result.message}`);
-                }
-            }).catch(function(error) {
-                showMessage('删除失败', `删除过程中发生错误: ${error}`);
-            });
-        },
-        function() {
-            // 取消操作
-        }
-    );
 }
 
 function fetchProperNouns() {

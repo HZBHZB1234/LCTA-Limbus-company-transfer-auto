@@ -94,6 +94,7 @@
 - `launcher` 文件夹内的部分代码基于 [LimbusModLoader](https://github.com/LEAGUE-OF-NINE/LimbusModLoader) 实现，遵循 **[GPL-3.0 许可证](https://github.com/LEAGUE-OF-NINE/LimbusModLoader/blob/master/LICENSE)**。  
   > 💡 注意：`launcher` 目录下的所有代码均遵循 GPL-3.0。LCTA 主程序与启动器之间仅为配置与调用关系，无代码依赖，因此主程序不受 GPL-3.0 约束。
 - `webFunc/LanzouFolder.py` 来自互联网 *吾爱破解* 论坛。经过修改。[原文链接](https://www.52pojie.cn/thread-2005690-1-1.html)
+- 部分前端依赖代码引用自互联网，遵循其原有使用条款。前端依赖详细信息请查看 [InitCode.py](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/blob/main/.github/InitCode.py)
 
 ### 数据许可
 - **零协会汉化包**：遵循 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) 许可。

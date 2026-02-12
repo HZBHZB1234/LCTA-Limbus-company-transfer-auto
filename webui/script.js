@@ -2089,55 +2089,91 @@ async function startTranslation() {
     });
 }
 
-function refreshPackageList() {
-    const packageList = document.getElementById('install-package-list');
-    if (!packageList) return;
-    
-    packageList.innerHTML = '<div class="loading">正在加载...</div>';
-    
-    pywebview.api.get_translation_packages()
-        .then(function(result) {
-            packageList.innerHTML = '';
-            
-            if (result.success && result.packages && result.packages.length > 0) {
-                result.packages.forEach(pkg => {
-                    const packageItem = document.createElement('div');
-                    packageItem.className = 'list-item';
-                    packageItem.innerHTML = `
-                        <div class="list-item-content">
-                            <i class="fas fa-box"></i>
-                            <span>${pkg}</span>
-                        </div>
-                    `;
-                    packageItem.addEventListener('click', () => selectListItem(packageItem));
-                    packageList.appendChild(packageItem);
-                });
-            } else {
-                const emptyItem = document.createElement('div');
-                emptyItem.className = 'list-empty';
-                emptyItem.innerHTML = `
-                    <i class="fas fa-box-open"></i>
-                    <p>未找到可用的汉化包</p>
+class ItemListManager{
+    constructor(containerElement) {
+        this.containerElement = document.getElementById(containerElement);
+        this.items = [];
+    }
+
+    waitList() {
+        const itemList = this.containerElement;
+        if (!itemList) return;
+        
+        itemList.innerHTML = `
+            <div class="list-empty">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>正在加载中...</p>
+            </div>
+        `;
+    }
+        
+    updateList() {
+        const itemList = this.containerElement;
+        itemList.innerHTML = '';
+        
+        if (this.items.length > 0) {
+            this.items.forEach(function(itm) {
+                const packageItem = document.createElement('div');
+                packageItem.className = 'list-item';
+                packageItem.innerHTML = `
+                    <div class="list-item-content">
+                        <i class="fas fa-box"></i>
+                        <span>${itm}</span>
+                    </div>
+                    <div class="list-item-actions">
+                        <button class="list-action-btn" title="选择">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    </div>
                 `;
-                packageList.appendChild(emptyItem);
-            }
-        })
-        .catch(function(error) {
-            packageList.innerHTML = '';
-            const errorItem = document.createElement('div');
-            errorItem.className = 'list-error';
-            errorItem.innerHTML = `
-                <i class="fas fa-exclamation-triangle"></i>
-                <p>加载汉化包列表失败: ${error}</p>
+                
+                const selectButton = packageItem.querySelector('.list-action-btn');
+                selectButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    selectPackage(pkg);
+                });
+                
+                itemList.appendChild(packageItem);
+            });
+        } else {
+            const emptyItem = document.createElement('div');
+            emptyItem.className = 'list-empty';
+            emptyItem.innerHTML = `
+                <i class="fas fa-box-open"></i>
+                <p>未找到可用的汉化包</p>
             `;
-            packageList.appendChild(errorItem);
-        });
+            itemList.appendChild(emptyItem);
+        }
+    }
+
+    shoeErrorList(error) {
+        const itemList = this.containerElement;
+        console.error('获取失败:', error);
+        itemList.innerHTML = '';
+        const errorItem = document.createElement('div');
+        errorItem.className = 'list-empty';
+        errorItem.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>获取列表失败: ${error.message || '未知错误'}</p>
+        `;
+        itemList.appendChild(errorItem);
+    }
+
+    addItem(item) {
+        this.items.push(item);
+        this.updateList();
+    }
+
+    removeItem(item) {
+        const index = this.items.indexOf(item);
+        if (index !== -1) {
+            this.items.splice(index, 1);
+        };
+        this.updateList();
+    }
 }
 
-// 初始化安装包列表
-function initPackageList() {
-    refreshPackageList();
-}
+let packageItemManager = ItemListManager('install-package-list');
 
 function refreshInstallPackageList() {
     const packageList = document.getElementById('install-package-list');

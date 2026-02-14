@@ -167,7 +167,7 @@ jobs:
         Compress-Archive -Path release/${{ env.APP_NAME }}_Folder_Debug -DestinationPath release/${{ env.APP_NAME }}-Folder-Debug.zip
         
         # 压缩更新文件夹
-        Compress-Archive -Path ./LCTA_update -DestinationPath release/${{ env.APP_NAME }}-update.zip
+        Compress-Archive -Path ./LCTA_update/* -DestinationPath release/${{ env.APP_NAME }}-update.zip
 
     # 创建 GitHub Release（仅当推送的是 tag 时）
     - name: Create Release on Tag

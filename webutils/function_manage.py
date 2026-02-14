@@ -90,7 +90,7 @@ def get_default_mod_path():
     return Path.home() / 'AppData' /  'Roaming' / 'LimbusCompanyMods'
 
 def get_mod_path(config):
-    mod_path = config.get('manage', {}).get('mod_path', '')
+    mod_path = config.get('ui_default').get('manage', {}).get('mod_path', '')
     if not mod_path:
         mod_path = get_default_mod_path()
     else:

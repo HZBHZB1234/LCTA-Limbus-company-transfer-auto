@@ -2979,6 +2979,7 @@ let modItemManager = new ToggleItemListManager('install-mod-list', {
 });
 
 async function refreshInstalledModList() {
+    modItemManager.waitList();
     const result = await pywebview.api.find_installed_mod();
     if (result.success) {
         const merge = result.able.concat(result.disable);
@@ -2998,10 +2999,27 @@ function openModPath() {
     pywebview.api.open_mod_path();
 }
 
-function deleteSelectedMod() {
-    const selectedItem = modItemManager.getSelectedItem();
-    pywebview.api.delete_mod(selectedItem, 
-        modItemManager.getEnabledMap[selectedItem]);
+async function deleteSelectedMod() {
+    const packageName = modItemManager.getSelectedItem();
+    if (!packageName) {
+        showMessage('提示', '请先选择一个模组');
+        return;
+    }
+
+    showConfirm('确认删除', `确定要删除模组 "${packageName}" 吗？此操作不可撤销。`,
+        async function() {
+            const result = await pywebview.api.delete_mod(packageName, 
+                modItemManager.getEnabledMap[selectedItem]);
+                    if (result.success) {
+                        // 从管理器中移除该项，自动更新列表并清空选中状态
+                        packageItemManager.removeItem(packageName);
+                    } else {
+                        showMessage('删除失败', `删除模组失败: ${result.message}`);
+                    }
+        },
+        function() {
+        }
+    );
 }
 
 function fetchProperNouns() {

@@ -1481,8 +1481,11 @@ function toggleDevelopSettings() {
 
 async function toggleCustomLang() {
     const checkbox = document.getElementById('enable-lang');
-    await pywebview.api.toggle_installed_package(checkbox.checked);
+    const result = await pywebview.api.toggle_installed_package(checkbox.checked);
     toggleCustomLangGui();
+    if (result.success && result.changed && checkbox.checked) {
+        refreshInstalledPackageList();
+    }
 }
 
 /**
@@ -2737,7 +2740,8 @@ function refreshInstalledPackageList() {
                 if (result.success) {
                     box.checked=false;
                 }
-            }
+            };
+            toggleCustomLangGui();
         })
         .catch(function(error) {
             console.error('获取汉化包列表失败:', error);

@@ -358,7 +358,7 @@ class LCTA_API():
     def toggle_installed_package(self, able):
         try:
             changed = toggle_install_package(self.config, able)
-            return {"success": True, "changeed": changed}
+            return {"success": True, "changed": changed}
         except Exception as e:
             self.log(f"切换可用状态失败: {str(e)}")
             self.logger.exception(e)

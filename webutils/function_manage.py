@@ -7,20 +7,20 @@ import json
 
 from .functions import *
 
-def check_lang_enabled(game_path:str) -> str:
+def check_lang_enabled(game_path:str) -> bool:
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
     if lang_path.exists():
-        return "able"
+        return True
     lang_path = Path(game_path) / 'LimbusCompany_Data' / '_lang'
-    if lang_path.exists():
-        return "disable"
-    return 'not_exist'
+    if not lang_path.exists():
+        lang_path.mkdir()
+    return False
 
 def find_installed_packages(config) -> Tuple[list, str]:
     game_path = config.get('game_path', '')
     if not game_path:
         raise
-    if not check_lang_enabled(game_path)=='able':
+    if not check_lang_enabled(game_path):
         return [], ''
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
     r = []
@@ -77,7 +77,7 @@ def toggle_install_package(config, enable):
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
     disable_path = Path(game_path) / 'LimbusCompany_Data' / '_lang'
     current = check_lang_enabled(game_path)
-    if (current=='able') == enable:
+    if current == enable:
         return False
     else:
         if enable:

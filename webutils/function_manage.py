@@ -1,5 +1,6 @@
 import shutil
 import sys
+import os
 from pathlib import Path
 from typing import Tuple
 import json
@@ -84,3 +85,48 @@ def toggle_install_package(config, enable):
         else:
             shutil.move(lang_path, disable_path)
         return True
+
+def get_default_mod_path():
+    return Path.home() / 'AppData' /  'Roaming' / 'LimbusCompanyMods'
+
+def get_mod_path(config):
+    mod_path = config.get('manage', {}).get('mod_path', '')
+    if not mod_path:
+        mod_path = get_default_mod_path()
+    else:
+        mod_path = Path(mod_path)
+    return mod_path
+
+def fing_mod(config):
+    mod_path = get_mod_path(config)
+    r = list(mod_path.glob('*.carra2'))
+    r.extend(list(mod_path.glob('*.bank')))
+    r.extend(list(mod_path.glob('*.lunartique')))
+    rd = list(mod_path.glob('*.carra2_disable'))
+    rd.extend(list(mod_path.glob('*.bank_disable')))
+    rd.extend(list(mod_path.glob('*.lunartique_disable')))
+    r = [i.name for i in r]
+    rd = [(i.name).rstrip('_disable') for i in rd]
+    return r, rd
+
+def toggle_mod(config, mod_name: str, enable):
+    mod_path = get_mod_path(config)
+    mod = mod_path / (mod_name if not enable else f'{mod_name}_disable')
+    if mod.exists():
+        shutil.move(mod, mod_path / (mod_name if enable else f'{mod_name}_disable'))
+        return True
+    else:
+        return False
+    
+def delete_mod(config, mod_name: str, enable):
+    mod_path = get_mod_path(config)
+    mod = mod_path / (mod_name if enable else f'{mod_name}_disable')
+    if mod.exists():
+        mod.unlink()
+        return True
+    else:
+        return False
+
+def open_mod_path(config):
+    mod_path = get_mod_path(config)
+    os.system(f'explorer {mod_path}')

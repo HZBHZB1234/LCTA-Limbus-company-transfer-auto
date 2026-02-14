@@ -16,7 +16,9 @@ from .function_manage import (find_installed_packages,
                               use_translation_package,
                               delete_installed_package,
                               check_lang_enabled,
-                              toggle_install_package)
+                              toggle_install_package,
+                              fing_mod, toggle_mod, delete_mod,
+                              open_mod_path)
 
 __all__ = [
     'function_llc_main',
@@ -39,5 +41,9 @@ __all__ = [
     'use_translation_package',
     'delete_installed_package',
     'check_lang_enabled',
-    'toggle_install_package'
+    'toggle_install_package',
+    'fing_mod',
+    'toggle_mod',
+    'delete_mod',
+    'open_mod_path'
 ]

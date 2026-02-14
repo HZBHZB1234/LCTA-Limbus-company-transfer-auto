@@ -212,6 +212,9 @@ class ConfigManager {
             'bubble-enable-screen': 'ui_default.bubble.enable_screen',
             'bubble-screen': 'ui_default.bubble.screen',
             'bubble-install': 'ui_default.bubble.install',
+
+            // 安装数据管理设置
+            'installed-mod-directory': 'ui_default.manage.mod_path',
             
             // 清理设置
             'clean-progress': 'ui_default.clean.clean_progress',
@@ -1616,7 +1619,7 @@ function browseInstallModDirectory() {
             modDirInput.value = result;
             configManager.updateConfigValue('installed-mod-directory', result)
                 .then(() => {
-                    refreshInstallPackageList();
+                    refreshInstalledModList();
                 });
         }
     }).catch(function(error) {
@@ -1631,7 +1634,7 @@ function clearModDirectory() {
         modDirInput.value = '';
         configManager.updateConfigValue('installed-mod-directory', '')
             .then(() => {
-                refreshInstallPackageList();
+                refreshInstalledModList();
             });
     }
 }
@@ -2802,6 +2805,203 @@ function deleteInstalledPackage() {
             // 取消删除，无操作
         }
     );
+}
+
+/**
+ * 支持启用/禁用切换的列表管理器
+ * 继承自 ItemListManager
+ * @param {string} containerId - 容器元素ID
+ * @param {Object} options - 配置选项
+ * @param {function} options.onToggle - 切换启用状态时的回调 (item, enabled) => {}
+ * @param {boolean|function} options.defaultEnabled - 默认启用状态（可设为函数，接收item返回布尔值）
+ * @param {string} options.itemKey - 当item为对象时，用作唯一标识的属性名，默认为 'name'
+ * @param {function} options.onSelect - 选中回调 (item) => {}
+ * @param {string} options.emptyMessage - 列表为空时的提示文本
+ * @param {string} options.itemIcon - 条目图标类名
+ */
+class ToggleItemListManager extends ItemListManager {
+    constructor(containerId, options = {}) {
+        super(containerId, options);
+        // 启用状态映射 { itemKey: boolean }
+        this.enabledMap = {};
+        this.defaultEnabled = options.defaultEnabled || false;
+        this.onToggle = options.onToggle || null;
+        this.itemKey = options.itemKey || 'name'; // 从对象中提取键的属性
+    }
+
+    /**
+     * 设置列表数据，同时初始化启用状态映射
+     * @param {Array<string|Object>} items - 可包含字符串或对象，对象需包含 this.itemKey 指定字段
+     */
+    setItems(items) {
+        // 初始化启用状态
+        this.enabledMap = {};
+        if (Array.isArray(items)) {
+            items.forEach(item => {
+                const key = this._getItemKey(item);
+                // 若 defaultEnabled 为函数则调用，否则直接取值
+                const defaultValue = typeof this.defaultEnabled === 'function'
+                    ? this.defaultEnabled(item)
+                    : this.defaultEnabled;
+                this.enabledMap[key] = defaultValue;
+            });
+        }
+        // 调用父类 setItems（会更新 this.items 并触发 updateList）
+        super.setItems(items);
+    }
+
+    /**
+     * 获取条目的唯一标识键
+     */
+    _getItemKey(item) {
+        if (typeof item === 'string') {
+            return item;
+        } else if (item && typeof item === 'object') {
+            return item[this.itemKey] ?? String(item);
+        }
+        return String(item);
+    }
+
+    /**
+     * 获取条目的显示名称（用于列表文本）
+     */
+    _getDisplayName(item) {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') {
+            return item.displayName || item[this.itemKey] || String(item);
+        }
+        return String(item);
+    }
+
+    /**
+     * 重写列表项 DOM 创建方法，添加启用/禁用按钮
+     */
+    _createItemElement(item) {
+        const key = this._getItemKey(item);
+        const displayName = this._getDisplayName(item);
+        const isEnabled = this.enabledMap[key] || false;
+
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'list-item';
+        if (this.selectedItem === item) {
+            itemDiv.classList.add('selected');
+            itemDiv.setAttribute('data-selected', 'true');
+        }
+
+        itemDiv.innerHTML = `
+            <div class="list-item-content">
+                <i class="fas ${this.itemIcon}"></i>
+                <span>${displayName}</span>
+            </div>
+            <div class="list-item-actions">
+                <button class="list-action-btn toggle-btn" title="${isEnabled ? '禁用' : '启用'}" style="margin-right: 5px;">
+                    <i class="fas ${isEnabled ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
+                </button>
+                <button class="list-action-btn select-btn" title="选择">
+                    <i class="fas fa-check"></i>
+                </button>
+            </div>
+        `;
+
+        // 切换按钮事件
+        const toggleBtn = itemDiv.querySelector('.toggle-btn');
+        toggleBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const newState = !this.enabledMap[key];
+            this.enabledMap[key] = newState;
+            // 更新按钮图标和标题
+            const icon = toggleBtn.querySelector('i');
+            icon.className = `fas ${newState ? 'fa-toggle-on' : 'fa-toggle-off'}`;
+            toggleBtn.title = newState ? '禁用' : '启用';
+            // 触发外部回调
+            if (this.onToggle && typeof this.onToggle === 'function') {
+                this.onToggle(item, newState);
+            }
+        });
+
+        // 选择按钮事件（保留原有选择功能）
+        const selectBtn = itemDiv.querySelector('.select-btn');
+        selectBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.setSelectedItem(item);
+            if (this.onSelect && typeof this.onSelect === 'function') {
+                this.onSelect(item);
+            }
+        });
+
+        // 点击条目内容区域（非按钮部分）也触发选中
+        itemDiv.addEventListener('click', (e) => {
+            if (e.target.closest('.list-action-btn')) {
+                return;
+            }
+            this.setSelectedItem(item);
+            if (this.onSelect && typeof this.onSelect === 'function') {
+                this.onSelect(item);
+            }
+        });
+
+        return itemDiv;
+    }
+
+    /**
+     * 获取当前启用状态映射
+     */
+    getEnabledMap() {
+        return this.enabledMap;
+    }
+
+    /**
+     * 手动设置某个条目的启用状态（会触发重新渲染）
+     * @param {string} key - 条目标识键
+     * @param {boolean} enabled
+     */
+    setEnabled(key, enabled) {
+        if (this.enabledMap.hasOwnProperty(key)) {
+            this.enabledMap[key] = enabled;
+            this.updateList();
+        }
+    }
+}
+
+let modItemManager = new ToggleItemListManager('install-mod-list', {
+    emptyMessage: '未找到模组',
+    itemIcon: 'fa-language',
+    defaultEnabled: false, // 默认全部禁用
+    onSelect: (item) => {
+        console.log('选中翻译器:', item);
+    },
+    onToggle: (item, enabled) => {
+        console.log(`模组 ${item} 状态变为: ${enabled ? '启用' : '禁用'}`);
+        toggleMod(item, enabled)
+    }
+});
+
+async function refreshInstalledModList() {
+    const result = await pywebview.api.find_installed_mod();
+    if (result.success) {
+        const merge = result.able.concat(result.disable);
+        modItemManager.setItems(merge);
+        result.able.forEach(item =>{
+            modItemManager.enabledMap[item]=true;
+        })
+        modItemManager.updateList();
+    }
+}
+
+async function toggleMod(item, enable) {
+    const result = await pywebview.api.toggle_mod(item, enable);
+}
+
+function openModPath() {
+    pywebview.api.open_mod_path();
+}
+
+function deleteSelectedMod() {
+    const selectedItem = modItemManager.getSelectedItem();
+    pywebview.api.delete_mod(selectedItem, 
+        modItemManager.getEnabledMap[selectedItem]);
 }
 
 function fetchProperNouns() {

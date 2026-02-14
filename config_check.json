@@ -50,6 +50,9 @@
             "screen": "str",
             "install": "bool"
         },
+        "manage": {
+            "mod_path": "str"
+        },
         "proper": {
             "join_char": "str",
             "disable_space": "bool",

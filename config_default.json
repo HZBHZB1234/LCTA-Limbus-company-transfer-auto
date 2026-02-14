@@ -42,6 +42,9 @@
             "screen": "16:9",
             "install": false
         },
+        "manage": {
+            "mod_path": ""
+        },
         "api_config": { 
             "key": ""
         },

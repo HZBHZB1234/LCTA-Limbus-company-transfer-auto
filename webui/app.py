@@ -407,6 +407,49 @@ class LCTA_API():
             self.log(error_msg)
             self.logger.exception(e)
             return {"success": False, "message": error_msg}
+        
+    def find_installed_mod(self):
+        try:
+            able, disable = fing_mod(self.config)
+            return {"success": True, "able": able, "disable": disable}
+        except Exception as e:
+            error_msg = f"查找已安装mod出错: {str(e)}"
+            self.log(error_msg)
+            self.logger.exception(e)
+            return {"success": False, "message": error_msg}
+        
+    def toggle_mod(self, mod_name, enable):
+        try:
+            self.log_manager.log(f'修改mod可用性 {mod_name} 为 {enable}')
+            changed = toggle_mod(self.config, mod_name, enable)
+            return {"success": True, "changed": changed}
+        except Exception as e:
+            error_msg = f"切换mod出错: {str(e)}"
+            self.log(error_msg)
+            self.logger.exception(e)
+            return {"success": False, "message": error_msg}
+        
+    def delete_mod(self, mod_name, enable):
+        try:
+            self.log_manager.log(f'删除mod {mod_name} 状态 {enable}')
+            success = delete_mod(self.config, mod_name, enable)
+            return {"success": success, "message": ""}
+        except Exception as e:
+            error_msg = f"删除mod出错: {str(e)}"
+            self.log(error_msg)
+            self.logger.exception(e)
+            return {"success": False, "message": error_msg}
+        
+    def open_mod_path(self):
+        try:
+            self.log_manager.log('打开mod文件夹')
+            open_mod_path(self.config)
+            return {"success": True, "message": ""}
+        except Exception as e:
+            error_msg = f"打开mod路径出错: {str(e)}"
+            self.log(error_msg)
+            self.logger.exception(e)
+            return {"success": False, "message": error_msg}
 
     def change_font_for_package(self, package_name, font_path, modal_id="false"):
         '''为指定翻译包更换字体'''

@@ -43,7 +43,7 @@ def restore_sound():
         os.replace(sound_file, target)
 
 def replace_sound(mod_folder: str, game_path: str):
-    mod_zips_root_path = get_mod_folder()
+    mod_zips_root_path = os.environ['mod_path']
     global _game_path
     _game_path = shlex.split(game_path)[0]
     if any(file_name.endswith(".bank") for file_name in os.listdir(mod_zips_root_path)):

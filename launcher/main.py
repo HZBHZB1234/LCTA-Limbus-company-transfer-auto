@@ -491,7 +491,8 @@ def main_after_mod():
     import launcher.patch as patch
     import launcher.sound as sound
 
-    mod_zips_root_path = get_mod_folder()
+    get_mod_folder(config_whole)
+    mod_zips_root_path = os.environ['mod_path']
     os.makedirs(mod_zips_root_path, exist_ok=True)
 
     logging.info("Limbus Mod Loader version: v1.8")

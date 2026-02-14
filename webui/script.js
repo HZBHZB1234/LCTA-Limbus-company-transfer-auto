@@ -515,6 +515,11 @@ function initNavigation() {
                         refreshInstallPackageList();
                     }
 
+                    if (sectionId === 'manage-section') {
+                        refreshInstalledPackageList();
+                        refreshInstalledModList();
+                    }
+
                     if (sectionId !== 'test-section') {
                         goTestSection(false);
                     }
@@ -1471,6 +1476,43 @@ function toggleDevelopSettings() {
     }
 };
 
+async function toggleCustomLang() {
+    const checkbox = document.getElementById('enable-lang');
+    await pywebview.api.toggle_installed_package(checkbox.checked);
+    toggleCustomLangGui();
+}
+
+/**
+ * 切换“客制化翻译”启用状态，控制遮罩层的显示与隐藏
+ */
+function toggleCustomLangGui() {
+    const checkbox = document.getElementById('enable-lang');
+    const group = document.getElementById('installed-package-group');
+    if (!checkbox || !group) return;
+
+    const overlayClass = 'installed-package-overlay';
+    let overlay = group.querySelector('.' + overlayClass);
+
+    if (!checkbox.checked) {
+        // 未启用 → 显示遮罩层
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.className = overlayClass;
+            overlay.innerHTML = `
+                <i class="fas fa-lock"></i>
+                <p>客制化翻译已禁用</p>
+                <small>勾选上方选项以启用此区域</small>
+            `;
+            group.appendChild(overlay);
+        }
+    } else {
+        // 已启用 → 移除遮罩层
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+}
+
 function toggleProper() {
     const group = document.getElementById('proper-settings');
     const enable = document.getElementById('enable-proper');
@@ -1538,18 +1580,6 @@ function copySteamPath() {
     navigator.clipboard.writeText(cmdElement.value);
 }
 
-function browsePackageDirectory() {
-    pywebview.api.browse_folder('package-directory').then(function(result) {
-        const packageDirInput = document.getElementById('package-directory');
-        if (packageDirInput && result) {
-            packageDirInput.value = result;
-            configManager.updateConfigValue('package-directory', result);
-        }
-    }).catch(function(error) {
-        showMessage('错误', '浏览文件夹时发生错误: ' + error);
-    });
-}
-
 // 浏览安装界面的汉化包目录
 function browseInstallPackageDirectory() {
     pywebview.api.browse_folder('install-package-directory').then(function(result) {
@@ -1572,6 +1602,34 @@ function clearPackageDirectory() {
     if (packageDirInput) {
         packageDirInput.value = '';
         configManager.updateConfigValue('install-package-directory', '')
+            .then(() => {
+                refreshInstallPackageList();
+            });
+    }
+}
+
+// 浏览安装界面的汉化包目录
+function browseInstallModDirectory() {
+    pywebview.api.browse_folder('installed-mod-directory').then(function(result) {
+        const modDirInput = document.getElementById('installed-mod-directory');
+        if (modDirInput && result) {
+            modDirInput.value = result;
+            configManager.updateConfigValue('installed-mod-directory', result)
+                .then(() => {
+                    refreshInstallPackageList();
+                });
+        }
+    }).catch(function(error) {
+        showMessage('错误', '浏览文件夹时发生错误: ' + error);
+    });
+}
+
+// 清空汉化包目录输入框
+function clearModDirectory() {
+    const modDirInput = document.getElementById('installed-mod-directory');
+    if (modDirInput) {
+        modDirInput.value = '';
+        configManager.updateConfigValue('installed-mod-directory', '')
             .then(() => {
                 refreshInstallPackageList();
             });
@@ -2273,14 +2331,6 @@ function refreshInstallPackageList() {
 }
 
 /**
- * 手动选择某个包（若需外部调用）
- * @param {string} packageName - 汉化包名称
- */
-function selectPackage(packageName) {
-    packageItemManager.setSelectedItem(packageName);
-}
-
-/**
  * 安装选中的汉化包
  */
 function installSelectedPackage() {
@@ -2646,6 +2696,112 @@ function getFontFromInstalled() {
         .catch(function(error) {
             showMessage('错误', '获取系统字体列表时发生错误: ' + error);
         });
+}
+
+// 创建汉化包列表管理器实例
+let installedPackageItemManager = new ItemListManager('installed-package-list', {
+    emptyMessage: '未找到已安装汉化包',
+    itemIcon: 'fa-box',
+    onSelect: (item) => {
+        addLogMessage(`已选中汉化包: ${item}`, 'info');
+    }
+});
+
+/**
+ * 刷新已安装汉化包列表
+ * 从后端获取数据后调用管理器的 setItems 和 updateList 进行渲染
+ */
+function refreshInstalledPackageList() {
+    const packageList = document.getElementById('installed-package-list');
+    if (!packageList) return;
+
+    // 显示加载状态
+    installedPackageItemManager.waitList();
+
+    pywebview.api.get_installed_packages()
+        .then(function(result) {
+            const box = document.getElementById('enable-lang');
+            if (result.success && result.enable && result.packages && result.packages.length > 0) {
+                // 设置数据并更新列表
+                box.checked=true;
+                installedPackageItemManager.setItems(result.packages);
+                if (result.selected) {
+                    installedPackageItemManager.setSelectedItem(result.selected);
+                };
+            } else {
+                // 空列表也会自动显示 emptyMessage
+                installedPackageItemManager.setItems([]);
+                if (result.success) {
+                    box.checked=false;
+                }
+            }
+        })
+        .catch(function(error) {
+            console.error('获取汉化包列表失败:', error);
+            installedPackageItemManager.showErrorList(error);
+        });
+}
+
+/**
+ * 使用选中的汉化包
+ */
+function useSelectedPackage() {
+    const packageName = installedPackageItemManager.getSelectedItem();
+    if (!packageName) {
+        showMessage('提示', '请先选择一个汉化包');
+        return;
+    }
+
+    const modal = new ProgressModal('使用选中汉化包');
+    modal.addLog(`开始切换汉化包: ${packageName}`);
+
+    pywebview.api.use_translation(packageName, modal.id)
+        .then(function(result) {
+            if (result.success) {
+                modal.complete(true, '汉化包切换成功');
+
+                setTimeout(
+                    ()=>{modal.close()}, 300
+                )
+            } else {
+                modal.complete(false, '切换失败: ' + result.message);
+            }
+        })
+        .catch(function(error) {
+            modal.complete(false, '切换过程中发生错误: ' + error);
+        });
+}
+
+/**
+ * 删除选中的汉化包
+ */
+function deleteInstalledPackage() {
+    const packageName = installedPackageItemManager.getSelectedItem();
+    if (!packageName) {
+        showMessage('提示', '请先选择一个汉化包');
+        return;
+    }
+
+    showConfirm('确认删除', `确定要删除汉化包 "${packageName}" 吗？此操作不可撤销。`,
+        function() {
+            pywebview.api.delete_installed_package(packageName)
+                .then(function(result) {
+                    if (result.success) {
+                        // 从管理器中移除该项，自动更新列表并清空选中状态
+                        packageItemManager.removeItem(packageName);
+                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
+                    } else {
+                        showMessage('删除失败', `删除汉化包失败: ${result.message}`);
+                    }
+                })
+                .catch(function(error) {
+                    showMessage('删除失败', `删除过程中发生错误: ${error}`);
+                });
+        },
+        function() {
+            // 取消删除，无操作
+        }
+    );
 }
 
 function fetchProperNouns() {
@@ -3578,6 +3734,7 @@ window.addEventListener('pywebviewready', function() {
                     toggleCachePathInput();
                     toggleStoragePathInput();
                     toggleDevelopSettings();
+                    toggleCustomLangGui();
                     toggleAutoProper();
                     toggleSteamCommand();
                     toggleEnableScreen()

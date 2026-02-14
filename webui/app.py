@@ -29,21 +29,7 @@ from webutils.const_apiConfig import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
 )
 from webutils.function_translate import translate_main
-from webutils import (
-    function_llc_main, 
-    function_ourplay_main,
-    function_ourplay_api,
-    find_translation_packages,
-    delete_translation_package,
-    change_font_for_package,
-    install_translation_package,
-    get_system_fonts,
-    export_system_font,
-    function_fetch_main,
-    function_LCTA_auto_main,
-    clean_config_main,
-    function_bubble_main
-)
+from webutils import *
 
 class CancelRunning(Exception):
     pass
@@ -166,7 +152,7 @@ class LCTA_API():
             selected_path = file_path[0]
             # 通过JavaScript更新页面中的输入框
             js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
-            self._window.evaluate_js(js_code)
+            self._window.run_js(js_code)
             self.log_ui(f"已选择文件: {selected_path}")
             return selected_path
         return None
@@ -181,7 +167,7 @@ class LCTA_API():
             selected_path = folder_path[0]
             # 通过JavaScript更新页面中的输入框
             js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
-            self._window.evaluate_js(js_code)
+            self._window.run_js(js_code)
             self.log_ui(f"已选择文件夹: {selected_path}")
             return selected_path
         return None
@@ -202,7 +188,7 @@ class LCTA_API():
         escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
         js_code = f"addLogMessage('{escaped_message}');"
         try:
-            self._window.evaluate_js(js_code)
+            self._window.run_js(js_code)
         except:
             # 如果窗口不可用则打印到控制台
             print(f"[UI] {full_message}")
@@ -215,7 +201,7 @@ class LCTA_API():
         escaped_text = text.replace("'", "\\'")
         js_code = f"updateProgress({percent}, '{escaped_text}');"
         try:
-            self._window.evaluate_js(js_code)
+            self._window.run_js(js_code)
         except:
             pass
 
@@ -366,7 +352,60 @@ class LCTA_API():
         except Exception as e:
             error_msg = f"安装翻译包时出错: {str(e)}"
             self.log(error_msg)
-            self.logger.exception("安装翻译包时出错")
+            self.logger.exception(e)
+            return {"success": False, "message": error_msg}
+        
+    def toggle_installed_package(self, able):
+        try:
+            changed = toggle_install_package(self.config, able)
+            return {"success": True, "changeed": changed}
+        except Exception as e:
+            self.log(f"切换可用状态失败: {str(e)}")
+            self.logger.exception(e)
+            return {"success": False, "message": str(e)}
+        
+    def get_installed_packages(self):
+        '''获取翻译包列表'''
+        try:
+            enable = check_lang_enabled(self.config.get('game_path', ''))
+            if not enable:
+                return {"success": True, "enable": False}
+            packages, selected = find_installed_packages(self.config)
+            self.log(f"找到 {len(packages)} 个翻译包")
+            return {"success": True, "packages": packages,
+                    "selected": selected, 'enable': True}
+        except Exception as e:
+            self.log(f"获取翻译包列表失败: {str(e)}")
+            self.logger.exception(e)
+            return {"success": False, "message": str(e)}
+
+    def delete_installed_package(self, package_name):
+        '''删除指定的翻译包'''
+        try:
+            return delete_installed_package(package_name, self.config)
+        except Exception as e:
+            error_msg = f"删除翻译包时出错: {str(e)}"
+            self.log(error_msg)
+            self.logger.exception(e)
+            return {"success": False, "message": error_msg}
+
+    def use_translation(self, package_name=None, modal_id="false"):
+        '''安装翻译包'''
+        try:
+            self.add_modal_log(f"开始切换汉化包: {package_name}", modal_id)
+            # 调用安装函数
+            success = use_translation_package(
+                package_name, 
+                self.config
+            )
+            if success:
+                return {"success": True, "message": "成功切换汉化包"}
+            else:
+                return {"success": False, "message": "切换汉化包失败"}
+        except Exception as e:
+            error_msg = f"安装翻译包时出错: {str(e)}"
+            self.log(error_msg)
+            self.logger.exception(e)
             return {"success": False, "message": error_msg}
 
     def change_font_for_package(self, package_name, font_path, modal_id="false"):
@@ -383,7 +422,7 @@ class LCTA_API():
         except Exception as e:
             error_msg = f"更换字体时出错: {str(e)}"
             self.log(error_msg)
-            self.logger.exception("更换字体时出错")
+            self.logger.exception(e)
             return {"success": False, "message": error_msg}
 
     def get_system_fonts_list(self):
@@ -400,7 +439,7 @@ class LCTA_API():
         except Exception as e:
             error_msg = f"获取系统字体列表时出错: {str(e)}"
             self.log(error_msg)
-            self.logger.exception("获取系统字体列表时出错")
+            self.logger.exception(e)
             return {"success": False, "message": error_msg}
 
     def export_selected_font(self, font_name, destination_path):
@@ -417,7 +456,7 @@ class LCTA_API():
         except Exception as e:
             error_msg = f"导出字体时出错: {str(e)}"
             self.log(error_msg)
-            self.logger.exception("导出字体时出错")
+            self.logger.exception(e)
             return {"success": False, "message": error_msg}
 
     def download_ourplay_translation(self, modal_id= "false"):
@@ -656,7 +695,7 @@ class LCTA_API():
         }}
         """
         try:
-            self._window.evaluate_js(js_code)
+            self._window.run_js(js_code)
         except Exception as e:
             self.log(f"设置模态窗口状态失败: {e}")
             self.log_error(e)
@@ -677,7 +716,7 @@ class LCTA_API():
         }}
         """
         try:
-            self._window.evaluate_js(js_code)
+            self._window.run_js(js_code)
         except Exception as e:
             self.log(f"添加模态窗口日志失败: {e}")
             self.log_error(e)
@@ -698,7 +737,7 @@ class LCTA_API():
         }}
         """
         try:
-            self._window.evaluate_js(js_code)
+            self._window.run_js(js_code)
         except Exception as e:
             self.log(f"更新模态窗口进度失败: {e}")
             self.log_error(e)
@@ -722,7 +761,7 @@ class LCTA_API():
             });
 
             '''
-        self._window.evaluate_js(js_code)
+        self._window.run_js(js_code)
     
     def update_config_value(self, key_path, value, create_missing=True):
         """

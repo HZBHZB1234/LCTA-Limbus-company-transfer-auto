@@ -52,7 +52,12 @@
                 <i class="fas fa-broom"></i>
                 <span>清除本地缓存</span>
             </button>
-            
+
+            <button id="manage-btn" class="nav-btn">
+                <i class="fas fa-broom"></i>
+                <span>已安装数据管理</span>
+            </button>
+
             <button id="launcher-config-btn" class="nav-btn">
                 <i class="fas fa-rocket"></i>
                 <span>Launcher配置</span>
@@ -632,6 +637,106 @@
             </div>
         </div>
 
+        <!-- 已安装管理界面 -->
+        <div id="manage-section" class="content-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-download"></i>
+                    已安装数据管理
+                </h2>
+                <p class="section-subtitle">控制本地已安装修改包，包括汉化包和皮肤mod</p>
+            </div>
+            
+            <div class="settings-grid">
+                <div class="setting-card">
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="enable-lang" onchange="toggleCustomLang()" checked>
+                            <span class="checkmark"></span>
+                            启用客制化翻译
+                        </label>
+                    </div>
+                    
+                    <div id="installed-package-group">
+                        <div class="form-group">
+                            <label for="installed-package-list">已安装汉化包:</label>
+                            <div class="list-container">
+                                <div class="list-header">
+                                    <span>包名称</span>
+                                    <span>操作</span>
+                                </div>
+                                <div class="list-content" id="installed-package-list">
+                                    <div class="list-empty">
+                                        <i class="fas fa-box-open"></i>
+                                        <p>未找到已安装汉化包</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="button-group">
+                            <button type="button" class="action-btn" onclick="refreshInstalledPackageList()">
+                                <i class="fas fa-sync-alt"></i> 刷新列表
+                            </button>
+                            <button type="button" class="action-btn success" onclick="useSelectedPackage()">
+                                <i class="fas fa-check-circle"></i> 使用选中汉化包
+                            </button>
+                            <button type="button" class="action-btn danger" onclick="deleteInstalledSelectedPackage()">
+                                <i class="fas fa-trash"></i> 删除选中汉化包
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-card">
+                    <h3 class="setting-title">模组目录</h3>
+                    <div class="form-group">
+                        <label for="installed-mod-directory">模组安装目录:</label>
+                        <div class="file-input-group">
+                            <div class="input-wrapper">
+                                <input type="text" id="installed-mod-directory" placeholder="留空则使用默认路径">
+                                <button type="button" class="input-clear" onclick="clearModDirectory()" title="清空目录设置">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <button type="button" class="action-btn secondary" onclick="browseInstallModDirectory()">
+                                <i class="fas fa-folder-open"></i> 浏览
+                            </button>
+                        </div>
+                        <small class="form-hint">选择存放汉化包的目录，留空则使用程序所在目录</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="install-mod-list">可用模组:</label>
+                        <div class="list-container">
+                            <div class="list-header">
+                                <span>模组名称</span>
+                                <span>操作</span>
+                            </div>
+                            <div class="list-content" id="install-mod-list">
+                                <div class="list-empty">
+                                    <i class="fas fa-box-open"></i>
+                                    <p>未找到可用的模组</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="button" class="action-btn" onclick="refreshInstalledModList()">
+                            <i class="fas fa-sync-alt"></i> 刷新列表
+                        </button>
+                        <button type="button" class="action-btn success" onclick="useChangeSelectedMod()">
+                            <i class="fas fa-check-circle"></i> 切换选中模组可用性
+                        </button>
+                        <button type="button" class="action-btn danger" onclick="deleteSelectedMod()">
+                            <i class="fas fa-trash"></i> 删除选中模组
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 配置API界面 -->
         <div id="config-section" class="content-section">
             <div class="section-header">
@@ -1176,6 +1281,11 @@
                 <button class="primary-btn" onclick="pywebview.api.sign_eval_js()">
                     <i class="fas fa-play"></i>
                     为窗口订阅js
+                </button>
+
+                <button class="primary-btn" onclick="location.reload(true)">
+                    <i class="fas fa-play"></i>
+                    强制刷新缓存并重载
                 </button>
             </div>
         </div>

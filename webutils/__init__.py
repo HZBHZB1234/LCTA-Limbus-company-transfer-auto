@@ -11,7 +11,12 @@ from .function_install import (
 from .function_fetch import function_fetch_main
 from .function_LCTA_auto import function_LCTA_auto_main, check_ver_github_M
 from .function_bubble import function_bubble_main
-from webutils.function_clean import clean_config_main
+from .function_clean import clean_config_main
+from .function_manage import (find_installed_packages,
+                              use_translation_package,
+                              delete_installed_package,
+                              check_lang_enabled,
+                              toggle_install_package)
 
 __all__ = [
     'function_llc_main',
@@ -29,5 +34,10 @@ __all__ = [
     'function_LCTA_auto_main',
     'check_ver_github_M',
     'clean_config_main',
-    'function_bubble_main'
+    'function_bubble_main',
+    'find_installed_packages',
+    'use_translation_package',
+    'delete_installed_package',
+    'check_lang_enabled',
+    'toggle_install_package'
 ]

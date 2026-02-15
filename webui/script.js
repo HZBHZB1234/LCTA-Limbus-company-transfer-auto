@@ -3027,6 +3027,8 @@ async function deleteSelectedMod() {
     );
 }
 
+let symlinkStatus ;
+
 async function loadSymlinkStatus() {
     const statusDiv = document.getElementById('symlink-status');
     if (!statusDiv) return;
@@ -3041,7 +3043,7 @@ async function loadSymlinkStatus() {
             return;
         }
 
-        const status = result.status;
+        symlinkStatus = result.status;
         let html = '<div class="list-container">';
         html += '<div class="list-header"><span>目录</span><span>状态</span></div>';
         html += '<div class="list-content">';
@@ -3049,12 +3051,12 @@ async function loadSymlinkStatus() {
         // Unity
         html += `<div class="list-item">
             <div class="list-item-content"><i class="fas fa-folder"></i> Unity</div>
-            <div>${formatSymlinkStatus(status.unity)}</div>
+            <div>${formatSymlinkStatus(symlinkStatus.unity)}</div>
         </div>`;
         // ProjectMoon
         html += `<div class="list-item">
             <div class="list-item-content"><i class="fas fa-folder"></i> ProjectMoon</div>
-            <div>${formatSymlinkStatus(status.PM)}</div>
+            <div>${formatSymlinkStatus(symlinkStatus.PM)}</div>
         </div>`;
 
         html += '</div></div>';
@@ -3107,13 +3109,17 @@ function formatSymlinkStatus(info) {
 
 async function createSymlink(folder) {
     const folderName = folder === 'unity' ? 'Unity' : 'ProjectMoon';
-    // 让用户选择目标目录
-    const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
-    if (!targetDir || targetDir.length === 0) return;
-
-    const modal = new ProgressModal(`创建 ${folderName} 软链接`);
-    modal.addLog(`开始创建软链接，目标目录: ${targetDir}`);
-
+    if (symlinkStatus[folder].status === 'symlink') {
+        showConfirm('是否要更换软链接目标？',
+            `您已经创建了一个正确的软链接，它的目录是 ${symlinkStatus[folder].target}，是否更换目录？
+            如果您确认继续，请选择您想要更换的目标路径`,
+            async function() {
+                const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
+                if (!targetDir || targetDir.length === 0) return;
+            },
+            function() {}
+        )
+    }
     try {
         const result = await pywebview.api.create_symlink(folder, targetDir);
         if (result.success) {

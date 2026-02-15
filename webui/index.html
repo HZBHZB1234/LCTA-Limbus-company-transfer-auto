@@ -734,6 +734,43 @@
                         </button>
                     </div>
                 </div>
+
+                <div class="setting-card">
+                    <h3 class="setting-title">
+                        <i class="fas fa-link"></i>
+                        游戏数据软链接管理
+                    </h3>
+                    <p class="form-hint">管理 Unity 和 ProjectMoon 数据目录的符号链接，便于迁移数据。</p>
+                    
+                    <div id="symlink-status">
+                        <!-- 状态将通过 JavaScript 动态填充 -->
+                        <div class="list-empty">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>正在加载状态...</p>
+                        </div>
+                    </div>
+
+                    <div class="button-group" style="margin-top: 16px;">
+                        <button class="action-btn" onclick="createSymlink('unity')" 
+                        id="unity-create" style="display: none;">
+                            <i class="fas fa-plus"></i> 创建或转移 Unity 软链接
+                        </button>
+                        <button class="action-btn" onclick="createSymlink('pm')"
+                        id="pm-create" style="display: none;">
+                            <i class="fas fa-plus"></i> 创建或转移 ProjectMoon 软链接
+                        </button>
+                    </div>
+                    <div class="button-group" style="margin-top: 8px;">
+                        <button class="action-btn danger" onclick="removeSymlink('unity')" 
+                        id="unity-remove" style="display: none;">
+                            <i class="fas fa-times"></i> 移除 Unity 软链接
+                        </button>
+                        <button class="action-btn danger" onclick="removeSymlink('pm')" 
+                        id="pm-remove" style="display: none;">
+                            <i class="fas fa-times"></i> 移除 ProjectMoon 软链接
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 

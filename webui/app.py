@@ -67,6 +67,7 @@ class LCTA_API():
         self.fix_config = load_util.fix_config
         self.get_steam_command = get_steam_command
         self.change_icon = change_icon
+        self.open_explorer = open_explorer
 
     def run_func(self, func_name, *args):
         if hasattr(self, func_name):
@@ -450,7 +451,52 @@ class LCTA_API():
             self.log(error_msg)
             self.logger.exception(e)
             return {"success": False, "message": error_msg}
+        
+    def get_symlink_status(self):
+        """获取 Unity 和 ProjectMoon 文件夹的软链接状态"""
+        try:
+            result = check_symlink()
+            return {"success": True, "status": result}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
 
+    def create_symlink(self, folder: str, target_dir: str):
+        """创建指定文件夹的软链接，并打开两个 explorer 窗口"""
+        try:
+            # 执行创建
+            success = create_symlink_for(folder, target_dir, self.log_manager)
+            if not success:
+                return {"success": False, "message": "创建软链接失败，请查看日志"}
+
+            # 获取原始目录和目标目录路径
+            original = UNITY if folder.lower() == 'unity' else PM
+            target = Path(target_dir)
+
+            # 打开两个资源管理器窗口
+            open_explorer(original)   # 注意：此时 original 已经是软链接，打开它会进入 target
+            open_explorer(target)
+
+            self.log(f"已打开文件夹: {original} 和 {target}")
+            return {"success": True, "message": "软链接创建成功，文件夹已打开"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def remove_symlink(self, folder: str):
+        """移除指定文件夹的软链接"""
+        try:
+            success = remove_symlink_for(folder, self.log_manager)
+            if not success:
+                return {"success": False, "message": "移除软链接失败，请查看日志"}
+            original = UNITY if folder.lower() == 'unity' else PM
+            if original.parent.exists():
+                open_explorer(original.parent)
+
+            return {"success": True, "message": "软链接已移除"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
     def change_font_for_package(self, package_name, font_path, modal_id="false"):
         '''为指定翻译包更换字体'''
         try:

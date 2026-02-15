@@ -18,7 +18,9 @@ from .function_manage import (find_installed_packages,
                               check_lang_enabled,
                               toggle_install_package,
                               fing_mod, toggle_mod, delete_mod,
-                              open_mod_path)
+                              open_mod_path, check_symlink,create_symlink_for,
+                              open_explorer, UNITY, PM,
+                              remove_symlink_for)
 
 __all__ = [
     'function_llc_main',
@@ -45,5 +47,10 @@ __all__ = [
     'fing_mod',
     'toggle_mod',
     'delete_mod',
-    'open_mod_path'
+    'open_mod_path',
+    'check_symlink',
+    'create_symlink_for',
+    'open_explorer',
+    'UNITY','PM',
+    'remove_symlink_for'
 ]

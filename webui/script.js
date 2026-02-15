@@ -521,6 +521,7 @@ function initNavigation() {
                     if (sectionId === 'manage-section') {
                         refreshInstalledPackageList();
                         refreshInstalledModList();
+                        loadSymlinkStatus();
                     }
 
                     if (sectionId !== 'test-section') {
@@ -3023,6 +3024,132 @@ async function deleteSelectedMod() {
         },
         function() {
         }
+    );
+}
+
+async function loadSymlinkStatus() {
+    const statusDiv = document.getElementById('symlink-status');
+    if (!statusDiv) return;
+
+    try {
+        const result = await pywebview.api.get_symlink_status();
+        if (!result.success) {
+            statusDiv.innerHTML = `<div class="list-empty">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>获取状态失败: ${result.message}</p>
+            </div>`;
+            return;
+        }
+
+        const status = result.status;
+        let html = '<div class="list-container">';
+        html += '<div class="list-header"><span>目录</span><span>状态</span></div>';
+        html += '<div class="list-content">';
+
+        // Unity
+        html += `<div class="list-item">
+            <div class="list-item-content"><i class="fas fa-folder"></i> Unity</div>
+            <div>${formatSymlinkStatus(status.unity)}</div>
+        </div>`;
+        // ProjectMoon
+        html += `<div class="list-item">
+            <div class="list-item-content"><i class="fas fa-folder"></i> ProjectMoon</div>
+            <div>${formatSymlinkStatus(status.PM)}</div>
+        </div>`;
+
+        html += '</div></div>';
+        statusDiv.innerHTML = html;
+    } catch (error) {
+        statusDiv.innerHTML = `<div class="list-empty">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>加载状态时发生错误: ${error}</p>
+        </div>`;
+        console.log(error);
+    }
+}
+
+function openPath(path) {
+    console.log(`打开 ${path}`);
+    pywebview.api.run_func('open_explorer', path);
+}
+
+function formatSymlinkStatus(info) {
+    let buttonText = '';
+    let onClickCode = '';
+    const path = info.path; // 总是存在
+    const target = info.target; // 可能 undefined
+
+    switch (info.status) {
+        case 'not_exist':
+            buttonText = '不存在';
+            onClickCode = ''; // 不打开
+            break;
+        case 'not_symlink':
+            buttonText = '普通目录';
+            console.log(path);
+            onClickCode = `openPath(${JSON.stringify(path)})`;
+            break;
+        case 'symlink':
+            buttonText = `软链接`;
+            console.log(target);
+            onClickCode = `openPath(${JSON.stringify(target)})`; // 打开目标
+            break;
+        default:
+            buttonText = '未知';
+    }
+
+    if (onClickCode) {
+        return `<button class="action-btn small" onclick='${onClickCode}' style="padding: 4px 8px; font-size: 12px;">${buttonText}</button>`;
+    } else {
+        return `<span style="color: var(--color-warning);">${buttonText}</span>`;
+    }
+}
+
+async function createSymlink(folder) {
+    const folderName = folder === 'unity' ? 'Unity' : 'ProjectMoon';
+    // 让用户选择目标目录
+    const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
+    if (!targetDir || targetDir.length === 0) return;
+
+    const modal = new ProgressModal(`创建 ${folderName} 软链接`);
+    modal.addLog(`开始创建软链接，目标目录: ${targetDir}`);
+
+    try {
+        const result = await pywebview.api.create_symlink(folder, targetDir);
+        if (result.success) {
+            modal.complete(true, result.message);
+            // 刷新状态
+            loadSymlinkStatus();
+        } else {
+            modal.complete(false, result.message);
+        }
+    } catch (error) {
+        modal.complete(false, `操作失败: ${error}`);
+    }
+}
+
+async function removeSymlink(folder) {
+    const folderName = folder === 'unity' ? 'Unity' : 'ProjectMoon';
+    // 确认对话框
+    showConfirm(
+        '确认移除软链接',
+        `确定要移除 ${folderName} 的软链接吗？移除后该目录将不再指向目标文件夹。`,
+        async () => {
+            const modal = new ProgressModal(`移除 ${folderName} 软链接`);
+            modal.addLog('开始移除...');
+            try {
+                const result = await pywebview.api.remove_symlink(folder);
+                if (result.success) {
+                    modal.complete(true, result.message);
+                    loadSymlinkStatus();
+                } else {
+                    modal.complete(false, result.message);
+                }
+            } catch (error) {
+                modal.complete(false, `操作失败: ${error}`);
+            }
+        },
+        () => {}
     );
 }
 

@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
     // 设置其他有用的环境变量
     SetEnvironmentVariable("PYTHONUNBUFFERED", "1");
     SetEnvironmentVariable("PYTHONIOENCODING", "utf-8");
-    SetEnvironmentVariable("__version__", "4.1.0");
+    SetEnvironmentVariable("__version__", "4.1.1");
     
     // 5. 构建脚本路径
     char script_path[MAX_PATH];

@@ -249,7 +249,7 @@ def translate_main(modal_id, logger_: LogManager,
         try:
             # 提取上一个版本号的日期部分和序号部分
             prev_date = str(previous_version)[:8]  # 前8位是日期
-            prev_sequence = int(previous_version[8:])  # 后2位是序号
+            prev_sequence = str(previous_version[8:])  # 后2位是序号
             
             if prev_date == current_date:
                 # 如果是同一天，序号加1
@@ -261,8 +261,8 @@ def translate_main(modal_id, logger_: LogManager,
             else:
                 # 如果是新的一天，从01开始
                 VERSION = f"{current_date}01"
-        except (ValueError, IndexError):
-            print(f"警告: 上一个版本号'{previous_version}'格式不正确，将重置为今天的新版本")
+        except Exception:
+            logger.error(f"警告: 上一个版本号'{previous_version}'格式不正确，将重置为今天的新版本")
             VERSION = f"{current_date}01"
 
         try:

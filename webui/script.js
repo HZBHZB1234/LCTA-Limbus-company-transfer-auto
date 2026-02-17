@@ -3111,7 +3111,7 @@ async function createSymlink(folder) {
     const folderName = folder === 'unity' ? 'Unity' : 'ProjectMoon';
     if (symlinkStatus[folder].status === 'symlink') {
         showConfirm('是否要更换软链接目标？',
-            `您已经创建了一个正确的软链接，它的目录是 ${symlinkStatus[folder].target}，是否更换目录？
+            `您已经创建了一个可用的软链接，它的目录是 ${symlinkStatus[folder].target}，是否更换目录？
             如果您确认继续，请选择您想要更换的目标路径`,
             async function() {
                 const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
@@ -3922,6 +3922,7 @@ function confirmGamePath(foundPath) {
                 .then(function(success) {
                     if (success) {
                         configManager.flushPendingUpdates();
+                        configManager.applyConfigToUI();
                         addLogMessage('游戏路径已确认并保存: ' + foundPath, 'success');
                     } else {
                         addLogMessage('保存游戏路径时出错', 'error');

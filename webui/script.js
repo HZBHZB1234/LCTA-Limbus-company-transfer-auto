@@ -209,8 +209,6 @@ class ConfigManager {
 
             // 气泡文本mod配置
             'bubble-color': 'ui_default.bubble.color',
-            'bubble-enable-screen': 'ui_default.bubble.enable_screen',
-            'bubble-screen': 'ui_default.bubble.screen',
             'bubble-install': 'ui_default.bubble.install',
 
             // 安装数据管理设置
@@ -1539,17 +1537,6 @@ function toggleAutoProper() {
     } 
     else {
         group.style.display = 'block';
-    }
-};
-
-function toggleEnableScreen() {
-    const group = document.getElementById('bubble-screen-group');
-    const enable = document.getElementById('bubble-enable-screen');
-    if (enable.checked) {
-        group.style.display = 'block';
-    } 
-    else {
-        group.style.display = 'none';
     }
 };
 
@@ -4093,7 +4080,6 @@ window.addEventListener('pywebviewready', function() {
                     toggleCustomLangGui();
                     toggleAutoProper();
                     toggleSteamCommand();
-                    toggleEnableScreen()
                 })
             }
             checkGamePath();

@@ -44,57 +44,12 @@ def check_bubble(modal_id, logger_: LogManager, filelists):
 def get_direct_download(file_id):
     return f'{BASE_DIRECT}{BASE_LANZOU_URL}{file_id}'
     
-def download_bubble(modal_id, logger_: LogManager, save_path: Path, color, filelists,
-                 enable_screen, screen_type):
+def download_bubble(modal_id, logger_: LogManager, save_path: Path, color, filelists):
     color = '彩色' if color else '无色'
-    if enable_screen:
-        screen_q, screen_w = screen_type.split(":")
-        compiled_screen = f'{screen_q}\s*[:：]\s*{screen_w}'
-        if not screen_type == '16:10':
-            file = [i for i in filelists if (re.search(compiled_screen, i['name_all'])
-                                         and color in i['name_all'] and '替换' in i['name_all'])][0]
-            url = get_direct_download(file['id'])
-            return download_with(url, save_path / 'bubble_mod.zip',
-                                 logger_=logger_, modal_id=modal_id, validate=False)
-        else:
-            with tempfile.TemporaryDirectory() as tmp:
-                temp_dir = Path(tmp)
-                file_ten = [i for i in filelists if (re.search(compiled_screen, i['name_all'])
-                                         and '仅' in i['name_all'] and '替换' in i['name_all'])][0]
-                url = get_direct_download(file_ten['id'])
-                download_with(url, temp_dir / '1610.zip', progress_=[0,50],
-                              logger_=logger_, modal_id=modal_id, validate=False)
-                _screen = '16\s*[:：]\s*9'
-                file = [i for i in filelists if (re.search(_screen, i['name_all'])
-                                         and color in i['name_all'] and '替换' in i['name_all'])][0]
-                url = get_direct_download(file['id'])
-                download_with(url, temp_dir / '169.zip', progress_=[50,100],
-                              logger_=logger_, modal_id=modal_id, validate=False)
-                result_dir = temp_dir / 'mod'
-                with zipfile.ZipFile(temp_dir / '169.zip', 'r') as zip_ref:
-                    zip_ref.extractall(result_dir)
-                with zipfile.ZipFile(temp_dir / '1610.zip', 'r') as zip_ref:
-                    zip_ref.extractall(result_dir)
-                with zipfile.ZipFile(save_path / 'bubble_mod.zip', 'w', zipfile.ZIP_DEFLATED) as zip_ref:
-                    for i in result_dir.glob('*'):
-                        zip_ref.write(i, arcname=i.name)
-    else:
-        with tempfile.TemporaryDirectory() as tmp:
-            temp_dir = Path(tmp)
-            _screen = '16\s*[:：]\s*9'
-            file = [i for i in filelists if (re.search(_screen, i['name_all'])
-                                        and color in i['name_all'] and '替换' in i['name_all'])][0]
-            url = get_direct_download(file['id'])
-            download_with(url, temp_dir / '169.zip', logger_=logger_,
-                          modal_id=modal_id, validate=False)
-            result_dir = temp_dir / 'mod'
-            with zipfile.ZipFile(temp_dir / '169.zip', 'r') as zip_ref:
-                zip_ref.extractall(result_dir)
-            tips_file = result_dir / 'BattleHint.json'
-            tips_file.unlink()
-            with zipfile.ZipFile(save_path / 'bubble_mod.zip', 'w', zipfile.ZIP_DEFLATED) as zip_ref:
-                for i in result_dir.glob('*'):
-                    zip_ref.write(i, arcname=i.name)
+    file = [i for i in filelists if (color in i['name_all'] and '替换' in i['name_all'])][0]
+    url = get_direct_download(file['id'])
+    download_with(url, save_path / 'bubble_mod.zip', logger_=logger_,
+                    modal_id=modal_id, validate=False)
                     
 def install_bubble_mod(mod_path: Path, lang_path: Path):
     config_path = lang_path / 'config.json'
@@ -109,8 +64,6 @@ def fetch_file_list():
 def function_bubble_main(modal_id, logger_: LogManager, whole_config):
     bubble_config = whole_config.get('ui_default', {}).get('bubble', {})
     color = bubble_config.get('color', False)
-    enable_screen = bubble_config.get('enable_screen', False)
-    screen_type = bubble_config.get('screen', "16:9")
     install = bubble_config.get('install', False)
     lang_path = Path(whole_config.get('game_path')) / 'LimbusCompany_Data' / 'lang'
     enable_cache = whole_config.get('enable_cache', True)
@@ -124,7 +77,7 @@ def function_bubble_main(modal_id, logger_: LogManager, whole_config):
     
     if enable_cache:
         version = check_bubble(modal_id, logger_, file_list)
-        cache_key = f'{color},{enable_screen},{screen_type}'
+        cache_key = color
         version = f'{version}\n{cache_key}'
         version_config = cache_path / 'version.txt'
         cache_mod = cache_path / 'bubble_mod.zip'
@@ -132,9 +85,9 @@ def function_bubble_main(modal_id, logger_: LogManager, whole_config):
             logger_.log_modal_process("缓存已存在，无需下载", modal_id)
             shutil.copy(cache_mod, './')
         else:
-            download_bubble(modal_id, logger_, Path('.'), color, file_list, enable_screen, screen_type)
+            download_bubble(modal_id, logger_, Path('.'), color, file_list)
     else:
-        download_bubble(modal_id, logger_, Path('.'), color, file_list, enable_screen, screen_type)
+        download_bubble(modal_id, logger_, Path('.'), color, file_list)
         
     if install:
         install_bubble_mod(mod_, lang_path)

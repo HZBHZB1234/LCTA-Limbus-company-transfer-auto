@@ -46,8 +46,6 @@
         },
         "bubble": {
             "color": "bool",
-            "enable_screen": "bool",
-            "screen": "str",
             "install": "bool"
         },
         "manage": {

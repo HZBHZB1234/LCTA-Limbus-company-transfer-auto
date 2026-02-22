@@ -3,7 +3,7 @@
         "translator":{
             "translator": "LLM通用翻译服务",
             "fallback": true,
-            "is_text": true,
+            "is_text": false,
             "from_lang": "EN",
             "enable_proper": true,
             "auto_fetch_proper": true,

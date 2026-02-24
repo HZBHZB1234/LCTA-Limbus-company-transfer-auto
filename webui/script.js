@@ -3655,8 +3655,30 @@ function simpleMarkdownToHtml(text) {
 // 添加一个变量来跟踪是否已经显示了更新窗口
 let updateModalShown = false;
 
+function doUpdate() {
+            this.close();
+            const progressModal = new ProgressModal('更新程序');
+            progressModal.addLog('开始下载并安装更新...');
+            pywebview.api.perform_update_in_modal(progressModal.id)
+                .then(function(result) {
+                    if (!result) {
+                        progressModal.addLog('更新失败');
+                        progressModal.complete(false, '更新失败');
+                        return;
+                    }
+                    progressModal.addLog('更新完成');
+                    progressModal.addLog('正在重新启动程序...');
+                    progressModal.complete(true, '更新完成');
+                })
+                .catch(function(error) {
+                    progressModal.addLog('更新失败: ' + error);
+                    progressModal.complete(false, '更新失败');
+                });
+        }
+
+
 // 显示更新信息
-function showUpdateInfo(update_info) {
+async function showUpdateInfo(update_info) {
     if (updateModalShown) {
         return;
     }
@@ -3689,26 +3711,7 @@ function showUpdateInfo(update_info) {
     const modal = showConfirm(
         '发现新版本',
         '',
-        function() {
-            this.close();
-            const progressModal = new ProgressModal('更新程序');
-            progressModal.addLog('开始下载并安装更新...');
-            pywebview.api.perform_update_in_modal(progressModal.id)
-                .then(function(result) {
-                    if (!result) {
-                        progressModal.addLog('更新失败');
-                        progressModal.complete(false, '更新失败');
-                        return;
-                    }
-                    progressModal.addLog('更新完成');
-                    progressModal.addLog('正在重新启动程序...');
-                    progressModal.complete(true, '更新完成');
-                })
-                .catch(function(error) {
-                    progressModal.addLog('更新失败: ' + error);
-                    progressModal.complete(false, '更新失败');
-                });
-        },
+        doUpdate,
         function() {
             addLogMessage('用户取消了更新');
             updateModalShown = false;
@@ -3721,10 +3724,22 @@ function showUpdateInfo(update_info) {
         originalClose.call(this);
     };
     
-    setTimeout(() => {
+    setTimeout(async function() {
         const statusElement = document.getElementById(`modal-status-${modal.id}`);
         if (statusElement) {
             statusElement.innerHTML = htmlMessage;
+        };
+        let r = await pywebview.api.get_attr('is_frozen');
+        if (!r) {
+            r = r && (await pywebview.api.get_attr('debug') === 'true')
+        };
+        if (r) {
+            const confirmButton = document.getElementById(`confirm-btn-${modal.id}`)
+            confirmButton.removeEventListener('click', doUpdate)
+            confirmButton.addEventListener('click', ()=>{
+                showMessage('当前版本不兼容自动下载');
+                modal.close()
+            })
         }
     }, 100);
 }

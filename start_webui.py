@@ -11,6 +11,10 @@ project_root = Path(__file__).parent
 print(project_root)
 sys.path.insert(0, str(project_root))
 
+debug = False
+
+
+
 def get_resource_path():
     """
     获取资源文件的绝对路径
@@ -31,6 +35,8 @@ def init_env():
     # 判断是否为打包环境
     is_frozen = hasattr(sys, 'frozen') or hasattr(sys, '_MEIPASS')
     os.environ['is_frozen'] = str(is_frozen).lower()
+    if debug:
+        os.environ['debug'] = 'true'
     if not is_frozen:
         os.environ['PATH'] += os.pathsep + str(project_root / 'code' / 'venv' / 'Scripts')
 

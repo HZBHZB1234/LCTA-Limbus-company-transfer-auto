@@ -50,6 +50,7 @@ class LCTA_API():
         self.is_frozen = os.getenv('is_frozen', 'false').lower() == 'true'
         self.log(f"当前运行环境: {'打包环境' if self.is_frozen else '开发环境'}")
         self.log(f"当前运行目录：{ os.getenv('path_') }")
+        self.debug = os.getenv('debug', '')
 
         self.TKIT_MACHINE = TKIT_MACHINE
         self.TKIT_MACHINE_OBJECT = TKIT_MACHINE_OBJECT

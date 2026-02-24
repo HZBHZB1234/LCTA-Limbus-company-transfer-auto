@@ -357,14 +357,23 @@ def decompress_by_extension(file_path, output_dir='.', logger_: LogManager=None)
     
 def get_steam_command():
     froze = os.getenv('is_frozen', '')
+    cwd = Path(os.getcwd())
     if froze == 'true':
-        this_launcher = list(Path(os.getcwd()).glob('LCTA*.exe'))[0]
+        this_launcher = list(cwd).glob('LCTA*.exe')[0]
     elif froze == 'false':
-        this_launcher = Path(os.getcwd()) / 'launcher.exe'
+        this_launcher = cwd / 'launcher.exe'
         if not this_launcher.exists():
             raise
     else:
-        raise
+        if os.getenv('debug', '') == 'true':
+            this_launcher = cwd / 'start_webui.py'
+            if not this_launcher.exists():
+                raise
+            if (cwd / 'venv').exists():
+                cmd = f'"{cwd / "venv" / "Scripts" / "python.exe"}" "{this_launcher}" -launcher %command%'
+                return cmd
+        else:
+            raise
     cmd = f'"{this_launcher}" -launcher %command%'
     return cmd
 

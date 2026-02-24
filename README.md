@@ -38,10 +38,7 @@
 ## 从源码安装 (不推荐)
 1. 确保已安装 [Python3.96](https://www.python.org/downloads) 及以上版本python
 2. 下载项目源码
-3. 运行 `pip install -r requirements.txt` 安装依赖
-4. 运行 **start_webui.py**
-  > 为加速启动速度，请运行[.github\InitCode.py](https://github.com/HZBHZB1234/LCTA/blob/main/.github/InitCode.py)以本地化网络资源  
-  > **注：** 运行 **InitCode.py** 时请确保已安装 **requests** 模块  
+3. 运行 `build.ps1` 以初始化代码。根据指引完成操作
 
 ---
 

@@ -361,10 +361,6 @@ def get_steam_command():
     if froze == 'true':
         this_launcher = list(cwd).glob('LCTA*.exe')[0]
     elif froze == 'false':
-        this_launcher = cwd / 'launcher.exe'
-        if not this_launcher.exists():
-            raise
-    else:
         if os.getenv('debug', '') == 'true':
             this_launcher = cwd / 'start_webui.py'
             if not this_launcher.exists():
@@ -373,7 +369,11 @@ def get_steam_command():
                 cmd = f'"{cwd / "venv" / "Scripts" / "python.exe"}" "{this_launcher}" -launcher %command%'
                 return cmd
         else:
-            raise
+            this_launcher = cwd / 'launcher.exe'
+            if not this_launcher.exists():
+                raise
+    else:
+        raise
     cmd = f'"{this_launcher}" -launcher %command%'
     return cmd
 

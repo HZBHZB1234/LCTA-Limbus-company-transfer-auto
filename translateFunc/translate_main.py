@@ -5,6 +5,7 @@ import sys
 import shutil
 import logging
 import re
+import os
 from dataclasses import dataclass, field
 from copy import deepcopy
 from contextlib import suppress
@@ -813,7 +814,12 @@ class FileProcessor:
         self.matcher = matcher
         self.logger = logger
         self.request_config = request_config
-
+        self._dump = os.getenv('DUMP', 'False').lower() == 'true'
+        
+    def dump(self, content):
+        if self._dump:
+            self.logger.debug(content)
+        
     def process_file(self):
         # 1. 加载JSON文件
         # 创建成员变量：self.kr_json, self.en_json, self.jp_json, self.llc_json
@@ -863,6 +869,7 @@ class FileProcessor:
             "jp": self._get_translating_text('jp'),
             "en": self._get_translating_text('en')
         }
+        self.dump(request_text)
         
         # 8. 根据配置选择翻译构建器并进行翻译
         # 创建变量：builder, request_texts, result
@@ -873,6 +880,7 @@ class FileProcessor:
                                         self.request_config, self.formal_flatten_item)
             # 构建统一请求结构
             request_text = builder.build()
+            self.dump(request_text)
         
             # 获取分割后的请求文本（可能因文本过长而分割成多个部分）
             request_texts = builder.get_request_text()
@@ -887,6 +895,8 @@ class FileProcessor:
                 # result_part: 字符串类型，翻译器返回的翻译结果
                 result_part = self.request_config.translator.translate(
                     request_part, timeout=timeout)
+                
+                self.dump(result_part)
                 
                 # 根据格式解析结果
                 if self.request_config.is_text_format:
@@ -914,10 +924,12 @@ class FileProcessor:
                 from_lang=self.request_config.from_lang)
             # 调用翻译器进行批量翻译
             result = self.request_config.translator.translate(request_texts)
+            self.dump(result)
             self.logger.info(f"获得 {len(result)} 条结果")
             
         try:
             translated_text = builder.deBuild(result)
+            self.dump(translated_text)
         except StopIteration:
             self.logger.warning(f"翻译结果还原时出现问题：返回值长度问题")
             self._save_except()
@@ -951,8 +963,9 @@ class FileProcessor:
             except FileNotFoundError:
                 self.logger.warning(f"{self.path_config.real_name}不存在llc文件，使用空文件")
                 self.llc_json = {}
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             self.logger.warning(f"{self.path_config.real_name}文件解析错误，跳过")
+            self.logger.exception(e)
             self._save_except()
             raise ProcesserExit("json_decode_error")
 
@@ -980,7 +993,8 @@ class FileProcessor:
                 except:
                     try:
                         self._save_kr()
-                    except:
+                    except Exception as e:
+                        self.logger.exception(e)
                         self.logger.error(f"保存文件{self.path_config.real_name}，请检查文件路径")
                         raise ProcesserExit("save_except_except")
     
@@ -991,7 +1005,8 @@ class FileProcessor:
             with open(self.path_config.target_file, 'w', encoding='utf-8-sig') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=4)
                 raise ProcesserExit("success_save")
-        except:
+        except Exception as e:
+            self.logger.exception(e)
             raise ProcesserExit("success_save_error")
             
     def _check_empty(self):

@@ -46,6 +46,10 @@ def translate_main(modal_id, logger_: LogManager,
         HAS_PREFIX = configs.get("has_prefix", True) or not enable_dev_settings
         is_llm = translator_text == "LLM通用翻译服务"
         api_settings = translator_config.get(translator_text, {})
+        dump = os.getenv('DUMP', 'False').lower() == 'true'
+        def dump(content):
+            if dump:
+                logger_.log(content)
         
         game_path = Path(whole_configs.get("game_path", ""))
         
@@ -79,6 +83,7 @@ def translate_main(modal_id, logger_: LogManager,
         
         if is_llm:
             translate_config.text_max_length = 20000
+            translate_config.max_workers = 1
             
         with protect_secret():
             translator: TranslatorBase = translator(translate_config)
@@ -104,6 +109,7 @@ def translate_main(modal_id, logger_: LogManager,
             JP_base_path=jp_path,
             EN_base_path=en_path
         )
+        dump(base_path_config)
         
         request_config = RequestConfig(
             enable_proper=True,
@@ -118,6 +124,7 @@ def translate_main(modal_id, logger_: LogManager,
         
         base_path_config.create_need_dirs()
         target_files = list(base_path_config.KR_base_path.rglob("*.json"))
+        dump(target_files)
         len_target_file = len(target_files)
         logger_.log(f"找到 {len_target_file} 个文件。")
         logger_.log_modal_process(f"找到 {len_target_file} 个文件。", modal_id)

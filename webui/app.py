@@ -260,6 +260,8 @@ class LCTA_API():
         """开始翻译"""
         try:
             self.add_modal_log("开始翻译...", modal_id)
+            os.environ['DUMP'] = str(self.config.get('ui_default', {}).get('translator', {})
+                                  .get('dump', False)).lower()
             translate_main(modal_id, self.log_manager,
                            self.config, translator_config,
                            formating_function=self.format_api_settings)
@@ -785,7 +787,7 @@ class LCTA_API():
         }}
         """
         try:
-            self._window.run_js(js_code)
+            self._window.evaluate_js(js_code)
         except Exception as e:
             self.log(f"设置模态窗口状态失败: {e}")
             self.log_error(e)
@@ -806,7 +808,7 @@ class LCTA_API():
         }}
         """
         try:
-            self._window.run_js(js_code)
+            self._window.evaluate_js(js_code)
         except Exception as e:
             self.log(f"添加模态窗口日志失败: {e}")
             self.log_error(e)
@@ -827,7 +829,7 @@ class LCTA_API():
         }}
         """
         try:
-            self._window.run_js(js_code)
+            self._window.evaluate_js(js_code)
         except Exception as e:
             self.log(f"更新模态窗口进度失败: {e}")
             self.log_error(e)

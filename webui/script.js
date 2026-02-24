@@ -186,6 +186,7 @@ class ConfigManager {
             "jp-path": "ui_default.translator.jp_path",
             "llc-path": "ui_default.translator.llc_path",
             "has-prefix": "ui_default.translator.has_prefix",
+            "dump-translation": "ui_default.translator.dump",
             
             // 安装设置
             'install-package-directory': 'ui_default.install.package_directory',

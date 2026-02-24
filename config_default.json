@@ -15,7 +15,8 @@
             "kr_path": "",
             "jp_path": "",
             "llc_path": "",
-            "has_prefix": true
+            "has_prefix": true,
+            "dump": false
         },
         "install":{
             "package_directory": ""

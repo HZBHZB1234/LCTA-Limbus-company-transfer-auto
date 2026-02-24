@@ -91,7 +91,6 @@ jobs:
       run: |
         python -m venv venv
         .\venv\Scripts\activate
-        Remove-Item -Path venv/Scripts -Recurse -Force
         python -m pip install pip --upgrade
         pip install -r LCTA\requirements.txt
     - name: Install Embedded Python

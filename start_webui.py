@@ -25,14 +25,19 @@ def get_resource_path():
     
     return base_path
 
+def init_env():
+    """初始化环境变量"""
+    os.environ['path_'] = str(get_resource_path())
+    # 判断是否为打包环境
+    is_frozen = hasattr(sys, 'frozen') or hasattr(sys, '_MEIPASS')
+    os.environ['is_frozen'] = str(is_frozen).lower()
+    if not is_frozen:
+        os.environ['PATH'] += os.pathsep + str(project_root / 'code' / 'venv' / 'Scripts')
+
 def start_webui():
     """启动PyWebGUI界面"""
     try:
-        # 将资源路径添加到环境变量，供app.py使用
-        os.environ['path_'] = str(get_resource_path())
-        # 判断是否为打包环境
-        is_frozen = hasattr(sys, 'frozen') or hasattr(sys, '_MEIPASS')
-        os.environ['is_frozen'] = str(is_frozen).lower()
+        init_env()
         
         from webui.app import main
         print("正在启动LCTA WebUI...")
@@ -46,11 +51,8 @@ def start_webui():
 def start_launcher():
     """启动Launcher界面"""
     try:
-        os.environ['path_'] = str(get_resource_path())
+        init_env()
         os.environ['steam_argv'] = ' '.join(sys.argv[1:].remove('-launcher')) if len(sys.argv) >=3 else ''
-        # 判断是否为打包环境
-        is_frozen = hasattr(sys, 'frozen') or hasattr(sys, '_MEIPASS')
-        os.environ['is_frozen'] = str(is_frozen).lower()
         
         from launcher.main import main
         print("正在启动LCTA Launcher...")

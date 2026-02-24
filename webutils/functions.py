@@ -229,7 +229,7 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
                     logger_.log(f"文件未创建: {save_path}")
                     raise FileNotFoundError(f"文件未创建: {save_path}")
             else:
-                logger_.log(f"下载失败 (URL {i+1}/{len_proxies}): {e}")
+                logger_.log(f"下载失败 (URL {i+1}/{len_proxies})")
             
         except Exception as e:
             logger_.log(f"下载失败 (URL {i+1}/{len_proxies}): {e}")
@@ -333,9 +333,10 @@ def get_cache_font(config: dict = {}, logger_: LogManager = LogManager()) -> str
                     font_assets_seven, Path(temp_dir) / 'font.7z',
                     chunk_size=1024 * 100, logger_=logger_
                     )
-                    decompress_7z(Path(temp_dir) / 'font.7z',
+                    r = decompress_7z(Path(temp_dir) / 'font.7z',
                                   config.get('cache_path', '.'), logger_)
-                    return get_cache_font(config, logger_)
+                    if r:
+                        return get_cache_font(config, logger_)
             except Exception as e:
                 logger_.log_error(e)
                 return cache_normal

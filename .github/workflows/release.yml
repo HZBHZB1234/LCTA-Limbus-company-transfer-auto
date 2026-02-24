@@ -91,6 +91,7 @@ jobs:
       run: |
         python -m venv venv
         .\venv\Scripts\activate
+        Remove-Item -Path venv/Scripts -Recurse -Force
         python -m pip install pip --upgrade
         pip install -r LCTA\requirements.txt
     - name: Install Embedded Python
@@ -99,7 +100,6 @@ jobs:
         New-Item -ItemType Directory -Path venv/Bins
         Expand-Archive -Path ../python.zip -DestinationPath venv/Bins
         Add-Content -Path venv/Bins/*._pth -Value "import site"
-        Remove-Item -Path venv/Scripts -Recurse -Force
     
     - name: copy files
       run: |

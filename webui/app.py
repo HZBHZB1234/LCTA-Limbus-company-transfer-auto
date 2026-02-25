@@ -9,6 +9,7 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 import shutil
 import threading
+import zipfile
 import atexit
 from contextlib import suppress
 from typing import Optional, List, Dict, TYPE_CHECKING
@@ -118,7 +119,19 @@ class LCTA_API():
             if self.config.get('game_path', ''):
                 cache_path = Path(self.config.get('cache_path', '')) / 'ChineseFont.ttf'
                 if not cache_path.exists():
-                    shutil.copy2(get_cache_font(self.config, self.log_manager), cache_path)   
+                    shutil.copy2(get_cache_font(self.config, self.log_manager), cache_path)  
+                    
+    def init_log(self):
+        for i in Path('logs').glob('app.log.*'):
+            if i.name.endswith('.zip'):
+                continue
+            try:
+                with zipfile.ZipFile(f'{i.name}.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    zipf.write(i, arcname=i.name)
+                i.unlink()
+            except Exception as e:
+                self.log(f"压缩日志文件 {i} 时出错: {e}")
+                self.log_error(e)
 
     def use_inner(self):
         """使用默认配置并保存"""

@@ -70,9 +70,6 @@ function main {
                 Write-Error '创建虚拟环境失败'
                 return 1
             }
-        } else {
-            Write-Error '虚拟环境不存在，且用户选择不创建，退出'
-            return 1
         }
     } else {
         try {

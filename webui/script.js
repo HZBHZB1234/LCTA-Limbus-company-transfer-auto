@@ -4109,6 +4109,8 @@ window.addEventListener('pywebviewready', function() {
                 }
             );
 
+            pywebview.api.init_log();
+
             const current_theme = configManager.getCachedValue('theme') || 'light';
             themeManager.setTheme(current_theme, true);
 

@@ -1639,6 +1639,7 @@ class ModalWindow {
         this.isMinimized = false;
         this.isCompleted = false;
         this.isPaused = false;
+        this.percent = 0
         this.options = {
             showProgress: false,
             showCancelButton: true,
@@ -1696,6 +1697,7 @@ class ModalWindow {
         modalContainer.appendChild(this.element);
         
         this.bindEvents();
+        this.updateProgress(0);
     }
     
     getFooterButtons() {
@@ -1783,6 +1785,7 @@ class ModalWindow {
     }
     
     updateProgress(percent, text = '') {
+        this.percent = percent
         const progressFill = document.getElementById(`modal-progress-fill-${this.id}`);
         if (progressFill) {
             progressFill.style.width = percent + '%';
@@ -1895,6 +1898,7 @@ class ModalWindow {
         
         minimizedContainer.appendChild(minimizedElement);
         this.element.style.display = 'none';
+        this.syncProgressToMinimized(this.percent);
     }
     
     restoreFromMinimized() {

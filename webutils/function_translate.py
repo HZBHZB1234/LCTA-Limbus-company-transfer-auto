@@ -46,9 +46,9 @@ def translate_main(modal_id, logger_: LogManager,
         HAS_PREFIX = configs.get("has_prefix", True) or not enable_dev_settings
         is_llm = translator_text == "LLM通用翻译服务"
         api_settings = translator_config.get(translator_text, {})
-        dump = os.getenv('DUMP', 'False').lower() == 'true'
+        _dump = os.getenv('DUMP', 'False').lower() == 'true'
         def dump(content):
-            if dump:
+            if _dump:
                 logger_.log(content)
         
         game_path = Path(whole_configs.get("game_path", ""))

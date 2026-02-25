@@ -2075,8 +2075,8 @@ class ProgressModal extends ModalWindow {
     }
     
     cancel() {
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_modal_cancel) {
-            pywebview.api.handle_modal_cancel(this.id)
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.set_modal_running) {
+            pywebview.api.set_modal_running(this.id, 'cancel')
                 .catch(function(error) {
                     console.error('处理取消操作失败:', error);
                 });
@@ -2086,8 +2086,8 @@ class ProgressModal extends ModalWindow {
     }
     
     pause() {
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_modal_pause) {
-            pywebview.api.handle_modal_pause(this.id)
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.set_modal_running) {
+            pywebview.api.set_modal_running(this.id, 'pause')
                 .catch(function(error) {
                     console.error('处理暂停操作失败:', error);
                 });
@@ -2097,8 +2097,8 @@ class ProgressModal extends ModalWindow {
     }
     
     resume() {
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_modal_resume) {
-            pywebview.api.handle_modal_resume(this.id)
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.set_modal_running) {
+            pywebview.api.set_modal_running(this.id, 'running')
                 .catch(function(error) {
                     console.error('处理恢复操作失败:', error);
                 });

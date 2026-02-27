@@ -126,7 +126,7 @@ class LCTA_API():
             if i.name.endswith('.zip'):
                 continue
             try:
-                with zipfile.ZipFile(f'{i.name}.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
+                with zipfile.ZipFile((Path('logs') / f'{i.name}.zip'), 'w', zipfile.ZIP_DEFLATED) as zipf:
                     zipf.write(i, arcname=i.name)
                 i.unlink()
             except Exception as e:

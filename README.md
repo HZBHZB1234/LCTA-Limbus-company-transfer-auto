@@ -1,6 +1,7 @@
 # 🧰 LCTA - 边狱公司工具箱 (Limbus Company Transfer Auto)
 
 一个功能全面的《边狱公司》游戏辅助工具集，提供汉化、管理、优化等一系列自动化功能。
+<img src='https://moe.8845.top/get/?name=LCTA&theme=moebooru'></img>
 
 ---
 
@@ -69,7 +70,7 @@
 
 ### 作者与社区
 - **B站主页**：[ygdtpnn](https://space.bilibili.com/3493119444126599)  
-- **最新介绍视频**：[LCTA 工具箱演示](https://www.bilibili.com/video/BV1v54y1X7jY)  
+- **最新介绍视频**：[LCTA 工具箱演示](https://www.bilibili.com/video/BV1iuAUzHEmA)  
   > ⚠️ 注：视频可能非最新，请以项目实际版本为准
 - **GitHub 作者**：[HZBHZB1234](https://github.com/HZBHZB1234)
 - **意见反馈**：[Issues 页面](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues)

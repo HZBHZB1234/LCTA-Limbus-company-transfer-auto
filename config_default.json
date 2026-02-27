@@ -39,6 +39,7 @@
         },
         "bubble": {
             "color": false,
+            "llc": false,
             "install": false
         },
         "manage": {

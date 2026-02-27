@@ -210,6 +210,7 @@ class ConfigManager {
 
             // 气泡文本mod配置
             'bubble-color': 'ui_default.bubble.color',
+            'bubble-llc': 'ui_default.bubble.llc',
             'bubble-install': 'ui_default.bubble.install',
 
             // 安装数据管理设置

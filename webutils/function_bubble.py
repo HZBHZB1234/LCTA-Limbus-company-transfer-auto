@@ -46,25 +46,15 @@ def get_direct_download(file_id):
     
 def download_bubble(modal_id, logger_: LogManager, save_path: Path, color, llc, filelists):
     color = '彩色' if color else '无色'
-    file = [i for i in filelists if (color in i['name_all'] and '替换' in i['name_all'])][0]
-    url = get_direct_download(file['id'])
-    if llc:
+    files = [i for i in filelists if (color in i['name_all'] and '替换' in i['name_all'])]
+    if not llc:
+        url = get_direct_download([file for file in files if '无随机' in file['name_all']][0]['id'])
         download_with(url, save_path / 'bubble_mod.zip', logger_=logger_,
                         modal_id=modal_id, validate=False)
     else:
-        with tempfile.TemporaryDirectory() as tmp:
-            temp_dir = Path(tmp)
-            download_with(url, temp_dir / 'download.zip', logger_=logger_,
-                            modal_id=modal_id, validate=False)
-            _folder = temp_dir / 'tmp'
-            with zipfile.ZipFile(temp_dir / 'download.zip', 'r') as f:
-                f.extractall(_folder)
-            (_folder / 'BattleHint.json').unlink()
-            with zipfile.ZipFile(save_path / 'bubble_mod.zip', 'w') as f:
-                for i in _folder.iterdir():
-                    f.write(i, arcname=i.name)
-
-
+        url = get_direct_download([file for file in files if not '无随机' in file['name_all']][0]['id'])
+        download_with(url, save_path / 'bubble_mod.zip', logger_=logger_,
+                        modal_id=modal_id, validate=False)
                     
 def install_bubble_mod(mod_path: Path, lang_path: Path):
     config_path = lang_path / 'config.json'

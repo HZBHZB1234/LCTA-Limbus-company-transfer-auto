@@ -52,7 +52,11 @@ def start_webui():
     except Exception as e:
         print(f"启动WebUI时发生错误: {e}")
         import traceback
-        traceback.print_exc()
+        exc = traceback.format_exc()
+        print(exc)
+        _log = Path(os.getcwd()) / 'logs' / 'app.log'
+        with open(_log, '+a' if _log.exists() else '+w') as f:
+            f.write(exc)
 
 def start_launcher():
     """启动Launcher界面"""

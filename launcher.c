@@ -15,7 +15,6 @@ int run_python_script(const char* python_path, const char* script_path);
 void show_error_message(const char* title, const char* message);
 void set_steam_argv(int argc, char* argv[], int launcher_index);
 int calculate_file_hash(const char* file_path, char* hash_hex, size_t hex_size);
-int verify_embedded_python();
 
 #define EXPECTED_PYTHON_HASH "0fe699e2cb61a2cbe449a34eee56bd6175fbeb6ee7dc1261b0c338574c010d2b"
 
@@ -23,13 +22,16 @@ int main(int argc, char* argv[]) {
     printf("Starting LCTA Launcher...\n");
     
     // 检查命令行参数
+    int is_debug = 0;
     int show_console = 0;
     char script_name[MAX_PATH] = "code\\start_webui.py";
     
     int launcher_index = -1;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-launcher") == 0) {
-            show_console = 1;  // 显示控制台窗口
+            if (!is_debug) {
+                show_console = 1;  // 显示控制台窗口
+            };
             strcpy(script_name, "code\\launcher\\main.py");
             launcher_index = i; // 记录-launcher参数的位置
             printf("Launcher mode detected, starting launcher GUI...\n");
@@ -97,6 +99,11 @@ int main(int argc, char* argv[]) {
     SetEnvironmentVariable("PYTHONUNBUFFERED", "1");
     SetEnvironmentVariable("PYTHONIOENCODING", "utf-8");
     SetEnvironmentVariable("__version__", "4.1.3");
+    if (is_debug) {
+        SetEnvironmentVariable("__debug_exe__", "true");
+    } else {
+        SetEnvironmentVariable("__debug_exe__", "false");
+    };
     
     // 5. 构建脚本路径
     char script_path[MAX_PATH];

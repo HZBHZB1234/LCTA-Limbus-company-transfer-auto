@@ -30,8 +30,15 @@ release_note = r + '\n' + ABOUT
 Path('update.md').write_text(release_note, encoding='utf-8')
 print('生成更新日志成功')
 
-print('开始复制图标文件')
+print('开始创建debug.c')
 os.chdir(projext_path)
+path_debug = Path(projext_path) / "launcher_debug.c"
+shutil.copy2("launcher.c", path_debug)
+path_debug.write_text(path_debug.read_text(encoding='utf-8').replace(
+    'int is_debug = 0;', 'int is_debug = 1;'),
+                       encoding='utf-8')
+
+print('开始复制图标文件')
 shutil.copy2("favicon.ico", "webui/favicon.ico")
 print('复制图标文件完成')
 

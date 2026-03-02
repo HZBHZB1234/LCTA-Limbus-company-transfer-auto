@@ -44,6 +44,13 @@ def start_webui():
     """启动PyWebGUI界面"""
     try:
         init_env()
+        try:
+            import clr
+            print('clr导入成功，使用netfx')
+        except Exception as e:
+            print(f'clr使用netfx导入失败: {e}')
+            os.environ['PYTHONNET_RUNTIME']='coreclr'
+            import clr
         
         from webui.app import main
         print("正在启动LCTA WebUI...")
@@ -57,6 +64,8 @@ def start_webui():
         _log = Path(os.getcwd()) / 'logs' / 'app.log'
         with open(_log, '+a' if _log.exists() else '+w') as f:
             f.write(exc)
+        if os.getenv('__debug_exe__', 'false') == 'true':
+            input('回车键以退出...')
 
 def start_launcher():
     """启动Launcher界面"""

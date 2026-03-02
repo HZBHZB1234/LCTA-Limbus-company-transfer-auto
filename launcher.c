@@ -29,15 +29,17 @@ int main(int argc, char* argv[]) {
     int launcher_index = -1;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-launcher") == 0) {
-            if (!is_debug) {
-                show_console = 1;  // 显示控制台窗口
-            };
+            show_console = 1;  // 显示控制台窗口
             strcpy(script_name, "code\\launcher\\main.py");
             launcher_index = i; // 记录-launcher参数的位置
             printf("Launcher mode detected, starting launcher GUI...\n");
             break;
         }
-    }
+    };
+
+    if (is_debug) {
+        show_console = 1;
+    };
     
     // 根据参数决定是否隐藏控制台窗口
     HWND console = GetConsoleWindow();

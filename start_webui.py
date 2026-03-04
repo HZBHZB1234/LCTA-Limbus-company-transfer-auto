@@ -44,6 +44,9 @@ def start_webui():
     """启动PyWebGUI界面"""
     try:
         init_env()
+        if os.getenv('__debug_exe__', 'false') == 'true':
+            os.environ['COREHOST_TRACE'] = 1
+            os.environ["COREHOST_TRACEFILE"] = "hostfxr.log"
         try:
             import clr
             print('clr导入成功，使用netfx')
@@ -61,10 +64,19 @@ def start_webui():
         import traceback
         exc = traceback.format_exc()
         print(exc)
-        _log = Path(os.getcwd()) / 'logs' / 'app.log'
+        print(e)
+        _log = Path(os.getcwd()) / 'logs'
+        _log.mkdir(exist_ok=True)
+        _log = _log / 'app.log'
         with open(_log, '+a' if _log.exists() else '+w') as f:
             f.write(exc)
+        print(os.getenv('__debug_exe__', 'false'))
         if os.getenv('__debug_exe__', 'false') == 'true':
+            import webutils.debug_environ_test as test
+            try:
+                test.main()
+            except Exception as e:
+                traceback.print_exc()
             input('回车键以退出...')
 
 def start_launcher():
@@ -87,7 +99,12 @@ def start_launcher():
 
 if __name__ == "__main__":
     # 检查命令行参数
-    if "-launcher" in sys.argv:
-        start_launcher()
-    else:
-        start_webui()
+    try:
+        if "-launcher" in sys.argv:
+            start_launcher()
+        else:
+            start_webui()
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        input('未知神秘错误')

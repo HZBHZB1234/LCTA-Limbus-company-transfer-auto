@@ -45,12 +45,27 @@
 
 ## 📅 开发计划 (TODO)
 
+- 添加 C 盘链接创建功能  
+- 修复汉化相关非预期日志问题
+- 修复汉化相关非预期漏翻问题
+- 添加专有名词分析功能
+- 添加运行环境自动诊断
 - 统一配置与函数调用逻辑  
 - 统一日志逻辑，使用单例化日志管理器  
 - 添加 MOD 制作工具  
-- 添加 C 盘链接创建功能  
 - 集成letheLauncher功能
-- 下载气泡自动Fallback
+- 使用vue重构webui
+<details>
+  <summary>点击展开已完成功能</summary>
+  <ul>
+    <li>下载气泡自动Fallback</li>
+  </ul>
+</details>
+<details>
+  <summary>点击展开已放弃功能</summary>
+  <ul>
+  </ul>
+</details>
 
 ---
 

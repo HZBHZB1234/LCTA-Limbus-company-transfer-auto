@@ -145,8 +145,8 @@ def check_path(path: Path):
     
 def check_symlink():
     return {
-        'unity': check_path(UNITY),
-        'PM': check_path(PM)
+        'Unity': check_path(UNITY),
+        'ProjectMoon': check_path(PM)
     }
     
 def open_explorer(path):

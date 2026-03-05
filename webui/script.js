@@ -521,7 +521,7 @@ function initNavigation() {
                     if (sectionId === 'manage-section') {
                         refreshInstalledPackageList();
                         refreshInstalledModList();
-                        loadSymlinkStatus();
+                        refreshSymlink();
                     }
 
                     if (sectionId !== 'test-section') {
@@ -1577,43 +1577,37 @@ function copySteamPath() {
 }
 
 // 浏览安装界面的汉化包目录
-function browseInstallPackageDirectory() {
-    pywebview.api.browse_folder('install-package-directory').then(function(result) {
-        const packageDirInput = document.getElementById('install-package-directory');
-        if (packageDirInput && result) {
-            packageDirInput.value = result;
-            configManager.updateConfigValue('install-package-directory', result)
-                .then(() => {
-                    refreshInstallPackageList();
-                });
-        }
-    }).catch(function(error) {
-        showMessage('错误', '浏览文件夹时发生错误: ' + error);
-    });
+async function browseInstallPackageDirectory() {
+    const result = await pywebview.api.browse_folder('install-package-directory');
+    const packageDirInput = document.getElementById('install-package-directory');
+    if (packageDirInput && result) {
+        packageDirInput.value = result;
+        await configManager.updateConfigValue('install-package-directory', result);
+        await configManager.flushPendingUpdates();
+        refreshInstallPackageList();
+    }
 }
 
 // 清空汉化包目录输入框
-function clearPackageDirectory() {
+async function clearPackageDirectory() {
     const packageDirInput = document.getElementById('install-package-directory');
     if (packageDirInput) {
         packageDirInput.value = '';
-        configManager.updateConfigValue('install-package-directory', '')
-            .then(() => {
-                refreshInstallPackageList();
-            });
+        await configManager.updateConfigValue('install-package-directory', '');
+        await configManager.flushPendingUpdates();
+        refreshInstallPackageList();
     }
 }
 
 // 浏览安装界面的汉化包目录
 function browseInstallModDirectory() {
-    pywebview.api.browse_folder('installed-mod-directory').then(function(result) {
+    pywebview.api.browse_folder('installed-mod-directory').then(async function(result) {
         const modDirInput = document.getElementById('installed-mod-directory');
         if (modDirInput && result) {
             modDirInput.value = result;
-            configManager.updateConfigValue('installed-mod-directory', result)
-                .then(() => {
-                    refreshInstalledModList();
-                });
+            await configManager.updateConfigValue('installed-mod-directory', result);
+            await configManager.flushPendingUpdates();
+            refreshInstalledModList();
         }
     }).catch(function(error) {
         showMessage('错误', '浏览文件夹时发生错误: ' + error);
@@ -1621,14 +1615,13 @@ function browseInstallModDirectory() {
 }
 
 // 清空汉化包目录输入框
-function clearModDirectory() {
+async function clearModDirectory() {
     const modDirInput = document.getElementById('installed-mod-directory');
     if (modDirInput) {
         modDirInput.value = '';
-        configManager.updateConfigValue('installed-mod-directory', '')
-            .then(() => {
-                refreshInstalledModList();
-            });
+        await configManager.updateConfigValue('installed-mod-directory', '');
+        await configManager.flushPendingUpdates();
+        refreshInstalledModList();
     }
 }
 
@@ -3020,47 +3013,157 @@ async function deleteSelectedMod() {
     );
 }
 
+/**
+ * 支持自定义动作按钮的列表管理器
+ * 继承自 ItemListManager，在每个列表项的选中按钮左侧添加一个可配置文本和回调的按钮
+ * @param {string} containerId - 容器元素ID
+ * @param {Object} options - 配置选项
+ * @param {string|function} options.actionButtonText - 按钮显示文本，可以是字符串或接收 item 返回字符串的函数
+ * @param {function} options.actionButtonCallback - 按钮点击回调，接收当前 item 作为参数
+ * @param {function} options.onSelect - 选中回调 (item) => {}
+ * @param {string} options.emptyMessage - 列表为空时显示的提示
+ * @param {string} options.itemIcon - 项目图标类名
+ */
+class ActionButtonItemListManager extends ItemListManager {
+    constructor(containerId, options = {}) {
+        super(containerId, options);
+        this.actionButtonText = options.actionButtonText || null;
+        this.actionButtonCallback = options.actionButtonCallback || null;
+    }
+
+    /**
+     * 获取条目的显示名称（支持字符串或对象）
+     * @param {string|Object} item
+     * @returns {string}
+     */
+    _getDisplayName(item) {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') {
+            // 优先使用 displayName 或 name 属性，否则转为字符串
+            return item.displayName || item.name || String(item);
+        }
+        return String(item);
+    }
+
+    /**
+     * 重写列表项 DOM 创建方法，添加自定义动作按钮
+     */
+    _createItemElement(item) {
+        const displayName = this._getDisplayName(item);
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'list-item';
+        if (this.selectedItem === item) {
+            itemDiv.classList.add('selected');
+            itemDiv.setAttribute('data-selected', 'true');
+        }
+
+        // 构建操作区域 HTML
+        let actionsHtml = '<div class="list-item-actions">';
+
+        // 如果配置了动作按钮，添加动作按钮
+        if (this.actionButtonText && this.actionButtonCallback) {
+            const buttonText = typeof this.actionButtonText === 'function'
+                ? this.actionButtonText(item)
+                : this.actionButtonText;
+            actionsHtml += `
+                <button class="list-action-btn action-btn" title="${buttonText}" style="margin-right: 5px;">
+                    <span>${buttonText}</span>
+                </button>
+            `;
+        }
+
+        // 添加原有的选择按钮
+        actionsHtml += `
+            <button class="list-action-btn select-btn" title="选择">
+                <i class="fas fa-check"></i>
+            </button>
+        </div>`;
+
+        itemDiv.innerHTML = `
+            <div class="list-item-content">
+                <i class="fas ${this.itemIcon}"></i>
+                <span>${displayName}</span>
+            </div>
+            ${actionsHtml}
+        `;
+
+        // 绑定动作按钮事件（如果存在）
+        if (this.actionButtonText && this.actionButtonCallback) {
+            const actionBtn = itemDiv.querySelector('.action-btn');
+            actionBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.actionButtonCallback(item);
+            });
+        }
+
+        // 绑定选择按钮事件
+        const selectBtn = itemDiv.querySelector('.select-btn');
+        selectBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.setSelectedItem(item);
+            if (this.onSelect && typeof this.onSelect === 'function') {
+                this.onSelect(item);
+            }
+        });
+
+        // 点击条目内容区域（非按钮部分）也触发选中
+        itemDiv.addEventListener('click', (e) => {
+            if (e.target.closest('.list-action-btn')) {
+                return;
+            }
+            this.setSelectedItem(item);
+            if (this.onSelect && typeof this.onSelect === 'function') {
+                this.onSelect(item);
+            }
+        });
+
+        return itemDiv;
+    }
+}
+
 let symlinkStatus ;
 
 async function loadSymlinkStatus() {
-    const statusDiv = document.getElementById('symlink-status');
-    if (!statusDiv) return;
-
     try {
         const result = await pywebview.api.get_symlink_status();
-        if (!result.success) {
-            statusDiv.innerHTML = `<div class="list-empty">
-                <i class="fas fa-exclamation-triangle"></i>
-                <p>获取状态失败: ${result.message}</p>
-            </div>`;
-            return;
-        }
-
-        symlinkStatus = result.status;
-        let html = '<div class="list-container">';
-        html += '<div class="list-header"><span>目录</span><span>状态</span></div>';
-        html += '<div class="list-content">';
-
-        // Unity
-        html += `<div class="list-item">
-            <div class="list-item-content"><i class="fas fa-folder"></i> Unity</div>
-            <div>${formatSymlinkStatus(symlinkStatus.unity)}</div>
-        </div>`;
-        // ProjectMoon
-        html += `<div class="list-item">
-            <div class="list-item-content"><i class="fas fa-folder"></i> ProjectMoon</div>
-            <div>${formatSymlinkStatus(symlinkStatus.PM)}</div>
-        </div>`;
-
-        html += '</div></div>';
-        statusDiv.innerHTML = html;
+        symlinkStatus = result.success ? result.status : {} 
     } catch (error) {
-        statusDiv.innerHTML = `<div class="list-empty">
-            <i class="fas fa-exclamation-triangle"></i>
-            <p>加载状态时发生错误: ${error}</p>
-        </div>`;
         console.log(error);
+        addLogMessage(error);
     }
+}
+
+async function refreshSymlink() {
+    await loadSymlinkStatus();
+
+    const manager = new ActionButtonItemListManager('symlink-list', {
+        actionButtonText: (item) => {
+            let symlink = symlinkStatus[item];
+            switch (symlink) {
+                case 'not_exist':
+                    return '不存在'
+                case 'not_symlink':
+                    return '文件夹'
+                case 'symlink':
+                    return '软链接'
+                default:
+                    return '处理错误'
+            }
+        },
+        actionButtonCallback: (item) => {
+            console.log('交互:', item);
+            // 自定义操作，例如打开模态框
+        },
+        onSelect: (item) => {
+            console.log('选中:', item);
+        },
+        emptyMessage: '暂无数据',
+        itemIcon: 'fa-file'
+    });
+
+    manager.setItems(['ProjectMoon', 'Unity']);
 }
 
 function openPath(path) {
@@ -3068,37 +3171,6 @@ function openPath(path) {
     pywebview.api.run_func('open_explorer', path);
 }
 
-function formatSymlinkStatus(info) {
-    let buttonText = '';
-    let onClickCode = '';
-    const path = info.path; // 总是存在
-    const target = info.target; // 可能 undefined
-
-    switch (info.status) {
-        case 'not_exist':
-            buttonText = '不存在';
-            onClickCode = ''; // 不打开
-            break;
-        case 'not_symlink':
-            buttonText = '普通目录';
-            console.log(path);
-            onClickCode = `openPath(${JSON.stringify(path)})`;
-            break;
-        case 'symlink':
-            buttonText = `软链接`;
-            console.log(target);
-            onClickCode = `openPath(${JSON.stringify(target)})`; // 打开目标
-            break;
-        default:
-            buttonText = '未知';
-    }
-
-    if (onClickCode) {
-        return `<button class="action-btn small" onclick='${onClickCode}' style="padding: 4px 8px; font-size: 12px;">${buttonText}</button>`;
-    } else {
-        return `<span style="color: var(--color-warning);">${buttonText}</span>`;
-    }
-}
 
 async function createSymlink(folder) {
     const folderName = folder === 'unity' ? 'Unity' : 'ProjectMoon';

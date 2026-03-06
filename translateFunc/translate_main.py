@@ -1004,10 +1004,10 @@ class FileProcessor:
         try:
             with open(self.path_config.target_file, 'w', encoding='utf-8-sig') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=4)
-                raise ProcesserExit("success_save")
         except Exception as e:
             self.logger.exception(e)
             raise ProcesserExit("success_save_error")
+        raise ProcesserExit("success_save")
             
     def _check_empty(self):
         if self.kr_json in EMPTY_DATA or self.kr_json.get('dataList', []) in EMPTY_DATA_LIST:

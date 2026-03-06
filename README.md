@@ -46,7 +46,6 @@
 ## 📅 开发计划 (TODO)
 
 - 添加 C 盘链接创建功能  
-- 修复已安装数据管理页面汉化包相关功能未预期工作问题
 - 修复安装汉化包不会自动切换的问题
 - 优化新手指导
 - 添加美化功能
@@ -61,6 +60,7 @@
   <summary>点击展开已完成功能</summary>
   <ul>
     <li>下载气泡自动Fallback</li>
+    <li>修复已安装数据管理页面汉化包相关功能未预期工作问题</li>
   </ul>
 </details>
 <details>
@@ -75,13 +75,6 @@
     <li>修复汉化相关非预期漏翻问题</li>
   </ul>
 </details>
-
----
-
-## ❗ 已知问题
-
-> 目前所有已知问题已解决。  
-> 如遇到新问题，欢迎提交至 [Issues](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues)。
 
 ---
 

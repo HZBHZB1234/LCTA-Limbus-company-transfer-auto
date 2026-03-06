@@ -359,7 +359,7 @@ def get_steam_command():
     froze = os.getenv('is_frozen', '')
     cwd = Path(os.getcwd())
     if froze == 'true':
-        this_launcher = list(cwd).glob('LCTA*.exe')[0]
+        this_launcher = list(cwd.glob('LCTA*.exe'))[0]
     elif froze == 'false':
         if os.getenv('debug', '') == 'true':
             this_launcher = cwd / 'start_webui.py'

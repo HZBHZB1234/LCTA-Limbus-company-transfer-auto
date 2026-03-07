@@ -3135,13 +3135,15 @@ async function loadSymlinkStatus() {
     }
 }
 
+let symlinkManager;
+
 async function refreshSymlink() {
     await loadSymlinkStatus();
 
-    const manager = new ActionButtonItemListManager('symlink-list', {
+    symlinkManager = new ActionButtonItemListManager('symlink-list', {
         actionButtonText: (item) => {
             let symlink = symlinkStatus[item];
-            switch (symlink) {
+            switch (symlink.status) {
                 case 'not_exist':
                     return '不存在'
                 case 'not_symlink':
@@ -3154,7 +3156,19 @@ async function refreshSymlink() {
         },
         actionButtonCallback: (item) => {
             console.log('交互:', item);
-            // 自定义操作，例如打开模态框
+            let symlink = symlinkStatus[item];
+            switch (symlink.status) {
+                case 'not_exist':
+                    break;
+                case 'not_symlink':
+                    openPath(symlink.path);
+                    break;
+                case 'symlink':
+                    openPath(symlink.target);
+                    break;
+                default:
+                    showMessage('无法处理')
+            }
         },
         onSelect: (item) => {
             console.log('选中:', item);
@@ -3163,7 +3177,7 @@ async function refreshSymlink() {
         itemIcon: 'fa-file'
     });
 
-    manager.setItems(['ProjectMoon', 'Unity']);
+    symlinkManager.setItems(['ProjectMoon', 'Unity']);
 }
 
 function openPath(path) {
@@ -3172,56 +3186,103 @@ function openPath(path) {
 }
 
 
-async function createSymlink(folder) {
-    const folderName = folder === 'unity' ? 'Unity' : 'ProjectMoon';
-    if (symlinkStatus[folder].status === 'symlink') {
-        showConfirm('是否要更换软链接目标？',
-            `您已经创建了一个可用的软链接，它的目录是 ${symlinkStatus[folder].target}，是否更换目录？
-            如果您确认继续，请选择您想要更换的目标路径`,
-            async function() {
-                const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
-                if (!targetDir || targetDir.length === 0) return;
-            },
-            function() {}
-        )
-    }
+async function createSymlink() {
+    const folderName = symlinkManager.getSelectedItem();
+    const folder = symlinkStatus[folderName];
     try {
-        const result = await pywebview.api.create_symlink(folder, targetDir);
-        if (result.success) {
-            modal.complete(true, result.message);
-            // 刷新状态
-            loadSymlinkStatus();
+        if (folder.status === 'symlink') {
+            showConfirm('是否要更换软链接目标？',
+                `您已经创建了一个可用的软链接，它的目录是 ${folder.target}，是否更换目录？
+                如果您确认继续，请选择您想要更换的目标路径`,
+                async function() {
+                    const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
+                    if (!targetDir || targetDir.length === 0) return;
+                    const hasContent = await pywebview.api.run_func('evaluate_path', targetDir);
+                    async function doCreate() {
+                        await pywebview.api.run_func('remove_symlink', folder.path);
+                        await pywebview.api.run_func('create_symlink', targetDir, folder.path);
+                        await pywebview.api.move_folders(folder.target, targetDir);
+                        refreshSymlink();
+                    };
+                    if (hasContent) {
+                        showConfirm('警告', `目标文件夹中含有文件。可能出现非预期行为。
+                            如果你确定知道自己在做什么，请点击确定`,
+                        doCreate, () => {})
+                    } else {
+                        doCreate();
+                    };
+                },
+                () => {}
+            )
+        } else if (folder.status === 'not_symlink') {
+            showConfirm('是否要创建软链接？',
+                `如果您确认继续，请选择您想要把数据放在的文件夹`,
+                async function() {
+                    const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
+                    if (!targetDir || targetDir.length === 0) return;
+                    const hasContent = await pywebview.api.run_func('evaluate_path', targetDir);
+                    async function doCreate() {
+                        await pywebview.api.move_folders(folder.path, targetDir);
+                        await pywebview.api.run_func('remove_symlink', folder.path);
+                        await pywebview.api.run_func('create_symlink', targetDir, folder.path);
+                        refreshSymlink();
+                    };
+                    if (hasContent) {
+                        showConfirm('警告', `目标文件夹中含有文件。可能出现非预期行为。
+                            如果你确定知道自己在做什么，请点击确定`,
+                        doCreate, () => {})
+                    } else {
+                        doCreate();
+                    };
+                },
+                () => {}
+            )
+        } else if (folder.status === 'not_exist') {
+            showConfirm('创建软链接',
+                '现在对应位置没有目录，如果您先前手动迁移了数据，那么点击是以创建软链接',
+                () => {
+                    showMessage('提示', '请选择您先前迁移的文件夹',
+                        async ()=> {
+                            const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
+                            if (!targetDir || targetDir.length === 0) return;
+                            await pywebview.api.run_func('create_symlink', targetDir, folder.path);
+                            refreshSymlink();
+                        }
+                    )
+                },
+            ()=>{});
         } else {
-            modal.complete(false, result.message);
-        }
+            showMessage('警告', '请先确保文件正确已安装');
+        };
     } catch (error) {
-        modal.complete(false, `操作失败: ${error}`);
-    }
+        showMessage('错误', `创建软链接时发生错误
+            ${error}`);
+    };
 }
 
-async function removeSymlink(folder) {
-    const folderName = folder === 'unity' ? 'Unity' : 'ProjectMoon';
-    // 确认对话框
-    showConfirm(
-        '确认移除软链接',
-        `确定要移除 ${folderName} 的软链接吗？移除后该目录将不再指向目标文件夹。`,
-        async () => {
-            const modal = new ProgressModal(`移除 ${folderName} 软链接`);
-            modal.addLog('开始移除...');
-            try {
-                const result = await pywebview.api.remove_symlink(folder);
-                if (result.success) {
-                    modal.complete(true, result.message);
-                    loadSymlinkStatus();
-                } else {
-                    modal.complete(false, result.message);
-                }
-            } catch (error) {
-                modal.complete(false, `操作失败: ${error}`);
-            }
-        },
-        () => {}
-    );
+async function removeSymlink() {
+    const folderName = symlinkManager.getSelectedItem();
+    const folder = symlinkStatus[folderName];
+    try {
+        if (folder.status === 'symlink') {
+            showConfirm('是否要删除软链接？',
+                `您已经创建了一个可用的软链接，它的目录是 ${folder.target}，是否删除？
+                如果您确认继续，这将使文件夹重新回到c盘`,
+                async function() {
+                    await pywebview.api.run_func('remove_symlink', folder.path);
+                    await pywebview.api.run_func('evaluate_path', folder.path);
+                    await pywebview.api.move_folders(folder.target, folder.path);
+                    refreshSymlink();
+                },
+                () => {}
+            )
+        } else {
+            showMessage('警告', '当前数据项不是软链接');
+        };
+    } catch (error) {
+        showMessage('错误', `删除软链接时发生错误
+            ${error}`)
+    };
 }
 
 function fetchProperNouns() {

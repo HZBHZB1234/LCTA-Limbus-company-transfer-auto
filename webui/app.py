@@ -6,6 +6,7 @@ import json
 import socket
 import time
 import logging
+import ctypes
 from logging.handlers import TimedRotatingFileHandler
 import shutil
 import threading
@@ -24,7 +25,7 @@ import webFunc.GithubDownload as GithubDownload
 from webutils.log_manage import LogManager
 import webutils.load as load_util
 import webutils.function_llc as function_llc
-from webutils.functions import get_cache_font, get_steam_command, change_icon
+from webutils.functions import get_cache_font, get_steam_command, change_icon, _move_folders
 from webutils.update import Updater, get_app_version
 from webutils.const_apiConfig import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
@@ -70,6 +71,9 @@ class LCTA_API():
         self.get_steam_command = get_steam_command
         self.change_icon = change_icon
         self.open_explorer = open_explorer
+        self.evaluate_path = evaluate_path
+        self.create_symlink = create_symlink_for
+        self.remove_symlink = remove_symlink_for
 
     def run_func(self, func_name, *args):
         if hasattr(self, func_name):
@@ -476,43 +480,16 @@ class LCTA_API():
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
+        
+    def move_folders(self, from_path: str, target_path: str):
+        frPath = Path(from_path)
+        user32 = ctypes.windll.user32
+        paths = [[str(i)[idx:] for idx, letter in enumerate(str(i)) if letter.isalpha()][0]
+                  for i in frPath.iterdir()]
+        return _move_folders(
+            paths, target_path,
+            hwnd=user32.FindWindowW(None, 'LCTA - 边狱公司汉化工具箱'))
 
-    def create_symlink(self, folder: str, target_dir: str):
-        """创建指定文件夹的软链接，并打开两个 explorer 窗口"""
-        try:
-            # 执行创建
-            success = create_symlink_for(folder, target_dir, self.log_manager)
-            if not success:
-                return {"success": False, "message": "创建软链接失败，请查看日志"}
-
-            # 获取原始目录和目标目录路径
-            original = UNITY if folder.lower() == 'unity' else PM
-            target = Path(target_dir)
-
-            # 打开两个资源管理器窗口
-            open_explorer(original)   # 注意：此时 original 已经是软链接，打开它会进入 target
-            open_explorer(target)
-
-            self.log(f"已打开文件夹: {original} 和 {target}")
-            return {"success": True, "message": "软链接创建成功，文件夹已打开"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
-    def remove_symlink(self, folder: str):
-        """移除指定文件夹的软链接"""
-        try:
-            success = remove_symlink_for(folder, self.log_manager)
-            if not success:
-                return {"success": False, "message": "移除软链接失败，请查看日志"}
-            original = UNITY if folder.lower() == 'unity' else PM
-            if original.parent.exists():
-                open_explorer(original.parent)
-
-            return {"success": True, "message": "软链接已移除"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
     def change_font_for_package(self, package_name, font_path, modal_id="false"):
         '''为指定翻译包更换字体'''
         try:

@@ -19,7 +19,7 @@ from .function_manage import (find_installed_packages,
                               toggle_install_package,
                               fing_mod, toggle_mod, delete_mod,
                               open_mod_path, check_symlink,create_symlink_for,
-                              open_explorer, UNITY, PM,
+                              evaluate_path, open_explorer, UNITY, PM,
                               remove_symlink_for)
 
 __all__ = [
@@ -51,6 +51,7 @@ __all__ = [
     'check_symlink',
     'create_symlink_for',
     'open_explorer',
+    'evaluate_path',
     'UNITY','PM',
     'remove_symlink_for'
 ]

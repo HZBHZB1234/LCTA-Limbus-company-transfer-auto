@@ -155,72 +155,18 @@ def open_explorer(path):
         subprocess.Popen(['explorer', str(path)])
     else:raise
 
-def create_symlink_for(folder: str, target_dir: str, logger_):
-    """
-    为 Unity 或 ProjectMoon 创建软链接指向 target_dir
-    folder: 'unity' 或 'pm'
-    """
-    if folder.lower() not in ('unity', 'pm'):
-        logger_.log(f"无效的文件夹名称: {folder}")
-        return False
+def create_symlink_for(from_dir: str, target_dir: str):
+    Path(target_dir).symlink_to(from_dir, target_is_directory=True)
 
-    target = Path(target_dir)
-    if not target.exists():
-        target.mkdir(parents=True, exist_ok=True)
-
-    # 原始目录
-    if folder.lower() == 'unity':
-        original = UNITY
+def remove_symlink_for(folder: str):
+    _folder = Path(folder)
+    if _folder.is_symlink():
+        _folder.unlink()
     else:
-        original = PM
+        _folder.rmdir()
 
-    # 如果原始目录已存在且是符号链接，先移除（避免覆盖）
-    if original.is_symlink() or original.exists():
-        # 如果是普通目录，需要用户先移动内容，这里我们只移除链接，不处理内容
-        if original.is_symlink():
-            original.unlink()
-        else:
-            # 普通目录，不能直接覆盖，应提示用户
-            logger_.log(f"错误：{original} 已存在且不是符号链接，请手动处理后再试")
-            return False
-
-    # 创建软链接
-    try:
-        if os.name == 'nt':  # Windows
-            import ctypes
-            kdll = ctypes.windll.LoadLibrary("kernel32.dll")
-            ret = kdll.CreateSymbolicLinkW(str(original), str(target), 0x1)  # 0x1 表示目录链接
-            if ret == 0:
-                raise OSError(f"创建符号链接失败，错误码: {ctypes.GetLastError()}")
-        else:
-            original.symlink_to(target, target_is_directory=True)
-        logger_.log(f"已创建软链接 {original} -> {target}")
-        return True
-    except Exception as e:
-        logger_.log(f"创建软链接失败: {e}")
-        return False
-
-def remove_symlink_for(folder: str, logger_):
-    """移除 Unity 或 ProjectMoon 的软链接，恢复为普通目录（如果目标存在则重命名）"""
-    if folder.lower() not in ('unity', 'pm'):
-        logger_.log(f"无效的文件夹名称: {folder}")
-        return False
-
-    original = UNITY if folder.lower() == 'unity' else PM
-
-    if not original.exists():
-        logger_.log(f"{original} 不存在")
-        return False
-
-    if not original.is_symlink():
-        logger_.log(f"{original} 不是符号链接")
-        return False
-
-    # 获取链接指向的目标
-    target = original.resolve()
-    original.unlink()  # 删除链接
-
-    # 如果目标目录存在且不为空，可以保留，也可以移动回来？这里只移除链接，不自动移动数据
-    logger_.log(f"已移除软链接 {original}")
-    # 可选：将目标目录重命名为原始名称？但可能造成数据丢失，不自动处理
-    return True
+def evaluate_path(path: str):
+    _path = Path(path)
+    if not _path.exists():
+        _path.mkdir(exist_ok=True)
+    return bool(list(_path.iterdir()))

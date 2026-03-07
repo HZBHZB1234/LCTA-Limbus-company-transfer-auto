@@ -8,6 +8,7 @@ import time
 import zipfile
 import hashlib
 import ctypes
+from ctypes import wintypes
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Set
 import shutil
@@ -419,3 +420,79 @@ def change_icon():
         0, 
         "TraySettings"
     )
+
+FO_MOVE = 0x0001
+FO_COPY = 0x0002
+FO_DELETE = 0x0003
+FO_RENAME = 0x0004
+
+FOF_ALLOWUNDO = 0x0040          # 支持撤销（放入回收站）
+FOF_NOCONFIRMATION = 0x0010     # 不显示确认对话框
+FOF_SILENT = 0x0004             # 不显示进度对话框
+FOF_SIMPLEPROGRESS = 0x0100     # 显示简单进度条
+FOF_NOCONFIRMMKDIR = 0x0200     # 自动创建目标目录（不询问）
+# 更多标志可参考 MSDN
+
+# ---------- SHFILEOPSTRUCTW 结构体 ----------
+class SHFILEOPSTRUCTW(ctypes.Structure):
+    _fields_ = [
+        ('hwnd', wintypes.HWND),               # 父窗口句柄
+        ('wFunc', ctypes.c_uint),               # 操作类型（FO_MOVE 等）
+        ('pFrom', ctypes.c_void_p),             # 源文件列表（双 null 结尾）
+        ('pTo', ctypes.c_void_p),               # 目标列表（双 null 结尾）
+        ('fFlags', ctypes.c_uint),              # 标志位
+        ('fAnyOperationsAborted', wintypes.BOOL), # 操作是否被用户中止
+        ('hNameMappings', ctypes.c_void_p),      # 文件名映射（通常不用）
+        ('lpszProgressTitle', ctypes.c_wchar_p), # 进度对话框标题
+    ]
+
+# 加载 shell32.dll 中的 SHFileOperationW
+_shell32 = ctypes.windll.shell32
+_SHFileOperationW = _shell32.SHFileOperationW
+_SHFileOperationW.argtypes = [ctypes.POINTER(SHFILEOPSTRUCTW)]
+_SHFileOperationW.restype = ctypes.c_int
+
+
+def _move_folders(src_list, dst_dir, hwnd=None,
+                  flags=FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR):
+    """
+    使用 Windows Shell API 移动多个文件夹（支持跨驱动器）。
+
+    Args:
+        src_list (list of str): 源文件夹路径列表，例如 ['C:\\folder1', 'D:\\data\\folder2']
+        dst_dir (str): 目标文件夹路径，例如 'E:\\backup'
+        hwnd (int or None): 父窗口句柄，用于显示对话框（可为 None）
+        flags (int): 附加标志，例如 FOF_ALLOWUNDO | FOF_NOCONFIRMATION
+
+    Returns:
+        (success, aborted, error_code)
+        success (bool): 操作是否成功完成（返回 0 且未被中止）
+        aborted (bool): 用户是否中止了操作
+        error_code (int): 如果失败，返回 Windows 错误码；否则为 0
+    """
+    # 构造源列表字符串：每个路径以 null 分隔，末尾加一个 null，由 create_unicode_buffer 补全第二个 null
+    src_str = '\0'.join(src_list) + '\0'
+    src_buffer = ctypes.create_unicode_buffer(src_str)
+
+    # 构造目标路径字符串：末尾加一个 null，create_unicode_buffer 补全第二个 null
+    dst_str = dst_dir + '\0'
+    dst_buffer = ctypes.create_unicode_buffer(dst_str)
+
+    # 初始化结构体
+    op = SHFILEOPSTRUCTW()
+    op.hwnd = hwnd if hwnd is not None else None
+    op.wFunc = FO_MOVE
+    op.pFrom = ctypes.addressof(src_buffer)   # 传递缓冲区地址
+    op.pTo = ctypes.addressof(dst_buffer)
+    op.fFlags = flags
+    op.fAnyOperationsAborted = False
+    op.hNameMappings = None
+    op.lpszProgressTitle = None                # 如需自定义标题可设置
+
+    # 调用 API
+    ret = _SHFileOperationW(ctypes.byref(op))
+
+    aborted = op.fAnyOperationsAborted != 0
+    success = (ret == 0) and not aborted
+
+    return success, aborted, ret

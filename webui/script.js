@@ -4121,7 +4121,7 @@ async function showGuide(page) {
   // 按键状态管理
   let wPressed = false;      // W 键是否正在被按下
   let wTimer = null;         // 长按计时器 ID
-  const LONG_PRESS_TIME = 2000; // 长按阈值（毫秒）
+  const LONG_PRESS_TIME = 1000; // 长按阈值（毫秒）
 
   // 用户自定义的回调函数（此处可替换为具体逻辑）
   function onLongPressW() {

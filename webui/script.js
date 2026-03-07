@@ -4091,6 +4091,100 @@ function requestGamePath() {
     );
 }
 
+async function showGuide(page) {
+
+    const modal = showMessage('俺寻思', '正在加载数据内容')
+
+    const response = await fetch(`guide/${page}.md`);
+
+    let markdownText
+    
+    if (!response.ok) {
+        markdownText = `加载内容失败: ${response.status} ${response.statusText}`;
+    } else {
+        markdownText = await response.text();
+    };
+    
+    const bodyHtml = simpleMarkdownToHtml(markdownText);
+    const showing = `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`
+
+    setTimeout(() => {
+        const statusElement = document.getElementById(`modal-status-${modal.id}`);
+        if (statusElement) {
+            statusElement.innerHTML = showing;
+        }
+    }, 100);
+}
+
+
+(function() {
+  // 按键状态管理
+  let wPressed = false;      // W 键是否正在被按下
+  let wTimer = null;         // 长按计时器 ID
+  const LONG_PRESS_TIME = 2000; // 长按阈值（毫秒）
+
+  // 用户自定义的回调函数（此处可替换为具体逻辑）
+  function onLongPressW() {
+    const activeNav = document.querySelector('.nav-btn.active');
+    const page = activeNav.id.replace('-btn', '');
+    console.log('俺寻思', page);
+    showGuide(page);
+  }
+
+  // 重置与 W 键相关的所有状态
+  function resetWState() {
+    if (wTimer) {
+      clearTimeout(wTimer);
+      wTimer = null;
+    }
+    wPressed = false;
+  }
+
+  // 键盘按下事件
+  function handleKeyDown(e) {
+    // 只关心物理按键 W（KeyW 不随键盘布局改变，更稳定）
+    if (e.code === 'KeyW') {
+      if (wPressed) return;
+
+      wPressed = true;
+
+      // 设置 4 秒后触发的计时器
+      wTimer = setTimeout(() => {
+        onLongPressW();       // 执行回调
+        wTimer = null;        // 计时器已触发，清除引用
+      }, LONG_PRESS_TIME);
+    }
+  }
+
+  // 键盘松开事件
+  function handleKeyUp(e) {
+    if (e.code === 'KeyW') {
+      // 松开时无论是否满 4 秒，都清除计时器并重置状态
+      resetWState();
+    }
+  }
+
+  // 窗口失去焦点时重置（例如用户切换到其他应用时可能无法收到 keyup）
+  function handleBlur() {
+    resetWState();
+  }
+
+  // 添加全局事件监听
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
+  window.addEventListener('blur', handleBlur);
+
+  // 可选：返回一个清理函数，便于在需要时移除监听（例如在组件卸载时）
+  // 如果你是在模块或单页应用中使用，可以保留此清理逻辑
+  window.removeLongPressW = function() {
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('keyup', handleKeyUp);
+    window.removeEventListener('blur', handleBlur);
+    resetWState();
+  };
+})();
+
+
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
     init();

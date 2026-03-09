@@ -137,6 +137,22 @@ class LCTA_API():
                 self.log(f"压缩日志文件 {i} 时出错: {e}")
                 self.log_error(e)
 
+    def check_show(self):
+        last_version = self.config.get('last_version', 'v1.0.0')
+        if last_version != os.environ["__version__"]:
+            self.config['last_version'] = os.environ["__version__"]
+            update_note = (Path(__file__).parent / 'assets' / 'update.md').read_text(encoding='utf-8').split('\n')
+            r = []
+            flag = False
+            for i in update_note:
+                if i.startswith('##'):
+                    if flag:break
+                    else:flag = True
+                r.append(i)
+            r = '\n'.join(r)
+            return {'show': True, 'message': r}
+        return {'show': False}
+
     def use_inner(self):
         """使用默认配置并保存"""
         with open("config.json", "w", encoding="utf-8") as f:

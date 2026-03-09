@@ -4328,6 +4328,22 @@ window.addEventListener('pywebviewready', function() {
                     toggleCustomLangGui();
                     toggleAutoProper();
                     toggleSteamCommand();
+                });
+
+                pywebview.api.check_show().then(
+                    (result) => {
+                        if (result.show) {
+                            const modal = showMessage('版本更新内容', '正在加载数据内容')
+                            const bodyHtml = simpleMarkdownToHtml(result.message);
+                            const showing = `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`
+
+                            setTimeout(() => {
+                                const statusElement = document.getElementById(`modal-status-${modal.id}`);
+                                if (statusElement) {
+                                    statusElement.innerHTML = showing;
+                                }
+                            }, 100);
+                        }
                 })
             }
             checkGamePath();

@@ -76,6 +76,7 @@
     "cache_path": "str",
     "enable_storage": "bool",
     "storage_path": "str",
+    "last_version": "str",
     "launcher": {
         "zero": {
             "zip_type": "str",

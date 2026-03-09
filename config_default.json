@@ -76,6 +76,7 @@
     "cache_path": "tmp",
     "enable_storage": false,
     "storage_path": "tmp",
+    "last_version": "v4.1.4",
     "launcher": {
         "zero": {
             "zip_type": "seven",

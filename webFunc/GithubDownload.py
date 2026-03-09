@@ -83,6 +83,7 @@ class ProxyManager:
         """初始化代理列表"""
         # 添加默认代理
         self.proxies.append("https://gh-proxy.org/")
+        self.proxies.append("")
         
         # 尝试从API获取代理列表
         try:
@@ -94,7 +95,7 @@ class ProxyManager:
         """从API获取代理列表"""
         api_url = "https://api.akams.cn/github"
         try:
-            response = requests.get(api_url, timeout=5)
+            response = requests.get(api_url, timeout=10)
             response.raise_for_status()
             data = response.json()
             

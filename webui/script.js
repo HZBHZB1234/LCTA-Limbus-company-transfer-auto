@@ -3785,6 +3785,18 @@ function addLogMessage(message, level = 'info') {
     };
 }
 
+const renderer = new marked.Renderer();
+
+// 重写 link 方法
+renderer.link = function (href, title, text) {
+  // 生成原始的链接 HTML
+  const link = marked.Renderer.prototype.link.call(this, href, title, text);
+  // 如果已经是 <a> 标签，则添加 target 和 rel
+  return link.replace('<a', '<a target="_blank" rel="noopener noreferrer"');
+};
+
+// 使用自定义渲染器
+marked.setOptions({ renderer });
 // 简单Markdown转HTML
 function simpleMarkdownToHtml(text) {
     const html = marked.parse(text);

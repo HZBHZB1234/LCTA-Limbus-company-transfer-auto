@@ -544,7 +544,7 @@ class LCTA_API():
         '''导出选定的字体'''
         try:
             self.log(f"开始导出字体 {font_name} 到 {destination_path}")
-            result = export_system_font(font_name, destination_path)
+            result = export_system_font(font_name, destination_path, self.log_manager)
             if result["success"]:
                 self.log(f"成功导出字体 {font_name}")
                 return result

@@ -105,7 +105,7 @@ def get_system_fonts():
     return {"success": True, "fonts": fonts, "font_files": font_files}
 
 
-def export_system_font(font_name, destination_path):
+def export_system_font(font_name, destination_path, _logger: LogManager):
     """导出系统字体文件到指定位置"""
     try:
         # 获取Windows字体目录
@@ -147,6 +147,7 @@ def export_system_font(font_name, destination_path):
         return {"success": True, "message": f"字体已导出到: {destination_path}"}
         
     except Exception as e:
+        _logger.log_error(e)
         return {"success": False, "message": f"导出字体时出错: {str(e)}"}
 
 

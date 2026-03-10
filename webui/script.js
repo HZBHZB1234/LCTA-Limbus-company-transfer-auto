@@ -2381,157 +2381,32 @@ function deleteSelectedPackage() {
     );
 }
 
-function changeFontForPackage() {
+async function changeFontForPackage() {
     const packageName = packageItemManager.getSelectedItem();
     if (!packageName) {
         showMessage('错误', '无法获取选中汉化包的名称');
         return;
     }
-    
-    pywebview.api.get_system_fonts_list()
-        .then(function(result) {
-            const modal = new ModalWindow('更换字体', {
-                showProgress: false,
-                showCancelButton: true,
-                cancelButtonText: '关闭',
-                showMinimizeButton: true,
-                showLog: false
-            });
-            
-            let modalContent = `
-                <div class="font-selector">
-                    <div class="form-group">
-                        <label for="font-search-${modal.id}">搜索字体:</label>
-                        <input type="text" id="font-search-${modal.id}" placeholder="输入字体名称搜索..." style="width: 100%;">
-                    </div>
-                    <div class="form-group">
-                        <label>系统字体:</label>
-                        <div class="list-container" style="max-height: 200px; overflow-y: auto;">
-                            <div id="font-list-${modal.id}" style="width: 100%; padding: 10px;">
-            `;
-            
-            if (result.success && result.fonts && result.fonts.length > 0) {
-                modalContent += '<div class="list-empty"><p>加载中...</p></div>';
-            } else {
-                modalContent += '<div class="list-empty"><p>未找到系统字体</p></div>';
-            }
-            
-            modalContent += `
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>预览:</label>
-                        <div id="font-preview-${modal.id}" style="border: 1px solid var(--color-border); padding: 10px; min-height: 60px; background-color: var(--color-bg-input); border-radius: var(--radius-md);">
-                            选择字体以预览
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            modal.element.querySelector('.modal-body').innerHTML = modalContent;
-            
-            if (result.success && result.fonts && result.fonts.length > 0) {
-                const fontList = document.getElementById(`font-list-${modal.id}`);
-                fontList.innerHTML = '';
-                
-                result.fonts.forEach(font => {
-                    const fontItem = document.createElement('div');
-                    fontItem.className = 'list-item';
-                    fontItem.innerHTML = `
-                        <div class="list-item-content">
-                            <i class="fas fa-font"></i>
-                            <span>${font}</span>
-                        </div>
-                    `;
-                    fontItem.addEventListener('click', () => {
-                        document.querySelectorAll(`#font-list-${modal.id} .list-item`).forEach(item => {
-                            item.classList.remove('selected');
-                        });
-                        fontItem.classList.add('selected');
-                        
-                        const previewDiv = document.getElementById(`font-preview-${modal.id}`);
-                        previewDiv.innerHTML = `
-                            <div style="font-family: '${font}'; font-size: 16px; margin-bottom: 8px;">
-                                字体预览: ${font}
-                            </div>
-                            <div style="font-family: '${font}';">
-                                The quick brown fox jumps over the lazy dog.<br>
-                                0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>
-                                abcdefghijklmnopqrstuvwxyz<br>
-                                中文示例文本
-                            </div>
-                        `;
-                    });
-                    fontList.appendChild(fontItem);
-                });
-                
-                const searchInput = document.getElementById(`font-search-${modal.id}`);
-                searchInput.addEventListener('input', function() {
-                    const searchTerm = searchInput.value.toLowerCase();
-                    const items = fontList.querySelectorAll('.list-item');
-                    
-                    items.forEach(item => {
-                        const fontName = item.querySelector('span')?.textContent?.toLowerCase() || '';
-                        if (fontName.includes(searchTerm)) {
-                            item.style.display = 'flex';
-                        } else {
-                            item.style.display = 'none';
-                        }
-                    });
-                });
-            }
-            
-            const confirmBtn = document.createElement('button');
-            confirmBtn.className = 'primary-btn';
-            confirmBtn.innerHTML = '<i class="fas fa-check"></i> 确定';
-            confirmBtn.onclick = function() {
-                const selectedFontItem = document.querySelector(`#font-list-${modal.id} .list-item.selected`);
-                if (!selectedFontItem) {
-                    showMessage('提示', '请先选择一个字体');
-                    return;
+
+    showMessage('选择字体文件', '请选择字体文件', 
+        async ()=>{
+            const fontPath = await pywebview.api.browse_file('font-path');
+            if (fontPath) {
+                const modal = new ProgressModal('更换字体');
+                modal.setStatus('开始');
+                const result = await pywebview.api.change_font_for_package(packageName, fontPath, modal.id);
+                if (result.success) {
+                    modal.complete(true, '完成更换字体');
+                    setTimeout(modal.close, 500);
+                    refreshInstallPackageList();
+                } else {
+                    modal.addLog('更换失败');
+                    modal.addLog(result.message);
+                    modal.complete(false, result.message);
                 }
-                
-                const fontName = selectedFontItem.querySelector('span')?.textContent;
-                if (!fontName) {
-                    showMessage('错误', '无法获取选中字体的名称');
-                    return;
-                }
-                
-                modal.close();
-                
-                const progressModal = new ProgressModal('更换字体');
-                progressModal.addLog(`开始为汉化包 "${packageName}" 更换字体为 "${fontName}"`);
-                
-                pywebview.api.export_selected_font(fontName, "")
-                    .then(function(result) {
-                        if (result.success) {
-                            progressModal.complete(true, '字体更换成功');
-                        } else {
-                            progressModal.complete(false, '字体更换失败: ' + result.message);
-                        }
-                    })
-                    .catch(function(error) {
-                        progressModal.complete(false, '更换过程中发生错误: ' + error);
-                    });
-            };
-            
-            const footer = document.getElementById(`modal-footer-${modal.id}`);
-            footer.innerHTML = '';
-            footer.appendChild(confirmBtn);
-            
-            const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'action-btn';
-            cancelBtn.textContent = '取消';
-            cancelBtn.onclick = () => {
-                modal.close();
-                modal.setCompleted();
-            };
-            footer.appendChild(cancelBtn);
-        })
-        .catch(function(error) {
-            showMessage('错误', '获取系统字体列表时发生错误: ' + error);
-        });
+            }
+        }
+    )
 }
 
 function getFontFromInstalled() {
@@ -2648,7 +2523,7 @@ function getFontFromInstalled() {
                 pywebview.api.browse_folder('font-export-path')
                     .then(function(result) {
                         if (result && result.length > 0) {
-                            const exportPath = result[0];
+                            const exportPath = result;
                             
                             modal.close();
                             
@@ -2659,6 +2534,7 @@ function getFontFromInstalled() {
                                 .then(function(result) {
                                     if (result.success) {
                                         progressModal.complete(true, '字体导出成功');
+                                    setTimeout(progressModal.close, 250);
                                     } else {
                                         progressModal.complete(false, '字体导出失败: ' + result.message);
                                     }

@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
+from contextlib import suppress
 import webFunc.GithubDownload as GithubDownload
 from webFunc.GithubDownload import ReleaseInfo, ReleaseAsset, GitHubReleaseFetcher
 from webutils.log_manage import *
@@ -59,8 +60,13 @@ class Updater:
             # 去掉版本号前缀 v
             current = current_version.lstrip('v')
             latest = latest_version.lstrip('v')
+
+            current = current.replace('.', '')
+            latest = latest.replace('.', '')
             
-            return latest != current
+            with suppress(Exception):
+                return int(latest) > int(current)
+            return True
         except:
             return False
     

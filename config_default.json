@@ -63,6 +63,8 @@
     },
     "api_config": "",
     "api_crypto": true,
+    "user_fancy": "[]",
+    "fancy_allow": "{\"技能文本美化(FL Like)\": true,\"气泡文本渐变(FL Like)\": true,\"EGO文本渐变(FL Like)\": true}",
     "theme": "light",
     "game_path":"",
     "debug":false,

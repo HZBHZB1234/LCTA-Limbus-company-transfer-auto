@@ -63,6 +63,8 @@
     },
     "api_config": "str",
     "api_crypto": "bool",
+    "user_fancy": "str",
+    "fancy_allow": "str",
     "theme": "str",
     "game_path": "str",
     "debug": "bool",

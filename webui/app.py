@@ -624,6 +624,14 @@ class LCTA_API():
             self.log_manager.log_modal_status("清理失败", modal_id)
             return {"success": False, "message": str(e)}
 
+    def get_fancy_rulesets(self):
+        return {'success': True, 'data': {
+            'builtin': builtinFancyConfig,
+            'user': json.loads(self.config.get('user_fancy', [])),
+            'enabled': json.loads(self.config.get('fancy_allow',
+                 "{\"技能文本美化(FL Like)\": true,\"气泡文本渐变(FL Like)\": true,\"EGO文本渐变(FL Like)\": true}"))
+        }}
+
     def download_llc_translation(self, modal_id= "false"):
         """下载LLC翻译"""
         try:

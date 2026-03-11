@@ -324,8 +324,3 @@ def fancy_main(game_path: str, package_name: str, config: list):
                     json.dumps(data, ensure_ascii=False, indent=4), encoding='utf-8-sig')
             except Exception as e:
                 logger.exception(f"处理文件 {file} 时出错: {e}")
-
-if __name__ == '__main__':
-    fancy_main('C:\\Program Files (x86)\\Steam\\steamapps\\common\\Limbus Company\\',
-               'LLc-CN-LCTA', json.loads((Path(__file__).parent / 'build-in-fancy.json')
-                                         .read_text(encoding='utf-8')))

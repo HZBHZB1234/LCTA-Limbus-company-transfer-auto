@@ -225,6 +225,9 @@ class ConfigManager {
             'api-configs': 'api_config',
             'api-select': 'ui_default.api_config.key',
 
+            'fancy-user': 'user_fancy',
+            'fancy-allow': 'fancy_allow',
+
             // 抓取设置
             'proper-join-char': 'ui_default.proper.join_char',
             'proper-skip-space': 'ui_default.proper.disable_space',
@@ -3176,6 +3179,250 @@ async function removeSymlink() {
     };
 }
 
+class FancyManager {
+    constructor() {
+        this.rulesets = [];           // 所有规则集（包含内置和用户自定义），每个对象含 { name, desc, rules, builtin }
+        this.enabledMap = {};          // 启用状态映射，键为规则集名称（需唯一）
+        this.selectedRuleset = null;   // 当前选中的规则集对象
+        this.listManager = null;       // ToggleItemListManager 实例
+        this.initialized = false;
+    }
+
+    async init() {
+        if (this.initialized) return;
+        // 初始化列表管理器
+        this.listManager = new ToggleItemListManager('fancy-ruleset-list', {
+            emptyMessage: '暂无规则集',
+            itemIcon: 'fa-paint-brush',
+            defaultEnabled: false,
+            onSelect: (item) => this.onSelectRuleset(item),
+            onToggle: (item, enabled) => this.onToggleRuleset(item, enabled)
+        });
+
+        await this.loadRulesets();
+        this.initialized = true;
+    }
+
+    async loadRulesets() {
+        // 从后端获取规则集数据（包括内置和用户自定义）
+        try {
+            const result = await pywebview.api.get_fancy_rulesets();
+            if (result.success) {
+                // result.data 应包含 { builtin: [], user: [], enabled: {} }
+                const builtin = result.data.builtin || [];
+                const user = result.data.user || [];
+                this.enabledMap = result.data.enabled || {};
+
+                // 标记内置规则集
+                builtin.forEach(rs => { rs.builtin = true; });
+                user.forEach(rs => { rs.builtin = false; });
+
+                this.rulesets = [...builtin, ...user];
+
+                // 更新列表显示
+                const items = this.rulesets.map(rs => rs.name);
+                this.listManager.setItems(items);
+                // 根据 enabledMap 设置每个条目的启用状态
+                items.forEach(name => {
+                    if (this.enabledMap[name] !== undefined) {
+                        this.listManager.enabledMap[name] = this.enabledMap[name];
+                    }
+                });
+                this.listManager.updateList();
+
+                // 如果有规则集，默认选中第一个
+                if (this.rulesets.length > 0) {
+                    this.listManager.setSelectedItem(this.rulesets[0].name);
+                    this.onSelectRuleset(this.rulesets[0].name);
+                }
+            } else {
+                showMessage('错误', '加载规则集失败: ' + result.message);
+            }
+        } catch (error) {
+            console.error('加载规则集出错:', error);
+            showMessage('错误', '加载规则集时发生异常');
+        }
+    }
+
+    onSelectRuleset(itemName) {
+        const ruleset = this.rulesets.find(rs => rs.name === itemName);
+        if (!ruleset) return;
+        this.selectedRuleset = ruleset;
+        this.updateEditorUI();
+    }
+
+    onToggleRuleset(itemName, enabled) {
+        this.enabledMap[itemName] = enabled;
+        // 可即时保存，但为了性能，等待用户点击保存全部
+    }
+
+    updateEditorUI() {
+        if (!this.selectedRuleset) {
+            // 清空并禁用
+            document.getElementById('fancy-ruleset-name').value = '';
+            document.getElementById('fancy-ruleset-name').disabled = true;
+            document.getElementById('fancy-ruleset-desc').value = '';
+            document.getElementById('fancy-ruleset-desc').disabled = true;
+            document.getElementById('fancy-ruleset-rules').value = '';
+            document.getElementById('fancy-ruleset-rules').disabled = true;
+            document.getElementById('fancy-ruleset-builtin').checked = false;
+            document.getElementById('fancy-save-current-btn').disabled = true;
+            return;
+        }
+
+        const nameInput = document.getElementById('fancy-ruleset-name');
+        const descInput = document.getElementById('fancy-ruleset-desc');
+        const rulesTextarea = document.getElementById('fancy-ruleset-rules');
+        const builtinCheck = document.getElementById('fancy-ruleset-builtin');
+        const saveBtn = document.getElementById('fancy-save-current-btn');
+
+        nameInput.value = this.selectedRuleset.name;
+        descInput.value = this.selectedRuleset.desc || '';
+        rulesTextarea.value = JSON.stringify(this.selectedRuleset.rules, null, 2);
+        builtinCheck.checked = this.selectedRuleset.builtin || false;
+
+        // 内置规则集不可编辑
+        const isBuiltin = this.selectedRuleset.builtin;
+        nameInput.disabled = isBuiltin;
+        descInput.disabled = isBuiltin;
+        rulesTextarea.disabled = isBuiltin;
+        saveBtn.disabled = isBuiltin;
+    }
+
+    // 保存当前编辑的规则集
+    saveCurrent() {
+        if (!this.selectedRuleset || this.selectedRuleset.builtin) return;
+
+        const newName = document.getElementById('fancy-ruleset-name').value.trim();
+        const newDesc = document.getElementById('fancy-ruleset-desc').value.trim();
+        const rulesText = document.getElementById('fancy-ruleset-rules').value.trim();
+
+        if (!newName) {
+            showMessage('提示', '规则集名称不能为空');
+            return;
+        }
+
+        // 验证 JSON
+        let newRules;
+        try {
+            newRules = JSON.parse(rulesText);
+            if (!Array.isArray(newRules)) throw new Error('规则必须是一个数组');
+        } catch (e) {
+            showMessage('错误', '规则 JSON 格式错误: ' + e.message);
+            return;
+        }
+
+        // 如果名称改变，需要更新 enabledMap 和列表
+        const oldName = this.selectedRuleset.name;
+        if (oldName !== newName) {
+            // 检查新名称是否已存在
+            if (this.rulesets.some(rs => rs.name === newName)) {
+                showMessage('错误', '已存在同名的规则集');
+                return;
+            }
+            // 更新 enabledMap
+            this.enabledMap[newName] = this.enabledMap[oldName];
+            delete this.enabledMap[oldName];
+            // 更新列表项
+            this.listManager.items = this.rulesets.map(rs => rs.name);
+            this.listManager.updateList();
+        }
+
+        // 更新当前规则集对象
+        this.selectedRuleset.name = newName;
+        this.selectedRuleset.desc = newDesc;
+        this.selectedRuleset.rules = newRules;
+
+        // 重新选中该规则集（刷新高亮）
+        this.listManager.setSelectedItem(newName);
+        // 刷新列表显示（名称可能已变）
+        this.listManager.items = this.rulesets.map(rs => rs.name);
+        this.listManager.updateList();
+
+        showMessage('成功', '规则集已保存');
+    }
+
+    // 新建规则集
+    newRuleset() {
+        const newName = prompt('请输入新规则集名称（不可与现有重名）');
+        if (!newName) return;
+
+        if (this.rulesets.some(rs => rs.name === newName)) {
+            showMessage('错误', '名称已存在');
+            return;
+        }
+
+        const newRuleset = {
+            name: newName,
+            desc: '',
+            rules: [],
+            builtin: false
+        };
+        this.rulesets.push(newRuleset);
+        this.enabledMap[newName] = false;  // 默认禁用
+
+        // 更新列表
+        this.listManager.setItems(this.rulesets.map(rs => rs.name));
+        this.listManager.updateList();
+        this.listManager.setSelectedItem(newName);
+        this.onSelectRuleset(newName);
+    }
+
+    // 删除当前选中的规则集（仅限非内置）
+    deleteSelected() {
+        if (!this.selectedRuleset) {
+            showMessage('提示', '请先选中一个规则集');
+            return;
+        }
+        if (this.selectedRuleset.builtin) {
+            showMessage('提示', '内置规则集不能删除');
+            return;
+        }
+
+        showConfirm('确认删除', `确定要删除规则集 "${this.selectedRuleset.name}" 吗？`,
+            () => {
+                const index = this.rulesets.indexOf(this.selectedRuleset);
+                if (index !== -1) {
+                    this.rulesets.splice(index, 1);
+                    delete this.enabledMap[this.selectedRuleset.name];
+                    // 更新列表
+                    this.listManager.setItems(this.rulesets.map(rs => rs.name));
+                    this.listManager.updateList();
+                    this.selectedRuleset = null;
+                    this.updateEditorUI();
+                }
+            },
+            () => {}
+        );
+    }
+
+    // 保存所有规则集及启用状态到后端
+    async saveAll() {
+        // 分离内置和用户规则集（内置不应保存，但启用状态需要保存）
+        const userRulesets = this.rulesets.filter(rs => !rs.builtin);
+        // 移除 builtin 字段后再发送
+        const userData = userRulesets.map(({ builtin, ...rest }) => rest);
+
+        configManager.updateConfigValue('fancy-user', JSON.stringify(userData));
+        configManager.updateConfigValue('fancy-allow', JSON.stringify(this.enabledMap));
+        configManager.flushPendingUpdates();
+    }
+
+    // 格式化当前规则 JSON
+    formatJson() {
+        const textarea = document.getElementById('fancy-ruleset-rules');
+        try {
+            const obj = JSON.parse(textarea.value);
+            textarea.value = JSON.stringify(obj, null, 2);
+        } catch (e) {
+            showMessage('错误', 'JSON 格式错误，无法格式化');
+        }
+    }
+}
+
+// 全局实例
+let fancyManager;
+
 function fetchProperNouns() {
     const outputFormat = document.getElementById('proper-output').value;
     const skipSpace = document.getElementById('proper-skip-space').checked;
@@ -4247,7 +4494,10 @@ window.addEventListener('pywebviewready', function() {
                                 }
                             }, 100);
                         }
-                })
+                });
+
+                fancyManager = new FancyManager();
+                fancyManager.init();
             }
             checkGamePath();
             

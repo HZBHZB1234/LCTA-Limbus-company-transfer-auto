@@ -527,6 +527,10 @@ function initNavigation() {
                     if (sectionId !== 'test-section') {
                         goTestSection(false);
                     }
+
+                    if (sectionId !== 'clean-section') {
+                        goCleanSection(false);
+                    }                    
                 }, 150);
             }
         });
@@ -1557,6 +1561,17 @@ function toggleSteamCommand() {
 
 function goTestSection(DIEPLAY){
     const testButton = document.getElementById('test-btn');
+    if (DIEPLAY) {
+        testButton.style.display = 'block';
+        testButton.click();
+    } 
+    else {
+        testButton.style.display = 'none';
+    }
+};
+
+function goCleanSection(DIEPLAY){
+    const testButton = document.getElementById('clean-btn');
     if (DIEPLAY) {
         testButton.style.display = 'block';
         testButton.click();

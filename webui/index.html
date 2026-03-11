@@ -48,7 +48,7 @@
                 <span>汉化包下载</span>
             </button>
             
-            <button id="clean-btn" class="nav-btn">
+            <button id="clean-btn" class="nav-btn" style="display: none;">
                 <i class="fas fa-broom"></i>
                 <span>清除本地缓存</span>
             </button>
@@ -1130,6 +1130,13 @@
                         <button class="action-btn" onclick="goTestSection(true)">
                             <i class="fas fa-sync-alt"></i>
                             进入调试页面
+                        </button>
+                    </div>
+
+                    <div class="action-grid">
+                        <button class="action-btn" onclick="goCleanSection(true)">
+                            <i class="fas fa-sync-alt"></i>
+                            进入已废弃的缓存清理页面
                         </button>
                     </div>
                 </div>

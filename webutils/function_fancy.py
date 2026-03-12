@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import List, Dict, Optional, Union
 
 # 导入颜色渐变处理函数
-from Faust_fancy import process_dlg_text
+from .Faust_fancy import process_dlg_text
 
 logger = logging.getLogger('fancy')
 

@@ -22,6 +22,7 @@ from .function_manage import (find_installed_packages,
                               evaluate_path, open_explorer, UNITY, PM,
                               remove_symlink_for)
 from .builtinFancy import fancy as builtinFancyConfig
+from .function_fancy import fancy_main
 
 __all__ = [
     'function_llc_main',
@@ -55,5 +56,6 @@ __all__ = [
     'evaluate_path',
     'UNITY','PM',
     'remove_symlink_for',
-    'builtinFancyConfig'
+    'builtinFancyConfig',
+    'fancy_main'
 ]

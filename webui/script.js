@@ -3273,13 +3273,13 @@ class FancyManager {
         const nameInput = document.getElementById('fancy-ruleset-name');
         const descInput = document.getElementById('fancy-ruleset-desc');
         const rulesTextarea = document.getElementById('fancy-ruleset-rules');
-        const builtinCheck = document.getElementById('fancy-ruleset-builtin');
+        const builtinCheck = document.getElementById('builtinRule');
         const saveBtn = document.getElementById('fancy-save-current-btn');
 
         nameInput.value = this.selectedRuleset.name;
         descInput.value = this.selectedRuleset.desc || '';
         rulesTextarea.value = JSON.stringify(this.selectedRuleset.rules, null, 2);
-        builtinCheck.checked = this.selectedRuleset.builtin || false;
+        builtinCheck.style = (this.selectedRuleset.builtin || false) ? 'display: block;' : 'display: none;' ;
 
         // 内置规则集不可编辑
         const isBuiltin = this.selectedRuleset.builtin;
@@ -3422,6 +3422,26 @@ class FancyManager {
 
 // 全局实例
 let fancyManager;
+
+function applyFancy() {
+    const modal = new ProgressModal('应用美化文本');
+    modal.addLog(`开始执行美化`);
+    modal.addLog(`应用规则集${fancyManager.enabledMap}`);
+    pywebview.api.fancy_main(fancyManager.rulesets, fancyManager.enabledMap).then(
+        () => {
+            modal.complete(true, '完成美化');
+            setTimeout(() => {
+                modal.close();
+            }, 2000);
+        }
+    ).catch(
+        (error) => {
+            modal.addLog(`美化执行错误，错误提示${error}`);
+            modal.complete(false, '美化执行失败');
+        }
+    );
+
+};
 
 function fetchProperNouns() {
     const outputFormat = document.getElementById('proper-output').value;

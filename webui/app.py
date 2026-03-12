@@ -684,6 +684,17 @@ class LCTA_API():
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
+    def fancy_main(self, config_list, enableMap):
+        try:
+            gamePath = self.config['game_path']
+            lang_path = Path(gamePath) / 'LimbusCompany_Data' / 'lang'
+            config_lang = 'test'
+            #config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
+        except Exception as e:
+            self.logger.exception(e)
+            raise RuntimeError('获取当前安装汉化包失败')
+        fancy_main(gamePath, config_lang, [i for i in config_list if enableMap.get(i.get('name', ''), False)])
+
     def fetch_proper_nouns(self, modal_id= "false"):
         """获取专有词汇"""
         try:

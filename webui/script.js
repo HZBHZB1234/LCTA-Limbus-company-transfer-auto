@@ -4503,7 +4503,7 @@ window.addEventListener('pywebviewready', function() {
 
                 pywebview.api.check_show().then(
                     (result) => {
-                        if (result.show) {
+                        if (result.show && !first_use) {
                             const modal = showMessage('版本更新内容', '正在加载数据内容')
                             const bodyHtml = simpleMarkdownToHtml(result.message);
                             const showing = `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`

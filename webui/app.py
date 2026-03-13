@@ -688,8 +688,7 @@ class LCTA_API():
         try:
             gamePath = self.config['game_path']
             lang_path = Path(gamePath) / 'LimbusCompany_Data' / 'lang'
-            config_lang = 'test'
-            #config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
+            config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
         except Exception as e:
             self.logger.exception(e)
             raise RuntimeError('获取当前安装汉化包失败')

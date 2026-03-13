@@ -133,10 +133,20 @@ class UpdateBase(ABC):
         self.update_config()
         self.logger.log(f"汉化包更新完成")
         
-        run_bubble = self.launcher_config.get('bubble', False)
+        run_bubble = self.launcher_config.get('work', {}).get('bubble', False)
         if run_bubble:
             self.config_whole['ui_default']['bubble']['install'] = True
             function_bubble_main('安装气泡mod', self.logger, self.config_whole)
+        
+        run_fancy = self.launcher_config.get('work', {}).get('fancy', False)
+        if run_fancy:
+            gamePath = self.config_whole['game_path']
+            lang_path = Path(gamePath) / 'LimbusCompany_Data' / 'lang'
+            config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
+            config_list = builtinFancyConfig
+            config_list.extend(json.loads(config_whole.get('user_fancy', '[]')))
+            enableMap = json.loads(config_whole.get('fancy_allow', '[]'))
+            fancy_main(gamePath, config_lang, [i for i in config_list if enableMap.get(i.get('name', ''), False)])
         return True
     
     def special_run(self) -> bool:

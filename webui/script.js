@@ -246,7 +246,8 @@ class ConfigManager {
             'launcher-ourplay-use-api': 'launcher.ourplay.use_api',
             'launcher-work-update': 'launcher.work.update',
             'launcher-work-mod': 'launcher.work.mod',
-            'launcher-work-bubble': 'launcher.bubble'
+            'launcher-work-bubble': 'launcher.work.bubble',
+            'launcher-work-fancy': 'launcher.work.fancy'
         };
         
         this.configCache = {}; // 配置缓存

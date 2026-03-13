@@ -97,7 +97,8 @@
         "work":{
             "update": "LM-G",
             "mod": false,
-            "bubble": false
+            "bubble": false,
+            "fancy": false
         },
         "last_install": {
             "llc" : "0",

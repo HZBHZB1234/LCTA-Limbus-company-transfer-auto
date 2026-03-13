@@ -74,7 +74,7 @@ fancy = [
                 },
                 "aim": "[back].name",
                 "action": [
-                    { "from": "^(.*)$", "to": "<color=#ff0000>\\1</color>" },
+                    { "from": "^(.*)$", "to": "<color=#ff0000>⚠️\\1⚠️</color>" },
                     { "rate": 0.5 },
                     { "from": "^(.*)$", "to": "<b><i>\\1</i></b>" }
                 ]
@@ -98,7 +98,7 @@ fancy = [
                 },
                 "aim": "[back].abName",
                 "action": [
-                    { "from": "^(.*)$", "to": "<color=#ff0000>\\1</color>" },
+                    { "from": "^(.*)$", "to": "<color=#ff0000>⚠️\\1⚠️</color>" },
                     { "rate": 0.5 },
                     { "from": "^(.*)$", "to": "<b><i>\\1</i></b>" }
                 ]

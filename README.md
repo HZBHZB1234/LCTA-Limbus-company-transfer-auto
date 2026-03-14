@@ -90,7 +90,8 @@
 
 ### 作者与社区
 - **B站主页**：[ygdtpnn](https://space.bilibili.com/3493119444126599)  
-- **最新介绍视频**：[LCTA 工具箱演示](https://www.bilibili.com/video/BV1iuAUzHEmA)  
+- **介绍视频**：[LCTA 工具箱演示](https://www.bilibili.com/video/BV1iuAUzHEmA)  
+- **最新版本介绍**: [介绍视频]([https://www.bilibili.com/video/BV1F3wxzfEt6)
   > ⚠️ 注：视频可能非最新，请以项目实际版本为准
 - **GitHub 作者**：[HZBHZB1234](https://github.com/HZBHZB1234)
 - **意见反馈**：[Issues 页面](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues)

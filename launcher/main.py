@@ -462,7 +462,7 @@ def main_pre():
     rotating_handler = RotatingFileHandler(".\\logs\\launcher.log", maxBytes=1024*100,
                                            backupCount=5, encoding='utf-8')
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[
             rotating_handler,

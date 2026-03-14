@@ -4236,6 +4236,7 @@ function confirmGamePath(foundPath) {
                         configManager.flushPendingUpdates();
                         configManager.applyConfigToUI();
                         addLogMessage('游戏路径已确认并保存: ' + foundPath, 'success');
+                        pywebview.api.init_cache();
                     } else {
                         addLogMessage('保存游戏路径时出错', 'error');
                     }

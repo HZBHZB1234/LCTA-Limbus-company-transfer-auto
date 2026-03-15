@@ -21,126 +21,12 @@ print(_project_root)
 sys.path.insert(0, str(_project_root))
 
 import translateFunc.translate_doc as translate_doc
+from translateFunc.proper.flat import *
 
 EMPTY_DATA = [{'dataList': []}, {}, []]
 EMPTY_DATA_LIST = [[], [{}]]
 EMPTY_TEXT = ['', '-']
 AVOID_PATH = ['usage', 'id', 'model']
-
-def flatten_dict_enhanced(d, parent_key=(), ignore_types=None, max_depth=None):
-    """
-    扁平化嵌套字典，使用元组作为键
-    
-    参数:
-        d: 要扁平化的字典
-        parent_key: 父键的元组，默认为空元组
-        ignore_types: 要忽略的值的类型列表，例如 [None, ''] 或 [type(None), str]
-        max_depth: 最大递归深度，None表示无限制
-    """
-    items = []
-    
-    def _flatten(obj, current_key, depth=0):
-        if max_depth and depth > max_depth:
-            items.append((current_key, obj))
-            return
-        
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                new_key = current_key + (str(k),)
-                _flatten(v, new_key, depth + 1)
-        elif isinstance(obj, (list, tuple)):
-            for i, item in enumerate(obj):
-                new_key = current_key + (i,)
-                _flatten(item, new_key, depth + 1)
-        else:
-            # 检查是否需要忽略该值
-            should_ignore = False
-            if ignore_types:
-                for ignore_type in ignore_types:
-                    # 如果ignore_type是类型本身
-                    if isinstance(ignore_type, type):
-                        if isinstance(obj, ignore_type):
-                            should_ignore = True
-                            break
-                    # 如果ignore_type是具体的值（如None, ''等）
-                    else:
-                        if obj == ignore_type:
-                            should_ignore = True
-                            break
-            
-            if not should_ignore:
-                items.append((current_key, obj))
-    
-    _flatten(d, parent_key)
-    return dict(items)
-
-def update_dict_with_flattened(original_dict, flat_updates):
-    """
-    使用扁平化字典更新原始字典
-    
-    参数:
-        original_dict: 要更新的原始字典
-        flat_updates: 扁平化字典，键为元组形式的路径，值为要更新的值
-    
-    返回:
-        更新后的原始字典（原地更新）
-    """
-    for path, value in flat_updates.items():
-        # 确保路径是元组
-        if not isinstance(path, tuple):
-            path = (path,)
-        
-        # 遍历到路径的倒数第二个元素
-        current = original_dict
-        for i, key in enumerate(path[:-1]):
-            # 如果是列表/元组索引
-            if isinstance(key, int):
-                # 确保当前位置是列表或元组
-                if isinstance(current, (list, tuple)):
-                    # 如果是元组，需要转换为列表才能修改
-                    if isinstance(current, tuple):
-                        # 这里假设我们不允许修改元组，跳过或抛异常
-                        # 但为了通用性，我们可以转换为列表
-                        raise TypeError(f"Cannot update tuple at path {path[:i+1]}")
-                    # 确保索引有效
-                    if key < len(current):
-                        current = current[key]
-                    else:
-                        raise IndexError(f"Index {key} out of range at path {path[:i+1]}")
-                else:
-                    raise TypeError(f"Expected list/tuple at {path[:i+1]}, got {type(current)}")
-            # 如果是字典键
-            else:
-                if isinstance(current, dict):
-                    if key not in current:
-                        # 如果键不存在，创建新字典
-                        current[key] = {}
-                    current = current[key]
-                else:
-                    raise TypeError(f"Expected dict at {path[:i+1]}, got {type(current)}")
-        
-        # 设置最终值
-        last_key = path[-1]
-        if isinstance(last_key, int):
-            if isinstance(current, (list, tuple)):
-                if isinstance(current, tuple):
-                    raise TypeError(f"Cannot update tuple at path {path}")
-                if last_key < len(current):
-                    current[last_key] = value
-                else:
-                    # 如果索引超出范围，扩展列表
-                    if last_key >= len(current):
-                        current.extend([None] * (last_key - len(current) + 1))
-                    current[last_key] = value
-            else:
-                raise TypeError(f"Expected list/tuple at {path[:-1]}, got {type(current)}")
-        else:
-            if isinstance(current, dict):
-                current[last_key] = value
-            else:
-                raise TypeError(f"Expected dict at {path[:-1]}, got {type(current)}")
-    
-    return original_dict
 
 class ProcesserExit(Exception):
     def __init__(self, exit_type):

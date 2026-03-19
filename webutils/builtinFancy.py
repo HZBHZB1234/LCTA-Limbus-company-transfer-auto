@@ -115,5 +115,21 @@ fancy = [
                 ]
             }
         ]
-    }
+    },
+    {
+        "name": "技能名称渐变(FL Like)",
+        "desc": "为技能名称添加渐变色",
+        "rules": [
+            {
+                "aimFile": "Skills_personality-.*\\.json$",
+                "aim": "dataList\\.\\d+\\.levelList\\.name",
+                "action": [
+                    {
+                        "builtIn": "skillColor",
+                        "rate": 1.0
+                    }
+                ]
+            }
+        ]
+    },
 ]

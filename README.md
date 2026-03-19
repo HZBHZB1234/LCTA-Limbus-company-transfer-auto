@@ -1,6 +1,7 @@
 # 🧰 LCTA - 边狱公司工具箱 (Limbus Company Transfer Auto)
 
-一个功能全面的《边狱公司》游戏辅助工具集，提供汉化、管理、优化等一系列自动化功能。
+一个功能全面的《边狱公司》游戏辅助工具集，提供汉化、管理、优化等一系列自动化功能。  
+~~你不要问我为什么是transfer不是translate，我也想要改~~  
 <img src='https://moe.8845.top/get/?name=LCTA&theme=moebooru'></img>
 
 ---

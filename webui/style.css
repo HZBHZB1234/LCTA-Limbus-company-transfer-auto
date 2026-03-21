@@ -1806,7 +1806,6 @@ button {
 /* API状态卡片样式 */
 .api-status-grid {
     display: grid;
-    grid-template-columns: 1fr;
     gap: 20px;
 }
 
@@ -1895,19 +1894,6 @@ button {
     background-color: var(--color-bg-card);
     border-radius: var(--radius-lg);
     border: 1px dashed var(--color-border);
-}
-
-/* 响应式调整 */
-@media (min-width: 768px) {
-    .api-status-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-
-@media (min-width: 1200px) {
-    .api-status-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
 }
 
 /* GitHub Markdown样式主题适配 */

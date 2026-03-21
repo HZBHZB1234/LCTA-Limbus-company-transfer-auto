@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path 
 import warnings
 from typing import List, Dict, Tuple
+import re
 
 projext_path = Path(__file__).parent.parent
 
@@ -109,3 +110,39 @@ for url, file in FILES:
         print(f"已成功下载: {file}")
             
 print("所有资源文件下载完成！")
+
+
+print("修改marked.js，替换.at()")
+def replace_at_with_brackets(code: str) -> str:
+    """
+    将 JavaScript 代码中的数组 .at() 方法替换为 [] 访问。
+    只处理参数为数字字面量的情况（包括负数），对于其他表达式保持原样。
+    例如：
+        arr.at(0)   -> arr[0]
+        arr.at(-1)  -> arr[arr.length - 1]
+        arr.at(i)   -> arr.at(i)   (保持不变)
+    """
+    def repl(match):
+        array_name = match.group(1)          # 数组名，可能包含点，如 obj.arr
+        arg = match.group(2).strip()         # 参数，去除空格
+        # 检查参数是否为整数（允许负号）
+        if re.match(r'^-?\d+$', arg):
+            num = int(arg)
+            if num >= 0:
+                return f"{array_name}[{num}]"
+            else:
+                # 负数转换为 array[array.length - abs(num)]
+                return f"{array_name}[{array_name}.length - {abs(num)}]"
+        else:
+            # 非数字字面量，保持原样
+            return match.group(0)
+
+    # 匹配模式：数组名.at(参数)
+    pattern = re.compile(r'([\w.]+)\.at\(([^)]+)\)')
+    return pattern.sub(repl, code)
+with open('marked/marked.min.js', 'r', encoding='utf-8') as f:
+    marked = f.read()
+    marked = replace_at_with_brackets(marked)
+
+with open('marked/marked.min.js', 'w', encoding='utf-8') as f:
+    f.write(marked)

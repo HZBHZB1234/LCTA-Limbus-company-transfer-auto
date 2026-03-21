@@ -1,24 +1,60 @@
 from typing import Dict, List, Tuple, Callable
-import requests
+from pathlib import Path
+import logging
+import json
+from translateFunc.proper.flat import *
+logger = logging.getLogger('fancy')
+logger.setLevel(logging.DEBUG)
 
 class SkillColorHandler():
     def __init__(self) -> None:
         self.data = {}
-        self.DATAURL = r'https://limbuscompany.huijiwiki.com/api/rest_v1/namespace/data?filter={%22Data_Identitychoose%22:%22Identitychoose%22}&count=true&pagesize=1000'
+        self.TARGET_FILES = [f'personality-skill-{i+1:0>2}.json' for i in range(12)]
+        self.transfer = {
+            "INDIGO": "#2020ED",
+            "VIOLET": "#8915D1",
+            "CRIMSON": "#ED2525",
+            "AMBER": "#F1D11F",
+            "SHAMROCK": "#22FF1F",
+            "AZURE": "#18EAF9",
+            "SCARLET": "#FF7B1D",
+            "WHITE": "#FFFFFF",
+            "BLACK": "#000000"
+        }
 
     def init_resource(self):
-        header = {
-            'User-Agent': r'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-            'Accept': r'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Encoding': r'gzip, deflate, br, zstd'
-        }
-        r = requests.get(self.DATAURL, verify=False, headers=header)
-        r.raise_for_status()
-        self.data = r.json()['_embedded']
+        from .function_resource import function_resources
+        tmp, NOTFOUND = function_resources(self.TARGET_FILES, logger)
+        tmp = Path(tmp)
+        for i in self.TARGET_FILES:
+            try:
+                target = tmp / i
+                _data = json.loads(target.read_text(encoding='utf-8-sig'))
+                self.data.update(self.processData(_data))
+            except Exception as e:
+                logger.exception(e)
+
+    def processData(self, _data) -> dict:
+        data = _data['list']
+        data = {i['id']: i['skillData'][0]['attributeType'] for i in data}
+        # data = {i['id']: {'罪孽': i['skillData'][0]['attributeType'],
+        #                   '攻击属性': i['skillData'][0]['atkType'],
+        #                   '强化': False if i['skillData'][0]['defaultValue'] else True,
+        #                   '攻击容量': i['skillData'][0]['targetNum'],
+        #                   '技能数': i['skillTier']} for i in data}
+        return data
 
     def exportFunc(self, value: str, data: Dict[tuple, str], dst_tuple: tuple) -> str:
         if not self.data:
             self.init_resource()
+        if len(value) >= 9:
+            return value
+        id_tuple = dst_tuple[:-3]+('id',)
+        _id = data[id_tuple]
+        try:
+            return f'<color={self.transfer[self.data[_id]]}>{value}</color>'
+        except:
+            return value
 
 skillColorHandler = SkillColorHandler()
 

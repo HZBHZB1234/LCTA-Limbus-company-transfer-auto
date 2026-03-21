@@ -122,7 +122,7 @@ fancy = [
         "rules": [
             {
                 "aimFile": "Skills_personality-.*\\.json$",
-                "aim": "dataList\\.\\d+\\.levelList\\.name",
+                "aim": "dataList\\.\\d+\\.levelList.\\d+\\.name",
                 "action": [
                     {
                         "builtIn": "skillColor",

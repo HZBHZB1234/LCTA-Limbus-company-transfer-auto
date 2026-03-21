@@ -23,6 +23,7 @@ int main(int argc, char* argv[]) {
     
     // 检查命令行参数
     int is_debug = 0;
+    int use_qt = 0;
     int show_console = 0;
     char script_name[MAX_PATH] = "code\\start_webui.py";
     
@@ -100,11 +101,14 @@ int main(int argc, char* argv[]) {
     // 设置其他有用的环境变量
     SetEnvironmentVariable("PYTHONUNBUFFERED", "1");
     SetEnvironmentVariable("PYTHONIOENCODING", "utf-8");
-    SetEnvironmentVariable("__version__", "4.1.4");
+    SetEnvironmentVariable("__version__", "4.1.5");
     if (is_debug) {
         SetEnvironmentVariable("__debug_exe__", "true");
     } else {
         SetEnvironmentVariable("__debug_exe__", "false");
+    };
+    if (use_qt) {
+        SetEnvironmentVariable("PYWEBVIEW_GUI", "qt");
     };
     
     // 5. 构建脚本路径

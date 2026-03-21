@@ -3,6 +3,7 @@ import os
 import shutil
 from pathlib import Path 
 import warnings
+from typing import List, Dict, Tuple
 
 projext_path = Path(__file__).parent.parent
 
@@ -10,11 +11,8 @@ print('开始撰写Release Note')
 update_note = projext_path / 'webui' / 'assets' / "update.md"
 ABOUT = '''
 ## 文件下载指导  
-- LCTA-Portable-Full.zip 完整版全功能，空间占用较大。推荐下载此版本  
-- LCTA-Folder.zip 兼容版文件夹版  
-- LCTA-Folder-Debug.zip 兼容调试版，显示命令窗口  
-- LCTA-OneFile.zip 兼容版单文件版  
-- LCTA-OneFile-Debug.zip 兼容调试版，显示命令窗口  
+- LCTA-Portable-Full.zip 正常版本。推荐下载此版本  
+- LCTA-Portable-Full-Compatible.zip 兼容版，空间占用较大且存在可能出现的UI界面错误，请在无法使用正常版本时使用该版本  
 - LCTA-update.zip 完整版自动更新功能需求文件，包含项目源码 
 '''
 update_note = update_note.read_text(encoding='utf-8').split('\n')
@@ -30,13 +28,23 @@ release_note = r + '\n' + ABOUT
 Path('update.md').write_text(release_note, encoding='utf-8')
 print('生成更新日志成功')
 
-print('开始创建debug.c')
+print('开始创建c语言脚本')
+createC: List[Tuple[str, List[Tuple[str, str]]]] = [
+    ('launcher.c', []),
+    ('launcher_debug.c', [('int is_debug = 0;', 'int is_debug = 1;')]),
+    ('launcher_qt.c', [('int use_qt = 0;', 'int use_qt = 1;')]),
+    ('launcher_qt_debug.c', [('int use_qt = 0;', 'int use_qt = 1;'),
+                       ('int is_debug = 0;', 'int is_debug = 1;')])
+]
 os.chdir(projext_path)
-path_debug = Path(projext_path) / "launcher_debug.c"
-shutil.copy2("launcher.c", path_debug)
-path_debug.write_text(path_debug.read_text(encoding='utf-8').replace(
-    'int is_debug = 0;', 'int is_debug = 1;'),
-                       encoding='utf-8')
+codeC = Path('launcher.c').read_text(encoding='utf-8')
+baseDir = projext_path.parent
+for outputPath, actions in createC:
+    output = baseDir / outputPath
+    outputContent = codeC
+    for _, __ in actions:
+        outputContent = outputContent.replace(_, __)
+    output.write_text(outputContent, encoding='utf-8')
 
 print('开始复制图标文件')
 shutil.copy2("favicon.ico", "webui/favicon.ico")

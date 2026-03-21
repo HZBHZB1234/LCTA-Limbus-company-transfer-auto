@@ -27,13 +27,10 @@
 
 ### 安装
 1. 从 [Release 页面](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/releases) 下载最新版本
-  > 文件下载指导  
-  LCTA-Portable-Full.zip 完整版全功能，空间占用较大。推荐下载此版本  
-  LCTA-Folder.zip 兼容版文件夹版  
-  LCTA-Folder-Debug.zip 兼容调试版，显示命令窗口  
-  LCTA-OneFile.zip 兼容版单文件版  
-  LCTA-OneFile-Debug.zip 兼容调试版，显示命令窗口  
-  LCTA-update.zip 完整版自动更新功能需求文件，包含项目源码  
+   > 文件下载指导  
+   - LCTA-Portable-Full.zip 正常版本。推荐下载此版本  
+   - LCTA-Portable-Full-Compatible.zip 兼容版，空间占用较大且存在可能出现的UI界面错误，请在无法使用正常版本时使用该版本  
+   - LCTA-update.zip 完整版自动更新功能需求文件，包含项目源码 
 2. 解压到任意目录
 3. 运行 **可执行文件(.exe)** 即可启动工具箱
 

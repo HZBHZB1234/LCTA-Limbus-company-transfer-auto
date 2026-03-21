@@ -1,4 +1,4 @@
-__version__ = "4.1.4"
+__version__ = "4.1.5"
 
 import sys
 import os
@@ -45,7 +45,7 @@ def start_webui():
     try:
         init_env()
         if os.getenv('__debug_exe__', 'false') == 'true':
-            os.environ['COREHOST_TRACE'] = 1
+            os.environ['COREHOST_TRACE'] = '1'
             os.environ["COREHOST_TRACEFILE"] = "hostfxr.log"
         try:
             import clr

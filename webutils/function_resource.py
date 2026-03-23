@@ -85,7 +85,7 @@ def function_resources(target: list, logger: logging.Logger= logging.getLogger('
     _tmp = tempfile.mkdtemp()
     resourcePath = Path.home() / 'AppData' / 'LocalLow' / 'Unity' / 'ProjectMoon_LimbusCompany'
     files = resourcePath.rglob('__data')
-    files = sorted(files, key=lambda a: a.stat().st_atime, reverse=True)
+    files = sorted(files, key=lambda a: a.stat().st_ctime_ns, reverse=True)
     logger.debug(f'找到{len(files)}个文件')
     customTarget = deepcopy(target)
     for file in files:

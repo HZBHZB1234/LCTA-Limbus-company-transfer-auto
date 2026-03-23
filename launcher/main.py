@@ -462,13 +462,14 @@ def main_pre():
     rotating_handler = RotatingFileHandler(".\\logs\\launcher.log", maxBytes=1024*100,
                                            backupCount=5, encoding='utf-8')
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[
             rotating_handler,
             logging.StreamHandler(stream=sys.stdout)
         ]
     )
+    rotating_handler.setLevel(logging.DEBUG)
     logger = LogManager()
     logger.set_log_callback(logging.info)
     logger.set_error_callback(logging.exception)

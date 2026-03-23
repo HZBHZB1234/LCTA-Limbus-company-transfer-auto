@@ -201,7 +201,7 @@ class GitHubReleaseFetcher:
                 return None, proxy_url
                 
         except Exception as e:
-            print(f"代理 {proxy_url} 请求失败: {e}")
+            print(f"代理 {proxy_url} 请求失败")
             return None, proxy_url
     
     def _make_request(self, repo_owner: str, repo_name: str, endpoint: str, **kwargs) -> Optional[Dict[str, Any]]:

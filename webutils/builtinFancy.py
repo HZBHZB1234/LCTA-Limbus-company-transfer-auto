@@ -125,8 +125,10 @@ fancy = [
                 "aim": "dataList\\.\\d+\\.levelList.\\d+\\.name",
                 "action": [
                     {
-                        "builtIn": "skillColor",
-                        "rate": 1.0
+                        "builtIn": "skillColor"
+                    },
+                    {
+                        "rate": 0.3
                     }
                 ]
             }

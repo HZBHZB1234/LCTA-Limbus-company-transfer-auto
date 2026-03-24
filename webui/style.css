@@ -2144,3 +2144,68 @@ button {
     opacity: 0.8;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
+
+/* 拖拽遮罩层 */
+.drop-zone-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    pointer-events: none;
+    animation: maskFadeIn 0.2s ease-out;
+}
+
+@keyframes maskFadeIn {
+    from {
+        opacity: 0;
+        backdrop-filter: blur(0);
+    }
+    to {
+        opacity: 1;
+        backdrop-filter: blur(8px);
+    }
+}
+
+.drop-zone-mask-content {
+    text-align: center;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    transform: scale(1);
+    animation: contentScaleIn 0.25s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+}
+
+@keyframes contentScaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.drop-zone-mask-content i {
+    font-size: 64px;
+    margin-bottom: 20px;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
+.drop-zone-mask-content p {
+    font-size: 24px;
+    font-weight: 500;
+    margin: 0 0 8px;
+}
+
+.drop-zone-mask-content small {
+    font-size: 14px;
+    opacity: 0.8;
+}

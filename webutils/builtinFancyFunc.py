@@ -47,8 +47,8 @@ class SkillColorHandler():
     def exportFunc(self, value: str, data: Dict[tuple, str], dst_tuple: tuple) -> str:
         if not self.data:
             self.init_resource()
-        if len(value) >= 9:
-            return value
+        # if len(value) >= 9:
+        #     return value
         id_tuple = dst_tuple[:-3]+('id',)
         _id = data[id_tuple]
         try:

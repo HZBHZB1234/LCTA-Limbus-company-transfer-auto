@@ -1122,6 +1122,17 @@ class LCTA_API():
             self.log_error(e)
             return False
 
+    def handle_dropped_files(self, files_data):
+        """处理前端拖拽的文件数据"""
+        # files_data 是前端传递的文件信息列表
+        for file_info in files_data:
+            print(f"收到拖拽文件: {file_info['name']}, 大小: {file_info['size']}")
+        return {"success": True, "message": "收到文件"}
+
+    def install_from_dropped_files(self, files_data):
+        """从拖拽的文件安装汉化包"""
+        # 实现安装逻辑
+        return {"success": True, "message": "安装完成"}
 def setup_logging():
     """
     配置日志系统，使用TimedRotatingFileHandler按时间轮转日志

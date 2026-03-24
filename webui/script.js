@@ -4080,6 +4080,10 @@ function init() {
     // 初始化主题管理器
     themeManager = new ThemeManager();
     
+    // 初始化拖拽文件管理器
+    dragDropManager = new DragDropManager();
+    setupDragDropCallback();
+    
     // 初始化导航
     initNavigation();
     
@@ -4374,6 +4378,208 @@ async function showGuide(page) {
   };
 })();
 
+// 拖拽文件管理器
+// 拖拽文件管理器（毛玻璃遮罩版）
+class DragDropManager {
+    constructor() {
+        this.dropZoneElement = document.querySelector('.main-content');
+        this.maskElement = null;
+        this.onFileDropCallback = null;
+        this.init();
+    }
+    
+    init() {
+        if (!this.dropZoneElement) return;
+        
+        // 阻止页面默认拖拽行为
+        document.body.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        
+        document.body.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        
+        document.body.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        
+        document.body.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        
+        // 为拖拽区域添加事件
+        this.dropZoneElement.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showMask();
+        });
+        
+        this.dropZoneElement.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // 确保遮罩层显示
+            if (!this.maskElement) {
+                this.showMask();
+            }
+        });
+        
+        this.dropZoneElement.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // 检查是否真正离开了拖拽区域
+            const rect = this.dropZoneElement.getBoundingClientRect();
+            const x = e.clientX;
+            const y = e.clientY;
+            
+            if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+                this.hideMask();
+            }
+        });
+        
+        this.dropZoneElement.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.hideMask();
+            this.handleDrop(e);
+        });
+    }
+    
+    showMask() {
+        if (this.maskElement) return;
+        
+        this.maskElement = document.createElement('div');
+        this.maskElement.className = 'drop-zone-mask';
+        this.maskElement.innerHTML = `
+            <div class="drop-zone-mask-content">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <p>拖拽文件到这里</p>
+                <small>支持汉化包安装，模组安装或是版本更新</small>
+            </div>
+        `;
+        document.body.appendChild(this.maskElement);
+    }
+    
+    hideMask() {
+        if (this.maskElement) {
+            this.maskElement.remove();
+            this.maskElement = null;
+        }
+    }
+    
+    handleDrop(event) {
+        const files = [];
+        
+        if (event.dataTransfer.items) {
+            for (let i = 0; i < event.dataTransfer.items.length; i++) {
+                const item = event.dataTransfer.items[i];
+                if (item.kind === 'file') {
+                    const file = item.getAsFile();
+                    if (file) {
+                        files.push(file);
+                    }
+                }
+            }
+        } else {
+            for (let i = 0; i < event.dataTransfer.files.length; i++) {
+                files.push(event.dataTransfer.files[i]);
+            }
+        }
+        
+        if (files.length === 0) {
+            addLogMessage('未检测到文件拖拽', 'warning');
+            return;
+        }
+        
+        addLogMessage(`检测到 ${files.length} 个文件被拖入`, 'info');
+        
+        for (const file of files) {
+            addLogMessage(`拖入文件: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`, 'info');
+        }
+        
+        if (this.onFileDropCallback && typeof this.onFileDropCallback === 'function') {
+            this.onFileDropCallback(files);
+        }
+        
+        // 如果有 pywebview API，可以尝试获取文件路径
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_dropped_files) {
+            const fileData = files.map(f => ({
+                name: f.name,
+                size: f.size,
+                type: f.type,
+                lastModified: f.lastModified
+            }));
+            pywebview.api.handle_dropped_files(fileData).catch(err => {
+                addLogMessage(`处理拖拽文件失败: ${err}`, 'error');
+            });
+        }
+    }
+    
+    setOnFileDropCallback(callback) {
+        this.onFileDropCallback = callback;
+    }
+}
+// 创建全局拖拽管理器实例
+let dragDropManager;
+
+// 设置拖拽文件回调函数（可根据需要自定义）
+function setupDragDropCallback() {
+    if (!dragDropManager) return;
+    
+    dragDropManager.setOnFileDropCallback(async (files) => {
+        // 示例回调：处理拖入的文件
+        addLogMessage(`收到 ${files.length} 个拖拽文件`, 'success');
+        
+        // 判断是否为汉化包文件（.zip, .7z等）
+        const archiveFiles = files.filter(f => 
+            f.name.endsWith('.zip') || f.name.endsWith('.7z') || f.name.endsWith('.rar')
+        );
+        
+        if (archiveFiles.length > 0) {
+            // 显示确认对话框
+            showConfirm('安装汉化包', 
+                `检测到 ${archiveFiles.length} 个压缩文件，是否安装为汉化包？\n\n文件列表:\n${archiveFiles.map(f => f.name).join('\n')}`,
+                async () => {
+                    // 用户确认安装
+                    if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.install_from_dropped_files) {
+                        const modal = new ProgressModal('安装拖拽文件');
+                        modal.addLog(`准备安装 ${archiveFiles.length} 个文件...`);
+                        
+                        const fileData = archiveFiles.map(f => ({
+                            name: f.name,
+                            size: f.size,
+                            type: f.type
+                        }));
+                        
+                        try {
+                            const result = await pywebview.api.install_from_dropped_files(fileData);
+                            if (result.success) {
+                                modal.complete(true, '安装完成');
+                                setTimeout(() => modal.close(), 1500);
+                                refreshInstallPackageList();
+                            } else {
+                                modal.complete(false, `安装失败: ${result.message}`);
+                            }
+                        } catch (err) {
+                            modal.complete(false, `安装出错: ${err}`);
+                        }
+                    } else {
+                        addLogMessage('后端未实现 install_from_dropped_files 方法', 'warning');
+                    }
+                },
+                () => {
+                    addLogMessage('用户取消安装拖拽文件', 'info');
+                }
+            );
+        } else {
+            addLogMessage('拖入的文件不是压缩包，请拖入 .zip 或 .7z 格式的汉化包文件', 'info');
+        }
+    });
+}
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {

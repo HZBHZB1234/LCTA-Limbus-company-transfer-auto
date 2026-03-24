@@ -56,7 +56,7 @@ fancy = [
                 "aim": "dataList\\.\\d+\\.dlg",
                 "action": [
                     {
-                        "rate": 1.0
+                        "rate": 0.4
                     }
                 ]
             }
@@ -64,7 +64,10 @@ fancy = [
     },
     {
         "name": "EGO文本渐变(FL Like)",
-        "desc": "为EGO文本添加渐变色",
+        "desc": "为EGO文本添加渐变色，与人格技能冲突",
+        "conflict": [
+            "EGO名称渐变(FL Like)"
+        ],
         "rules": [
             {
                 "aimFile": "Skills_Ego_Personality-.*\\.json$",
@@ -132,6 +135,39 @@ fancy = [
                     }
                 ]
             }
+        ]
+    },
+    {
+        "name": "EGO名称渐变(FL Like)",
+        "desc": "为EGO名称添加渐变色，与EGO文本美化冲突",
+        "conflict": [
+            "EGO文本渐变(FL Like)"
+        ],
+        "rules": [
+            {
+                "aimFile": "Skills_Ego_Personality-.*\\.json$",
+                "aim": "dataList\\.\\d+\\.levelList\\.\\d+\\.name",
+                "action": [
+                    {
+                        "builtIn": "skillColor"
+                    },
+                    {
+                        "rate": 0.3
+                    }
+                ]
+            },
+            {
+                "aimFile": "Skills_Ego_Personality-.*\\.json$",
+                "aim": "dataList\\.\\d+\\.levelList\\.\\d+\\.adName",
+                "action": [
+                    {
+                        "builtIn": "skillColor"
+                    },
+                    {
+                        "rate": 0.3
+                    }
+                ]
+            },
         ]
     },
 ]

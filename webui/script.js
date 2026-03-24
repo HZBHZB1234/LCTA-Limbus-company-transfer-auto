@@ -3253,8 +3253,26 @@ class FancyManager {
     }
 
     onToggleRuleset(itemName, enabled) {
+        let conflict = [];
+        this.rulesets.forEach(element => {
+            if (element.name == itemName) {
+                conflict = element.conflict;
+            }
+        });
+        let conflictMessage = '';
+        conflict.forEach(element => {
+            if (this.enabledMap[element]) {
+                conflictMessage += `${element}  `;
+            }
+        });
+        if (conflictMessage) {
+            showMessage('冲突', `无法在启用  ${conflictMessage}  的情况下启用 ${itemName} 。
+                请先取消冲突的规则的启用后再启用 ${itemName} `);
+            this.listManager.enabledMap[itemName] = false;
+            this.listManager.updateList();
+            return
+        };
         this.enabledMap[itemName] = enabled;
-        // 可即时保存，但为了性能，等待用户点击保存全部
     }
 
     updateEditorUI() {

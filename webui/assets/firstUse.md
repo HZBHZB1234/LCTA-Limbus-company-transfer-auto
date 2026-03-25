@@ -5,6 +5,14 @@ LCTA 工具箱是一款为《边狱公司》游戏打造的全面辅助工具集
 若非对自己的操作能力有信心，**建议完整阅读本指引**。  
 本窗口仅显示一次，您也可以在 **关于** 页面中再次查看。
 
+您也可以点击以下按钮，快速、无需大脑的完成软件配置。
+
+<button class="primary-btn" onclick="goAndShow('elder');switchQuestion('main');">
+    <i class="fas fa-play"></i>
+    使用老年人模式
+</button>
+
+
 ---
 
 ## 先说结论，不同人的LCTA的最佳实践 

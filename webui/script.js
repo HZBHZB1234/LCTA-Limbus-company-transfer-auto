@@ -1389,7 +1389,8 @@ async function loadAndRenderMarkdown() {
     const files = [
       { url: '/assets/README.md', className: 'about-content' },
       { url: '/assets/update.md', className: 'update-content' },
-      { url: '/assets/firstUse.md', className: 'use-help' }
+      { url: '/assets/firstUse.md', className: 'use-help' },
+      { url: '/assets/firstUse.md', className: 'welcome-content' }
     ];
 
     // 并发请求所有文件
@@ -1444,6 +1445,33 @@ async function loadAndRenderMarkdown() {
   } catch (error) {
     console.error('加载Markdown文件过程中发生错误:', error);
   }
+}
+
+async function switchQuestion(name) {
+    const response = await fetch(`elder/${name}.md`);
+        
+    if (!response.ok) {
+      throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
+    }
+    
+    // 获取文本内容
+    const markdownText = await response.text();
+    
+    // 转换Markdown为HTML
+    const htmlContent = simpleMarkdownToHtml(markdownText);
+    
+    // 找到目标div元素
+    const targetDiv = document.querySelector('.quetion-content');
+    
+    if (!targetDiv) {
+      console.warn(`未找到问题元素`);
+      return;
+    }
+    
+    // 插入HTML内容
+    targetDiv.innerHTML = htmlContent;
+    
+    console.log(`成功加载并渲染: ${name}`);
 }
 
 // 浏览文件函数
@@ -4156,29 +4184,10 @@ function removeConnectionMask() {
     }
 }
 
-async function showFirstUseWindows() {
-
-    const modal = showMessage('欢迎使用LCTA', '正在加载数据内容')
-
-    const response = await fetch('assets/firstUse.md');
-
-    let markdownText
-    
-    if (!response.ok) {
-        markdownText = `加载 使用须知 失败: ${response.status} ${response.statusText}`;
-    } else {
-        markdownText = await response.text();
-    };
-    
-    const bodyHtml = simpleMarkdownToHtml(markdownText);
-    const showing = `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`
-
-    setTimeout(() => {
-        const statusElement = document.getElementById(`modal-status-${modal.id}`);
-        if (statusElement) {
-            statusElement.innerHTML = showing;
-        }
-    }, 100);
+async function goAndShow(name) {
+    const targetButton = document.getElementById(`${name}-btn`);
+    targetButton.style.display = 'block';
+    targetButton.click();
 }
 
 function setupGlobalErrorHandling() {
@@ -4634,7 +4643,7 @@ window.addEventListener('pywebviewready', function() {
         function(result) {
             first_use = result
             if (result) {
-                showFirstUseWindows();
+                goAndShow('welcome');
             }
         }
     );

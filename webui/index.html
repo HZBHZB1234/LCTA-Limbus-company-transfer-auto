@@ -32,6 +32,18 @@
         </div>
 
         <div class="sidebar-menu">
+            <button id="welcome-btn" class="nav-btn active" style="display: none;">
+                <i class="fas fa-user-circle"></i>
+                <span>欢迎</span>
+                <div class="nav-indicator"></div>
+            </button>
+
+            <button id="elder-btn" class="nav-btn active" style="display: none;">
+                <i class="fas fa-compass"></i>
+                <span>老年人模式</span>
+                <div class="nav-indicator"></div>
+            </button>
+            
             <button id="translate-btn" class="nav-btn active">
                 <i class="fas fa-language"></i>
                 <span>翻译工具</span>
@@ -1021,6 +1033,54 @@
             </div>
         </div>
 
+        <!-- 欢迎界面 -->
+        <div id="welcome-section" class="content-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-user-circle"></i>
+                    欢迎
+                </h2>
+                <p class="section-subtitle">边狱公司汉化工具箱</p>
+            </div>
+            
+            <div class="about-container">
+                <div class="about-card">
+                    <div class="about-header">
+                        <div class="about-logo">
+                            <i class="fas fa-language"></i>
+                        </div>
+                        <div class="about-title">
+                            <h3>LCTA - 边狱公司汉化工具箱</h3>
+                            <p class="version-badge">版本 4.1.5</p>
+                        </div>
+                    </div>
+                    
+                    <div class="markdown-body"> 
+                        <div class="welcome-content"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 老年人模式 -->
+        <div id="elder-section" class="content-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-compass"></i>
+                    老年人模式
+                </h2>
+                <p class="section-subtitle">简单方便，不需要动脑的指引程序</p>
+            </div>
+            
+            <div class="question-container">
+                <div class="about-card">
+                    <div class="markdown-body"> 
+                        <div class="quetion-content"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 日志界面 -->
         <div id="log-section" class="content-section">
             <div class="section-header">
@@ -1421,9 +1481,9 @@
                     强制刷新缓存并重载
                 </button>
 
-                <button class="primary-btn" onclick="showFirstUseWindows();">
+                <button class="primary-btn" onclick="goAndShow('welcome');">
                     <i class="fas fa-play"></i>
-                    显示初始窗口
+                    显示欢迎页面
                 </button>
 
                 <button class="primary-btn" onclick="const modal = new ProgressModal('测试窗口');

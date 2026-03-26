@@ -35,7 +35,10 @@ createC: List[Tuple[str, List[Tuple[str, str]]]] = [
     ('launcher_debug.c', [('int is_debug = 0;', 'int is_debug = 1;')]),
     ('launcher_qt.c', [('int use_qt = 0;', 'int use_qt = 1;')]),
     ('launcher_qt_debug.c', [('int use_qt = 0;', 'int use_qt = 1;'),
-                       ('int is_debug = 0;', 'int is_debug = 1;')])
+                       ('int is_debug = 0;', 'int is_debug = 1;')]),
+    ('test.c', [('char script_name[MAX_PATH] = "code\\start_webui.py";', 
+    'char script_name[MAX_PATH] = "code\\webutils\\test.py";'),
+    ('int is_debug = 0;', 'int is_debug = 1;')])                   
 ]
 os.chdir(projext_path)
 codeC = Path('launcher.c').read_text(encoding='utf-8')

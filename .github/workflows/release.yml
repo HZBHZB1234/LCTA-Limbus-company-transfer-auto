@@ -11,6 +11,7 @@ on:
 env:
   PYTHON_VERSION: 3.9.6  # 使用嵌入式Python版本
   APP_NAME: "LCTA"
+  TESTER_NAME: "无法打开？运行环境检测"
   PYINSTALLER_ARGU: "--add-data \"LCTA_backup/config_default.json;.\" --add-data \"LCTA_backup/config_check.json;.\" --add-data \"LCTA_backup/webui;webui\" -i \"LCTA_backup/favicon.ico\""
 
 jobs:
@@ -78,6 +79,11 @@ jobs:
         gcc -O2 -o launcher_debug.exe launcher_qt_debug.c launcher_res.o -lshlwapi
         strip launcher_debug.exe
         mv launcher_debug.exe release\${{ env.APP_NAME }}-Compatible\launcher_debug.exe
+
+        gcc -O2 -o tester.exe test.c launcher_res.o -lshlwapi
+        strip tester.exe
+        cp tester.exe release\${{ env.APP_NAME }}\${{ env.TESTER_NAME }}.exe
+        mv tester.exe release\${{ env.APP_NAME }}-Compatible\${{ env.TESTER_NAME }}.exe
     - name: Install Dependencies
       run: |
         python -m venv venv

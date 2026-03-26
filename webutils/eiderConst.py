@@ -3,5 +3,9 @@ updateList = {
 }
 
 bindRefer = {
+    'main': {}
+}
+
+relyList = {
     'main': []
 }

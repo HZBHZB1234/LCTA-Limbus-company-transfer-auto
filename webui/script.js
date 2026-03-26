@@ -1452,11 +1452,27 @@ async function loadAndRenderMarkdown() {
 
 class ElderManager {
     async init() {
-        this.historyList = JSON.parse(configManager.getCachedValue('elder_list'));
-
+        this.targetDiv = document.querySelector('.quetion-content')
         this.updateList = await pywebview.api.get_attr('updateList');
         this.refer = await pywebview.api.get_attr('bindRefer');
-        this.version = '415'
+        this.relyList = await pywebview.api.get_attr('relyList')
+        const version = '4.1.5'
+        this.version = version.replace('.', '')
+        let elderList = configManager.getCachedValue('elder_list');
+        if (!elderList) {
+            elderList = JSON.stringify(this.updateList);
+            this.historyList = JSON.parse(elderList);
+            for (const value of Object.keys(this.historyList)) {
+                this.historyList[value] = 'new';
+            }
+        } else {
+            this.historyList = JSON.parse(elderList);
+            for (const value of Object.keys(this.updateList)) {
+                if (this.historyList[value] === undefined) {
+                    this.historyList[value] = 'new';
+                }
+            }
+        }
     }
 
     async initPage() {
@@ -1465,12 +1481,71 @@ class ElderManager {
     }
 
     evalNextPage() {
+        let hasShowFlag = false;
+        let result = '';
+        for (const value of Object.keys(this.historyList)) {
+            if (!hasShowFlag) {
+                if (value == this.latestPage) {
+                    hasShowFlag = true;
+                }
+                continue;
+            }
+            if (this.historyList[value] == 'new' || this.historyList[value] < this.updateList[value]) {
+                if (this.relyList[value].every(
+                    (rely) => {
+                        if (typeof(rely) == 'string') {
+                            return configManager.getCachedValue(rely)
+                        } else {
+                            return configManager.getCachedValue(rely[0]) == rely[1]
+                        }
+                    }
+                )) {
+                    result = value;
+                    break;
+                };
+            }
+        }
+        return result;
+    }
 
+    async savePageRefer() {
+        const pageRefer = this.refer[this.latestPage];
+        for (const value of Object.keys(pageRefer)) {
+            const target = this.targetDiv.getElementById(value);
+            let newValue;
+            if (target.type === 'checkbox') {
+                newValue = target.checked;
+            } else if (target.tagName === 'SELECT' || target.tagName === 'INPUT') {
+                newValue = target.value;
+            }
+            await configManager.updateConfigValue(pageRefer[newValue][0], newValue);
+        }
+        await configManager.flushPendingUpdates();
+    }
+
+    async loadPageRefer() {
+        const pageRefer = this.refer[this.latestPage];
+        for (const value of Object.keys(pageRefer)) {
+            const target = this.targetDiv.getElementById(value);
+            let newValue = configManager.getCachedValue(pageRefer[newValue][1]);
+            if (target.type === 'checkbox') {
+                target.checked = newValue;
+            } else if (target.tagName === 'SELECT' || target.tagName === 'INPUT') {
+                target.value = newValue;
+            }
+        }
     }
 
     async switchPage() {
-        const pageRefer = this.refer[this.latestPage];
-        const nextPage = this.evalNextPage()
+        await this.savePageRefer();
+        const nextPage = this.evalNextPage();
+        if (nextPage) {
+            this.latestPage = nextPage;
+            await this.loadPage(nextPage);
+            this.loadPageRefer();
+        } else {
+            this.loadPage('final');
+        }
     }
 
     async loadPage(name) {
@@ -1486,16 +1561,7 @@ class ElderManager {
         // 转换Markdown为HTML
         const htmlContent = simpleMarkdownToHtml(markdownText);
         
-        // 找到目标div元素
-        const targetDiv = document.querySelector('.quetion-content');
-        
-        if (!targetDiv) {
-            console.warn(`未找到问题元素`);
-            return;
-        }
-        
-        // 插入HTML内容
-        targetDiv.innerHTML = htmlContent;
+        this.targetDiv.innerHTML = htmlContent;
         
         console.log(`成功加载并渲染: ${name}`);
     }
@@ -3160,6 +3226,9 @@ async function createSymlink() {
                     };
                     if (hasContent) {
                         showConfirm('警告', `目标文件夹中含有文件。可能出现非预期行为。
+                            这有可能导致以下错误: 
+                            游戏无法正常启动，点击删除软链接时同时移动目标文件夹下的所有文件。
+                            正常的做法是创建一个空文件夹用来盛放文件。
                             如果你确定知道自己在做什么，请点击确定`,
                         doCreate, () => {})
                     } else {
@@ -3183,6 +3252,9 @@ async function createSymlink() {
                     };
                     if (hasContent) {
                         showConfirm('警告', `目标文件夹中含有文件。可能出现非预期行为。
+                            这有可能导致以下错误: 
+                            游戏无法正常启动，点击删除软链接时同时移动目标文件夹下的所有文件。
+                            正常的做法是创建一个空文件夹用来盛放文件。
                             如果你确定知道自己在做什么，请点击确定`,
                         doCreate, () => {})
                     } else {
@@ -4788,6 +4860,9 @@ window.addEventListener('pywebviewready', function() {
 
                 fancyManager = new FancyManager();
                 fancyManager.init();
+                
+                elderManager.init();
+
             }
             checkGamePath();
             

@@ -59,6 +59,7 @@ class LCTA_API():
         self.LLM_TRANSLATOR = LLM_TRANSLATOR
         self.updateList= updateList
         self.bindRefer = bindRefer
+        self.relyList = relyList
         self.set_function()
         self.init_config()
 

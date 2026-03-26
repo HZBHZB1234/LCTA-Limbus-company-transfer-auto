@@ -23,7 +23,7 @@ from .function_manage import (find_installed_packages,
                               remove_symlink_for)
 from .builtinFancy import fancy as builtinFancyConfig
 from .function_fancy import fancy_main
-from .eiderConst import updateList, bindRefer
+from .eiderConst import updateList, bindRefer, relyList
 
 __all__ = [
     'function_llc_main',
@@ -60,5 +60,6 @@ __all__ = [
     'builtinFancyConfig',
     'fancy_main',
     'updateList',
-    'bindRefer'
+    'bindRefer',
+    'relyList'
 ]

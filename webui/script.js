@@ -169,6 +169,7 @@ class ConfigManager {
             'enable-storage': 'enable_storage',
             'storage-path': 'storage_path',
             '--theme': 'theme',
+            '--elder': 'elder_list',
 
             // 翻译设置
             "translator-service-select": "ui_default.translator.translator",
@@ -1447,32 +1448,62 @@ async function loadAndRenderMarkdown() {
   }
 }
 
-async function switchQuestion(name) {
-    const response = await fetch(`elder/${name}.md`);
+// 老年人模式切换相关代码
+
+class ElderManager {
+    async init() {
+        this.historyList = JSON.parse(configManager.getCachedValue('elder_list'));
+
+        this.updateList = await pywebview.api.get_attr('updateList');
+        this.refer = await pywebview.api.get_attr('bindRefer');
+        this.version = '415'
+    }
+
+    async initPage() {
+        this.latestPage = 'main';
+        await this.loadPage('main');
+    }
+
+    evalNextPage() {
+
+    }
+
+    async switchPage() {
+        const pageRefer = this.refer[this.latestPage];
+        const nextPage = this.evalNextPage()
+    }
+
+    async loadPage(name) {
+        const response = await fetch(`elder/${name}.md`);
+            
+        if (!response.ok) {
+            throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
+        }
         
-    if (!response.ok) {
-      throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
+        // 获取文本内容
+        const markdownText = await response.text();
+        
+        // 转换Markdown为HTML
+        const htmlContent = simpleMarkdownToHtml(markdownText);
+        
+        // 找到目标div元素
+        const targetDiv = document.querySelector('.quetion-content');
+        
+        if (!targetDiv) {
+            console.warn(`未找到问题元素`);
+            return;
+        }
+        
+        // 插入HTML内容
+        targetDiv.innerHTML = htmlContent;
+        
+        console.log(`成功加载并渲染: ${name}`);
     }
+
     
-    // 获取文本内容
-    const markdownText = await response.text();
-    
-    // 转换Markdown为HTML
-    const htmlContent = simpleMarkdownToHtml(markdownText);
-    
-    // 找到目标div元素
-    const targetDiv = document.querySelector('.quetion-content');
-    
-    if (!targetDiv) {
-      console.warn(`未找到问题元素`);
-      return;
-    }
-    
-    // 插入HTML内容
-    targetDiv.innerHTML = htmlContent;
-    
-    console.log(`成功加载并渲染: ${name}`);
 }
+
+elderManager = new ElderManager();
 
 // 浏览文件函数
 function browseFile(inputId) {
@@ -3287,19 +3318,23 @@ class FancyManager {
                 conflict = element.conflict;
             }
         });
-        let conflictMessage = '';
-        conflict.forEach(element => {
-            if (this.enabledMap[element]) {
-                conflictMessage += `${element}  `;
-            }
-        });
-        if (conflictMessage) {
-            showMessage('冲突', `无法在启用  ${conflictMessage}  的情况下启用 ${itemName} 。
-                请先取消冲突的规则的启用后再启用 ${itemName} `);
-            this.listManager.enabledMap[itemName] = false;
-            this.listManager.updateList();
-            return
-        };
+        try {
+            let conflictMessage = '';
+            conflict.forEach(element => {
+                if (this.enabledMap[element]) {
+                    conflictMessage += `${element}  `;
+                }
+            });
+            if (conflictMessage) {
+                showMessage('冲突', `无法在启用  ${conflictMessage}  的情况下启用 ${itemName} 。
+                    请先取消冲突的规则的启用后再启用 ${itemName} `);
+                this.listManager.enabledMap[itemName] = false;
+                this.listManager.updateList();
+                return
+            };
+        } catch (e) {
+            console.log(`切换时警告: ${e} 一般而言不是问题`)
+        }
         this.enabledMap[itemName] = enabled;
     }
 

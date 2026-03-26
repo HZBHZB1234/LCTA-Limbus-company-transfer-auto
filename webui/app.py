@@ -57,6 +57,8 @@ class LCTA_API():
         self.TKIT_MACHINE = TKIT_MACHINE
         self.TKIT_MACHINE_OBJECT = TKIT_MACHINE_OBJECT
         self.LLM_TRANSLATOR = LLM_TRANSLATOR
+        self.updateList= updateList
+        self.bindRefer = bindRefer
         self.set_function()
         self.init_config()
 

@@ -4366,7 +4366,7 @@ function removeConnectionMask() {
     }
 }
 
-async function goAndShow(name) {
+function goAndShow(name) {
     const targetButton = document.getElementById(`${name}-btn`);
     targetButton.style.display = 'block';
     targetButton.click();
@@ -4827,10 +4827,10 @@ window.addEventListener('pywebviewready', function() {
         });
 
     pywebview.api.get_attr('first_use').then(
-        function(result) {
+        async function(result) {
             first_use = result
             if (result) {
-                loadMarkdownContent('assets/firstUse.md', 'welcome-content');
+                await loadMarkdownContent('assets/firstUse.md', 'welcome-content');
                 goAndShow('welcome');
             }
         }

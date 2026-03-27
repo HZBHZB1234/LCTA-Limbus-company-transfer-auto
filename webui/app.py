@@ -153,8 +153,20 @@ class LCTA_API():
                     else:flag = True
                 r.append(i)
             r = '\n'.join(r)
+            r += '''\n<button class="primary-btn" onclick="goAndShow('elder');elderManager.initPage();">
+    <i class="fas fa-play"></i>
+    进入老年人模式来配置更新的内容
+</button>
+'''
             return {'show': True, 'message': r}
         return {'show': False}
+
+    def resetElder(self):
+        defaultConfig = self.load_config_default()
+        if defaultConfig:
+            self.config['elder'] = defaultConfig.get('elder', {})
+        else:
+            raise Exception("无法加载内置默认配置，重置老年人模式失败")
 
     def use_inner(self):
         """使用默认配置并保存"""

@@ -149,6 +149,18 @@ class AnimationManager {
     }
 }
 
+function setConfigToCache(obj, prefix = '') {
+    for (const [key, value] of Object.entries(obj)) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            setConfigToCache(value, path);
+        } else {
+            configManager.setCachedValue(path, value);
+        }
+    }
+}
+
 // 配置管理器
 class ConfigManager {
     constructor() {
@@ -169,7 +181,12 @@ class ConfigManager {
             'enable-storage': 'enable_storage',
             'storage-path': 'storage_path',
             '--theme': 'theme',
+
+            // 老年人模式设置
             '--elder': 'elder_list',
+            '--elder-character-launcher': 'elder.character.launcher',
+            '--elder-character-translate': 'elder.character.translate',
+            '--elder-character-manage': 'elder.character.manage',
 
             // 翻译设置
             "translator-service-select": "ui_default.translator.translator",
@@ -255,6 +272,12 @@ class ConfigManager {
         this.pendingUpdates = {}; // 待更新的配置
         this.debounceTimer = null;
         this.debounceDelay = 500; // 防抖延迟
+    }
+
+    async reloadConfig() {
+        obj = await pywebview.api.get_attr('config');
+        window.config = obj;
+        setConfigToCache(obj);
     }
     
     // 批量获取配置值
@@ -383,11 +406,13 @@ class ConfigManager {
     
     // 应用配置到UI（批量）
     async applyConfigToUI() {
-        const allIds = Object.keys(this.configKeyMap);
+        // 过滤掉 id 以 "--" 开头的配置项
+        const allIds = Object.keys(this.configKeyMap).filter(id => !id.startsWith('--'));
         const configValues = await this.getConfigValues(allIds);
         
         // 遍历所有配置项，更新UI
         for (const [id, keyPath] of Object.entries(this.configKeyMap)) {
+            if (id.startsWith('--')) continue; // 跳过以 "--" 开头的 id，不应用到 UI
             if (keyPath in configValues) {
                 this.applyValueToUI(id, configValues[keyPath]);
             }
@@ -413,6 +438,9 @@ class ConfigManager {
         const updates = {};
         
         for (const [id, keyPath] of Object.entries(this.configKeyMap)) {
+            // 跳过以 "--" 开头的 id，这些没有对应的 UI 元素
+            if (id.startsWith('--')) continue;
+            
             const element = document.getElementById(id);
             if (element) {
                 let value;
@@ -1384,24 +1412,13 @@ class APIConfigManager {
 // 初始化API配置管理器
 let apiConfigManager;
 
-async function loadAndRenderMarkdown() {
-  try {
-    // 定义要加载的文件路径
-    const files = [
-      { url: '/assets/README.md', className: 'about-content' },
-      { url: '/assets/update.md', className: 'update-content' },
-      { url: '/assets/firstUse.md', className: 'use-help' },
-      { url: '/assets/firstUse.md', className: 'welcome-content' }
-    ];
-
-    // 并发请求所有文件
-    const promises = files.map(async ({ url, className }) => {
-      try {
+async function loadMarkdownContent(url, className) {
+    try {
         // 请求Markdown文件
         const response = await fetch(url);
         
         if (!response.ok) {
-          throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
+            throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
         }
         
         // 获取文本内容
@@ -1409,7 +1426,7 @@ async function loadAndRenderMarkdown() {
         
         // 检查simpleMarkdownToHtml函数是否存在
         if (typeof simpleMarkdownToHtml !== 'function') {
-          throw new Error('simpleMarkdownToHtml函数未定义');
+            throw new Error('simpleMarkdownToHtml函数未定义');
         }
         
         // 转换Markdown为HTML
@@ -1419,8 +1436,8 @@ async function loadAndRenderMarkdown() {
         const targetDiv = document.querySelector(`.${className}`);
         
         if (!targetDiv) {
-          console.warn(`未找到class为${className}的元素`);
-          return;
+            console.warn(`未找到class为${className}的元素`);
+            return;
         }
         
         // 插入HTML内容
@@ -1428,14 +1445,28 @@ async function loadAndRenderMarkdown() {
         
         console.log(`成功加载并渲染: ${url}`);
         
-      } catch (error) {
+    } catch (error) {
         console.error(`处理 ${url} 时出错:`, error);
         // 可以选择在对应的div中显示错误信息
         const targetDiv = document.querySelector(`.${className}`);
         if (targetDiv) {
-          targetDiv.innerHTML = `<p class="error">加载内容失败: ${error.message}</p>`;
+            targetDiv.innerHTML = `<p class="error">加载内容失败: ${error.message}</p>`;
         }
-      }
+    }
+}
+
+async function loadAndRenderMarkdown() {
+  try {
+    // 定义要加载的文件路径
+    const files = [
+      { url: '/assets/README.md', className: 'about-content' },
+      { url: '/assets/update.md', className: 'update-content' },
+      { url: '/assets/firstUse.md', className: 'use-help' }
+    ];
+
+    // 并发请求所有文件
+    const promises = files.map(async ({ url, className }) => {
+        loadMarkdownContent(url, className);
     });
 
     // 等待所有文件加载完成
@@ -1457,7 +1488,7 @@ class ElderManager {
         this.refer = await pywebview.api.get_attr('bindRefer');
         this.relyList = await pywebview.api.get_attr('relyList')
         const version = '4.1.5'
-        this.version = version.replace('.', '')
+        this.version = version.replaceAll('.', '')
         let elderList = configManager.getCachedValue('elder_list');
         if (!elderList) {
             elderList = JSON.stringify(this.updateList);
@@ -1495,8 +1526,12 @@ class ElderManager {
                     (rely) => {
                         if (typeof(rely) == 'string') {
                             return configManager.getCachedValue(rely)
+                        } else if (rely[0] == 'not'){
+                            return !configManager.getCachedValue(rely[1]);
                         } else {
-                            return configManager.getCachedValue(rely[0]) == rely[1]
+                            const targetValue = configManager.getCachedValue(rely[0]);
+                            return rely.slice(1).some(
+                                (relyValue) => targetValue == relyValue);
                         }
                     }
                 )) {
@@ -1511,23 +1546,25 @@ class ElderManager {
     async savePageRefer() {
         const pageRefer = this.refer[this.latestPage];
         for (const value of Object.keys(pageRefer)) {
-            const target = this.targetDiv.getElementById(value);
+            const target = document.getElementById(value);
             let newValue;
             if (target.type === 'checkbox') {
                 newValue = target.checked;
             } else if (target.tagName === 'SELECT' || target.tagName === 'INPUT') {
                 newValue = target.value;
             }
-            await configManager.updateConfigValue(pageRefer[newValue][0], newValue);
+            await configManager.updateConfigValue(pageRefer[value][0], newValue);
         }
+        this.historyList[this.latestPage] = this.version;
+        configManager.updateConfigValue('--elder', JSON.stringify(this.historyList));
         await configManager.flushPendingUpdates();
     }
 
     async loadPageRefer() {
         const pageRefer = this.refer[this.latestPage];
         for (const value of Object.keys(pageRefer)) {
-            const target = this.targetDiv.getElementById(value);
-            let newValue = configManager.getCachedValue(pageRefer[newValue][1]);
+            const target = document.getElementById(value);
+            let newValue = configManager.getCachedValue(pageRefer[value][1]);
             if (target.type === 'checkbox') {
                 target.checked = newValue;
             } else if (target.tagName === 'SELECT' || target.tagName === 'INPUT') {
@@ -1548,6 +1585,39 @@ class ElderManager {
         }
     }
 
+    markdownPrefix(text, value='') {
+        const scripts = [];
+        let processedText = text.replace(/<script>([\s\S]*?)<\/script>/gi, (match, content) => {
+            scripts.push(content); // 收集脚本内容
+            return '';            // 从原文中移除该片段
+        });
+
+        let container = document.getElementById('elder-container');
+        if (!container) {
+            throw new Error('未找到id为elder-container的元素');
+        }
+        scripts.forEach(scriptContent => {
+            scriptContent = `setTimeout(() => {
+                ${scriptContent}
+            }, 100);`
+            const scriptEl = document.createElement('script');
+            scriptEl.type = 'text/javascript';
+            scriptEl.textContent = scriptContent;
+            container.appendChild(scriptEl);
+        });
+
+        const finalText = processedText.replace(/<version>([\s\S]*?)<\/version>/gi, (match, content) => {
+            const trimmed = content.trim();
+            const num = parseFloat(trimmed);
+            if (!isNaN(num) && this.historyList[value] !== 'new' && num < this.historyList[value]) {
+                return '<span class="new-badge" aria-hidden="true">!NEW</span>';
+            }
+            return '';
+        });
+
+        return finalText;
+    }
+
     async loadPage(name) {
         const response = await fetch(`elder/${name}.md`);
             
@@ -1559,7 +1629,12 @@ class ElderManager {
         const markdownText = await response.text();
         
         // 转换Markdown为HTML
-        const htmlContent = simpleMarkdownToHtml(markdownText);
+        try {
+            document.getElementById('elder-container').innerHTML = '';
+        } catch (error) {
+            console.log('未找到id为elder-container的元素');
+        }
+        const htmlContent = simpleMarkdownToHtml(this.markdownPrefix(markdownText, name));
         
         this.targetDiv.innerHTML = htmlContent;
         
@@ -4402,10 +4477,14 @@ function requestGamePath() {
 }
 
 async function showGuide(page) {
+    await showMarkdownModal(`guide/${page}.md`, '俺寻思', '正在加载数据内容')
+}
 
-    const modal = showMessage('俺寻思', '正在加载数据内容')
+async function showMarkdownModal(link, title= '指导', pre='正在加载数据内容') {
 
-    const response = await fetch(`guide/${page}.md`);
+    const modal = showMessage(title, pre)
+
+    const response = await fetch(link);
 
     let markdownText
     
@@ -4704,6 +4783,8 @@ document.addEventListener('DOMContentLoaded', function() {
     loadAndRenderMarkdown();
 });
 
+let first_use;
+
 // 与后端通信的初始化
 window.addEventListener('pywebviewready', function() {
     window.apiReady = true;
@@ -4745,11 +4826,11 @@ window.addEventListener('pywebviewready', function() {
             }
         });
 
-    let first_use
     pywebview.api.get_attr('first_use').then(
         function(result) {
             first_use = result
             if (result) {
+                loadMarkdownContent('assets/firstUse.md', 'welcome-content');
                 goAndShow('welcome');
             }
         }
@@ -4816,19 +4897,6 @@ window.addEventListener('pywebviewready', function() {
             
             // 初始化配置管理器的缓存
             if (configManager) {
-                // 递归函数，用于将配置对象扁平化并设置到缓存中
-                function setConfigToCache(obj, prefix = '') {
-                    for (const [key, value] of Object.entries(obj)) {
-                        const path = prefix ? `${prefix}.${key}` : key;
-                        
-                        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-                            setConfigToCache(value, path);
-                        } else {
-                            configManager.setCachedValue(path, value);
-                        }
-                    }
-                }
-                
                 // 将后端配置数据填充到缓存
                 setConfigToCache(config);
                 
@@ -4845,16 +4913,11 @@ window.addEventListener('pywebviewready', function() {
                 pywebview.api.check_show().then(
                     (result) => {
                         if (result.show && !first_use) {
-                            const modal = showMessage('版本更新内容', '正在加载数据内容')
                             const bodyHtml = simpleMarkdownToHtml(result.message);
-                            const showing = `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`
+                            const targetDiv = document.querySelector(`.${className}`);
 
-                            setTimeout(() => {
-                                const statusElement = document.getElementById(`modal-status-${modal.id}`);
-                                if (statusElement) {
-                                    statusElement.innerHTML = showing;
-                                }
-                            }, 100);
+                            targetDiv.innerHTML = bodyHtml;
+                            goAndShow('welcome');
                         }
                 });
 

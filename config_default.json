@@ -61,6 +61,13 @@
             "output_type":"json"
         }
     },
+    "elder": {
+        "character": {
+            "launcher": false,
+            "translate": false,
+            "manage": false
+        }
+    },
     "api_config": "",
     "api_crypto": true,
     "user_fancy": "[]",

@@ -30,10 +30,10 @@ def file_digest(file_path):
 
 
 def detect_lunartique_mods(mod_zips_root: str):
-    for mod_zip in glob.glob(f"{mod_zips_root}/*.zip"):
+    for mod_zip in Path(mod_zips_root).rglob("*.zip"):
         logging.info("Compressing lunartique format mod (might take a while!): %s", mod_zip)
         try:
-            compress_lunartique_mod(mod_zip, mod_zip.replace(".zip", ".carra2"))
+            compress_lunartique_mod(mod_zip, mod_zip.with_suffix(".carra2"))
             os.remove(mod_zip)
             logging.info("* Done")
         except Exception as e:
@@ -48,7 +48,7 @@ def mod_file_size(file):
 
 
 def extract_assets(mod_asset_root: str, mod_zips_root: str):
-    for mod_zip in sorted(glob.glob(f"{mod_zips_root}/*.carra*"), key=mod_file_size, reverse=True):
+    for mod_zip in sorted(Path(mod_zips_root).rglob("*.carra*"), key=mod_file_size, reverse=True):
         mod_zip = os.path.normpath(mod_zip)
         try:
             with ZipFile(mod_zip) as z:

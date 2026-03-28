@@ -501,6 +501,7 @@ def main_after_mod():
     from launcher.modfolder import get_mod_folder
     import launcher.patch as patch
     import launcher.sound as sound
+    import launcher.changes as changes
 
     get_mod_folder(config_whole)
     mod_zips_root_path = os.environ['mod_path']
@@ -516,6 +517,7 @@ def main_after_mod():
             logging.info("Cleaning up assets")
             patch.cleanup_assets()
             sound.restore_sound()
+            changes.cleanup_patch(steam_argv)
         except Exception as e:
             logging.error("Error: %s", e)
 
@@ -525,6 +527,8 @@ def main_after_mod():
         #atexit.register(cleanup_assets)
         logging.info("Detecting lunartique mods")
         patch.detect_lunartique_mods(mod_zips_root_path)
+        logging.info("Patching text data")
+        changes.apply_patch(mod_zips_root_path, steam_argv)
         tmp_asset_root = tempfile.mkdtemp()
         logging.info("Extracting mod assets to %s", tmp_asset_root)
         patch.extract_assets(tmp_asset_root, mod_zips_root_path)

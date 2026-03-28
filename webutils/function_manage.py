@@ -102,10 +102,14 @@ def fing_mod(config):
     mod_path = get_mod_path(config)
     r = list(mod_path.glob('*.carra2'))
     r.extend(list(mod_path.glob('*.bank')))
-    r.extend(list(mod_path.glob('*.lunartique')))
+    r.extend(list(mod_path.glob('*.zip')))
+    r.extend(list(mod_path.glob('*.json')))
+    r.extend([i for i in mod_path.glob('*') if i.is_dir() and not i.name.endswith('_disable')])
     rd = list(mod_path.glob('*.carra2_disable'))
     rd.extend(list(mod_path.glob('*.bank_disable')))
-    rd.extend(list(mod_path.glob('*.lunartique_disable')))
+    rd.extend(list(mod_path.glob('*.zip_disable')))
+    rd.extend(list(mod_path.glob('*.json_disable')))
+    rd.extend([i for i in mod_path.glob('*') if i.is_dir() and i.name.endswith('_disable')])
     r = [i.name for i in r]
     rd = [(i.name).rstrip('_disable') for i in rd]
     return r, rd
@@ -123,6 +127,9 @@ def delete_mod(config, mod_name: str, enable):
     mod_path = get_mod_path(config)
     mod = mod_path / (mod_name if enable else f'{mod_name}_disable')
     if mod.exists():
+        if mod.is_dir():
+            shutil.rmtree(mod)
+            return True
         mod.unlink()
         return True
     else:

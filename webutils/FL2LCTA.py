@@ -85,6 +85,14 @@ def apply_changes_to_data(original_data, changes):
             return result
     else:
         return original_data
+    
+def LCTAapply(original_data, changed_data):
+    return jsonpatch.apply_patch(original_data, changed_data)
 
 def get_LCTA_changes(original_data, changed_data):
-    return 
+    return list(jsonpatch.make_patch(original_data, changed_data))
+
+def FL2LCTA(original_data, changed_data):
+    changed_data = apply_changes_to_data(original_data, changed_data)
+    changes = get_LCTA_changes(original_data, changed_data)
+    return changes

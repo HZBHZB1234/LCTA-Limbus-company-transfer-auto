@@ -3,6 +3,7 @@ import os
 from pyunpack import Archive
 import shutil
 import tempfile
+import json
 import zipfile
 
 FOLDERLIST = [
@@ -13,6 +14,19 @@ FOLDERLIST = [
     'StoryData',
 ]
 
+NAMEREFER = {
+    'full': '汉化包',
+    'nofont': '无字体汉化包',
+    'FLmod': '浮士德启动器格式模组',
+    'jsononly': '文本内容替换包',
+    'update': '更新包',
+    'invalid': '无效的文件',
+    'carra': '贴图模组',
+    'bank': '音效模组',
+    'textfile': '文本内容替换包',
+    'LCTAchange': 'LCTA文本修改包',
+    'FLchange': '浮士德启动器格式文本修改包',
+}
 
 def evalZip(zip_path):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -29,6 +43,8 @@ def evalZip(zip_path):
             return 'FLmod'
         if notJsonAmount >= 3:
             return 'jsononly'
+        if any('requirements.txt' in name for name in notJsonAmount) and any('start_webui.py' in name for name in notJsonAmount):
+            return 'update'
         return 'invalid'
         
 def evalFolder(folder_path):
@@ -54,7 +70,19 @@ def eval7zip(file_path):
         return 'invalid', tmp
     
 def evalJson(json_path):
-    pass
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if 'dataList' in data:
+            return 'textFile'
+        if 'patches' in data:
+            return 'LCTAchange'
+        if isinstance(data, dict) and all('dataList' in i for i in data.values()):
+            return 'FLchange'
+        return 'invalid'
+    except Exception as e:
+        return 'invalid'
+        
 
 if __name__ == '__main__':
     evalZip(r'E:\desktop\limbus transfer\LCTA-Limbus-company-transfer-auto\LimbusLocalize_2026032001.zip')

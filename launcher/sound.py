@@ -30,16 +30,16 @@ def sound_replace_thread(mod_folder: str):
 
     logging.info("Validation complete, replacing sound files")
     target_folder = sound_folder()
-    for sound_file in glob.glob(f"{mod_folder}/*.bank"):
+    for sound_file in Path(mod_folder).rglob("*.bank"):
         logging.info("Replacing %s", sound_file)
-        target = os.path.join(target_folder, os.path.basename(sound_file))
+        target = os.path.join(target_folder, sound_file.name)
         os.replace(target, target + ".bak")
         shutil.copyfile(sound_file, target)
 
 def restore_sound():
     target_folder = sound_folder()
-    for sound_file in glob.glob(f"{target_folder}/*.bank.bak"):
-        target = sound_file.replace(".bak", "")
+    for sound_file in Path(target_folder).rglob("*.bank.bak"):
+        target = sound_file.with_suffix(".bank")
         os.replace(sound_file, target)
 
 def replace_sound(mod_folder: str, game_path: str):

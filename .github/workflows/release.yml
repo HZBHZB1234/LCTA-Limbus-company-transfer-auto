@@ -90,7 +90,7 @@ jobs:
         .\venv\Scripts\activate
         python -m pip install pip --upgrade
         pip install -r LCTA\requirements.txt
-        python -c "from pathlib import Path;session=Path('venv\Lib\site-packages\requests\sessions.py');
+        python -c "from pathlib import Path;session=Path(r'venv\Lib\site-packages\requests\sessions.py');
         session.write_text(session.read_text(encoding='utf-8').replace('verify=None,', 'verify=False,'),encoding='utf-8')"
     - name: Install Embedded Python
       run: |

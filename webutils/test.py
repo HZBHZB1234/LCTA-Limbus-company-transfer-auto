@@ -69,5 +69,6 @@ def evalHtml():
 
 if __name__ == '__main__':
     if not evalRuntime():
-        evalHtml()
+        if not evalHtml():
+            print('环境测试通过')
     input('回车键以退出...')

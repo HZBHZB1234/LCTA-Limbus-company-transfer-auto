@@ -1139,7 +1139,6 @@ class LCTA_API():
 
     def handle_dropped_files(self, files_data):
         """处理前端拖拽的文件数据"""
-        # files_data 是前端传递的文件信息列表
         for file_info in files_data:
             print(f"收到拖拽文件: {file_info['name']}, 大小: {file_info['size']}")
         return {"success": True, "message": "收到文件"}

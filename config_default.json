@@ -65,8 +65,8 @@
         "character": {
             "base": true,
             "launcher": true,
-            "translate": false,
-            "manage": false
+            "translate": true,
+            "manage": true
         }
     },
     "api_config": "",

@@ -184,6 +184,7 @@ class ConfigManager {
 
             // 老年人模式设置
             '--elder': 'elder_list',
+            '--elder-character-base': 'elder.character.base',
             '--elder-character-launcher': 'elder.character.launcher',
             '--elder-character-translate': 'elder.character.translate',
             '--elder-character-manage': 'elder.character.manage',
@@ -1609,8 +1610,8 @@ class ElderManager {
         const finalText = processedText.replace(/<version>([\s\S]*?)<\/version>/gi, (match, content) => {
             const trimmed = content.trim();
             const num = parseFloat(trimmed);
-            if (!isNaN(num) && this.historyList[value] !== 'new' && num < this.historyList[value]) {
-                return '<span class="new-badge" aria-hidden="true">!NEW</span>';
+            if (!isNaN(num) && this.historyList[value] !== 'new' && num > this.historyList[value]) {
+                return '<span style="border: 1px solid #ddd; color: #666; padding: 2px 4px; border-radius: 4px; font-size: 12px;">NEW</span>';
             }
             return '';
         });

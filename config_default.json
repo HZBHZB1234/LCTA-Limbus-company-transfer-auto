@@ -63,7 +63,8 @@
     },
     "elder": {
         "character": {
-            "launcher": false,
+            "base": true,
+            "launcher": true,
             "translate": false,
             "manage": false
         }

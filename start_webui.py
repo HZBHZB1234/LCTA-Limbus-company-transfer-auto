@@ -52,8 +52,15 @@ def start_webui():
             print('clr导入成功，使用netfx')
         except Exception as e:
             print(f'clr使用netfx导入失败: {e}')
-            os.environ['PYTHONNET_RUNTIME']='coreclr'
-            import clr
+            try:
+                os.environ['PYTHONNET_RUNTIME']='coreclr'
+                import clr
+                print('clr导入成功，使用coreclr')
+            except Exception as e:
+                print(f'clr使用coreclr导入失败: {e}')
+                os.environ['PYTHONNET_RUNTIME']='mono'
+                import clr
+                print('clr导入成功，使用mono')
         
         from webui.app import main
         print("正在启动LCTA WebUI...")

@@ -63,6 +63,7 @@
     },
     "elder": {
         "character": {
+            "base": "bool",
             "launcher": "bool",
             "translate": "bool",
             "manage": "bool"

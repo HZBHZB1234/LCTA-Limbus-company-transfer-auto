@@ -33,6 +33,7 @@
             configManager.updateConfigValue('--elder', JSON.stringify(elderManager.historyList));
             await configManager.flushPendingUpdates();
             await pywebview.api.resetElder();
+            await configManager.reloadConfig();
             elderManager.initPage();
             })()">
     <i class="fas fa-play"></i>

@@ -24,6 +24,7 @@ from .function_manage import (find_installed_packages,
 from .builtinFancy import fancy as builtinFancyConfig
 from .function_fancy import fancy_main
 from .eiderConst import updateList, bindRefer, relyList
+from .function_drop import evalFile, makeMessage, evalFiles
 
 __all__ = [
     'function_llc_main',
@@ -61,5 +62,8 @@ __all__ = [
     'fancy_main',
     'updateList',
     'bindRefer',
-    'relyList'
+    'relyList',
+    'evalFile',
+    'makeMessage',
+    'evalFiles'
 ]

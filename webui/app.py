@@ -1139,13 +1139,18 @@ class LCTA_API():
 
     def handle_dropped_files(self, files_data):
         """处理前端拖拽的文件数据"""
-        for file_info in files_data:
-            print(f"收到拖拽文件: {file_info['name']}, 大小: {file_info['size']}")
-        return {"success": True, "message": "收到文件"}
+        files_data = [i['name'] for i in files_data]
+        file_info = {file: evalFile(file) for file in files_data}
+        message = makeMessage(file_info)
+        if message == 'invalid':
+            return {"success": False, "message": "禁止同时进行更新与其他操作"}
+        if message == 'none':
+            return {"success": False, "message": "无文件"}
+        return {"success": True, "message": message, "file_info": file_info}
 
-    def install_from_dropped_files(self, files_data):
+    def eval_dropped_files(self, files_data, modal_id="false"):
         """从拖拽的文件安装汉化包"""
-        # 实现安装逻辑
+        evalFiles(files_data, self.config, self.log_manager, modal_id)
         return {"success": True, "message": "安装完成"}
 def setup_logging():
     """

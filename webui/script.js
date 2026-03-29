@@ -4729,50 +4729,17 @@ function setupDragDropCallback() {
     dragDropManager.setOnFileDropCallback(async (files) => {
         // 示例回调：处理拖入的文件
         addLogMessage(`收到 ${files.length} 个拖拽文件`, 'success');
-        
-        // 判断是否为汉化包文件（.zip, .7z等）
-        const archiveFiles = files.filter(f => 
-            f.name.endsWith('.zip') || f.name.endsWith('.7z') || f.name.endsWith('.rar')
-        );
-        
-        if (archiveFiles.length > 0) {
-            // 显示确认对话框
-            showConfirm('安装汉化包', 
-                `检测到 ${archiveFiles.length} 个压缩文件，是否安装为汉化包？\n\n文件列表:\n${archiveFiles.map(f => f.name).join('\n')}`,
-                async () => {
-                    // 用户确认安装
-                    if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.install_from_dropped_files) {
-                        const modal = new ProgressModal('安装拖拽文件');
-                        modal.addLog(`准备安装 ${archiveFiles.length} 个文件...`);
-                        
-                        const fileData = archiveFiles.map(f => ({
-                            name: f.name,
-                            size: f.size,
-                            type: f.type
-                        }));
-                        
-                        try {
-                            const result = await pywebview.api.install_from_dropped_files(fileData);
-                            if (result.success) {
-                                modal.complete(true, '安装完成');
-                                setTimeout(() => modal.close(), 1500);
-                                refreshInstallPackageList();
-                            } else {
-                                modal.complete(false, `安装失败: ${result.message}`);
-                            }
-                        } catch (err) {
-                            modal.complete(false, `安装出错: ${err}`);
-                        }
-                    } else {
-                        addLogMessage('后端未实现 install_from_dropped_files 方法', 'warning');
-                    }
-                },
-                () => {
-                    addLogMessage('用户取消安装拖拽文件', 'info');
-                }
-            );
-        } else {
-            addLogMessage('拖入的文件不是压缩包，请拖入 .zip 或 .7z 格式的汉化包文件', 'info');
+        const modal = showConfirm('处理文件', '正在处理拖入的文件...');
+        result = await pywebview.api.handle_dropped_files(files)
+
+        document.getElementById(`modal-status-${modal.id}`).innerHTML = result.message;
+        if (result.success) {
+            modal.eval_dropped_files = function() {
+                modal.close();
+                const modal = new ProgressModal('处理文件');
+                modal.addLog('正在处理文件...');
+                pywebview.api.eval_dropped_files(result.file_info, modal.id);
+            }
         }
     });
 }

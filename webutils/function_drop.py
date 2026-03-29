@@ -83,6 +83,41 @@ def evalJson(json_path):
     except Exception as e:
         return 'invalid'
         
+def evalFile(file_path):
+    if Path(file_path).is_dir():
+        return evalFolder(file_path)
+    if file_path.endswith('.zip'):
+        return evalZip(file_path)
+    if file_path.endswith('.7z'):
+        return eval7zip(file_path)[0]
+    if file_path.endswith('.json'):
+        return evalJson(file_path)
+    return 'invalid'
+
+def makeMessage(content):
+    message = '<div>'
+    count = {key: 0 for key in NAMEREFER}
+    for i in content.values():
+        count[i] += 1
+    for key, value in count.items():
+        if value > 0:
+            message += f"<p>{NAMEREFER.get(key, key)}: {value}个</p>"
+    message += '<p></p>'
+    message += '<details><summary>点击展开完整列表</summary><ul>'
+
+    for i, t in content.items():
+        message += f'<li>{i}: {NAMEREFER.get(t, t)}</li>'
+    message += '</ul></details>'
+    message += '<p>点击确认以安装</p>'
+    message += '</div>'
+    if count['update'] and not all(count[key] == 0 for key in count if key != 'update'):
+        return 'invalid'
+    if all(count[key] == 0 for key in count if key != 'invalid') and count['invalid'] > 0:
+        return 'none'
+    return message
+
+def evalFiles(files_data, config, logger, modal_id="false"):
+    pass
 
 if __name__ == '__main__':
     evalZip(r'E:\desktop\limbus transfer\LCTA-Limbus-company-transfer-auto\LimbusLocalize_2026032001.zip')

@@ -23,7 +23,7 @@ NAMEREFER = {
     'invalid': '无效的文件',
     'carra': '贴图模组',
     'bank': '音效模组',
-    'textfile': '文本内容替换包',
+    'textFile': '文本内容替换包',
     'LCTAchange': 'LCTA文本修改包',
     'FLchange': '浮士德启动器格式文本修改包',
 }
@@ -102,12 +102,12 @@ def makeMessage(content):
     for key, value in count.items():
         if value > 0:
             message += f"<p>{NAMEREFER.get(key, key)}: {value}个</p>"
-    message += '<p></p>'
-    message += '<details><summary>点击展开完整列表</summary><ul>'
+    message += '<br/><hr /><br/>'
+    message += '<details><summary>点击展开完整列表</summary><br />'
 
     for i, t in content.items():
-        message += f'<li>{i}: {NAMEREFER.get(t, t)}</li>'
-    message += '</ul></details>'
+        message += f'<p><strong>{Path(i).name}</strong>: {NAMEREFER.get(t, t)}</p>'
+    message += '</details><br /><hr /><br />'
     message += '<p>点击确认以安装</p>'
     message += '</div>'
     if count['update'] and not all(count[key] == 0 for key in count if key != 'update'):

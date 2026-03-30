@@ -1,4 +1,5 @@
 import webview
+from webview.dom import DOMEventHandler
 import os
 import sys
 from pathlib import Path
@@ -38,7 +39,7 @@ class CancelRunning(Exception):
 
 class LCTA_API():
     def __init__(self,logger:logging):
-        self._window = None
+        self._window: webview.Window = None
         # 初始化日志管理器
         self.logger =logger
         self.log_manager = LogManager()
@@ -60,6 +61,7 @@ class LCTA_API():
         self.updateList= updateList
         self.bindRefer = bindRefer
         self.relyList = relyList
+        self.current_files = []
         self.set_function()
         self.init_config()
 
@@ -1137,9 +1139,10 @@ class LCTA_API():
             self.log_error(e)
             return False
 
-    def handle_dropped_files(self, files_data):
+    def handle_dropped_files(self):
         """处理前端拖拽的文件数据"""
-        files_data = [i['name'] for i in files_data]
+        files_data = self.current_files
+        self.current_files = []
         file_info = {file: evalFile(file) for file in files_data}
         message = makeMessage(file_info)
         if message == 'invalid':
@@ -1147,6 +1150,20 @@ class LCTA_API():
         if message == 'none':
             return {"success": False, "message": "无文件"}
         return {"success": True, "message": message, "file_info": file_info}
+    
+    def drag_in(self, e):
+        print("drag in")
+        # self._window.evaluate_js("if (!dragDropManager.maskElement) {dragDropManager.showMask();}")
+
+    def on_drop(self, e):
+        files = e['dataTransfer']['files']
+        self.current_files = [file['pywebviewFullPath'] for file in files]
+        self._window.evaluate_js("dragDropManager.hideMask();dragDropManager.onFileDropCallback()")
+
+        print(f'Event: {e["type"]}. Dropped files:')
+
+        for file in files:
+            print(file.get('pywebviewFullPath'))
 
     def eval_dropped_files(self, files_data, modal_id="false"):
         """从拖拽的文件安装汉化包"""
@@ -1234,9 +1251,17 @@ def main():
         logger_c = logging.getLogger('urllib3.connectionpool')
         logger_c.setLevel(logging.INFO)
 
+    def start_func():
+        print('加载函数')
+        window.dom.document.events.dragenter += DOMEventHandler(api.drag_in, True, True)
+        window.dom.document.events.dragstart += DOMEventHandler(api.drag_in, True, True)
+        window.dom.document.events.dragover += DOMEventHandler(api.drag_in, True, True, debounce=500)
+        window.dom.document.events.drop += DOMEventHandler(api.on_drop, True, True)
+
     if enable_storage:
         stPath = api.config.get('storage_path', 'tmp')
         webview.start(
+            func=start_func,
             debug=debug_mode,
             http_server=True,
             storage_path=str(Path(stPath)),
@@ -1244,6 +1269,7 @@ def main():
         )
     else:
         webview.start(
+            func=start_func,
             debug=debug_mode,
             http_server=True
         )

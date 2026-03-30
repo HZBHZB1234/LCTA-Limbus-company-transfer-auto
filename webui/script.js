@@ -4591,58 +4591,33 @@ class DragDropManager {
         document.body.addEventListener('dragenter', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            this.showMask();
         });
         
         document.body.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            this.showMask();
         });
         
         document.body.addEventListener('dragleave', (e) => {
             e.preventDefault();
             e.stopPropagation();
-        });
-        
-        document.body.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        });
-        
-        // 为拖拽区域添加事件
-        this.dropZoneElement.addEventListener('dragenter', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.showMask();
-        });
-        
-        this.dropZoneElement.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            // 确保遮罩层显示
-            if (!this.maskElement) {
-                this.showMask();
-            }
-        });
-        
-        this.dropZoneElement.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            // 检查是否真正离开了拖拽区域
-            const rect = this.dropZoneElement.getBoundingClientRect();
-            const x = e.clientX;
-            const y = e.clientY;
-            
-            if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-                this.hideMask();
-            }
-        });
-        
-        this.dropZoneElement.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
             this.hideMask();
-            this.handleDrop(e);
         });
+        
+        // document.body.addEventListener('drop', (e) => {
+        //     e.preventDefault();
+        //     e.stopPropagation();
+        // });
+                
+        
+        // this.dropZoneElement.addEventListener('drop', (e) => {
+        //     e.preventDefault();
+        //     e.stopPropagation();
+        //     this.hideMask();
+        //     this.handleDrop(e);
+        // });
     }
     
     showMask() {
@@ -4698,20 +4673,7 @@ class DragDropManager {
         }
         
         if (this.onFileDropCallback && typeof this.onFileDropCallback === 'function') {
-            this.onFileDropCallback(files);
-        }
-        
-        // 如果有 pywebview API，可以尝试获取文件路径
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.handle_dropped_files) {
-            const fileData = files.map(f => ({
-                name: f.name,
-                size: f.size,
-                type: f.type,
-                lastModified: f.lastModified
-            }));
-            pywebview.api.handle_dropped_files(fileData).catch(err => {
-                addLogMessage(`处理拖拽文件失败: ${err}`, 'error');
-            });
+            this.onFileDropCallback();
         }
     }
     
@@ -4726,11 +4688,9 @@ let dragDropManager;
 function setupDragDropCallback() {
     if (!dragDropManager) return;
     
-    dragDropManager.setOnFileDropCallback(async (files) => {
-        // 示例回调：处理拖入的文件
-        addLogMessage(`收到 ${files.length} 个拖拽文件`, 'success');
+    dragDropManager.setOnFileDropCallback(async () => {
         const modal = showConfirm('处理文件', '正在处理拖入的文件...');
-        result = await pywebview.api.handle_dropped_files(files)
+        result = await pywebview.api.handle_dropped_files()
 
         document.getElementById(`modal-status-${modal.id}`).innerHTML = result.message;
         if (result.success) {

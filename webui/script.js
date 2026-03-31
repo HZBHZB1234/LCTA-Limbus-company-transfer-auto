@@ -4581,6 +4581,7 @@ class DragDropManager {
         this.dropZoneElement = document.querySelector('.main-content');
         this.maskElement = null;
         this.onFileDropCallback = null;
+        this.leaveChecked = 0;
         this.init();
     }
     
@@ -4589,45 +4590,51 @@ class DragDropManager {
         
         // 阻止页面默认拖拽行为
         document.body.addEventListener('dragenter', (e) => {
+            console.log('dragenter');
             e.preventDefault();
             e.stopPropagation();
             this.showMask();
         });
         
         document.body.addEventListener('dragover', (e) => {
+            console.log('dragover');
             e.preventDefault();
             e.stopPropagation();
             this.showMask();
         });
         
         document.body.addEventListener('dragleave', (e) => {
+            console.log('dragleave');
             e.preventDefault();
             e.stopPropagation();
             this.hideMask();
         });
         
-        // document.body.addEventListener('drop', (e) => {
-        //     e.preventDefault();
-        //     e.stopPropagation();
-        // });
-                
-        
-        // this.dropZoneElement.addEventListener('drop', (e) => {
-        //     e.preventDefault();
-        //     e.stopPropagation();
-        //     this.hideMask();
-        //     this.handleDrop(e);
-        // });
+        document.body.addEventListener('drop', (e) => {
+            console.log('drop');
+            this.maskLoad();
+        });
+    }
+
+    maskLoad() {
+        console.log('start maskLoad');
+        if (!this.maskElement) return;
+        const maskElement = document.getElementById('file-mask-char');
+        if (!maskElement) return;
+        maskElement.className = 'spinner';
+        console.log('end maskLoad');
+        return;
     }
     
     showMask() {
+        this.leaveChecked = 0;
         if (this.maskElement) return;
         
         this.maskElement = document.createElement('div');
         this.maskElement.className = 'drop-zone-mask';
         this.maskElement.innerHTML = `
             <div class="drop-zone-mask-content">
-                <i class="fas fa-cloud-upload-alt"></i>
+                <i id="file-mask-char" class="fas fa-cloud-upload-alt"></i>
                 <p>拖拽文件到这里</p>
                 <small>支持汉化包安装，模组安装或是版本更新</small>
             </div>
@@ -4636,10 +4643,20 @@ class DragDropManager {
     }
     
     hideMask() {
-        if (this.maskElement) {
-            this.maskElement.remove();
-            this.maskElement = null;
-        }
+        this.leaveChecked = 1;
+        setTimeout(() => {
+            if (!this.leaveChecked) return;
+            this.leaveChecked += 1;
+            setTimeout(() => {
+                if (this.leaveChecked >= 2) {
+                    if (this.maskElement) {
+                        this.maskElement.remove();
+                        this.maskElement = null;
+                        this.leaveChecked = 0;
+                    }
+                }
+            }, 30);
+        }, 30);
     }
     
     handleDrop(event) {

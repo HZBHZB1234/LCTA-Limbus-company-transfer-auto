@@ -1488,7 +1488,7 @@ class ElderManager {
         this.updateList = await pywebview.api.get_attr('updateList');
         this.refer = await pywebview.api.get_attr('bindRefer');
         this.relyList = await pywebview.api.get_attr('relyList')
-        const version = '4.1.5'
+        const version = '5.0.0'
         this.version = version.replaceAll('.', '')
         let elderList = configManager.getCachedValue('elder_list');
         if (!elderList) {
@@ -4225,7 +4225,7 @@ async function showUpdateInfo(update_info) {
     updateModalShown = true;
     
     let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-    htmlMessage += `<p><strong>当前版本:</strong> v4.1.5</p>`;
+    htmlMessage += `<p><strong>当前版本:</strong> v5.0.0</p>`;
     
     if (update_info.title) {
         htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;

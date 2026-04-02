@@ -94,12 +94,20 @@ def translate_main(modal_id, logger_: LogManager,
         
         if not kr_path or not enable_dev_settings:
             kr_path = assets_path / "kr"
+        else:
+            kr_path = Path(kr_path)
         if not jp_path or not enable_dev_settings:
             jp_path = assets_path / "jp"
+        else:
+            jp_path = Path(jp_path)
         if not en_path or not enable_dev_settings:
             en_path = assets_path / "en"
+        else:
+            en_path = Path(en_path)
         if not llc_path or not enable_dev_settings:
             llc_path = lang_path / "LLC_zh-CN"
+        else:
+            llc_path = Path(llc_path)
 
 
         base_path_config = PathConfig(

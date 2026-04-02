@@ -8,21 +8,20 @@ import socket
 import time
 import logging
 import ctypes
+from logging.handlers import TimedRotatingFileHandler
 import shutil
 import threading
 import zipfile
 import atexit
-from functools import wraps
 from contextlib import suppress
 from typing import Optional, List, Dict, TYPE_CHECKING
-from globalManagers.configManager import configManager
 if TYPE_CHECKING:
     from translatekit.base import TranslatorBase
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from globalManagers.logManager import logManager
+
 import webFunc.GithubDownload as GithubDownload
 from webutils.log_manage import LogManager
 import webutils.load as load_util
@@ -39,32 +38,35 @@ class CancelRunning(Exception):
     pass
 
 class LCTA_API():
-    def __init__(self):
+    def __init__(self,logger:logging):
         self._window: webview.Window = None
+        # 初始化日志管理器
+        self.logger =logger
+        self.log_manager = LogManager()
+        self.log_manager.set_log_callback(self.logger.info)
+        self.log_manager.set_error_callback(self.logger.exception)
+        self.log_manager.set_ui_callback(self.log_ui)
         self.modal_list = []
         self.http_port = 0
 
         # 判断是否为打包环境
         self.is_frozen = os.getenv('is_frozen', 'false').lower() == 'true'
-        logManager.info(f"当前运行环境: {'打包环境' if self.is_frozen else '开发环境'}")
-        logManager.info(f"当前运行目录：{ os.getenv('path_') }")
+        self.log(f"当前运行环境: {'打包环境' if self.is_frozen else '开发环境'}")
+        self.log(f"当前运行目录：{ os.getenv('path_') }")
         self.debug = os.getenv('debug', '')
 
-        self.current_files = []
-        self.set_function()
-        self._config = {}
-        self.init_config()
-        self.bindConst()
-
-    def bindConst(self):
         self.TKIT_MACHINE = TKIT_MACHINE
         self.TKIT_MACHINE_OBJECT = TKIT_MACHINE_OBJECT
         self.LLM_TRANSLATOR = LLM_TRANSLATOR
         self.updateList= updateList
         self.bindRefer = bindRefer
         self.relyList = relyList
+        self.current_files = []
+        self.set_function()
+        self.init_config()
 
     def set_function(self):
+        load_util.set_logger(self.log_manager)
         self.find_lcb = load_util.find_lcb
         self.load_config = load_util.load_config
         self.check_game_path = load_util.check_game_path
@@ -78,76 +80,37 @@ class LCTA_API():
         self.create_symlink = create_symlink_for
         self.remove_symlink = remove_symlink_for
 
-    def start_func(self):
-        print('加载函数')
-        self._window.dom.document.events.dragenter += DOMEventHandler(LCTAapp.drag_in, True, True)
-        self._window.dom.document.events.dragstart += DOMEventHandler(LCTAapp.drag_in, True, True)
-        self._window.dom.document.events.dragover += DOMEventHandler(LCTAapp.drag_in, True, True, debounce=500)
-        self._window.dom.document.events.drop += DOMEventHandler(LCTAapp.on_drop, True, True)
-        self._window.events.closed += LCTAapp.save_setting_from
-    
-    @property
-    def config(self):
-        return self._config
-    
-    @config.setter
-    def config(self, value):
-        self._config = value
-        configManager.config = value
-
-    def processModalWrapper(self, processName = None):
-        def wrapper(func):
-            @wraps
-            def resultFunc(*args, modal_id=None, **kwargs):
-                try:
-                    logManager.ModalLog('已开始执行', modal_id)
-                    if processName:
-                        logManager.ModalLog(f"开始{processName}...", modal_id)
-                    func(*args, modal_id=modal_id, config=self.config, **kwargs)
-                    logManager.ModalLog("执行完毕", modal_id)
-                    logManager.ModalLog(f"{processName}完成", modal_id)
-                    return {"success": True, "message": f"{processName}完成"}
-                except CancelRunning:
-                    logManager.info('用户已取消流程')
-                    self.del_modal_list(modal_id)
-                    return {"success": False, "message": "已取消"}
-                except Exception as e:
-                    logManager.exception(e)
-                    return {"success": False, "message": str(e)}
-            return resultFunc
-        return wrapper
-
     def run_func(self, func_name, *args):
         if hasattr(self, func_name):
             func = getattr(self, func_name)
             return func(*args)
         else:
-            logManager.warn(f"函数 {func_name} 不存在")
+            self.log(f"函数 {func_name} 不存在")
             return None
         
     def init_config(self):
-        try:
-            configManager.loadConfig()
-        except Exception as e:
-            logManager.exception(e)
-        self.config = configManager.config
+        self.config = self.load_config()
         self.first_use = False
         if self.config is None:
-            logManager.warn("在初始化时未找到配置文件")
-            try:
-                configManager.config = configManager.default
-                configManager.save_config()
-                self.config = configManager.default
-                logManager.info("已生成默认配置文件")
-                self.first_use = True
-            except Exception as e:
-                logManager.error("生成默认配置文件时出现问题")
-                self.message_config=(["错误","生成默认配置文件时出现问题"])
-                logManager.exception(e)
-        self.config_ok, self.config_error = configManager.validate_config()
+            self.log("在初始化时未找到配置文件")
+            self.config = self.load_config_default()
+            if self.config is None:
+                self.log("未知致命错误，理应不会触发，无法找到内置默认配置")
+                return False
+            else:
+                try:
+                    self.use_default()
+                    self.log("已生成默认配置文件")
+                    self.first_use = True
+                except Exception as e:
+                    self.log("生成默认配置文件时出现问题")
+                    self.message_config=(["错误","生成默认配置文件时出现问题"])
+                    self.log_error(e)
+        self.config_ok, self.config_error = self.validate_config(self.config)
         if not self.config_ok:
-            logManager.warn("配置文件格式错误")
-            logManager.warn("\n".join(self.config_error))
+            self.log("配置文件格式错误")
+            self.log("\n".join(self.config_error))
+        self.debug_mode = self.config.get('debug', False)
 
     def init_github(self):
         max_workers:str = self.config.get('github_max_workers', "4")
@@ -201,8 +164,26 @@ class LCTA_API():
         return {'show': False}
 
     def resetElder(self):
-        self.config['elder'] = configManager.config.get('elder', {})
+        defaultConfig = self.load_config_default()
+        if defaultConfig:
+            self.config['elder'] = defaultConfig.get('elder', {})
+        else:
+            raise Exception("无法加载内置默认配置，重置老年人模式失败")
+
+    def use_inner(self):
+        """使用默认配置并保存"""
+        with open("config.json", "w", encoding="utf-8") as f:
+            json.dump(self.config, f, ensure_ascii=False, indent=4)
+
+    def use_default(self):
+        """使用内置默认配置并保存"""
+        with open("config.json", "w", encoding="utf-8") as f:
+            json.dump(self.load_config_default(), f, ensure_ascii=False, indent=4)
+        self.log("已生成内置默认配置文件")
         
+    def set_window(self, window):
+        self._window = window
+
     def get_attr(self, attr_name):
         if hasattr(self, attr_name):
             return getattr(self, attr_name)
@@ -222,9 +203,9 @@ class LCTA_API():
         if file_path and len(file_path) > 0:
             selected_path = file_path[0]
             # 通过JavaScript更新页面中的输入框
-            js_code = f"""document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';
-            addLogMessage('已选择文件: {selected_path}')"""
+            js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
             self._window.run_js(js_code)
+            self.log_ui(f"已选择文件: {selected_path}")
             return selected_path
         return None
 
@@ -237,14 +218,56 @@ class LCTA_API():
         if folder_path and len(folder_path) > 0:
             selected_path = folder_path[0]
             # 通过JavaScript更新页面中的输入框
-            js_code = f"""document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';
-            addLogMessage('已选择文件夹: {selected_path}');"""
+            js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
             self._window.run_js(js_code)
+            self.log_ui(f"已选择文件夹: {selected_path}")
             return selected_path
         return None
+    
+    def log(self,message):
+        self.log_manager.log(message)
+    
+    def log_error(self, e):
+        self.log_manager.log_error(e)
         
+    def log_ui(self, message, level=logging.INFO):
+        """UI日志方法"""
+        # 添加时间戳
+        timestamp = time.strftime("[%Y-%m-%d %H:%M:%S]")
+        full_message = f"{timestamp} {message}"
+        
+        # 通过JavaScript将日志消息发送到前端
+        escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
+        js_code = f"addLogMessage('{escaped_message}');"
+        try:
+            self._window.run_js(js_code)
+        except:
+            # 如果窗口不可用则打印到控制台
+            print(f"[UI] {full_message}")
+        finally:
+            self.log(full_message)
+
+
+    def update_progress(self, percent, text):
+        """更新进度"""
+        escaped_text = text.replace("'", "\\'")
+        js_code = f"updateProgress({percent}, '{escaped_text}');"
+        try:
+            self._window.run_js(js_code)
+        except:
+            pass
+
+    def progress_callback(self, progress):
+        """进度回调，用于下载等操作"""
+        try:
+            # 进度是0-100的数值
+            self.update_progress(int(progress), f"进度: {int(progress)}%")
+            return True  # 继续操作
+        except:
+            return True  # 即使出错也继续
+
     def add_modal_id(self, modal_id):
-        logManager.info(f"添加模态窗口ID: {modal_id}")
+        self.log(f"添加模态窗口ID: {modal_id}")
         self.modal_list.append({
             "modal_id": modal_id,
             "running": "running"})
@@ -254,38 +277,53 @@ class LCTA_API():
         return [i["running"] for i in self.modal_list if i["modal_id"] == modal_id][0]
 
     def _wait_continue(self, modal_id):
-        while self._check_modal_running(modal_id)=="pause":
-            time.sleep(1)
+        while True:
+            if self._check_modal_running(modal_id)=="pause":
+                time.sleep(1)
+            else:
+                break
 
     def check_modal_running(self, modal_id, log=True):
-        logManager.info(f"检查模态窗口ID: {modal_id}")
+        if log:
+            self.log(f"检查模态窗口ID: {modal_id}")
         status = self._check_modal_running(modal_id)
         if status == "pause":
             self._wait_continue(modal_id)
         elif status == "cancel":
             raise CancelRunning
-    
     def set_modal_running(self, modal_id, types="cancel"):
-        logManager.info(f"设置模态窗口ID: {modal_id} 状态为 {types}")
+        self.log(f"设置模态窗口ID: {modal_id} 状态为 {types}")
         for i in self.modal_list:
             if i["modal_id"] == modal_id:
                 i["running"] = str(types)
                 break
 
     def del_modal_list(self, modal_id):
-        logManager.info(f"删除模态窗口ID: {modal_id}")
+        self.log(f"删除模态窗口ID: {modal_id}")
         for times, i in enumerate(self.modal_list):
             if i["modal_id"] == modal_id:
                 del self.modal_list[times]
                 break
 
-    def start_translation(self, translator_config: dict, modal_id= None):
+    # 以下为新添加的API方法，用于支持模态窗口功能
+    def start_translation(self, translator_config: dict, modal_id= "false"):
         """开始翻译"""
-        os.environ['DUMP'] = str(self.config.get('ui_default', {}).get('translator', {})
-                                .get('dump', False)).lower()
-        translate_main(modal_id, self.log_manager,
-                        self.config, translator_config,
-                        formating_function=self.format_api_settings)
+        try:
+            self.add_modal_log("开始翻译...", modal_id)
+            os.environ['DUMP'] = str(self.config.get('ui_default', {}).get('translator', {})
+                                  .get('dump', False)).lower()
+            translate_main(modal_id, self.log_manager,
+                           self.config, translator_config,
+                           formating_function=self.format_api_settings)
+            self.add_modal_log("翻译完成", modal_id)
+            return {"success": True, "message": "翻译完成"}
+        except CancelRunning:
+            self.log('用户已取消翻译流程')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
 
     def get_system_fonts(self):
         """获取系统已安装的字体列表"""
@@ -1131,5 +1169,110 @@ class LCTA_API():
         """从拖拽的文件安装汉化包"""
         evalFiles(files_data, self.config, self.log_manager, modal_id)
         return {"success": True, "message": "安装完成"}
+def setup_logging():
+    """
+    配置日志系统，使用TimedRotatingFileHandler按时间轮转日志
+    """
+    # 创建logs目录（如果不存在）
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+    
+    # 配置日志记录器
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+    
+    # 使用TimedRotatingFileHandler按天轮转日志
+    handler = TimedRotatingFileHandler(
+        'logs/app.log', 
+        when='midnight',     # 每天午夜轮转
+        interval=1,          # 间隔1天
+        encoding='utf-8',
+        utc=False,           # 使用本地时间
+        delay=False,
+        atTime=None          # 午夜轮转
+    )
+    
+    # 设置日志格式
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    
+    # 添加处理器到记录器
+    logger.addHandler(handler)
+    
+    return logger
 
-LCTAapp = LCTA_API()
+def main():
+    # 获取HTML文件的绝对路径
+    html_path = os.path.join(os.getenv('path_'), "webui\\index.html")
+    
+    # 设置日志
+    logger = setup_logging()
+    logger.info("正在启动LCTA WebUI")
+    
+
+    # 创建API实例
+    api = LCTA_API(logger)
+    logger.info('API已创建')
+    # 创建窗口 - 先创建窗口，不立即绑定API
+    window = webview.create_window(
+        "LCTA - 边狱公司汉化工具箱",
+        url=html_path,
+        width=1200,
+        height=800,
+        resizable=True,
+        fullscreen=False,
+        text_select=True,
+        js_api=api
+    )
+    
+    api.set_window(window)
+    window.events.closed += api.save_setting_from
+    atexit.register(api.save_config_to_file)
+    # 设置模态窗口相关的回调
+    api.log_manager.set_modal_callbacks(
+        status_callback=api.set_modal_status,
+        log_callback=api.add_modal_log,
+        progress_callback=api.update_modal_progress,
+        check_running=api.check_modal_running
+    )
+    
+    logger.info("WebUI窗口已创建")
+
+    debug_mode = api.config.get("debug", False)
+    enable_storage = api.config.get('enable_storage', False)
+
+    webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
+    webview.settings['ALLOW_DOWNLOADS'] = True
+    
+    if not debug_mode:
+        logger_c = logging.getLogger('urllib3.connectionpool')
+        logger_c.setLevel(logging.INFO)
+
+    def start_func():
+        print('加载函数')
+        window.dom.document.events.dragenter += DOMEventHandler(api.drag_in, True, True)
+        window.dom.document.events.dragstart += DOMEventHandler(api.drag_in, True, True)
+        window.dom.document.events.dragover += DOMEventHandler(api.drag_in, True, True, debounce=500)
+        window.dom.document.events.drop += DOMEventHandler(api.on_drop, True, True)
+
+    if enable_storage:
+        stPath = api.config.get('storage_path', 'tmp')
+        webview.start(
+            func=start_func,
+            debug=debug_mode,
+            http_server=True,
+            storage_path=str(Path(stPath)),
+            private_mode=False
+        )
+    else:
+        webview.start(
+            func=start_func,
+            debug=debug_mode,
+            http_server=True
+        )
+
+if __name__ == "__main__":
+    main()

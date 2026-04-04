@@ -1,0 +1,70 @@
+.markdown-body {
+  background-color: var(--color-bg-card) !important;
+  color: var(--color-text-primary) !important;
+  font-family: inherit !important;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  color: var(--color-text-primary) !important;
+  border-bottom-color: var(--color-border) !important;
+}
+
+.markdown-body a {
+  color: var(--color-primary) !important;
+}
+.markdown-body a:hover {
+  color: var(--color-primary-dark) !important;
+}
+
+.markdown-body code {
+  background-color: var(--color-bg-input) !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid var(--color-border) !important;
+}
+
+.markdown-body pre {
+  background-color: var(--color-bg-input) !important;
+  border: 1px solid var(--color-border) !important;
+}
+
+.markdown-body blockquote {
+  color: var(--color-text-secondary) !important;
+  border-left-color: var(--color-primary) !important;
+  background-color: var(--color-bg-primary) !important;
+}
+
+.markdown-body table {
+  border-color: var(--color-border) !important;
+}
+.markdown-body table th,
+.markdown-body table td {
+  border-color: var(--color-border) !important;
+}
+.markdown-body table tr {
+  background-color: var(--color-bg-card) !important;
+}
+.markdown-body table tr:nth-child(2n) {
+  background-color: var(--color-bg-primary) !important;
+}
+
+/* GitHub Markdown 主题变量覆盖 */
+.markdown-body {
+  --color-prettylights-syntax-comment: var(--color-text-secondary);
+  --color-prettylights-syntax-constant: var(--color-primary);
+  --color-prettylights-syntax-entity: var(--color-success);
+  --color-prettylights-syntax-keyword: var(--color-danger);
+  --color-prettylights-syntax-string: var(--color-warning);
+  --color-fg-default: var(--color-text-primary);
+  --color-fg-muted: var(--color-text-secondary);
+  --color-canvas-default: var(--color-bg-card);
+  --color-canvas-subtle: var(--color-bg-primary);
+  --color-border-default: var(--color-border);
+  --color-accent-fg: var(--color-primary);
+  --color-success-fg: var(--color-success);
+  --color-danger-fg: var(--color-danger);
+}

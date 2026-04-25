@@ -25,3 +25,7 @@ dev_assets
 translatekit
 LLc-CN_LCTA
 webui/assets/README.md
+
+pyproject.toml
+uv.lock
+.claude

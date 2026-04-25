@@ -549,13 +549,13 @@ function initNavigation() {
                     }
                     
                     if (sectionId === 'install-section') {
-                        refreshInstallPackageList();
+                        window.refreshInstallPackageList();
                     }
 
                     if (sectionId === 'manage-section') {
-                        refreshInstalledPackageList();
-                        refreshInstalledModList();
-                        refreshSymlink();
+                        window.refreshInstalledPackageList();
+                        window.refreshInstalledModList();
+                        window.refreshSymlink();
                     }
 
                     if (sectionId !== 'test-section') {
@@ -1796,55 +1796,6 @@ function copySteamPath() {
     navigator.clipboard.writeText(cmdElement.value);
 }
 
-// 浏览安装界面的汉化包目录
-async function browseInstallPackageDirectory() {
-    const result = await pywebview.api.browse_folder('install-package-directory');
-    const packageDirInput = document.getElementById('install-package-directory');
-    if (packageDirInput && result) {
-        packageDirInput.value = result;
-        await configManager.updateConfigValue('install-package-directory', result);
-        await configManager.flushPendingUpdates();
-        refreshInstallPackageList();
-    }
-}
-
-// 清空汉化包目录输入框
-async function clearPackageDirectory() {
-    const packageDirInput = document.getElementById('install-package-directory');
-    if (packageDirInput) {
-        packageDirInput.value = '';
-        await configManager.updateConfigValue('install-package-directory', '');
-        await configManager.flushPendingUpdates();
-        refreshInstallPackageList();
-    }
-}
-
-// 浏览安装界面的汉化包目录
-function browseInstallModDirectory() {
-    pywebview.api.browse_folder('installed-mod-directory').then(async function(result) {
-        const modDirInput = document.getElementById('installed-mod-directory');
-        if (modDirInput && result) {
-            modDirInput.value = result;
-            await configManager.updateConfigValue('installed-mod-directory', result);
-            await configManager.flushPendingUpdates();
-            refreshInstalledModList();
-        }
-    }).catch(function(error) {
-        showMessage('错误', '浏览文件夹时发生错误: ' + error);
-    });
-}
-
-// 清空汉化包目录输入框
-async function clearModDirectory() {
-    const modDirInput = document.getElementById('installed-mod-directory');
-    if (modDirInput) {
-        modDirInput.value = '';
-        await configManager.updateConfigValue('installed-mod-directory', '');
-        await configManager.flushPendingUpdates();
-        refreshInstalledModList();
-    }
-}
-
 // 模态窗口基类
 class ModalWindow {
     constructor(title, options = {}) {
@@ -2326,9 +2277,27 @@ class ProgressModal extends ModalWindow {
     }
 }
 
+function callApi(methodName, ...args) {
+    if (typeof pywebview === 'undefined' || !pywebview.api || typeof pywebview.api[methodName] !== 'function') {
+        return Promise.reject(new Error(`API不可用: ${methodName}`));
+    }
+    return pywebview.api[methodName](...args);
+}
+
+function completeModalByResult(modal, result, successMessage, failurePrefix) {
+    if (result && result.success) {
+        modal.complete(true, successMessage);
+        return;
+    }
+    const message = result && result.message ? result.message : '未知错误';
+    modal.complete(false, `${failurePrefix}: ${message}`);
+}
+
 // 工厂函数
 function showMessage(title, message, onCloseCallback = () => {
-    pywebview.api.log("用户关闭窗口")
+    callApi('log', "用户关闭窗口").catch(function(error) {
+        console.log(error);
+    });
 }) {
     return new MessageModal(title, message, onCloseCallback);
 }
@@ -2348,16 +2317,12 @@ async function startTranslation() {
     modal.addLog('开始翻译任务');
     await configManager.updateConfigValues(configManager.collectConfigFromUI());
     
-    pywebview.api.start_translation(apiConfigManager.currentSettings,
-        modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '翻译任务已完成');
-        } else {
-            modal.complete(false, '翻译失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '翻译过程中发生错误: ' + error);
-    });
+    callApi('start_translation', apiConfigManager.currentSettings, modal.id)
+        .then(function(result) {
+            completeModalByResult(modal, result, '翻译任务已完成', '翻译失败');
+        }).catch(function(error) {
+            modal.complete(false, '翻译过程中发生错误: ' + error);
+        });
 }
 
 // ================================
@@ -2507,7 +2472,7 @@ class ItemListManager {
 }
 
 
-// 创建汉化包列表管理器实例
+// 创建汉化包列表管理器实例（保留：changeFontForPackage 仍使用它）
 let packageItemManager = new ItemListManager('install-package-list', {
     emptyMessage: '未找到可用的汉化包',
     itemIcon: 'fa-box',
@@ -2517,89 +2482,12 @@ let packageItemManager = new ItemListManager('install-package-list', {
 });
 
 /**
- * 刷新汉化包列表
- * 从后端获取数据后调用管理器的 setItems 和 updateList 进行渲染
+ * 以下函数已迁移至 webui/js/features-install-manage.js，并通过 window.xxx 暴露。
+ * 这里保留同名 wrapper，供 script.js 内部/旧逻辑调用，避免 ReferenceError。
  */
-function refreshInstallPackageList() {
-    const packageList = document.getElementById('install-package-list');
-    if (!packageList) return;
-
-    // 显示加载状态
-    packageItemManager.waitList();
-
-    pywebview.api.get_translation_packages()
-        .then(function(result) {
-            if (result.success && result.packages && result.packages.length > 0) {
-                // 设置数据并更新列表
-                packageItemManager.setItems(result.packages);
-            } else {
-                // 空列表也会自动显示 emptyMessage
-                packageItemManager.setItems([]);
-            }
-        })
-        .catch(function(error) {
-            console.error('获取汉化包列表失败:', error);
-            packageItemManager.showErrorList(error);
-        });
-}
-
-/**
- * 安装选中的汉化包
- */
-function installSelectedPackage() {
-    const packageName = packageItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个汉化包');
-        return;
-    }
-
-    const modal = new ProgressModal('安装汉化包');
-    modal.addLog(`开始安装汉化包: ${packageName}`);
-
-    pywebview.api.install_translation(packageName, modal.id)
-        .then(function(result) {
-            if (result.success) {
-                modal.complete(true, '汉化包安装成功');
-            } else {
-                modal.complete(false, '安装失败: ' + result.message);
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '安装过程中发生错误: ' + error);
-        });
-}
-
-/**
- * 删除选中的汉化包
- */
-function deleteSelectedPackage() {
-    const packageName = packageItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个汉化包');
-        return;
-    }
-
-    showConfirm('确认删除', `确定要删除汉化包 "${packageName}" 吗？此操作不可撤销。`,
-        function() {
-            pywebview.api.delete_translation_package(packageName)
-                .then(function(result) {
-                    if (result.success) {
-                        // 从管理器中移除该项，自动更新列表并清空选中状态
-                        packageItemManager.removeItem(packageName);
-                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
-                    } else {
-                        showMessage('删除失败', `删除汉化包失败: ${result.message}`);
-                    }
-                })
-                .catch(function(error) {
-                    showMessage('删除失败', `删除过程中发生错误: ${error}`);
-                });
-        },
-        function() {
-            // 取消删除，无操作
-        }
-    );
-}
+function refreshInstallPackageList() { return window.refreshInstallPackageList(); }
+function installSelectedPackage() { return window.installSelectedPackage(); }
+function deleteSelectedPackage() { return window.deleteSelectedPackage(); }
 
 async function changeFontForPackage() {
     const packageName = packageItemManager.getSelectedItem();
@@ -2787,7 +2675,7 @@ function getFontFromInstalled() {
         });
 }
 
-// 创建汉化包列表管理器实例
+// 创建汉化包列表管理器实例（保留：避免旧逻辑引用时报错）
 let installedPackageItemManager = new ItemListManager('installed-package-list', {
     emptyMessage: '未找到已安装汉化包',
     itemIcon: 'fa-box',
@@ -2797,102 +2685,13 @@ let installedPackageItemManager = new ItemListManager('installed-package-list', 
 });
 
 /**
- * 刷新已安装汉化包列表
- * 从后端获取数据后调用管理器的 setItems 和 updateList 进行渲染
+ * 以下函数已迁移至 webui/js/features-install-manage.js，并通过 window.xxx 暴露。
+ * 这里保留同名 wrapper，供 script.js 内部/旧逻辑调用，避免 ReferenceError。
  */
-function refreshInstalledPackageList() {
-    const packageList = document.getElementById('installed-package-list');
-    if (!packageList) return;
+function refreshInstalledPackageList() { return window.refreshInstalledPackageList(); }
+function useSelectedPackage() { return window.useSelectedPackage(); }
+function deleteInstalledPackage() { return window.deleteInstalledPackage(); }
 
-    // 显示加载状态
-    installedPackageItemManager.waitList();
-
-    pywebview.api.get_installed_packages()
-        .then(function(result) {
-            const box = document.getElementById('enable-lang');
-            if (result.success && result.enable && result.packages && result.packages.length > 0) {
-                // 设置数据并更新列表
-                box.checked=true;
-                installedPackageItemManager.setItems(result.packages);
-                if (result.selected) {
-                    installedPackageItemManager.setSelectedItem(result.selected);
-                };
-            } else {
-                // 空列表也会自动显示 emptyMessage
-                installedPackageItemManager.setItems([]);
-                if (result.success) {
-                    box.checked=false;
-                }
-            };
-            toggleCustomLangGui();
-        })
-        .catch(function(error) {
-            console.error('获取汉化包列表失败:', error);
-            installedPackageItemManager.showErrorList(error);
-        });
-}
-
-/**
- * 使用选中的汉化包
- */
-function useSelectedPackage() {
-    const packageName = installedPackageItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个汉化包');
-        return;
-    }
-
-    const modal = new ProgressModal('使用选中汉化包');
-    modal.addLog(`开始切换汉化包: ${packageName}`);
-
-    pywebview.api.use_translation(packageName, modal.id)
-        .then(function(result) {
-            if (result.success) {
-                modal.complete(true, '汉化包切换成功');
-
-                setTimeout(
-                    ()=>{modal.close()}, 300
-                )
-            } else {
-                modal.complete(false, '切换失败: ' + result.message);
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '切换过程中发生错误: ' + error);
-        });
-}
-
-/**
- * 删除选中的汉化包
- */
-function deleteInstalledPackage() {
-    const packageName = installedPackageItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个汉化包');
-        return;
-    }
-
-    showConfirm('确认删除', `确定要删除汉化包 "${packageName}" 吗？此操作不可撤销。`,
-        function() {
-            pywebview.api.delete_installed_package(packageName)
-                .then(function(result) {
-                    if (result.success) {
-                        // 从管理器中移除该项，自动更新列表并清空选中状态
-                        packageItemManager.removeItem(packageName);
-                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
-                    } else {
-                        showMessage('删除失败', `删除汉化包失败: ${result.message}`);
-                    }
-                })
-                .catch(function(error) {
-                    showMessage('删除失败', `删除过程中发生错误: ${error}`);
-                });
-        },
-        function() {
-            // 取消删除，无操作
-        }
-    );
-}
 
 /**
  * 支持启用/禁用切换的列表管理器
@@ -3052,62 +2851,15 @@ class ToggleItemListManager extends ItemListManager {
     }
 }
 
-let modItemManager = new ToggleItemListManager('install-mod-list', {
-    emptyMessage: '未找到模组',
-    itemIcon: 'fa-language',
-    defaultEnabled: false, // 默认全部禁用
-    onSelect: (item) => {
-        console.log('选中翻译器:', item);
-    },
-    onToggle: (item, enabled) => {
-        console.log(`模组 ${item} 状态变为: ${enabled ? '启用' : '禁用'}`);
-        toggleMod(item, enabled)
-    }
-});
+/**
+ * 以下函数已迁移至 webui/js/features-install-manage.js，并通过 window.xxx 暴露。
+ * 这里保留同名 wrapper，供 script.js 内部/旧逻辑调用，避免 ReferenceError。
+ */
+function refreshInstalledModList() { return window.refreshInstalledModList(); }
+function toggleMod(item, enable) { return window.toggleMod(item, enable); }
+function openModPath() { return window.openModPath(); }
+function deleteSelectedMod() { return window.deleteSelectedMod(); }
 
-async function refreshInstalledModList() {
-    modItemManager.waitList();
-    const result = await pywebview.api.find_installed_mod();
-    if (result.success) {
-        const merge = result.able.concat(result.disable);
-        modItemManager.setItems(merge);
-        result.able.forEach(item =>{
-            modItemManager.enabledMap[item]=true;
-        })
-        modItemManager.updateList();
-    }
-}
-
-async function toggleMod(item, enable) {
-    const result = await pywebview.api.toggle_mod(item, enable);
-}
-
-function openModPath() {
-    pywebview.api.open_mod_path();
-}
-
-async function deleteSelectedMod() {
-    const packageName = modItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个模组');
-        return;
-    }
-
-    showConfirm('确认删除', `确定要删除模组 "${packageName}" 吗？此操作不可撤销。`,
-        async function() {
-            const result = await pywebview.api.delete_mod(packageName, 
-                modItemManager.getEnabledMap[selectedItem]);
-                    if (result.success) {
-                        // 从管理器中移除该项，自动更新列表并清空选中状态
-                        packageItemManager.removeItem(packageName);
-                    } else {
-                        showMessage('删除失败', `删除模组失败: ${result.message}`);
-                    }
-        },
-        function() {
-        }
-    );
-}
 
 /**
  * 支持自定义动作按钮的列表管理器
@@ -3219,173 +2971,15 @@ class ActionButtonItemListManager extends ItemListManager {
     }
 }
 
-let symlinkStatus ;
-
-async function loadSymlinkStatus() {
-    try {
-        const result = await pywebview.api.get_symlink_status();
-        symlinkStatus = result.success ? result.status : {} 
-    } catch (error) {
-        console.log(error);
-        addLogMessage(error);
-    }
-}
-
-let symlinkManager;
-
-async function refreshSymlink() {
-    await loadSymlinkStatus();
-
-    symlinkManager = new ActionButtonItemListManager('symlink-list', {
-        actionButtonText: (item) => {
-            let symlink = symlinkStatus[item];
-            switch (symlink.status) {
-                case 'not_exist':
-                    return '不存在'
-                case 'not_symlink':
-                    return '文件夹'
-                case 'symlink':
-                    return '软链接'
-                default:
-                    return '处理错误'
-            }
-        },
-        actionButtonCallback: (item) => {
-            console.log('交互:', item);
-            let symlink = symlinkStatus[item];
-            switch (symlink.status) {
-                case 'not_exist':
-                    break;
-                case 'not_symlink':
-                    openPath(symlink.path);
-                    break;
-                case 'symlink':
-                    openPath(symlink.target);
-                    break;
-                default:
-                    showMessage('无法处理')
-            }
-        },
-        onSelect: (item) => {
-            console.log('选中:', item);
-        },
-        emptyMessage: '暂无数据',
-        itemIcon: 'fa-file'
-    });
-
-    symlinkManager.setItems(['ProjectMoon', 'Unity']);
-}
-
-function openPath(path) {
-    console.log(`打开 ${path}`);
-    pywebview.api.run_func('open_explorer', path);
-}
-
-
-async function createSymlink() {
-    const folderName = symlinkManager.getSelectedItem();
-    const folder = symlinkStatus[folderName];
-    try {
-        if (folder.status === 'symlink') {
-            showConfirm('是否要更换软链接目标？',
-                `您已经创建了一个可用的软链接，它的目录是 ${folder.target}，是否更换目录？
-                如果您确认继续，请选择您想要更换的目标路径`,
-                async function() {
-                    const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
-                    if (!targetDir || targetDir.length === 0) return;
-                    const hasContent = await pywebview.api.run_func('evaluate_path', targetDir);
-                    async function doCreate() {
-                        await pywebview.api.run_func('remove_symlink', folder.path);
-                        await pywebview.api.run_func('create_symlink', targetDir, folder.path);
-                        await pywebview.api.move_folders(folder.target, targetDir);
-                        refreshSymlink();
-                    };
-                    if (hasContent) {
-                        showConfirm('警告', `目标文件夹中含有文件。可能出现非预期行为。
-                            这有可能导致以下错误: 
-                            游戏无法正常启动，点击删除软链接时同时移动目标文件夹下的所有文件。
-                            正常的做法是创建一个空文件夹用来盛放文件。
-                            如果你确定知道自己在做什么，请点击确定`,
-                        doCreate, () => {})
-                    } else {
-                        doCreate();
-                    };
-                },
-                () => {}
-            )
-        } else if (folder.status === 'not_symlink') {
-            showConfirm('是否要创建软链接？',
-                `如果您确认继续，请选择您想要把数据放在的文件夹`,
-                async function() {
-                    const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
-                    if (!targetDir || targetDir.length === 0) return;
-                    const hasContent = await pywebview.api.run_func('evaluate_path', targetDir);
-                    async function doCreate() {
-                        await pywebview.api.move_folders(folder.path, targetDir);
-                        await pywebview.api.run_func('remove_symlink', folder.path);
-                        await pywebview.api.run_func('create_symlink', targetDir, folder.path);
-                        refreshSymlink();
-                    };
-                    if (hasContent) {
-                        showConfirm('警告', `目标文件夹中含有文件。可能出现非预期行为。
-                            这有可能导致以下错误: 
-                            游戏无法正常启动，点击删除软链接时同时移动目标文件夹下的所有文件。
-                            正常的做法是创建一个空文件夹用来盛放文件。
-                            如果你确定知道自己在做什么，请点击确定`,
-                        doCreate, () => {})
-                    } else {
-                        doCreate();
-                    };
-                },
-                () => {}
-            )
-        } else if (folder.status === 'not_exist') {
-            showConfirm('创建软链接',
-                '现在对应位置没有目录，如果您先前手动迁移了数据，那么点击是以创建软链接',
-                () => {
-                    showMessage('提示', '请选择您先前迁移的文件夹',
-                        async ()=> {
-                            const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
-                            if (!targetDir || targetDir.length === 0) return;
-                            await pywebview.api.run_func('create_symlink', targetDir, folder.path);
-                            refreshSymlink();
-                        }
-                    )
-                },
-            ()=>{});
-        } else {
-            showMessage('警告', '请先确保文件正确已安装');
-        };
-    } catch (error) {
-        showMessage('错误', `创建软链接时发生错误
-            ${error}`);
-    };
-}
-
-async function removeSymlink() {
-    const folderName = symlinkManager.getSelectedItem();
-    const folder = symlinkStatus[folderName];
-    try {
-        if (folder.status === 'symlink') {
-            showConfirm('是否要删除软链接？',
-                `您已经创建了一个可用的软链接，它的目录是 ${folder.target}，是否删除？
-                如果您确认继续，这将使文件夹重新回到c盘`,
-                async function() {
-                    await pywebview.api.run_func('remove_symlink', folder.path);
-                    await pywebview.api.run_func('evaluate_path', folder.path);
-                    await pywebview.api.move_folders(folder.target, folder.path);
-                    refreshSymlink();
-                },
-                () => {}
-            )
-        } else {
-            showMessage('警告', '当前数据项不是软链接');
-        };
-    } catch (error) {
-        showMessage('错误', `删除软链接时发生错误
-            ${error}`)
-    };
-}
+/**
+ * 以下函数已迁移至 webui/js/features-install-manage.js，并通过 window.xxx 暴露。
+ * 这里保留同名 wrapper，供 script.js 内部/旧逻辑调用，避免 ReferenceError。
+ */
+function loadSymlinkStatus() { return window.loadSymlinkStatus(); }
+function refreshSymlink() { return window.refreshSymlink(); }
+function openPath(path) { return window.openPath(path); }
+function createSymlink() { return window.createSymlink(); }
+function removeSymlink() { return window.removeSymlink(); }
 
 class FancyManager {
     constructor() {
@@ -3653,327 +3247,6 @@ class FancyManager {
 // 全局实例
 let fancyManager;
 
-function applyFancy() {
-    const modal = new ProgressModal('应用美化文本');
-    modal.addLog(`开始执行美化`);
-    modal.addLog(`应用规则集${fancyManager.enabledMap}`);
-    pywebview.api.fancy_main(fancyManager.rulesets, fancyManager.enabledMap).then(
-        () => {
-            modal.complete(true, '完成美化');
-            setTimeout(() => {
-                modal.close();
-            }, 2000);
-        }
-    ).catch(
-        (error) => {
-            modal.addLog(`美化执行错误，错误提示${error}`);
-            modal.complete(false, '美化执行失败');
-        }
-    );
-
-};
-
-function fetchProperNouns() {
-    const outputFormat = document.getElementById('proper-output').value;
-    const skipSpace = document.getElementById('proper-skip-space').checked;
-    const maxCount = document.getElementById('proper-max-count').value;
-    const minCount = document.getElementById('proper-min-count').value;
-    const joinChar = document.getElementById('proper-join-char').value;
-    
-    const updates = {
-        'proper-join-char': joinChar,
-        'proper-max-lenth': maxCount,
-        'proper-min-lenth': minCount,
-        'proper-output-type': outputFormat,
-        'proper-disable-space': skipSpace
-    };
-
-    const modal = new ProgressModal('抓取专有词汇');
-    modal.addLog('开始抓取专有词汇...');
-    modal.addLog(`输出格式: ${outputFormat}`);
-    modal.addLog(`跳过含空格词汇: ${skipSpace ? '是' : '否'}`);
-    modal.addLog(`最短长度: ${minCount}`);
-    if (maxCount) {
-        modal.addLog(`最大词汇数量: ${maxCount}`);
-    }
-    if (outputFormat === 'single') {
-        modal.addLog(`文本分割符：${joinChar}`);
-    }
-    
-    configManager.updateConfigValues(updates)
-        .then(() => {
-            pywebview.api.fetch_proper_nouns(modal.id)
-                .then(function(result) {
-                    if (result.success) {
-                        modal.complete(true, '专有词汇抓取成功');
-                    } else {
-                        modal.complete(false, '抓取失败: ' + result.message);
-                    }
-                })
-                .catch(function(error) {
-                    modal.complete(false, '抓取过程中发生错误: ' + error);
-                });
-        })
-}
-
-function downloadOurplay() {
-    const fontOption = document.getElementById('ourplay-font-option').value;
-    const checkHash = document.getElementById('ourplay-check-hash').checked;
-    const useApi = document.getElementById('ourplay-use-api').checked;
-    
-    const modal = new ProgressModal('下载OurPlay汉化包');
-    modal.addLog('开始下载OurPlay汉化包...');
-    modal.addLog(`字体选项: ${fontOption}`);
-    modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
-    modal.addLog(`使用API: ${useApi ? '启用' : '禁用'}`);
-    
-    // 批量更新配置
-    const updates = {
-        'ourplay-font-option': fontOption,
-        'ourplay-check-hash': checkHash,
-        'ourplay-use-api': useApi
-    };
-    
-    configManager.updateConfigValues(updates)
-        .then(() => {
-            pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
-                if (result.success) {
-                    modal.complete(true, 'OurPlay汉化包下载成功');
-                } else {
-                    if (result.message === "已取消") {
-                        modal.cancel();
-                    } else {
-                        modal.complete(false, '下载失败: ' + result.message);
-                    }
-                }
-            }).catch(function(error) {
-                modal.complete(false, '下载过程中发生错误: ' + error);
-            });
-        });
-}
-
-async function downloadBubble() {
-    const modal = new ProgressModal('开始下载');
-    modal.setStatus('正在初始化...');
-    modal.addLog('开始下载任务');
-    await configManager.updateConfigValues(configManager.collectConfigFromUI());
-    
-    pywebview.api.download_bubble(
-        modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '下载任务已完成');
-        } else {
-            modal.complete(false, '下载失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '下载过程中发生错误: ' + error);
-    });
-}
-
-function cleanCache() {
-    const modal = new ProgressModal('清除缓存');
-    
-    // 获取清理选项
-    const cleanProgress = document.getElementById('clean-progress').checked;
-    const cleanNotice = document.getElementById('clean-notice').checked;
-    const cleanMods = document.getElementById('clean-mods').checked;
-    
-    // 获取自定义文件列表
-    const customFilesList = [];
-    const customFilesContainer = document.getElementById('custom-files-list');
-    if (customFilesContainer) {
-        // 从列表项中获取文件路径
-        const fileItems = customFilesContainer.querySelectorAll('.file-item');
-        fileItems.forEach(item => {
-            const filePath = item.querySelector('.file-path').textContent;
-            if (filePath) {
-                customFilesList.push(filePath);
-            }
-        });
-    }
-    
-    // 使用配置管理器批量更新配置
-    const updates = {
-        'clean-progress': cleanProgress,
-        'clean-notice': cleanNotice,
-        'clean-mods': cleanMods
-    };
-    
-    // 保存清理配置并执行清理
-    configManager.updateConfigValues(updates)
-        .then(() => {
-            // 配置保存成功后执行清理操作
-            pywebview.api.clean_cache(modal.id, customFilesList, cleanProgress, cleanNotice, cleanMods).then(function(result) {
-                if (result.success) {
-                    modal.complete(true, '缓存清除成功');
-                } else {
-                    if (result.message === '已取消') {
-                        modal.complete(null, '操作已取消');
-                    } else {
-                        modal.complete(false, '清除失败: ' + result.message);
-                    }
-                }
-            }).catch(function(error) {
-                modal.complete(false, '清除过程中发生错误: ' + error);
-            });
-        })
-        .catch(function(error) {
-            console.error('保存清理配置时发生错误:', error);
-            modal.complete(false, '保存配置失败: ' + error);
-        });
-}
-
-// 添加自定义清理文件/文件夹
-function addCustomFile() {
-    const filePathInput = document.getElementById('custom-file-path');
-    if (filePathInput && filePathInput.value.trim()) {
-        const filePath = filePathInput.value.trim();
-        const customFilesContainer = document.getElementById('custom-files-list');
-        
-        // 检查文件路径是否已存在
-        const existingItems = customFilesContainer.querySelectorAll('.file-path');
-        let exists = false;
-        existingItems.forEach(item => {
-            if (item.textContent === filePath) {
-                exists = true;
-            }
-        });
-        
-        if (exists) {
-            showMessage('提示', '该文件路径已存在列表中');
-            return;
-        }
-        
-        // 创建列表项
-        const fileItem = document.createElement('div');
-        fileItem.className = 'file-item';
-        fileItem.innerHTML = `
-            <div class="file-info">
-                <i class="fas fa-file"></i>
-                <span class="file-path">${filePath}</span>
-            </div>
-            <button class="action-btn small" onclick="removeCustomFile(this)">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
-        
-        customFilesContainer.appendChild(fileItem);
-        filePathInput.value = '';
-        
-        // 更新配置
-        updateCustomFilesConfig();
-    }
-}
-
-// 移除自定义清理文件
-function removeCustomFile(element) {
-    const fileItem = element.closest('.file-item');
-    if (fileItem) {
-        fileItem.remove();
-        updateCustomFilesConfig();
-    }
-}
-
-// 更新自定义文件配置
-function updateCustomFilesConfig() {
-    const customFilesList = [];
-    const customFilesContainer = document.getElementById('custom-files-list');
-    if (customFilesContainer) {
-        const fileItems = customFilesContainer.querySelectorAll('.file-item');
-        fileItems.forEach(item => {
-            const filePath = item.querySelector('.file-path').textContent;
-            if (filePath) {
-                customFilesList.push(filePath);
-            }
-        });
-    }
-    
-    // 更新配置
-    configManager.updateConfigValue('custom-files', customFilesList);
-}
-
-// 添加浏览文件到自定义清理列表
-function browseCustomFile() {
-    pywebview.api.browse_file('custom-file-path');
-}
-
-// 添加浏览文件夹到自定义清理列表
-function browseCustomFolder() {
-    pywebview.api.browse_folder('custom-file-path');
-}
-
-// 清空自定义文件列表
-function clearCustomFilesList() {
-    const customFilesContainer = document.getElementById('custom-files-list');
-    if (customFilesContainer) {
-        customFilesContainer.innerHTML = '';
-        updateCustomFilesConfig();
-    }
-}
-
-function downloadLLC() {
-    const zipType = document.getElementById('llc-zip-type').value;
-    const useProxy = document.getElementById('llc-use-proxy').checked;
-    const useCache = document.getElementById('llc-use-cache').checked;
-    const dumpDefault = document.getElementById('llc-dump-default').checked;
-    const download_source = document.getElementById('llc-download-source').value;
-    
-    // 批量更新配置
-    const updates = {
-        'llc-zip-type': zipType,
-        'llc-use-proxy': useProxy,
-        'llc-use-cache': useCache,
-        'llc-dump-default': dumpDefault,
-        'llc-download-source': download_source
-    };
-    
-    configManager.updateConfigValues(updates)
-        .then(() => {
-            const modal = new ProgressModal('下载零协汉化包');
-            modal.addLog('开始下载零协汉化包...');
-            modal.addLog(`压缩格式: ${zipType}`);
-            modal.addLog(`使用代理: ${useProxy ? '是' : '否'}`);
-            modal.addLog(`使用缓存: ${useCache ? '是' : '否'}`);
-            modal.addLog(`导出默认配置: ${dumpDefault ? '是' : '否'}`);
-            modal.addLog(`下载源: ${download_source}`);
-            
-            pywebview.api.download_llc_translation(modal.id).then(function(result) {
-                if (result.success) {
-                    modal.complete(true, '零协汉化包下载成功');
-                } else {
-                    if (result.message === "已取消") {
-                        modal.cancel();
-                    } else {
-                        modal.complete(false, '下载失败: ' + result.message);
-                    }
-                }
-            }).catch(function(error) {
-                modal.complete(false, '下载过程中发生错误: ' + error);
-            });
-        });
-}
-
-async function downloadMachine() {
-    const modal = new ProgressModal('开始下载');
-    modal.setStatus('正在初始化下载过程...');
-    modal.addLog('开始下载任务');
-    await configManager.updateConfigValues(configManager.collectConfigFromUI());
-    
-    pywebview.api.download_LCTA_auto(modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '下载任务已完成');
-        } else {
-            modal.complete(false, '下载失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '下载过程中发生错误: ' + error);
-    });
-}
-
-// ================================
-// 配置管理函数
-// ================================
-
 // 保存设置
 function saveSettings() {
     const modal = new ProgressModal('保存设置');
@@ -4079,52 +3352,6 @@ function resetConfig() {
     );
 }
 
-function manualCheckUpdates() {
-    const modal = new ProgressModal('检查更新');
-    modal.addLog('正在检查是否有可用更新...');
-    
-    pywebview.api.manual_check_update()
-        .then(function(result) {
-            if (result.has_update) {
-                modal.complete(true, `发现新版本 ${result.latest_version}，请前往GitHub下载更新`);
-                setTimeout(() => {
-                    if (!modal.isMinimized) {
-                        modal.close();
-                        showUpdateInfo(result);
-                    }
-                }, 2000);
-            } else {
-                modal.complete(true, '当前已是最新版本');
-                setTimeout(() => {
-                    if (!modal.isMinimized) {
-                        modal.close();
-                    }
-                }, 2000);
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '检查更新时发生错误: ' + error);
-            setTimeout(() => {
-                if (!modal.isMinimized) {
-                    modal.close();
-                }
-            }, 3000);
-        });
-}
-
-// 自动检查更新函数（仅在有更新时显示窗口）
-function autoCheckUpdates() {
-    pywebview.api.manual_check_update()
-        .then(function(result) {
-            if (result.has_update) {
-                showUpdateInfo(result);
-            }
-        })
-        .catch(function(error) {
-            addLogMessage('自动检查更新时发生错误: ' + error, 'error');
-        });
-}
-
 // 更新进度条函数
 function updateProgress(percent, text) {
     const progressFill = document.getElementById('progress-fill');
@@ -4191,97 +3418,15 @@ function simpleMarkdownToHtml(text) {
     return html;
 }
 
-// 添加一个变量来跟踪是否已经显示了更新窗口
-let updateModalShown = false;
+/**
+ * 更新相关函数已迁移至 webui/js/features-settings-update.js，并通过 window.xxx 暴露。
+ * 这里保留同名 wrapper，供 script.js 内部/旧逻辑调用，避免 ReferenceError。
+ */
+function manualCheckUpdates() { return window.manualCheckUpdates(); }
+function autoCheckUpdates() { return window.autoCheckUpdates(); }
+function doUpdate() { return window.doUpdate(); }
+function showUpdateInfo(updateInfo) { return window.showUpdateInfo(updateInfo); }
 
-function doUpdate() {
-            this.close();
-            const progressModal = new ProgressModal('更新程序');
-            progressModal.addLog('开始下载并安装更新...');
-            pywebview.api.perform_update_in_modal(progressModal.id)
-                .then(function(result) {
-                    if (!result) {
-                        progressModal.addLog('更新失败');
-                        progressModal.complete(false, '更新失败');
-                        return;
-                    }
-                    progressModal.addLog('更新完成');
-                    progressModal.addLog('正在重新启动程序...');
-                    progressModal.complete(true, '更新完成');
-                })
-                .catch(function(error) {
-                    progressModal.addLog('更新失败: ' + error);
-                    progressModal.complete(false, '更新失败');
-                });
-        }
-
-
-// 显示更新信息
-async function showUpdateInfo(update_info) {
-    if (updateModalShown) {
-        return;
-    }
-    
-    updateModalShown = true;
-    
-    let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-    htmlMessage += `<p><strong>当前版本:</strong> v5.0.0</p>`;
-    
-    if (update_info.title) {
-        htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
-    }
-    
-    if (update_info.body) {
-        let body = update_info.body.trim();
-        const bodyHtml = simpleMarkdownToHtml(body);
-        htmlMessage += `<div><strong>更新详情:</strong></div>`;
-        htmlMessage += `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`;
-    }
-    
-    if (update_info.published_at) {
-        const publishDate = new Date(update_info.published_at);
-        htmlMessage += `<p><strong>发布时间:</strong> ${publishDate.toLocaleDateString('zh-CN')}</p>`;
-    }
-    
-    if (update_info.html_url) {
-        htmlMessage += `<p><strong>发布页面:</strong> <a href="${update_info.html_url}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
-    }
-    
-    const modal = showConfirm(
-        '发现新版本',
-        '',
-        doUpdate,
-        function() {
-            addLogMessage('用户取消了更新');
-            updateModalShown = false;
-        }
-    );
-    
-    const originalClose = modal.close;
-    modal.close = function() {
-        updateModalShown = false;
-        originalClose.call(this);
-    };
-    
-    setTimeout(async function() {
-        const statusElement = document.getElementById(`modal-status-${modal.id}`);
-        if (statusElement) {
-            statusElement.innerHTML = htmlMessage;
-        };
-        let r = await pywebview.api.get_attr('is_frozen');
-        if (!r) {
-            r = r && (await pywebview.api.get_attr('debug') === 'true')
-        };
-        if (r) {
-            const confirmButton = document.getElementById(`confirm-btn-${modal.id}`)
-            confirmButton.removeEventListener('click', doUpdate)
-            confirmButton.addEventListener('click', ()=>{
-                showMessage('当前版本不兼容自动下载');
-                modal.close()
-            })
-        }
-    }, 100);
-}
 
 // 初始化函数
 function init() {
@@ -4878,7 +4023,7 @@ window.addEventListener('pywebviewready', function() {
             pywebview.api.init_github()
                 .then(function() {
                 if (autoCheckUpdate && !first_use) {
-                    autoCheckUpdates();
+                    window.autoCheckUpdates();
                     }
                 }
             );

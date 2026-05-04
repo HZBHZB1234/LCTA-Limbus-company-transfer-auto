@@ -1,5 +1,5 @@
 import json
-from .log_manage import LogManager
+from globalManagers.log_manager import LogManager
 from webFunc import GithubDownload
 from webFunc import Note
 from webutils.functions import download_with_github, download_with

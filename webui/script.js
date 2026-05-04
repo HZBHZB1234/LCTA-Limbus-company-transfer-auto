@@ -164,121 +164,49 @@ function setConfigToCache(obj, prefix = '') {
 // 配置管理器
 class ConfigManager {
     constructor() {
-        // 配置键名对照表：id -> 配置键路径
-        this.configKeyMap = {
-            // 基本设置
-            'game-path': 'game_path',
-            'debug-mode': 'debug',
-            'auto-check-update': 'auto_check_update',
-            'delete-updating': 'delete_updating',
-            'update-use-proxy': 'update_use_proxy',
-            'github-max-workers': 'github_max_workers',
-            'github-timeout': 'github_timeout',
-            'update-only-stable': 'update_only_stable',
-            'enable-cache': 'enable_cache',
-            'cache-path': 'cache_path',
-            'api-crypto': 'api_crypto',
-            'enable-storage': 'enable_storage',
-            'storage-path': 'storage_path',
-            '--theme': 'theme',
+        // 配置键名对照表（从后端动态获取，不再硬编码）
+        this.configKeyMap = {};
+        this.constants = {};        // UI常量（updateList, bindRefer, relyList等）
+        this.configDefaults = {};   // 默认配置扁平化缓存
 
-            // 老年人模式设置
-            '--elder': 'elder_list',
-            '--elder-character-base': 'elder.character.base',
-            '--elder-character-launcher': 'elder.character.launcher',
-            '--elder-character-translate': 'elder.character.translate',
-            '--elder-character-manage': 'elder.character.manage',
-
-            // 翻译设置
-            "translator-service-select": "ui_default.translator.translator",
-            "fallback": 'ui_default.translator.fallback',
-            "is-text": 'ui_default.translator.is_text',
-            'from-lang': 'ui_default.translator.from_lang',
-            'enable-proper': 'ui_default.translator.enable_proper',
-            'auto-fetch-proper': 'ui_default.translator.auto_fetch_proper',
-            'proper-path': 'ui_default.translator.proper_path',
-            'enable-role': 'ui_default.translator.enable_role',
-            'enable-skill': 'ui_default.translator.enable_skill',
-            'enable-dev-settings': 'ui_default.translator.enable_dev_settings',
-            "en-path": "ui_default.translator.en_path",
-            "kr-path": "ui_default.translator.kr_path",
-            "jp-path": "ui_default.translator.jp_path",
-            "llc-path": "ui_default.translator.llc_path",
-            "has-prefix": "ui_default.translator.has_prefix",
-            "dump-translation": "ui_default.translator.dump",
-            
-            // 安装设置
-            'install-package-directory': 'ui_default.install.package_directory',
-            'package-directory': 'ui_default.install.package_directory',
-            
-            // OurPlay设置
-            'ourplay-font-option': 'ui_default.ourplay.font_option',
-            'ourplay-check-hash': 'ui_default.ourplay.check_hash',
-            'ourplay-use-api': 'ui_default.ourplay.use_api',
-            
-            // 零协设置
-            'llc-zip-type': 'ui_default.zero.zip_type',
-            'llc-download-source': 'ui_default.zero.download_source',
-            'llc-use-proxy': 'ui_default.zero.use_proxy',
-            'llc-use-cache': 'ui_default.zero.use_cache',
-            'llc-dump-default': 'ui_default.zero.dump_default',
-
-            // LCTA-auto-update配置
-            'machine-download-source': 'ui_default.machine.download_source',
-            'machine-use-proxy': 'ui_default.machine.use_proxy',
-
-            // 气泡文本mod配置
-            'bubble-color': 'ui_default.bubble.color',
-            'bubble-llc': 'ui_default.bubble.llc',
-            'bubble-install': 'ui_default.bubble.install',
-
-            // 安装数据管理设置
-            'installed-mod-directory': 'ui_default.manage.mod_path',
-            
-            // 清理设置
-            'clean-progress': 'ui_default.clean.clean_progress',
-            'clean-notice': 'ui_default.clean.clean_notice',
-            'clean-mods': 'ui_default.clean.clean_mods',
-
-            // api配置设置
-            'api-configs': 'api_config',
-            'api-select': 'ui_default.api_config.key',
-
-            'fancy-user': 'user_fancy',
-            'fancy-allow': 'fancy_allow',
-
-            // 抓取设置
-            'proper-join-char': 'ui_default.proper.join_char',
-            'proper-skip-space': 'ui_default.proper.disable_space',
-            'proper-max-count': 'ui_default.proper.max_length',
-            'proper-min-count': 'ui_default.proper.min_length',
-            'proper-output': 'ui_default.proper.output_type',
-            
-            // Launcher设置
-            'launcher-zero-zip-type': 'launcher.zero.zip_type',
-            'launcher-zero-download-source': 'launcher.zero.download_source',
-            'launcher-zero-use-proxy': 'launcher.zero.use_proxy',
-            'launcher-zero-use-cache': 'launcher.zero.use_cache',
-            'machine-zero-download-source': 'launcher.machine.download_source',
-            'machine-zero-use-proxy': 'launcher.machine.use_proxy',
-            'launcher-ourplay-font-option': 'launcher.ourplay.font_option',
-            'launcher-ourplay-use-api': 'launcher.ourplay.use_api',
-            'launcher-work-update': 'launcher.work.update',
-            'launcher-work-mod': 'launcher.work.mod',
-            'launcher-work-bubble': 'launcher.work.bubble',
-            'launcher-work-fancy': 'launcher.work.fancy'
-        };
-        
         this.configCache = {}; // 配置缓存
         this.pendingUpdates = {}; // 待更新的配置
         this.debounceTimer = null;
-        this.debounceDelay = 500; // 防抖延迟
+        this.debounceDelay = 300; // 防抖延迟（500ms -> 300ms）
+        this._initialized = false;
+    }
+
+    /**
+     * 初始化：从后端一次性获取所有前端常量
+     * 替代原来硬编码的60+条configKeyMap和多次请求
+     */
+    async init() {
+        if (this._initialized) return;
+
+        try {
+            const result = await pywebview.api.export_frontend_constants();
+            if (result.success && result.data) {
+                const { config_key_map, config_defaults, constants } = result.data;
+                this.configKeyMap = config_key_map || {};
+                this.configDefaults = config_defaults || {};
+                this.constants = constants || {};
+                this._initialized = true;
+                console.log(`[ConfigManager] 初始化完成: ${Object.keys(this.configKeyMap).length} 个映射`);
+            } else {
+                console.error('[ConfigManager] 初始化失败:', result.message);
+            }
+        } catch (error) {
+            console.error('[ConfigManager] 初始化异常:', error);
+        }
     }
 
     async reloadConfig() {
-        obj = await pywebview.api.get_attr('config');
-        window.config = obj;
-        setConfigToCache(obj);
+        await this.init();
+        const result = await pywebview.api.get_attr('config');
+        if (result) {
+            window.config = result;
+            setConfigToCache(result);
+        }
     }
     
     // 批量获取配置值

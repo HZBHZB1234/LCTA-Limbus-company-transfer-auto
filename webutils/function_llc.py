@@ -1,4 +1,4 @@
-from .log_manage import LogManager
+from globalManagers.log_manager import LogManager
 import tempfile
 from .functions import *
 import shutil

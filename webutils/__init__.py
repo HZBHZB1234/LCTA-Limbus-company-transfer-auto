@@ -26,7 +26,21 @@ from .function_fancy import fancy_main
 from .eiderConst import updateList, bindRefer, relyList
 from .function_drop import evalFile, makeMessage, evalFiles
 
+# v5.0.0 新增：Handler 模块
+from .handlers.config_handler import ConfigHandler
+from .handlers.translate_handler import TranslateHandler
+from .handlers.download_handler import DownloadHandler
+from .handlers.install_handler import InstallHandler
+from .handlers.manage_handler import ManageHandler
+from .handlers.fancy_handler import FancyHandler
+from .handlers.update_handler import UpdateHandler
+from .handlers.dragdrop_handler import DragDropHandler
+from .handlers.clean_handler import CleanHandler
+from .handlers.font_handler import FontHandler
+from .handlers.proper_handler import ProperHandler
+
 __all__ = [
+    # 原函数导出（兼容）
     'function_llc_main',
     'function_ourplay_main',
     'find_translation_packages',
@@ -56,7 +70,7 @@ __all__ = [
     'create_symlink_for',
     'open_explorer',
     'evaluate_path',
-    'UNITY','PM',
+    'UNITY', 'PM',
     'remove_symlink_for',
     'builtinFancyConfig',
     'fancy_main',
@@ -65,5 +79,10 @@ __all__ = [
     'relyList',
     'evalFile',
     'makeMessage',
-    'evalFiles'
+    'evalFiles',
+    # v5.0.0 新增
+    'ConfigHandler', 'TranslateHandler', 'DownloadHandler',
+    'InstallHandler', 'ManageHandler', 'FancyHandler',
+    'UpdateHandler', 'DragDropHandler', 'CleanHandler',
+    'FontHandler', 'ProperHandler',
 ]

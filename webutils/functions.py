@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Set
 import shutil
 import tempfile
-from .log_manage import LogManager
+from globalManagers.log_manager import LogManager
 if TYPE_CHECKING:
     from webFunc.GithubDownload import ReleaseAsset
 

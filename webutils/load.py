@@ -1,20 +1,43 @@
+"""
+配置加载/验证工具函数（兼容层）
+部分逻辑已迁移到 globalManagers/ConfigManager 和 PathManager
+新代码请使用 globalManagers.get_config() / globalManagers.get_path()
+"""
+
 import winreg
 import json
 import os
 import zipfile
-from shutil import rmtree, copytree,copyfile
+from shutil import rmtree, copytree, copyfile
 import time
 import sys
 from typing import Dict, List, Tuple, Union, Any, Optional
 
-from .log_manage import LogManager
+from globalManagers import get_log as _get_singleton_log
 
-log: Optional[LogManager] = None
+log: Optional = None
 
-def set_logger(logger_instance : LogManager) -> None:
-    """设置全局日志记录器实例"""
+
+def set_logger(logger_instance=None) -> None:
+    """
+    设置全局日志记录器实例
+    新代码中 LogManager 已单例化，此函数保留仅为兼容
+    """
     global log
-    log = logger_instance
+    if logger_instance is not None:
+        log = logger_instance
+    else:
+        log = _get_singleton_log()
+
+
+def _get_log():
+    """内部：获取日志实例（优先使用设置的实例，回退到单例）"""
+    global log
+    if log is not None:
+        return log
+    return _get_singleton_log()
+
+
 def find_lcb() -> Optional[str]:
     """查找游戏安装路径"""
     try:
@@ -33,8 +56,8 @@ def find_lcb() -> Optional[str]:
                 
         return None
     except Exception as e:
-        log.log(f"查找游戏路径时出错: {str(e)}")
-        log.log_error(e)
+        _get_log().log(f"查找游戏路径时出错: {str(e)}")
+        _get_log().log_error(e)
         return None
 
 def load_config_types() -> Dict[str, Any]:
@@ -180,7 +203,7 @@ def fix_config(config: Dict[str, Any], config_default: Optional[Dict[str, Any]]=
     
     if config_default is None or config_check is None:
         # 如果无法加载默认配置或类型定义，则返回原配置
-        log.log("警告: 无法加载默认配置或配置类型定义，跳过配置修复")
+        _get_log().log("警告: 无法加载默认配置或配置类型定义，跳过配置修复")
         return config
     
     def _fix_recursive(current_config: Dict[str, Any], current_default: Dict[str, Any], current_check: Dict[str, Any], path: str=""):
@@ -197,7 +220,7 @@ def fix_config(config: Dict[str, Any], config_default: Optional[Dict[str, Any]]=
             if key not in current_config:
                 if key in current_default:
                     current_config[key] = current_default[key]
-                    log.log(f"修复配置: 添加缺失的键 '{current_path}' = {current_default[key]}")
+                    _get_log().log(f"修复配置: 添加缺失的键 '{current_path}' = {current_default[key]}")
                 else:
                     # 默认配置中也没有此键，根据类型设置默认值
                     if expected_type == "null":
@@ -212,7 +235,7 @@ def fix_config(config: Dict[str, Any], config_default: Optional[Dict[str, Any]]=
                         current_config[key] = {}
                     elif isinstance(expected_type, list):
                         current_config[key] = expected_type[0] if expected_type else None
-                    log.log(f"修复配置: 添加缺失的键 '{current_path}' 并设置默认值")
+                    _get_log().log(f"修复配置: 添加缺失的键 '{current_path}' 并设置默认值")
                 continue
                 
             value = current_config[key]
@@ -221,7 +244,7 @@ def fix_config(config: Dict[str, Any], config_default: Optional[Dict[str, Any]]=
             if isinstance(expected_type, dict) and value is None:
                 current_config[key] = {}
                 value = current_config[key]
-                log.log(f"修复配置: 将None值的键 '{current_path}' 修正为空字典")
+                _get_log().log(f"修复配置: 将None值的键 '{current_path}' 修正为空字典")
             
             # 如果期望类型是字典且实际值也是字典，则递归检查
             if isinstance(expected_type, dict) and isinstance(value, dict):
@@ -235,7 +258,7 @@ def fix_config(config: Dict[str, Any], config_default: Optional[Dict[str, Any]]=
                     # 类型不匹配，尝试从默认配置获取正确的值
                     if key in current_default and validate_config_value(current_default[key], expected_type):
                         current_config[key] = current_default[key]
-                        log.log(f"修复配置: 修正键 '{current_path}' 的值为默认值 {current_default[key]}")
+                        _get_log().log(f"修复配置: 修正键 '{current_path}' 的值为默认值 {current_default[key]}")
                     else:
                         # 默认配置中也没有有效值，根据类型设置默认值
                         if expected_type == "null":
@@ -250,7 +273,7 @@ def fix_config(config: Dict[str, Any], config_default: Optional[Dict[str, Any]]=
                             current_config[key] = {}
                         elif isinstance(expected_type, list):
                             current_config[key] = expected_type[0] if expected_type else None
-                        log.log(f"修复配置: 重置键 '{current_path}' 为类型相关的默认值")
+                        _get_log().log(f"修复配置: 重置键 '{current_path}' 为类型相关的默认值")
     
     # 创建配置副本以避免修改原始配置
     fixed_config = json.loads(json.dumps(config))

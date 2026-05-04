@@ -23,7 +23,7 @@ sys.path.insert(0, str(file_dir))
 
 from webFunc import *
 from webFunc import GithubDownload
-from webutils.log_manage import LogManager
+from globalManagers.log_manager import LogManager
 from webutils import *
 import webutils.load as LoadUtils
 import webutils.functions as func_utils

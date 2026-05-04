@@ -7,12 +7,19 @@ import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Callable
-from translateFunc.translate_main import *
-from translateFunc.translate_doc import *
+import logging
+from translateFunc.prompts import *
 from translateFunc.translate_request import *
-from translateFunc.get_proper import fetch as fetch_proper
+from translateFunc.fetch import fetch as fetch_proper
+from translateFunc.engine import (
+    PathConfig, FilePathConfig, RequestConfig,
+    MatcherOrganizer, FileProcessor,
+    ProcesserExit, ProcessExitType
+)
 from translatekit import *
-from webutils.log_manage import LogManager
+from globalManagers.log_manager import LogManager
+
+logger = logging.getLogger(__name__)
 from webutils.functions import get_cache_font, zip_folder
 
 def translate_main(modal_id, logger_: LogManager,
@@ -181,12 +188,12 @@ def translate_main(modal_id, logger_: LogManager,
                     processer.process_file()
                 except ProcesserExit as e:
                     logger.info(f"文件{file_path_config.rel_path}处理完毕，退出码{e.exit_type} ")
-                    if not e.exit_type == 'already_translated':
-                        logger_.log_modal_process(f"文件{file_path_config.rel_path}处理完毕，退出码{e.exit_type} ", modal_id)
+                    if e.exit_type != ProcessExitType.ALREADY_TRANSLATED:
+                        logger_.log_modal_process(f"文件{file_path_config.rel_path}处理完毕，退出码{e.exit_type.value} ", modal_id)
                         logger_.update_modal_progress(int(10+(idx//len_target_file)/4*5),
                                                       f"文件{file_path_config.real_name}操作完成", modal_id)
                         logger_.check_running(modal_id)
-                    if e.exit_type == 'translation_length_error':
+                    if e.exit_type == ProcessExitType.TRANSLATION_LENGTH_ERROR:
                         raise
             except Exception as e:
                 logger.error(f"文件{file_path_config.rel_path}处理出错，错误信息：{e}")

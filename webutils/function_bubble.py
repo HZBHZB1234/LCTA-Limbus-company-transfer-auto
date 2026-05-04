@@ -12,7 +12,7 @@ from contextlib import suppress
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from webutils.log_manage import LogManager
+from globalManagers.log_manager import LogManager
 from webutils.functions import download_with
 from webFunc.LanzouFolder import GetAllFileListByUrl
 

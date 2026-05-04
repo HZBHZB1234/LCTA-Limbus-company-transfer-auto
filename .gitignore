@@ -1,4 +1,6 @@
 *\__pycache__/
+.claude
+prompt.md
 dev_cache/
 webui/nexus/*.js
 !webui/nexus/simulation.js

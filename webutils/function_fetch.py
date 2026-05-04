@@ -3,7 +3,7 @@ from pathlib import Path
 import json
 import requests
 
-from .log_manage import LogManager
+from globalManagers.log_manager import LogManager
 
 def function_fetch_main(modal_id, logger_: LogManager, **kwargs):
     logger_.log_modal_process("成功链接后端", modal_id)

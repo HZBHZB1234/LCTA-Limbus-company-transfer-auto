@@ -8,8 +8,7 @@ from typing import Optional, Callable, Dict, Any
 from contextlib import suppress
 import webFunc.GithubDownload as GithubDownload
 from webFunc.GithubDownload import ReleaseInfo, ReleaseAsset, GitHubReleaseFetcher
-from webutils.log_manage import *
-from .log_manage import LogManager
+from globalManagers.log_manager import LogManager
 from .functions import download_with_github
 
 APPLICATION_PATH = Path(__file__).parent.parent

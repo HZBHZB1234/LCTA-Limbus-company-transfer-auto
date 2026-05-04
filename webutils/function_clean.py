@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from typing import List, Optional
 
-from .log_manage import LogManager
+from globalManagers.log_manager import LogManager
 from .functions import *
 
 

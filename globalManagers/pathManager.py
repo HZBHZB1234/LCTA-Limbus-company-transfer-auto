@@ -1,3 +1,8 @@
+'''
+通用单例化路径管理。编写代码时应该添加需要的路径到这个类里。
+'''
+
+
 import os
 import sys
 from typing import Optional

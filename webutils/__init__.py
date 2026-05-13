@@ -25,6 +25,7 @@ from .builtinFancy import fancy as builtinFancyConfig
 from .function_fancy import fancy_main
 from .eiderConst import updateList, bindRefer, relyList
 from .function_drop import evalFile, makeMessage, evalFiles
+from .game_utils import find_lcb, check_game_path
 
 __all__ = [
     'function_llc_main',
@@ -65,5 +66,7 @@ __all__ = [
     'relyList',
     'evalFile',
     'makeMessage',
-    'evalFiles'
+    'evalFiles',
+    'find_lcb',
+    'check_game_path',
 ]

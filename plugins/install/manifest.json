@@ -1,0 +1,21 @@
+{
+  "name": "install",
+  "display_name": "安装已有汉化",
+  "version": "5.0.0",
+  "description": "从本地安装和管理汉化包",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "install-btn",
+    "icon": "fas fa-download",
+    "label": "安装已有汉化",
+    "order": 2
+  },
+  "config_keys": [
+    { "path": "ui_default.install.package_directory", "label": "汉化包目录", "type": "path", "default": "", "description": "存放汉化包 zip 文件的目录" }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

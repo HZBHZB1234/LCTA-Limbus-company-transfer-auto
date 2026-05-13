@@ -1,0 +1,29 @@
+{
+  "name": "elder",
+  "display_name": "老年人模式",
+  "version": "5.0.0",
+  "description": "简化配置向导，适合不熟悉工具的用户",
+  "load_timing": "on_demand",
+  "nav_button": {
+    "show": true,
+    "id": "elder-btn",
+    "icon": "fas fa-compass",
+    "label": "老年人模式",
+    "order": 0,
+    "visible_when": {
+      "config_key": "elder.character.base",
+      "equals": true
+    }
+  },
+  "config_keys": [
+    { "path": "elder.character.base", "label": "基础", "type": "boolean", "default": true },
+    { "path": "elder.character.launcher", "label": "启动器", "type": "boolean", "default": true },
+    { "path": "elder.character.translate", "label": "翻译", "type": "boolean", "default": true },
+    { "path": "elder.character.manage", "label": "管理", "type": "boolean", "default": true },
+    { "path": "elder_list", "label": "老年人列表", "type": "string", "default": "[]" }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

@@ -1,0 +1,23 @@
+{
+  "name": "clean",
+  "display_name": "清除本地缓存",
+  "version": "5.0.0",
+  "description": "清理游戏缓存、进度和模组数据",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "clean-btn",
+    "icon": "fas fa-broom",
+    "label": "清除本地缓存",
+    "order": 6
+  },
+  "config_keys": [
+    { "path": "ui_default.clean.clean_progress", "label": "清理进度", "type": "boolean", "default": false },
+    { "path": "ui_default.clean.clean_notice", "label": "清理公告", "type": "boolean", "default": false },
+    { "path": "ui_default.clean.clean_mods", "label": "清理模组", "type": "boolean", "default": false }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

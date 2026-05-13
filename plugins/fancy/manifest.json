@@ -1,0 +1,22 @@
+{
+  "name": "fancy",
+  "display_name": "文本美化",
+  "version": "5.0.0",
+  "description": "对游戏文本应用美化规则（渐变、着色等）",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "fancy-btn",
+    "icon": "fas fa-paint-brush",
+    "label": "文本美化",
+    "order": 5
+  },
+  "config_keys": [
+    { "path": "user_fancy", "label": "用户美化规则", "type": "string", "default": "[]", "description": "JSON 格式的用户自定义美化规则" },
+    { "path": "fancy_allow", "label": "启用规则", "type": "string", "default": "{}", "description": "JSON 格式的规则启用映射" }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

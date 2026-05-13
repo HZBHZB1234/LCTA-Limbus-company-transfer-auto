@@ -1,0 +1,29 @@
+{
+  "name": "settings",
+  "display_name": "基础设置",
+  "version": "5.0.0",
+  "description": "配置游戏路径、调试模式、缓存等基础选项",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "settings-btn",
+    "icon": "fas fa-cog",
+    "label": "基础设置",
+    "order": 10
+  },
+  "config_keys": [
+    { "path": "game_path", "label": "游戏路径", "type": "path", "default": "", "description": "LimbusCompany.exe 所在目录" },
+    { "path": "debug", "label": "调试模式", "type": "boolean", "default": false },
+    { "path": "enable_cache", "label": "启用缓存", "type": "boolean", "default": false },
+    { "path": "cache_path", "label": "缓存路径", "type": "path", "default": "" },
+    { "path": "enable_storage", "label": "启用存储", "type": "boolean", "default": false },
+    { "path": "storage_path", "label": "存储路径", "type": "path", "default": "tmp" },
+    { "path": "theme", "label": "主题", "type": "select", "options": ["light", "dark", "purple"], "default": "light" },
+    { "path": "github_max_workers", "label": "GitHub 最大并发", "type": "string", "default": "4" },
+    { "path": "github_timeout", "label": "GitHub 超时", "type": "string", "default": "8" }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

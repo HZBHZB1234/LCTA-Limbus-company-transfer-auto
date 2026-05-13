@@ -1,0 +1,24 @@
+{
+  "name": "update",
+  "display_name": "应用更新",
+  "version": "5.0.0",
+  "description": "检查并安装 LCTA 工具箱更新",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "update-btn",
+    "icon": "fas fa-sync-alt",
+    "label": "应用更新",
+    "order": 9
+  },
+  "config_keys": [
+    { "path": "auto_check_update", "label": "自动检查更新", "type": "boolean", "default": true },
+    { "path": "delete_updating", "label": "删除更新文件", "type": "boolean", "default": true },
+    { "path": "update_use_proxy", "label": "更新使用代理", "type": "boolean", "default": true },
+    { "path": "update_only_stable", "label": "仅稳定版", "type": "boolean", "default": false }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

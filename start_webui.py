@@ -62,7 +62,7 @@ def start_webui():
                 import clr
                 print('clr导入成功，使用mono')
         
-        from webui.app import main
+        from webui.webuiHandel import main
         print("正在启动LCTA WebUI...")
         print("请稍候，界面即将打开...")
         main()

@@ -1,0 +1,19 @@
+{
+  "name": "font",
+  "display_name": "字体管理",
+  "version": "5.0.0",
+  "description": "管理系统字体，为汉化包更换字体",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "font-btn",
+    "icon": "fas fa-font",
+    "label": "字体管理",
+    "order": 8
+  },
+  "config_keys": [],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

@@ -1,0 +1,23 @@
+{
+  "name": "bubble",
+  "display_name": "气泡模组",
+  "version": "5.0.0",
+  "description": "下载和安装气泡文本模组",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "bubble-btn",
+    "icon": "fas fa-comment-dots",
+    "label": "气泡模组",
+    "order": 11
+  },
+  "config_keys": [
+    { "path": "ui_default.bubble.color", "label": "彩色气泡", "type": "boolean", "default": false },
+    { "path": "ui_default.bubble.llc", "label": "LLC气泡", "type": "boolean", "default": false },
+    { "path": "ui_default.bubble.install", "label": "安装气泡", "type": "boolean", "default": false }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

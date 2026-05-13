@@ -1,0 +1,21 @@
+{
+  "name": "manage",
+  "display_name": "已安装数据管理",
+  "version": "5.0.0",
+  "description": "管理已安装的汉化包和模组",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "manage-btn",
+    "icon": "fas fa-archive",
+    "label": "已安装数据管理",
+    "order": 4
+  },
+  "config_keys": [
+    { "path": "ui_default.manage.mod_path", "label": "模组路径", "type": "path", "default": "" }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

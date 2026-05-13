@@ -1,0 +1,15 @@
+{
+  "name": "drop",
+  "display_name": "拖拽安装",
+  "version": "5.0.0",
+  "description": "支持拖拽汉化包文件到窗口进行安装",
+  "load_timing": "startup",
+  "nav_button": {
+    "show": false
+  },
+  "config_keys": [],
+  "js_modules": [],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

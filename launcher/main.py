@@ -25,7 +25,8 @@ from webFunc import *
 from webFunc import GithubDownload
 from globalManagers.logManager import LogManager, logManager
 from webutils import *
-import webutils.load as LoadUtils
+from globalManagers.configManager import configManager
+from webutils.game_utils import find_lcb, check_game_path
 import webutils.functions as func_utils
 
 config_whole = {}
@@ -470,11 +471,10 @@ def main_pre():
     )
     rotating_handler.setLevel(logging.DEBUG)
     logManager.setup(logging.getLogger())
-    LoadUtils.set_logger(logManager)
+    configManager.loadConfig()
+    config_whole = configManager.config
 
     steam_argv = os.getenv('steam_argv', '')
-
-    config_whole = LoadUtils.load_config()
     
     if steam_argv == '':
         logManager.info("unexpectedly missing steam_argv environment variable")

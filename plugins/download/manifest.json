@@ -1,0 +1,30 @@
+{
+  "name": "download",
+  "display_name": "汉化包下载",
+  "version": "5.0.0",
+  "description": "下载 LLC/OurPlay/LCTA-AU 汉化包",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "download-btn",
+    "icon": "fas fa-users",
+    "label": "汉化包下载",
+    "order": 3
+  },
+  "config_keys": [
+    { "path": "ui_default.zero.zip_type", "label": "压缩类型", "type": "select", "options": ["zip", "7z"], "default": "zip" },
+    { "path": "ui_default.zero.use_proxy", "label": "使用代理", "type": "boolean", "default": true },
+    { "path": "ui_default.zero.use_cache", "label": "使用缓存", "type": "boolean", "default": false },
+    { "path": "ui_default.zero.dump_default", "label": "默认导出", "type": "boolean", "default": false },
+    { "path": "ui_default.zero.download_source", "label": "下载源", "type": "select", "options": ["github", "api"], "default": "github" },
+    { "path": "ui_default.ourplay.font_option", "label": "字体选项", "type": "select", "options": ["keep", "simplify", "traditional"], "default": "simplify" },
+    { "path": "ui_default.ourplay.check_hash", "label": "校验哈希", "type": "boolean", "default": true },
+    { "path": "ui_default.ourplay.use_api", "label": "使用API下载", "type": "boolean", "default": false },
+    { "path": "ui_default.machine.use_proxy", "label": "LCTA-AU代理", "type": "boolean", "default": true },
+    { "path": "ui_default.machine.download_source", "label": "LCTA-AU下载源", "type": "select", "options": ["github", "api"], "default": "github" }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

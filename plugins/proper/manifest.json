@@ -1,0 +1,25 @@
+{
+  "name": "proper",
+  "display_name": "专有词汇",
+  "version": "5.0.0",
+  "description": "从游戏 Wiki 抓取专有词汇用于翻译",
+  "load_timing": "lazy",
+  "nav_button": {
+    "show": true,
+    "id": "proper-btn",
+    "icon": "fas fa-book",
+    "label": "专有词汇",
+    "order": 7
+  },
+  "config_keys": [
+    { "path": "ui_default.proper.join_char", "label": "连接字符", "type": "string", "default": "" },
+    { "path": "ui_default.proper.disable_space", "label": "禁用空格", "type": "boolean", "default": false },
+    { "path": "ui_default.proper.max_length", "label": "最大长度", "type": "string", "default": "" },
+    { "path": "ui_default.proper.min_length", "label": "最小长度", "type": "string", "default": "" },
+    { "path": "ui_default.proper.output_type", "label": "输出类型", "type": "string", "default": "" }
+  ],
+  "js_modules": ["page.js"],
+  "css_modules": [],
+  "requires": [],
+  "conflicts": []
+}

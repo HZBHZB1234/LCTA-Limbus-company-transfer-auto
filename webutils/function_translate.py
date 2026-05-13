@@ -12,15 +12,15 @@ from translateFunc.translate_doc import *
 from translateFunc.translate_request import *
 from translateFunc.get_proper import fetch as fetch_proper
 from translatekit import *
-from webutils.log_manage import LogManager
+from globalManagers.logManager import LogManager, logManager
 from webutils.functions import get_cache_font, zip_folder
 
 def translate_main(modal_id, logger_: LogManager,
                    whole_configs: dict, translator_config: dict,
                    formating_function: Callable[[dict, dict], dict],):
     with tempfile.TemporaryDirectory() as tmpdir:
-        logger_.log_modal_process("开始初始化", modal_id)
-        logger_.log_modal_status("正在初始化", modal_id)
+        logger_.ModalLog("开始初始化", modal_id)
+        logger_.ModalStatus("正在初始化", modal_id)
         
         tmp = Path(tmpdir)
             
@@ -49,7 +49,7 @@ def translate_main(modal_id, logger_: LogManager,
         _dump = os.getenv('DUMP', 'False').lower() == 'true'
         def dump(content):
             if _dump:
-                logger_.log(content)
+                logger_.info(content)
         
         game_path = Path(whole_configs.get("game_path", ""))
         
@@ -134,8 +134,8 @@ def translate_main(modal_id, logger_: LogManager,
         target_files = list(base_path_config.KR_base_path.rglob("*.json"))
         dump(target_files)
         len_target_file = len(target_files)
-        logger_.log(f"找到 {len_target_file} 个文件。")
-        logger_.log_modal_process(f"找到 {len_target_file} 个文件。", modal_id)
+        logger_.info(f"找到 {len_target_file} 个文件。")
+        logger_.ModalLog(f"找到 {len_target_file} 个文件。", modal_id)
         try:
             if HAS_PREFIX:
                 model_file = base_path_config.KR_base_path / \
@@ -152,8 +152,8 @@ def translate_main(modal_id, logger_: LogManager,
             target_files.insert(0, model_file)
             target_files.insert(0, keyword_file)
         except Exception as e:
-            logger_.log_error(e)
-            logger_.log_modal_process(f"警告: 移动特殊文件失败: {str(e)}", modal_id)
+            logger_.error(e)
+            logger_.ModalLog(f"警告: 移动特殊文件失败: {str(e)}", modal_id)
         
         matcher = MatcherOrganizer()
         
@@ -166,9 +166,9 @@ def translate_main(modal_id, logger_: LogManager,
         
             matcher.update_proper(proper_data)
         
-        logger_.log_modal_status("正在执行翻译...", modal_id)
-        logger_.update_modal_progress(10, "正在执行翻译...", modal_id)
-        logger_.log_modal_process("开始执行翻译...", modal_id)
+        logger_.ModalStatus("正在执行翻译...", modal_id)
+        logger_.modalProgress(10, "正在执行翻译...", modal_id)
+        logger_.ModalLog("开始执行翻译...", modal_id)
         
         for idx, file in enumerate(target_files):
             file_path_config = FilePathConfig(
@@ -190,8 +190,8 @@ def translate_main(modal_id, logger_: LogManager,
                 except ProcesserExit as e:
                     logger.info(f"文件{file_path_config.rel_path}处理完毕，退出码{e.exit_type} ")
                     if not e.exit_type == 'already_translated':
-                        logger_.log_modal_process(f"文件{file_path_config.rel_path}处理完毕，退出码{e.exit_type} ", modal_id)
-                        logger_.update_modal_progress(int(10+(idx//len_target_file)/4*5),
+                        logger_.ModalLog(f"文件{file_path_config.rel_path}处理完毕，退出码{e.exit_type} ", modal_id)
+                        logger_.modalProgress(int(10+(idx//len_target_file)/4*5),
                                                       f"文件{file_path_config.real_name}操作完成", modal_id)
                         logger_.check_running(modal_id)
                     if e.exit_type == 'translation_length_error':
@@ -199,11 +199,11 @@ def translate_main(modal_id, logger_: LogManager,
             except Exception as e:
                 logger.error(f"文件{file_path_config.rel_path}处理出错，错误信息：{e}")
                 logger.exception(e)
-                logger_.log_modal_process(f"文件{file_path_config.rel_path}处理出错，错误信息：{e}", modal_id)
+                logger_.ModalLog(f"文件{file_path_config.rel_path}处理出错，错误信息：{e}", modal_id)
                 if fallback and is_llm:
                     try:
                         logger.info('尝试切换请求格式')
-                        logger_.log_modal_process('尝试切换请求格式', modal_id)
+                        logger_.ModalLog('尝试切换请求格式', modal_id)
                         translator.update_config(
                             system_prompt=JSON_SYSTEM_PROMPT if is_text else TEXT_SYSTEM_PROMPT,
                             response_format="json_object" if is_text else "text")
@@ -238,15 +238,15 @@ def translate_main(modal_id, logger_: LogManager,
                         file_path_config.KR_path.read_text(encoding='utf-8-sig')),
                     CNaffect=json.loads(
                         file_path_config.target_file.read_text(encoding='utf-8-sig')))
-        logger_.log_modal_process("已完成汉化", modal_id)
-        logger_.update_modal_progress(90, "已完成汉化", modal_id)
+        logger_.ModalLog("已完成汉化", modal_id)
+        logger_.modalProgress(90, "已完成汉化", modal_id)
 
         usage = translator.get_performance_metrics()
-        logger_.log_modal_process(f"""翻译完成，本次翻译开销:
+        logger_.ModalLog(f"""翻译完成，本次翻译开销:
 请求数量: {usage.get('request_count', '获取失败')}
 请求字符数: {usage.get('chars_translated', '获取失败')}""", modal_id)
-        logger_.log_modal_process("开始打包...", modal_id)
-        logger_.log_modal_status('正在打包汉化包', modal_id)
+        logger_.ModalLog("开始打包...", modal_id)
+        logger_.ModalStatus('正在打包汉化包', modal_id)
         
         
         today = datetime.now()
@@ -303,18 +303,18 @@ def translate_main(modal_id, logger_: LogManager,
         except Exception as e:
             logger.error('复制字体文件失败')
             logger.exception(e)
-            logger_.log_modal_process(f"复制字体文件失败: {str(e)}", modal_id)
+            logger_.ModalLog(f"复制字体文件失败: {str(e)}", modal_id)
             
         r = zip_folder(target_dir, work_dir / f'LCTA_{VERSION}.zip', logger_)
         if r:
-            logger_.log_modal_process("压缩完成", modal_id)
-            logger_.log_modal_status("翻译完成", modal_id)
-            logger_.update_modal_progress(100, "全部操作完成", modal_id)
+            logger_.ModalLog("压缩完成", modal_id)
+            logger_.ModalStatus("翻译完成", modal_id)
+            logger_.modalProgress(100, "全部操作完成", modal_id)
         else:
-            logger_.log_modal_process("压缩失败", modal_id)
-            logger_.log_modal_status("操作失败", modal_id)
-            logger_.update_modal_progress(100, "操作失败", modal_id)
+            logger_.ModalLog("压缩失败", modal_id)
+            logger_.ModalStatus("操作失败", modal_id)
+            logger_.modalProgress(100, "操作失败", modal_id)
             os.system(f'explorer "{tmp}"')
-            logger_.log_modal_process('目前已打开产物文件夹，如果有需要，请在60秒内保存数据', modal_id)
+            logger_.ModalLog('目前已打开产物文件夹，如果有需要，请在60秒内保存数据', modal_id)
             time.sleep(60)
 

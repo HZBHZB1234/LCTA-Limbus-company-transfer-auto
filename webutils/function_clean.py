@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from typing import List, Optional
 
-from .log_manage import LogManager
+from globalManagers.logManager import LogManager, logManager
 from .functions import *
 
 
@@ -19,7 +19,7 @@ def clean_config_main(modal_id: str, logger_: LogManager, clean_progress: bool =
     :param clean_notice: 是否清理通知文件
     :param custom_files: 自定义要删除的文件/文件夹列表
     """
-    logger_.log_modal_process("开始清理本地缓存文件", modal_id)
+    logger_.ModalLog("开始清理本地缓存文件", modal_id)
     
     # 获取LocalLow路径
     local_low_path = Path(os.environ['APPDATA']).parent / 'LocalLow'
@@ -27,7 +27,7 @@ def clean_config_main(modal_id: str, logger_: LogManager, clean_progress: bool =
     
     # 清理进度文件
     if clean_progress:
-        logger_.log_modal_process("正在清除本地进程文件...", modal_id)
+        logger_.ModalLog("正在清除本地进程文件...", modal_id)
         limbus_dir = local_low_path / 'ProjectMoon' / 'LimbusCompany'
         if limbus_dir.exists():
             # 获取所有文件，找到包含'save'的文件
@@ -36,18 +36,18 @@ def clean_config_main(modal_id: str, logger_: LogManager, clean_progress: bool =
                 save_file = save_files[0]
                 try:
                     save_file.unlink()
-                    logger_.log_modal_process(f"本地进程文件已清除: {save_file.name}", modal_id)
+                    logger_.ModalLog(f"本地进程文件已清除: {save_file.name}", modal_id)
                 except Exception as e:
-                    logger_.log_modal_process(f"删除进度文件失败: {str(e)}", modal_id)
-                    logger_.log_error(e)
+                    logger_.ModalLog(f"删除进度文件失败: {str(e)}", modal_id)
+                    logger_.error(e)
             else:
-                logger_.log_modal_process("未找到本地进程文件", modal_id)
+                logger_.ModalLog("未找到本地进程文件", modal_id)
         else:
-            logger_.log_modal_process("未找到LimbusCompany目录", modal_id)
+            logger_.ModalLog("未找到LimbusCompany目录", modal_id)
     
     # 清理通知文件
     if clean_notice:
-        logger_.log_modal_process("正在清除本地通知文件...", modal_id)
+        logger_.ModalLog("正在清除本地通知文件...", modal_id)
         notice_file = local_low_path / 'ProjectMoon' / 'LimbusCompany' / 'synchronous-data_product.json'
         notice_dir = local_low_path / 'ProjectMoon' / 'LimbusCompany' / 'notice'
         
@@ -55,19 +55,19 @@ def clean_config_main(modal_id: str, logger_: LogManager, clean_progress: bool =
         if notice_file.exists():
             try:
                 notice_file.unlink()
-                logger_.log_modal_process("本地通知文件已清除", modal_id)
+                logger_.ModalLog("本地通知文件已清除", modal_id)
             except Exception as e:
-                logger_.log_modal_process(f"删除通知文件失败: {str(e)}", modal_id)
-                logger_.log_error(e)
+                logger_.ModalLog(f"删除通知文件失败: {str(e)}", modal_id)
+                logger_.error(e)
         
         # 删除通知目录
         if notice_dir.exists():
             try:
                 rmtree(notice_dir)
-                logger_.log_modal_process("本地通知目录已清除", modal_id)
+                logger_.ModalLog("本地通知目录已清除", modal_id)
             except Exception as e:
-                logger_.log_modal_process(f"删除通知目录失败: {str(e)}", modal_id)
-                logger_.log_error(e)
+                logger_.ModalLog(f"删除通知目录失败: {str(e)}", modal_id)
+                logger_.error(e)
     
     # 清理自定义文件
     if custom_files:
@@ -78,18 +78,18 @@ def clean_config_main(modal_id: str, logger_: LogManager, clean_progress: bool =
                     deleted_count += clear_by_mod(file_path, logger_, modal_id)
                 elif os.path.isdir(file_path):
                     deleted_count += sum(map(lambda x: clear_by_mod(os.path.join(file_path, x), logger_, modal_id), os.listdir(file_path)))
-                    logger_.log_modal_process(f"已删除mod目录{file_path}下的对应文件", modal_id)
+                    logger_.ModalLog(f"已删除mod目录{file_path}下的对应文件", modal_id)
                 else:
-                    logger_.log_modal_process(f"{file_path} 不存在", modal_id)
+                    logger_.ModalLog(f"{file_path} 不存在", modal_id)
             except Exception as e:
-                logger_.log_modal_process(f"删除 {file_path} 失败: {str(e)}", modal_id)
-                logger_.log_error(e)
+                logger_.ModalLog(f"删除 {file_path} 失败: {str(e)}", modal_id)
+                logger_.error(e)
         
         if deleted_count > 0:
-            logger_.log_modal_process(f"已删除 {deleted_count} 个自定义文件/文件夹", modal_id)
+            logger_.ModalLog(f"已删除 {deleted_count} 个自定义文件/文件夹", modal_id)
     
-    logger_.log_modal_process("清理完成", modal_id)
-    logger_.log_modal_status("操作完成", modal_id)
+    logger_.ModalLog("清理完成", modal_id)
+    logger_.ModalStatus("操作完成", modal_id)
 
 
 def clear_by_mod(mod_path: str, logger_: LogManager, modal_id: str) -> int:
@@ -109,7 +109,7 @@ def clear_by_mod(mod_path: str, logger_: LogManager, modal_id: str) -> int:
     try:
         # 检查mod文件是否存在
         if not os.path.exists(mod_path):
-            logger_.log_modal_process(f"mod文件不存在: {mod_path}", modal_id)
+            logger_.ModalLog(f"mod文件不存在: {mod_path}", modal_id)
             return 0
         
         # 获取mod文件中的目录结构
@@ -129,18 +129,18 @@ def clear_by_mod(mod_path: str, logger_: LogManager, modal_id: str) -> int:
                     try:
                         rmtree(target_path)
                         deleted_count += 1
-                        logger_.log_modal_process(f"已删除: {path_del}", modal_id)
+                        logger_.ModalLog(f"已删除: {path_del}", modal_id)
                     except Exception as e:
-                        logger_.log_modal_process(f"删除 {path_del} 失败: {str(e)}", modal_id)
-                        logger_.log_error(e)
+                        logger_.ModalLog(f"删除 {path_del} 失败: {str(e)}", modal_id)
+                        logger_.error(e)
                 else:
-                    logger_.log_modal_process(f"{path_del} 不是一个目录", modal_id)
+                    logger_.ModalLog(f"{path_del} 不是一个目录", modal_id)
         
         return deleted_count
         
     except Exception as e:
-        logger_.log_modal_process(f"处理mod清理时发生错误: {str(e)}", modal_id)
-        logger_.log_error(e)
+        logger_.ModalLog(f"处理mod清理时发生错误: {str(e)}", modal_id)
+        logger_.error(e)
         return 0
 
 

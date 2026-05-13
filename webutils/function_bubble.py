@@ -12,7 +12,7 @@ from contextlib import suppress
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from webutils.log_manage import LogManager
+from globalManagers.logManager import LogManager, logManager
 from webutils.functions import download_with
 from webFunc.LanzouFolder import GetAllFileListByUrl
 
@@ -20,9 +20,9 @@ BASE_LANZOU_URL = "https://wwyi.lanzoub.com/"
 BASE_DIRECT = "http://lz.qaiu.top/parser?url="
 
 def check_bubble(modal_id, logger_: LogManager, filelists):
-    logger_.log_modal_process("开始检查气泡", modal_id)
+    logger_.ModalLog("开始检查气泡", modal_id)
     if not filelists:
-        logger_.log_modal_process("无法获取文件列表", modal_id)
+        logger_.ModalLog("无法获取文件列表", modal_id)
         return ''
     r = []
     for file in filelists:
@@ -36,7 +36,7 @@ def check_bubble(modal_id, logger_: LogManager, filelists):
         if all(i.isdigit() for i in file_split):
             r.append('.'.join(file_split))
     if not r:
-        logger_.log_modal_process("无法获取文件列表", modal_id)
+        logger_.ModalLog("无法获取文件列表", modal_id)
         return ''
     r = Counter(r)
     return r.most_common(1)[0][0]
@@ -88,7 +88,7 @@ def function_bubble_main(modal_id, logger_: LogManager, whole_config):
         version_config = cache_path / 'version.txt'
         cache_mod = cache_path / 'bubble_mod.zip'
         if version_config.exists() and version == version_config.read_text(encoding='utf-8'):
-            logger_.log_modal_process("缓存已存在，无需下载", modal_id)
+            logger_.ModalLog("缓存已存在，无需下载", modal_id)
             shutil.copy(cache_mod, './')
         else:
             download_bubble(modal_id, logger_, Path('.'), color, llc, file_list)
@@ -107,6 +107,6 @@ def function_bubble_main(modal_id, logger_: LogManager, whole_config):
     
 if __name__ == '__main__':
     files = fetch_file_list()
-    logger = LogManager()
+    logger = logManager
     print(files)
     print(check_bubble('', logger, files))

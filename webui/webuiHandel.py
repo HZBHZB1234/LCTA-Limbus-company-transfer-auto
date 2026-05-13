@@ -72,6 +72,7 @@ def main():
     )
     
     LCTAapp._window = window
+    logManager.setup(logger, window)
     atexit.register(LCTAapp.save_config_to_file)
 
     logger.info("WebUI窗口已创建")

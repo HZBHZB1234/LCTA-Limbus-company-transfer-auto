@@ -23,7 +23,7 @@ sys.path.insert(0, str(file_dir))
 
 from webFunc import *
 from webFunc import GithubDownload
-from webutils.log_manage import LogManager
+from globalManagers.logManager import LogManager, logManager
 from webutils import *
 import webutils.load as LoadUtils
 import webutils.functions as func_utils
@@ -87,10 +87,10 @@ class UpdateBase(ABC):
         """下载并安装更新包"""
         package_list = find_translation_packages('.')
         if zip_path not in package_list:
-            self.logger.log(f"更新包 {zip_path} 不在安装包列表中，请检查安装包")
+            self.logger.info(f"更新包 {zip_path} 不在安装包列表中，请检查安装包")
             return False
             
-        self.logger.log(f"更新包 {zip_path} 已在安装包列表中")
+        self.logger.info(f"更新包 {zip_path} 已在安装包列表中")
         install_translation_package(zip_path, self.config_whole.get("game_path", ""), 
                                    self.logger, f"update_install")
         return True
@@ -112,26 +112,26 @@ class UpdateBase(ABC):
     def run(self) -> bool:
         """执行完整的更新流程"""
         if not self.check_network_available():
-            self.logger.log("当前网络不可用，无法检查更新")
+            self.logger.info("当前网络不可用，无法检查更新")
             return False
             
         if not self.check_update():
-            self.logger.log("当前版本已经是最新版本")
+            self.logger.info("当前版本已经是最新版本")
             return False
             
         zip_path = self.perform_update()
         
         if not zip_path:
-            self.logger.log(f"更新包下载失败")
+            self.logger.info(f"更新包下载失败")
             return False
             
-        self.logger.log(f"更新包下载成功，路径: {zip_path}")
+        self.logger.info(f"更新包下载成功，路径: {zip_path}")
         
         if not self.download_and_install(zip_path):
             return False
             
         self.update_config()
-        self.logger.log(f"汉化包更新完成")
+        self.logger.info(f"汉化包更新完成")
         
         run_bubble = self.launcher_config.get('work', {}).get('bubble', False)
         if run_bubble:
@@ -152,7 +152,7 @@ class UpdateBase(ABC):
     def special_run(self) -> bool:
         """执行完整的更新流程"""
         if not self.check_network_available():
-            self.logger.log("当前网络不可用，无法检查更新")
+            self.logger.info("当前网络不可用，无法检查更新")
             return False
             
         self.check_update()
@@ -162,11 +162,11 @@ class UpdateBase(ABC):
 class NoUpdate(UpdateBase):
     """不执行任何更新"""
     def check_update(self) -> bool:
-        self.logger.log("未启用任何更新选项，跳过更新检查")
+        self.logger.info("未启用任何更新选项，跳过更新检查")
         return False
     
     def perform_update(self) -> Optional[str]:
-        self.logger.log("你是怎么触发这条日志的？")
+        self.logger.info("你是怎么触发这条日志的？")
         return None
     
     def update_config(self):
@@ -426,7 +426,7 @@ class LMGUpdate(UpdateBase):
             return False
         
     def check_update(self) -> bool:
-        logger.log('尝试进行检查')
+        self.logger.info('尝试进行检查')
         return True
         
     def update_config(self) -> bool:
@@ -456,7 +456,6 @@ def create_update(logger: LogManager) -> UpdateBase:
 
 def main_pre():
     global config_whole
-    global logger
     global steam_argv
     # 使用 RotatingFileHandler 实现日志文件轮换，最大100KB，保留5个备份文件
     rotating_handler = RotatingFileHandler(".\\logs\\launcher.log", maxBytes=1024*100,
@@ -470,31 +469,24 @@ def main_pre():
         ]
     )
     rotating_handler.setLevel(logging.DEBUG)
-    logger = LogManager()
-    logger.set_log_callback(logging.info)
-    logger.set_error_callback(logging.exception)
-    logger.set_ui_callback(lambda message,_: logging.info(message))
-    logger.set_modal_callbacks(status_callback=lambda status, modal_id: logging.info(f"{modal_id}: 阶段 {status}"), 
-                            log_callback=lambda message, modal_id: logging.info(f"{modal_id}: {message}"), 
-                            progress_callback=lambda percent, text, modal_id: logging.info(f"{modal_id}: {text} {percent}%"),
-                            check_running=lambda modal_id, log=True: (logging.info(f"{modal_id} 阶段正在运行")) if log else None)
-    LoadUtils.set_logger(logger)
+    logManager.setup(logging.getLogger())
+    LoadUtils.set_logger(logManager)
 
     steam_argv = os.getenv('steam_argv', '')
 
     config_whole = LoadUtils.load_config()
     
     if steam_argv == '':
-        logger.log("unexpectedly missing steam_argv environment variable")
-        logger.log("use path in config instead")
-        
+        logManager.info("unexpectedly missing steam_argv environment variable")
+        logManager.info("use path in config instead")
+
         steam_argv = config_whole.get("game_path", "")+'LimbusCompany.exe'
-    logger.log(f"steam_argv: {steam_argv}")
+    logManager.info(f"steam_argv: {steam_argv}")
     
     GithubDownload.init_request()
     
     # 使用工厂模式创建更新对象并执行更新
-    update_obj = create_update(logger)
+    update_obj = create_update(logManager)
     update_obj.run()
 
 def main_after_mod():
@@ -551,22 +543,15 @@ def main():
     try:
         main_pre()
     except Exception as e:
-        if logger:
-            logger.log_error(e)
-        else:
-            print(f"Error in main_pre: {e}")
+        logManager.error(e)
     try:
         if config_whole.get("launcher", {}).get("work", {}).get("mod", False):
             main_after_mod()
         else:
             main_after_game()
     except Exception as e:
-        if logger:
-            logger.log_error(e)
-        else:
-            print(f"Error in main_after: {e}")
-    if logger:
-        logger.log('正常退出')
+        logManager.error(e)
+    logManager.info('正常退出')
 
 if __name__ == '__main__':
     main()

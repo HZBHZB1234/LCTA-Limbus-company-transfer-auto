@@ -26,6 +26,11 @@ class LogManager:
         self.check_running: Optional[Callable] = None
         self.executor = ThreadPoolExecutor(max_workers=1)
 
+    def setup(self, logger: logging.Logger, window=None):
+        """配置日志管理器。window 仅在 WebUI 模式下需要传入。"""
+        self.logger = logger
+        self._window = window
+
     def threadWrapper(self, func):
         @wraps
         def resultFunc(*args, **kwargs):

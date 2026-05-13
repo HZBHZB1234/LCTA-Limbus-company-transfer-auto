@@ -24,7 +24,6 @@ sys.path.insert(0, str(project_root))
 
 from globalManagers.logManager import logManager
 import webFunc.GithubDownload as GithubDownload
-from webutils.log_manage import LogManager
 import webutils.load as load_util
 import webutils.function_llc as function_llc
 from webutils.functions import get_cache_font, get_steam_command, change_icon, _move_folders
@@ -51,6 +50,8 @@ class LCTA_API():
         self.debug = os.getenv('debug', '')
 
         self.current_files = []
+        self.log_manager = logManager
+        load_util.set_logger(logManager)
         self.set_function()
         self._config = {}
         self.init_config()
@@ -63,6 +64,15 @@ class LCTA_API():
         self.updateList= updateList
         self.bindRefer = bindRefer
         self.relyList = relyList
+
+    def log(self, message):
+        self.log_manager.info(message)
+
+    def log_error(self, e):
+        self.log_manager.error(str(e))
+
+    def log_ui(self, message, level=logging.INFO):
+        self.log_manager.logUI(message, level)
 
     def set_function(self):
         self.find_lcb = load_util.find_lcb
@@ -436,7 +446,7 @@ class LCTA_API():
         
     def toggle_mod(self, mod_name, enable):
         try:
-            self.log_manager.log(f'修改mod可用性 {mod_name} 为 {enable}')
+            self.log_manager.info(f'修改mod可用性 {mod_name} 为 {enable}')
             changed = toggle_mod(self.config, mod_name, enable)
             return {"success": True, "changed": changed}
         except Exception as e:
@@ -447,7 +457,7 @@ class LCTA_API():
         
     def delete_mod(self, mod_name, enable):
         try:
-            self.log_manager.log(f'删除mod {mod_name} 状态 {enable}')
+            self.log_manager.info(f'删除mod {mod_name} 状态 {enable}')
             success = delete_mod(self.config, mod_name, enable)
             return {"success": success, "message": ""}
         except Exception as e:
@@ -458,7 +468,7 @@ class LCTA_API():
         
     def open_mod_path(self):
         try:
-            self.log_manager.log('打开mod文件夹')
+            self.log_manager.info('打开mod文件夹')
             open_mod_path(self.config)
             return {"success": True, "message": ""}
         except Exception as e:
@@ -559,8 +569,8 @@ class LCTA_API():
         except Exception as e:
             self.add_modal_log(f"出现错误{e}，下载失败", modal_id)
             self.log_error(e)
-            self.log_manager.update_modal_progress(0, "下载失败", modal_id)
-            self.log_manager.log_modal_status("下载失败", modal_id)
+            self.log_manager.modalProgress(0, "下载失败", modal_id)
+            self.log_manager.ModalStatus("下载失败", modal_id)
             return {"success": False, "message": str(e)}
 
     def clean_cache(self, modal_id= "false", custom_files= [], clean_progress=None, clean_notice=None, clean_mods=None):
@@ -599,8 +609,8 @@ class LCTA_API():
         except Exception as e:
             self.add_modal_log(f"出现错误{e}，清理失败", modal_id)
             self.log_error(e)
-            self.log_manager.update_modal_progress(0, "清理失败", modal_id)
-            self.log_manager.log_modal_status("清理失败", modal_id)
+            self.log_manager.modalProgress(0, "清理失败", modal_id)
+            self.log_manager.ModalStatus("清理失败", modal_id)
             return {"success": False, "message": str(e)}
 
     def get_fancy_rulesets(self):
@@ -635,7 +645,7 @@ class LCTA_API():
                 cache_path=cache_path
             )
             self.add_modal_log("零协汉化包下载成功", modal_id)
-            self.log_manager.log_modal_status("操作完成", modal_id)
+            self.log_manager.ModalStatus("操作完成", modal_id)
             return {"success": True, "message": "零协汉化包下载成功"}
         except CancelRunning:
             self.log("llc下载任务已取消")
@@ -644,8 +654,8 @@ class LCTA_API():
         except Exception as e:
             self.add_modal_log(f"出现错误{e}，下载失败", modal_id)
             self.log_error(e)
-            self.log_manager.update_modal_progress(0, "下载失败", modal_id)
-            self.log_manager.log_modal_status("下载失败", modal_id)
+            self.log_manager.modalProgress(0, "下载失败", modal_id)
+            self.log_manager.ModalStatus("下载失败", modal_id)
             return {"success": False, "message": str(e)}
         
     def download_LCTA_auto(self, modal_id= "false"):
@@ -720,7 +730,7 @@ class LCTA_API():
             if not self.debug_mode:
                 logger_c = logging.getLogger('translatekit')
                 logger_c.setLevel(logging.INFO)
-                self.log_manager.log('隐藏参数输出')
+                self.log_manager.info('隐藏参数输出')
             translator = translator(
                 api_setting=api_settings, debug_mode=True)
             if not self.debug_mode:
@@ -761,7 +771,7 @@ class LCTA_API():
         self._window_test = webview.create_window("模组下载测试窗口", url="https://www.nexusmods.com/games/limbuscompany")
         
     def eval_skip(self):
-        self.log_manager.log('开始执行js')
+        self.log_manager.info('开始执行js')
         js_path = Path(os.getenv('path_')) / 'webui' / 'nexus'
         self._window_test.run_js(f"window.DICTIONARY_URL = 'http://127.0.0.1:{self.http_port}/nexus/dict.js'")
         #jss = list(js_path.glob('*.js'))
@@ -771,7 +781,7 @@ class LCTA_API():
             self._window_test.run_js(js_code)
     
     def sign_eval_js(self):
-        self.log_manager.log('已订阅事件')
+        self.log_manager.info('已订阅事件')
         self._window_test.events.loaded += self.eval_skip
 
     # 模态窗口相关API方法

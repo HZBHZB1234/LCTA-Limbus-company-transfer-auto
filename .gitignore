@@ -3,6 +3,8 @@ dev_cache/
 webui/nexus/*.js
 !webui/nexus/simulation.js
 tmp
+.claude
+prompt.md
 .rmv
 *.pyc
 *.pyo

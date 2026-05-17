@@ -12,9 +12,9 @@
     "order": 11
   },
   "config_keys": [
-    { "path": "ui_default.bubble.color", "label": "彩色气泡", "type": "boolean", "default": false },
-    { "path": "ui_default.bubble.llc", "label": "LLC气泡", "type": "boolean", "default": false },
-    { "path": "ui_default.bubble.install", "label": "安装气泡", "type": "boolean", "default": false }
+    { "path": "ui_default.bubble.color", "label": "彩色气泡", "type": "boolean", "default": false, "html_id": "bubble-color" },
+    { "path": "ui_default.bubble.llc", "label": "LLC气泡", "type": "boolean", "default": false, "html_id": "bubble-llc" },
+    { "path": "ui_default.bubble.install", "label": "安装气泡", "type": "boolean", "default": false, "html_id": "bubble-install" }
   ],
   "js_modules": ["page.js"],
   "css_modules": [],

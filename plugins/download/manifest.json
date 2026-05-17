@@ -12,16 +12,16 @@
     "order": 3
   },
   "config_keys": [
-    { "path": "ui_default.zero.zip_type", "label": "压缩类型", "type": "select", "options": ["zip", "7z"], "default": "zip" },
-    { "path": "ui_default.zero.use_proxy", "label": "使用代理", "type": "boolean", "default": true },
-    { "path": "ui_default.zero.use_cache", "label": "使用缓存", "type": "boolean", "default": false },
-    { "path": "ui_default.zero.dump_default", "label": "默认导出", "type": "boolean", "default": false },
-    { "path": "ui_default.zero.download_source", "label": "下载源", "type": "select", "options": ["github", "api"], "default": "github" },
-    { "path": "ui_default.ourplay.font_option", "label": "字体选项", "type": "select", "options": ["keep", "simplify", "traditional"], "default": "simplify" },
-    { "path": "ui_default.ourplay.check_hash", "label": "校验哈希", "type": "boolean", "default": true },
-    { "path": "ui_default.ourplay.use_api", "label": "使用API下载", "type": "boolean", "default": false },
-    { "path": "ui_default.machine.use_proxy", "label": "LCTA-AU代理", "type": "boolean", "default": true },
-    { "path": "ui_default.machine.download_source", "label": "LCTA-AU下载源", "type": "select", "options": ["github", "api"], "default": "github" }
+    { "path": "ui_default.zero.zip_type", "label": "压缩类型", "type": "select", "options": ["zip", "seven"], "default": "zip", "html_id": "llc-zip-type" },
+    { "path": "ui_default.zero.use_proxy", "label": "使用代理", "type": "boolean", "default": true, "html_id": "llc-use-proxy" },
+    { "path": "ui_default.zero.use_cache", "label": "使用缓存", "type": "boolean", "default": false, "html_id": "llc-use-cache" },
+    { "path": "ui_default.zero.dump_default", "label": "默认导出", "type": "boolean", "default": false, "html_id": "llc-dump-default" },
+    { "path": "ui_default.zero.download_source", "label": "下载源", "type": "select", "options": ["github", "mirror"], "default": "github", "html_id": "llc-download-source" },
+    { "path": "ui_default.ourplay.font_option", "label": "字体选项", "type": "select", "options": ["keep", "simplify", "llc"], "default": "simplify", "html_id": "ourplay-font-option" },
+    { "path": "ui_default.ourplay.check_hash", "label": "校验哈希", "type": "boolean", "default": true, "html_id": "ourplay-check-hash" },
+    { "path": "ui_default.ourplay.use_api", "label": "使用API下载", "type": "boolean", "default": false, "html_id": "ourplay-use-api" },
+    { "path": "ui_default.machine.use_proxy", "label": "LCTA-AU代理", "type": "boolean", "default": true, "html_id": "machine-use-proxy" },
+    { "path": "ui_default.machine.download_source", "label": "LCTA-AU下载源", "type": "select", "options": ["github", "mirror"], "default": "github", "html_id": "machine-download-source" }
   ],
   "js_modules": ["page.js"],
   "css_modules": [],

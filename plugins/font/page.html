@@ -1,0 +1,63 @@
+<!-- 字体管理页面 -->
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-font"></i>
+        字体管理
+    </h2>
+    <p class="section-subtitle">管理系统字体，为汉化包更换字体</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">系统字体</h3>
+        <div class="form-group">
+            <label for="font-list">可用字体:</label>
+            <div class="list-container">
+                <div class="list-header">
+                    <span>字体名称</span>
+                    <span>操作</span>
+                </div>
+                <div class="list-content" id="font-list">
+                    <div class="list-empty">
+                        <i class="fas fa-font"></i>
+                        <p>点击刷新获取系统字体</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="button-group">
+            <button class="action-btn" onclick="refreshFontList()">
+                <i class="fas fa-sync-alt"></i> 刷新字体列表
+            </button>
+            <button class="action-btn success" onclick="exportSelectedFont()">
+                <i class="fas fa-file-export"></i> 导出字体
+            </button>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">字体工具</h3>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-font"></i>
+                </div>
+                <h4>更换字体</h4>
+                <p>为选中的汉化包更换字体</p>
+                <button class="feature-btn" onclick="changeFontForPackage()">
+                    更换字体
+                </button>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-file-export"></i>
+                </div>
+                <h4>导出字体</h4>
+                <p>从已安装字体中获取文件</p>
+                <button class="feature-btn" onclick="getFontFromInstalled()">
+                    导出字体
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

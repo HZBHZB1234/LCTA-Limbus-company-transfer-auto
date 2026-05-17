@@ -1,0 +1,60 @@
+<!-- 清除本地缓存页面 -->
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-broom"></i>
+        清除本地缓存
+    </h2>
+    <p class="section-subtitle">清理缓存文件，通过初始化解决一些问题</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">清理选项</h3>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="clean-progress" checked>
+                <span class="checkmark"></span> 清理进度文件
+            </label>
+            <small class="form-hint">清除游戏进度文件，包括存档数据</small>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="clean-notice" checked>
+                <span class="checkmark"></span> 清理通知文件
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="clean-mods" checked>
+                <span class="checkmark"></span> 清理默认mod资源
+            </label>
+        </div>
+        <div class="form-group">
+            <label>自定义清理文件/文件夹:</label>
+            <div class="file-input-group">
+                <input type="text" id="custom-file-path" placeholder="输入或浏览选择要清理的文件或文件夹">
+                <button class="action-btn secondary" onclick="browseCustomFile()"><i class="fas fa-file"></i> 文件</button>
+                <button class="action-btn secondary" onclick="browseCustomFolder()"><i class="fas fa-folder"></i> 文件夹</button>
+            </div>
+            <button class="action-btn small" onclick="addCustomFile()" style="margin-top: 10px;">
+                <i class="fas fa-plus"></i> 添加到清理列表
+            </button>
+        </div>
+        <div class="form-group">
+            <div class="file-list-header">
+                <label>清理列表:</label>
+                <button class="action-btn small" onclick="clearCustomFilesList()"><i class="fas fa-trash-alt"></i> 清空列表</button>
+            </div>
+            <div class="file-list-container"><div class="file-list" id="custom-files-list"></div></div>
+        </div>
+    </div>
+    <div class="setting-card warning">
+        <div class="warning-header"><i class="fas fa-exclamation-triangle"></i><h3>警告</h3></div>
+        <p>此操作将清除本地的游戏进度和通知文件，以及您指定的自定义文件。这些操作不可逆，请谨慎操作。</p>
+        <div class="action-area">
+            <button class="action-btn danger" onclick="cleanCache()">
+                <i class="fas fa-trash-alt"></i> 清除缓存
+            </button>
+        </div>
+    </div>
+</div>

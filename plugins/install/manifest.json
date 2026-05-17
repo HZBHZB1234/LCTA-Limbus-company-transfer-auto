@@ -12,7 +12,7 @@
     "order": 2
   },
   "config_keys": [
-    { "path": "ui_default.install.package_directory", "label": "汉化包目录", "type": "path", "default": "", "description": "存放汉化包 zip 文件的目录" }
+    { "path": "ui_default.install.package_directory", "label": "汉化包目录", "type": "path", "default": "", "html_id": "install-package-directory", "description": "存放汉化包 zip 文件的目录" }
   ],
   "js_modules": ["page.js"],
   "css_modules": [],

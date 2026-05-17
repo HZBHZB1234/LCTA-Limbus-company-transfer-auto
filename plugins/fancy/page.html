@@ -1,0 +1,51 @@
+<!-- 文本美化页面 -->
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-paint-brush"></i>
+        美化规则
+    </h2>
+    <p class="section-subtitle">管理文本美化规则集</p>
+</div>
+
+<div class="settings-grid" style="grid-template-columns: 1fr 2fr;">
+    <div class="setting-card">
+        <h3 class="setting-title">规则集列表</h3>
+        <div class="form-group">
+            <div class="list-container">
+                <div class="list-header"><span>规则集名称</span><span>启用/禁用</span></div>
+                <div class="list-content" id="fancy-ruleset-list">
+                    <div class="list-empty"><i class="fas fa-spinner fa-spin"></i><p>加载中...</p></div>
+                </div>
+            </div>
+        </div>
+        <div class="button-group">
+            <button class="action-btn" onclick="newRuleset()"><i class="fas fa-plus"></i> 新建</button>
+            <button class="action-btn success" onclick="saveAllRulesets()"><i class="fas fa-save"></i> 保存全部</button>
+            <button class="action-btn danger" onclick="deleteSelectedRuleset()"><i class="fas fa-trash"></i> 删除</button>
+            <button class="action-btn success" onclick="applyFancy()"><i class="fas fa-play"></i> 立即应用美化</button>
+        </div>
+    </div>
+    <div class="setting-card">
+        <h3 class="setting-title">规则集编辑器</h3>
+        <div class="form-group">
+            <label for="fancy-ruleset-name">名称</label>
+            <input type="text" id="fancy-ruleset-name" placeholder="规则集名称" disabled>
+        </div>
+        <div class="form-group">
+            <label for="fancy-ruleset-desc">描述</label>
+            <input type="text" id="fancy-ruleset-desc" placeholder="规则集描述" disabled>
+        </div>
+        <div class="form-group">
+            <label for="fancy-ruleset-rules">规则 (JSON 格式)</label>
+            <textarea id="fancy-ruleset-rules" rows="15" placeholder='[ { "aimFile": "...", "aim": "...", "action": [...] }, ... ]' disabled style="font-family: monospace; width: 100%;"></textarea>
+        </div>
+        <div class="button-group">
+            <button class="primary-btn" onclick="saveCurrentRuleset()" id="fancy-save-current-btn" disabled>
+                <i class="fas fa-save"></i> 保存当前
+            </button>
+            <button class="action-btn" onclick="formatRulesetJson()">
+                <i class="fas fa-code"></i> 格式化JSON
+            </button>
+        </div>
+    </div>
+</div>

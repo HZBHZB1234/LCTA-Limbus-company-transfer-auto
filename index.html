@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LCTA - 边狱公司汉化工具箱</title>
+    <link rel="stylesheet" href="webui/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css">
+</head>
+<body class="theme-light">
+    <div class="theme-toggle">
+        <button class="theme-btn active" data-theme="light" title="亮色主题">
+            <i class="fas fa-sun"></i>
+        </button>
+        <button class="theme-btn" data-theme="dark" title="暗色主题">
+            <i class="fas fa-moon"></i>
+        </button>
+        <button class="theme-btn" data-theme="purple" title="蓝紫色主题">
+            <i class="fas fa-palette"></i>
+        </button>
+    </div>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <i class="fas fa-language"></i>
+                <h2>LCTA <span class="version">v5.0.0</span></h2>
+            </div>
+            <p class="subtitle">边狱公司汉化工具箱</p>
+        </div>
+
+        <div class="sidebar-menu">
+            <!-- 欢迎页按钮（默认隐藏，首次使用时显示） -->
+            <button id="welcome-btn" class="nav-btn" style="display: none;">
+                <i class="fas fa-user-circle"></i>
+                <span>欢迎</span>
+                <div class="nav-indicator"></div>
+            </button>
+
+            <!-- 动态导航按钮由 pluginLoader 构建 -->
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="status-indicator">
+                <div class="status-dot connected"></div>
+                <span>已连接</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <!-- 默认欢迎页 -->
+        <div id="page-content">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-language"></i>
+                    LCTA - 边狱公司汉化工具箱
+                </h2>
+                <p class="section-subtitle">正在加载...</p>
+            </div>
+        </div>
+
+        <!-- 日志页（内置） -->
+        <div id="log-section" class="content-section" style="display: none;">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-clipboard-list"></i>
+                    日志
+                </h2>
+                <p class="section-subtitle">查看系统运行日志</p>
+            </div>
+            <div class="log-container">
+                <div class="log-display" id="log-display">
+                    <div class="log-entry info">
+                        <div class="log-timestamp">[2025-01-01 12:00:00]</div>
+                        <div class="log-level">[INFO]</div>
+                        <div class="log-message">系统已启动，准备就绪</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 测试页（内置，隐藏） -->
+        <div id="test-section" class="content-section" style="display: none;">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-cog"></i>
+                    调试界面
+                </h2>
+                <p class="section-subtitle">测试使用</p>
+            </div>
+            <div class="action-area">
+                <button class="primary-btn" onclick="pywebview.api.startTest()">
+                    <i class="fas fa-play"></i> 开始启动
+                </button>
+                <button class="primary-btn" onclick="pywebview.api.eval_skip()">
+                    <i class="fas fa-play"></i> 注入js
+                </button>
+                <button class="primary-btn" onclick="pywebview.api.sign_eval_js()">
+                    <i class="fas fa-play"></i> 为窗口订阅js
+                </button>
+                <button class="primary-btn" onclick="location.reload(true)">
+                    <i class="fas fa-play"></i> 强制刷新缓存并重载
+                </button>
+                <button class="primary-btn" onclick="pagesManager.switchPage('welcome')">
+                    <i class="fas fa-play"></i> 显示欢迎页面
+                </button>
+                <button class="primary-btn" onclick="const modal = new ProgressModal('测试窗口');
+                console.log(modal);modal.setStatus('测试阶段');modal.addLog('开始测试');
+                modal.updateProgress(50, '测试')">
+                    <i class="fas fa-play"></i> 创建一个模态窗口
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态窗口容器 -->
+    <div id="modal-container"></div>
+
+    <!-- 最小化窗口容器 -->
+    <div id="minimized-container"></div>
+
+    <script src="webui/pluginLoader.js"></script>
+    <script src="webui/script.js"></script>
+</body>
+</html>

@@ -1,0 +1,319 @@
+<!-- 基础设置页面（含 Launcher 配置和 API 配置） -->
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-sliders-h"></i>
+        设置
+    </h2>
+    <p class="section-subtitle">程序配置与选项</p>
+</div>
+
+<div class="settings-grid">
+    <!-- 程序设置 -->
+    <div class="setting-card">
+        <h3 class="setting-title">程序设置</h3>
+        <div class="form-group">
+            <label for="game-path">游戏路径:</label>
+            <div class="file-input-group">
+                <input type="text" id="game-path" placeholder="选择游戏安装路径">
+                <button class="action-btn secondary" onclick="window.pywebview.api.browse_folder('game-path')">
+                    <i class="fas fa-folder-open"></i> 浏览
+                </button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="debug-mode">
+                <span class="checkmark"></span> 启用调试模式
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="auto-check-update" checked>
+                <span class="checkmark"></span> 启动时自动检查更新
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="delete-updating">
+                <span class="checkmark"></span> 更新时删除废弃的包
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="update-use-proxy" checked>
+                <span class="checkmark"></span> 更新通过镜像加速
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="update-only-stable" checked>
+                <span class="checkmark"></span> 仅更新稳定版本
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="api-crypto" checked>
+                <span class="checkmark"></span> 加密api配置
+            </label>
+            <small class="form-hint">修改后请在api配置界面进行保存后关闭</small>
+        </div>
+        <div class="form-group">
+            <label for="github-max-workers">Github代理重试线程数:</label>
+            <div class="input-with-icon">
+                <i class="fas fa-hashtag"></i>
+                <input type="number" id="github-max-workers" placeholder="例如：4">
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="github-timeout">Github代理超时秒数:</label>
+            <div class="input-with-icon">
+                <i class="fas fa-hashtag"></i>
+                <input type="number" id="github-timeout" placeholder="例如：8">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-cache" onchange="toggleCachePathInput()">
+                <span class="checkmark"></span> 启用资源缓存
+            </label>
+            <div id="cache-path-group" class="sub-form-group" style="display: none; margin-top: 10px;">
+                <label for="cache-path">缓存路径:</label>
+                <div class="file-input-group">
+                    <input type="text" id="cache-path" placeholder="tmp" value="tmp">
+                    <button class="action-btn secondary" onclick="window.pywebview.api.browse_folder('cache-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-storage" onchange="toggleStoragePathInput()">
+                <span class="checkmark"></span> 启用数据持久化
+            </label>
+            <div id="storage-path-group" class="sub-form-group" style="display: none; margin-top: 10px;">
+                <label for="storage-path">存储路径:</label>
+                <div class="file-input-group">
+                    <input type="text" id="storage-path" placeholder="tmp" value="tmp">
+                    <button class="action-btn secondary" onclick="window.pywebview.api.browse_folder('storage-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="action-area">
+            <button class="primary-btn" onclick="saveSettings()">
+                <i class="fas fa-save"></i> 保存设置
+            </button>
+        </div>
+    </div>
+
+    <!-- 配置操作 -->
+    <div class="setting-card">
+        <h3 class="setting-title">配置操作</h3>
+        <div class="action-grid">
+            <button class="action-btn" onclick="useDefaultConfig()">
+                <i class="fas fa-file-alt"></i> 使用默认配置
+            </button>
+        </div>
+        <div class="action-grid">
+            <button class="action-btn danger" onclick="resetConfig()">
+                <i class="fas fa-redo"></i> 重置配置
+            </button>
+        </div>
+        <div class="action-grid">
+            <button class="action-btn" onclick="manualCheckUpdates()">
+                <i class="fas fa-sync-alt"></i> 检查更新
+            </button>
+        </div>
+        <div class="action-grid">
+            <button class="action-btn" onclick="doUpdate()">
+                <i class="fas fa-sync-alt"></i> 强制进行更新
+            </button>
+        </div>
+        <div class="action-grid">
+            <button class="action-btn" onclick="goToTestPage()">
+                <i class="fas fa-sync-alt"></i> 进入调试页面
+            </button>
+        </div>
+        <div class="action-grid">
+            <button class="action-btn" onclick="goToCleanPage()">
+                <i class="fas fa-sync-alt"></i> 进入已废弃的缓存清理页面
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Launcher 配置 -->
+<hr style="margin: 30px 0; border-color: var(--border-color);">
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-rocket"></i>
+        Launcher配置
+    </h2>
+    <p class="section-subtitle">配置游戏启动器相关选项</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">零协汉化配置</h3>
+        <div class="form-group">
+            <label for="launcher-zero-zip-type">压缩格式:</label>
+            <div class="select-wrapper">
+                <select id="launcher-zero-zip-type">
+                    <option value="zip">ZIP格式</option>
+                    <option value="seven">7Z格式</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="launcher-zero-download-source">文本下载来源:</label>
+            <div class="select-wrapper">
+                <select id="launcher-zero-download-source">
+                    <option value="github">从github下载</option>
+                    <option value="mirror">从公益镜像下载 beta</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-zero-use-proxy" checked>
+                <span class="checkmark"></span> 使用代理加速下载
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-zero-use-cache" checked>
+                <span class="checkmark"></span> 使用本地字体缓存
+            </label>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">OurPlay配置</h3>
+        <div class="form-group">
+            <label for="launcher-ourplay-font-option">字体处理选项:</label>
+            <div class="select-wrapper">
+                <select id="launcher-ourplay-font-option">
+                    <option value="keep">保留原字体</option>
+                    <option value="simplify">精简字体</option>
+                    <option value="llc">使用本地字体缓存</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-ourplay-use-api" checked>
+                <span class="checkmark"></span> 使用API获取版本信息
+            </label>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">LCTA-AU汉化配置</h3>
+        <div class="form-group">
+            <label for="launcher-machine-download-source">文本下载来源:</label>
+            <div class="select-wrapper">
+                <select id="launcher-machine-download-source">
+                    <option value="github">从github下载</option>
+                    <option value="mirror">从公益镜像下载 beta</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-machine-use-proxy" checked>
+                <span class="checkmark"></span> 使用代理加速下载
+            </label>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">工作模式配置</h3>
+        <div class="form-group">
+            <label for="launcher-work-update">更新模式:</label>
+            <div class="select-wrapper">
+                <select id="launcher-work-update">
+                    <option value="no">不自动更新</option>
+                    <option value="llc">仅零协更新</option>
+                    <option value="ourplay">仅ourplay更新</option>
+                    <option value="LCTA-AU">仅LCTA-AU更新</option>
+                    <option value="LO">更新llc+ourplay</option>
+                    <option value="LM-G">更新llc+LCTA-AU (github)</option>
+                    <option value="LM-A">更新llc+LCTA-AU (API Beta)</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-mod" checked>
+                <span class="checkmark"></span> 启用MOD支持
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-fancy" checked>
+                <span class="checkmark"></span> 启用文本美化
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-bubble" checked>
+                <span class="checkmark"></span> 启用气泡文本
+            </label>
+        </div>
+        <div class="form-group" id="steam-command">
+            <label for="steam-cmd">steam命令</label>
+            <div class="steam-command-group" style="display: flex; align-items: center; gap: 8px;">
+                <input type="text" id="steam-cmd" placeholder="复制steam命令" readonly style="flex: 1; min-width: 0;">
+                <button class="action-btn secondary" onclick="copySteamPath()">
+                    <i class="fas fa-folder-open"></i> 复制
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="action-area">
+    <button class="primary-btn" onclick="saveSettings()">
+        <i class="fas fa-save"></i> 保存配置
+    </button>
+</div>
+
+<!-- API 配置 -->
+<hr style="margin: 30px 0; border-color: var(--border-color);">
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-cog"></i>
+        配置汉化API
+    </h2>
+    <p class="section-subtitle">配置翻译服务API密钥</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">API配置</h3>
+        <div class="form-group">
+            <label for="api-service-select">选择翻译服务:</label>
+            <div class="api-select"></div>
+        </div>
+        <div class="api-settings"></div>
+        <div class="action-area">
+            <button class="primary-btn" onclick="saveAPIConfig()">
+                <i class="fas fa-save"></i> 保存配置
+            </button>
+            <button class="primary-btn" onclick="testAPIConfig()">
+                <i class="fas fa-vial"></i> 测试api
+            </button>
+        </div>
+    </div>
+    <div class="setting-card">
+        <h3 class="setting-title">服务状态</h3>
+        <div class="api-status-grid"></div>
+    </div>
+</div>

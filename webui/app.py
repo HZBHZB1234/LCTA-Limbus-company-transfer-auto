@@ -2,9 +2,10 @@
 
 提供:
 - 装饰器: api_expose / modal_handler / require_config / on_startup
-- PluginManager: 插件发现、加载、生命周期管理
+- PluginManager: 插件发现、加载、生命周期管理、页面激活
 - LCTAAppFramework: 持有 window、配置、插件管理器，暴露 JS 可调用方法
 
+每个插件封装一个完整页面（HTML + CSS + JS + 后端 API）。
 所有业务逻辑位于 plugins/ 目录下各自插件中。
 """
 
@@ -33,6 +34,7 @@ _api_registry: dict[str, Callable] = {}
 _config_schema: dict[str, dict] = {}
 _plugin_manifests: dict[str, dict] = {}
 _startup_hooks: list[Callable] = []
+_page_switch_hooks: dict[str, dict[str, Callable]] = {}  # plugin_id -> {on_activate, on_deactivate}
 
 
 class CancelRunning(Exception):
@@ -111,12 +113,24 @@ def on_startup(func):
     return func
 
 
+def on_page_switch(plugin_id: str, event: str = "on_activate"):
+    """装饰器：注册插件页面切换事件回调（后端钩子）。
+
+    event: "on_activate" | "on_deactivate"
+    回调签名: func(framework, plugin_id) -> None
+    """
+    def decorator(func):
+        _page_switch_hooks.setdefault(plugin_id, {})[event] = func
+        return func
+    return decorator
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PluginManager
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class PluginManager:
-    """插件发现、加载、生命周期管理。"""
+    """插件发现、加载、页面生命周期管理。"""
 
     def __init__(self, plugins_dir: Path):
         self.plugins_dir = plugins_dir
@@ -147,14 +161,23 @@ class PluginManager:
             _plugin_manifests[manifest['name']] = manifest
             manifests.append(manifest)
 
-            # 注册配置 schema
+            # 验证：每个插件必须有且只有一个页面
+            page_html = plugin_dir / 'page.html'
+            if not page_html.exists():
+                logManager.warn(f"插件 {manifest['name']} 缺少 page.html，将创建默认页面")
+                self._create_default_page(plugin_dir, manifest)
+
+            # 注册配置 schema（附加 html_id 自动推导）
             for cfg in manifest.get('config_keys', []):
+                html_id = cfg.get('html_id', self._derive_html_id(cfg['path']))
                 _config_schema[cfg['path']] = {
                     'type': cfg.get('type', 'string'),
                     'default': cfg.get('default'),
                     'label': cfg.get('label', ''),
                     'options': cfg.get('options'),
                     'description': cfg.get('description', ''),
+                    'html_id': html_id,
+                    'plugin_id': manifest['name'],
                 }
 
             # startup 插件立即加载
@@ -164,6 +187,31 @@ class PluginManager:
         manifests.sort(key=lambda m: m.get('nav_button', {}).get('order', 999))
         logManager.info(f"发现 {len(manifests)} 个插件")
         return manifests
+
+    @staticmethod
+    def _derive_html_id(config_path: str) -> str:
+        """从配置路径推导 HTML 元素 ID：'ui_default.translator.enable_proper' → 'enable-proper'"""
+        return config_path.rsplit('.', 1)[-1].replace('_', '-')
+
+    @staticmethod
+    def _create_default_page(plugin_dir: Path, manifest: dict):
+        """为缺少 page.html 的插件创建默认页面。"""
+        page_html = plugin_dir / 'page.html'
+        display_name = manifest.get('display_name', manifest['name'])
+        page_html.write_text(f'''<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-puzzle-piece"></i>
+        {display_name}
+    </h2>
+    <p class="section-subtitle">{manifest.get("description", "")}</p>
+</div>
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">{display_name}</h3>
+        <p>此页面正在开发中...</p>
+    </div>
+</div>
+''', encoding='utf-8')
 
     # ── 加载 ──
 
@@ -198,7 +246,7 @@ class PluginManager:
     # ── 页面激活 ──
 
     def activate_page(self, plugin_id: str) -> dict:
-        """激活指定插件的页面，返回 HTML + JS + CSS。"""
+        """激活指定插件的页面，返回 HTML + JS + CSS + 配置值。"""
         manifest = _plugin_manifests.get(plugin_id)
         if not manifest:
             return {"success": False, "message": f"插件不存在: {plugin_id}"}
@@ -207,15 +255,32 @@ class PluginManager:
         if manifest.get('load_timing') == 'lazy':
             self._load_plugin(manifest)
 
+        # 先触发旧页面的 deactivate 钩子
+        if self.active_page and self.active_page != plugin_id:
+            self._fire_page_hook(self.active_page, 'on_deactivate')
+
         self.active_page = plugin_id
         plugin_dir = Path(manifest['_dir'])
 
+        # 触发新页面的 activate 钩子
+        self._fire_page_hook(plugin_id, 'on_activate')
+
         result = {"success": True, "plugin_id": plugin_id}
 
+        # 读取 page.html
         html_path = plugin_dir / 'page.html'
         if html_path.exists():
             result['html'] = html_path.read_text(encoding='utf-8')
 
+        # 读取 plugin 配置项的当前值
+        config_keys = manifest.get('config_keys', [])
+        if config_keys:
+            result['config'] = {}
+            for cfg in config_keys:
+                path = cfg['path']
+                result['config'][path] = configManager.get(path)
+
+        # JS 模块
         js_modules = manifest.get('js_modules', [])
         if js_modules:
             result['js'] = {}
@@ -224,6 +289,7 @@ class PluginManager:
                 if js_path.exists():
                     result['js'][js_file] = js_path.read_text(encoding='utf-8')
 
+        # CSS 模块
         css_modules = manifest.get('css_modules', [])
         if css_modules:
             result['css'] = {}
@@ -233,6 +299,16 @@ class PluginManager:
                     result['css'][css_file] = css_path.read_text(encoding='utf-8')
 
         return result
+
+    def _fire_page_hook(self, plugin_id: str, event: str):
+        """触发后端页面切换钩子。"""
+        hooks = _page_switch_hooks.get(plugin_id, {})
+        hook = hooks.get(event)
+        if hook:
+            try:
+                hook(plugin_id)
+            except Exception as e:
+                logManager.exception(e)
 
     # ── 导航 ──
 
@@ -285,7 +361,6 @@ class LCTAAppFramework:
                 configManager._do_save()
                 logManager.info("已生成默认配置文件")
             except Exception as e:
-                logManager.error("生成默认配置文件时出现问题")
                 logManager.exception(e)
 
         # 校验配置
@@ -337,7 +412,7 @@ class LCTAAppFramework:
     # ── JS 可调用: 插件 ──
 
     def plugin_activate(self, plugin_id: str) -> dict:
-        """JS 调用：激活插件页面，返回 HTML/JS/CSS。"""
+        """JS 调用：激活插件页面，返回 HTML/JS/CSS + 配置值。"""
         if not self.plugin_manager:
             return {"success": False, "message": "插件管理器未初始化"}
         return self.plugin_manager.activate_page(plugin_id)

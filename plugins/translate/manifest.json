@@ -12,10 +12,10 @@
     "order": 1
   },
   "config_keys": [
-    { "path": "ui_default.translator.translator", "label": "翻译服务", "type": "select", "options": ["百度翻译服务", "Google翻译服务", "LLM通用翻译服务"], "default": "百度翻译服务", "description": "选择使用的翻译引擎" },
+    { "path": "ui_default.translator.translator", "label": "翻译服务", "type": "select", "html_id": "translator-service-select", "options": ["百度翻译服务", "Google翻译服务", "LLM通用翻译服务"], "default": "百度翻译服务", "description": "选择使用的翻译引擎" },
     { "path": "ui_default.translator.fallback", "label": "启用回退", "type": "boolean", "default": false, "description": "翻译失败时回退到备用引擎" },
     { "path": "ui_default.translator.is_text", "label": "文本模式", "type": "boolean", "default": false },
-    { "path": "ui_default.translator.from_lang", "label": "源语言", "type": "string", "default": "", "description": "源语言代码" },
+    { "path": "ui_default.translator.from_lang", "label": "源语言", "type": "string", "default": "EN", "description": "源语言代码" },
     { "path": "ui_default.translator.enable_proper", "label": "启用专有词汇", "type": "boolean", "default": false },
     { "path": "ui_default.translator.auto_fetch_proper", "label": "自动获取专有词汇", "type": "boolean", "default": false },
     { "path": "ui_default.translator.proper_path", "label": "专有词汇路径", "type": "string", "default": "" },
@@ -27,7 +27,7 @@
     { "path": "ui_default.translator.jp_path", "label": "日文路径", "type": "string", "default": "" },
     { "path": "ui_default.translator.llc_path", "label": "LLC路径", "type": "string", "default": "" },
     { "path": "ui_default.translator.has_prefix", "label": "有前缀", "type": "boolean", "default": false },
-    { "path": "ui_default.translator.dump", "label": "调试导出", "type": "boolean", "default": false }
+    { "path": "ui_default.translator.dump", "label": "调试导出", "type": "boolean", "default": false, "html_id": "dump-translation" }
   ],
   "js_modules": ["page.js"],
   "css_modules": [],

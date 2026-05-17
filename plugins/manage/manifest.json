@@ -12,7 +12,7 @@
     "order": 4
   },
   "config_keys": [
-    { "path": "ui_default.manage.mod_path", "label": "模组路径", "type": "path", "default": "" }
+    { "path": "ui_default.manage.mod_path", "label": "模组路径", "type": "path", "default": "", "html_id": "installed-mod-directory" }
   ],
   "js_modules": ["page.js"],
   "css_modules": [],

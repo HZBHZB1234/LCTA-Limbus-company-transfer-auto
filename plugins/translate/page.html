@@ -1,0 +1,159 @@
+<!-- 翻译工具页面 -->
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-language"></i>
+        翻译工具
+    </h2>
+    <p class="section-subtitle">使用多种翻译服务自动翻译游戏文本</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">翻译选项</h3>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-proper" onchange="toggleProper()">
+                <span class="checkmark"></span>
+                启用专有名词 (LLM翻译专用)
+            </label>
+        </div>
+
+        <div id="proper-settings" style="display: none;">
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="auto-fetch-proper" onchange="toggleAutoProper()">
+                    <span class="checkmark"></span>
+                    在进行翻译时自动抓取专有词汇 (无法使用自定义设置)
+                </label>
+            </div>
+            <div class="form-group" id="proper-path-text">
+                <label for="proper-path">专有名词json路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="proper-path" placeholder="选择专有名词json文件">
+                    <button class="action-btn secondary" onclick="window.pywebview.api.browse_file('proper-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-role" onchange="toggleProper()">
+                <span class="checkmark"></span>
+                启用人物角色标识 (LLM翻译专用)
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-skill" onchange="toggleProper()">
+                <span class="checkmark"></span>
+                启用状态效果标识 (LLM翻译专用)
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-dev-settings" onchange="toggleDevelopSettings()">
+                <span class="checkmark"></span>
+                启用高级选项
+            </label>
+        </div>
+
+        <div id="dev-settings" style="display: none;">
+            <div class="form-group">
+                <label for="kr-path">韩文文本路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="kr-path" placeholder="选择韩文文本文件夹">
+                    <button class="action-btn secondary" onclick="window.pywebview.api.browse_folder('kr-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="jp-path">日文文本路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="jp-path" placeholder="选择日文文本文件夹">
+                    <button class="action-btn secondary" onclick="window.pywebview.api.browse_folder('jp-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="en-path">英文文本路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="en-path" placeholder="选择英文文本文件夹">
+                    <button class="action-btn secondary" onclick="window.pywebview.api.browse_folder('en-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="llc-path">中文文本路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="llc-path" placeholder="选择中文文本文件夹">
+                    <button class="action-btn secondary" onclick="window.pywebview.api.browse_folder('llc-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="has-prefix" checked>
+                    <span class="checkmark"></span>
+                    文件名存在前缀
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="dump-translation">
+                <span class="checkmark"></span>
+                转储过程内容以供分析
+            </label>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">翻译服务配置</h3>
+        <div class="form-group">
+            <label for="translator-service-select">翻译服务:</label>
+            <div class="translator-services"></div>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="fallback" checked>
+                <span class="checkmark"></span>
+                失败时进行相反重试 (LLM翻译专用)
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="is-text">
+                <span class="checkmark"></span>
+                使用文本格式进行请求 (LLM翻译专用)
+            </label>
+        </div>
+        <div class="form-group">
+            <label for="from-lang">使用源语言 (除LLM翻译外使用):</label>
+            <div class="select-wrapper">
+                <select id="from-lang">
+                    <option value="EN">英文</option>
+                    <option value="JP">日文</option>
+                    <option value="KR">韩文</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="action-area">
+    <button class="primary-btn" onclick="startTranslation()">
+        <i class="fas fa-play"></i>
+        开始翻译
+    </button>
+</div>

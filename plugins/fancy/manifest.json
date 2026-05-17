@@ -12,8 +12,8 @@
     "order": 5
   },
   "config_keys": [
-    { "path": "user_fancy", "label": "用户美化规则", "type": "string", "default": "[]", "description": "JSON 格式的用户自定义美化规则" },
-    { "path": "fancy_allow", "label": "启用规则", "type": "string", "default": "{}", "description": "JSON 格式的规则启用映射" }
+    { "path": "user_fancy", "label": "用户美化规则", "type": "string", "default": "[]", "html_id": "fancy-user", "description": "JSON 格式的用户自定义美化规则" },
+    { "path": "fancy_allow", "label": "启用规则", "type": "string", "default": "{}", "html_id": "fancy-allow", "description": "JSON 格式的规则启用映射" }
   ],
   "js_modules": ["page.js"],
   "css_modules": [],

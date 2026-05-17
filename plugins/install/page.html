@@ -1,0 +1,75 @@
+<!-- 安装已有汉化页面 -->
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-download"></i>
+        安装已有汉化
+    </h2>
+    <p class="section-subtitle">选择并安装本地汉化包</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">汉化包目录</h3>
+        <div class="form-group">
+            <label for="install-package-directory">汉化包目录:</label>
+            <div class="file-input-group">
+                <div class="input-wrapper">
+                    <input type="text" id="install-package-directory" placeholder="留空则使用程序所在目录">
+                    <button type="button" class="input-clear" onclick="clearPackageDirectory()" title="清空目录设置">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <button type="button" class="action-btn secondary" onclick="browseInstallPackageDirectory()">
+                    <i class="fas fa-folder-open"></i> 浏览
+                </button>
+            </div>
+            <small class="form-hint">选择存放汉化包的目录，留空则使用程序所在目录</small>
+        </div>
+
+        <div class="form-group">
+            <label for="install-package-list">可用汉化包:</label>
+            <div class="list-container">
+                <div class="list-header">
+                    <span>包名称</span>
+                    <span>操作</span>
+                </div>
+                <div class="list-content" id="install-package-list">
+                    <div class="list-empty">
+                        <i class="fas fa-box-open"></i>
+                        <p>未找到可用的汉化包</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button type="button" class="action-btn" onclick="refreshInstallPackageList()">
+                <i class="fas fa-sync-alt"></i> 刷新列表
+            </button>
+            <button type="button" class="action-btn success" onclick="installSelectedPackage()">
+                <i class="fas fa-check-circle"></i> 安装选中汉化包
+            </button>
+            <button type="button" class="action-btn danger" onclick="deleteSelectedPackage()">
+                <i class="fas fa-trash"></i> 删除选中汉化包
+            </button>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">字体管理</h3>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-font"></i></div>
+                <h4>更换字体</h4>
+                <p>为选中的汉化包更换字体</p>
+                <button class="feature-btn" onclick="changeFontForPackage()">更换字体</button>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-file-export"></i></div>
+                <h4>导出字体</h4>
+                <p>从已安装字体中获取文件</p>
+                <button class="feature-btn" onclick="getFontFromInstalled()">导出字体</button>
+            </div>
+        </div>
+    </div>
+</div>

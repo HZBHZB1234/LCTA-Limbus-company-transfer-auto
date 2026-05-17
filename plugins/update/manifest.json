@@ -12,10 +12,10 @@
     "order": 9
   },
   "config_keys": [
-    { "path": "auto_check_update", "label": "自动检查更新", "type": "boolean", "default": true },
-    { "path": "delete_updating", "label": "删除更新文件", "type": "boolean", "default": true },
-    { "path": "update_use_proxy", "label": "更新使用代理", "type": "boolean", "default": true },
-    { "path": "update_only_stable", "label": "仅稳定版", "type": "boolean", "default": false }
+    { "path": "auto_check_update", "label": "自动检查更新", "type": "boolean", "default": true, "html_id": "auto-check-update" },
+    { "path": "delete_updating", "label": "删除更新文件", "type": "boolean", "default": true, "html_id": "delete-updating" },
+    { "path": "update_use_proxy", "label": "更新使用代理", "type": "boolean", "default": true, "html_id": "update-use-proxy" },
+    { "path": "update_only_stable", "label": "仅稳定版", "type": "boolean", "default": false, "html_id": "update-only-stable" }
   ],
   "js_modules": ["page.js"],
   "css_modules": [],

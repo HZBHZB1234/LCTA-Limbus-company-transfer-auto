@@ -1,4 +1,22 @@
-// 主题管理
+/**
+ * script.js —— LCTA v5.0.0 核心前端基础设施
+ *
+ * 提供:
+ *   - ThemeManager: 三主题切换（亮色/暗色/紫色）
+ *   - AnimationManager: 淡入/淡出/滑动动画
+ *   - ConfigManager: 配置缓存 + 防抖批量更新 + schema 驱动的 ID 映射
+ *   - PagesManager: 页面生命周期管理 + DOM 就绪检查 + 切换事件钩子
+ *   - ModalWindow / ProgressModal: 模态窗口系统
+ *   - DragDropManager: 拖拽文件处理
+ *   - 工具函数: addLogMessage / showMessage / showConfirm / 加密等
+ *
+ * 页面逻辑已拆分至各插件的 page.js 文件中。
+ */
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ThemeManager
+// ═══════════════════════════════════════════════════════════════════════════════
+
 class ThemeManager {
     constructor() {
         this.currentTheme = 'light';
@@ -8,10 +26,9 @@ class ThemeManager {
         this.debounceDelay = 300;
         this.init();
     }
-    
+
     init() {
         this.setTheme(this.currentTheme, true);
-        
         document.querySelectorAll('.theme-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const theme = e.target.dataset.theme || e.target.closest('.theme-btn').dataset.theme;
@@ -19,140 +36,540 @@ class ThemeManager {
             });
         });
     }
-    
+
     setThemeWithDebounce(theme) {
         const clickedBtn = [...document.querySelectorAll('.theme-btn')].find(btn => btn.dataset.theme === theme);
         if (clickedBtn) {
             clickedBtn.classList.add('changing');
-            setTimeout(() => {
-                clickedBtn.classList.remove('changing');
-            }, 300);
+            setTimeout(() => clickedBtn.classList.remove('changing'), 300);
         }
-        
-        if (this.debounceTimer) {
-            clearTimeout(this.debounceTimer);
-        }
-        
-        this.debounceTimer = setTimeout(() => {
-            this.setTheme(theme);
-        }, this.debounceDelay);
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => this.setTheme(theme), this.debounceDelay);
     }
-    
+
     setTheme(theme, skipDebounce = false) {
-        if (this.isTransitioning) {
-            this.pendingTheme = theme;
-            return;
-        }
-        
-        if (this.currentTheme === theme) {
-            return;
-        }
-        
+        if (this.isTransitioning) { this.pendingTheme = theme; return; }
+        if (this.currentTheme === theme) return;
         this.isTransitioning = true;
         document.body.classList.add('theme-transition');
-        
         document.body.classList.remove('theme-light', 'theme-dark', 'theme-purple');
         document.body.classList.add(`theme-${theme}`);
-        
         this.currentTheme = theme;
-        configManager.updateConfigValue('--theme', theme);
-        
+        configManager.updateConfigValue('theme', theme);
         this.updateThemeButtons(theme);
-        this.addThemeTransition();
-    }
-    
-    updateThemeButtons(theme) {
-        document.querySelectorAll('.theme-btn').forEach(btn => {
-            if (btn.dataset.theme === theme) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
-    }
-    
-    addThemeTransition() {
         setTimeout(() => {
             document.body.classList.remove('theme-transition');
             this.isTransitioning = false;
-            
             if (this.pendingTheme && this.pendingTheme !== this.currentTheme) {
-                const pendingTheme = this.pendingTheme;
-                this.pendingTheme = null;
-                this.setTheme(pendingTheme);
+                const pt = this.pendingTheme; this.pendingTheme = null; this.setTheme(pt);
             }
         }, 300);
     }
+
+    updateThemeButtons(theme) {
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === theme);
+        });
+    }
 }
 
-// 动画管理器
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AnimationManager
+// ═══════════════════════════════════════════════════════════════════════════════
+
 class AnimationManager {
     static fadeIn(element, duration = 150) {
         element.style.opacity = 0;
         element.style.display = 'block';
-        
         let start = null;
-        const animate = (timestamp) => {
-            if (!start) start = timestamp;
-            const progress = timestamp - start;
-            const opacity = Math.min(progress / duration, 1);
-            
-            element.style.opacity = opacity;
-            
-            if (progress < duration) {
-                requestAnimationFrame(animate);
-            }
+        const animate = (ts) => {
+            if (!start) start = ts;
+            element.style.opacity = Math.min((ts - start) / duration, 1);
+            if (ts - start < duration) requestAnimationFrame(animate);
         };
-        
         requestAnimationFrame(animate);
     }
-    
+
     static fadeOut(element, duration = 150) {
         let start = null;
-        const animate = (timestamp) => {
-            if (!start) start = timestamp;
-            const progress = timestamp - start;
-            const opacity = 1 - Math.min(progress / duration, 1);
-            
-            element.style.opacity = opacity;
-            
-            if (progress < duration) {
-                requestAnimationFrame(animate);
-            } else {
-                element.style.display = 'none';
-                element.style.opacity = 1;
-            }
+        const animate = (ts) => {
+            if (!start) start = ts;
+            element.style.opacity = 1 - Math.min((ts - start) / duration, 1);
+            if (ts - start < duration) requestAnimationFrame(animate);
+            else { element.style.display = 'none'; element.style.opacity = 1; }
         };
-        
         requestAnimationFrame(animate);
     }
-    
+
     static slideIn(element, from = 'left', duration = 150) {
-        const direction = from === 'left' ? '-100%' : '100%';
-        element.style.transform = `translateX(${direction})`;
+        const dir = from === 'left' ? '-100%' : '100%';
+        element.style.transform = `translateX(${dir})`;
         element.style.display = 'block';
-        
         let start = null;
-        const animate = (timestamp) => {
-            if (!start) start = timestamp;
-            const progress = timestamp - start;
-            const percentage = Math.min(progress / duration, 1);
-            
-            element.style.transform = `translateX(${parseInt(direction) * (1 - percentage)}%)`;
-            
-            if (progress < duration) {
-                requestAnimationFrame(animate);
-            }
+        const animate = (ts) => {
+            if (!start) start = ts;
+            element.style.transform = `translateX(${parseInt(dir) * (1 - Math.min((ts - start) / duration, 1))}%)`;
+            if (ts - start < duration) requestAnimationFrame(animate);
         };
-        
         requestAnimationFrame(animate);
     }
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PagesManager —— 页面生命周期管理
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class PagesManager {
+    constructor() {
+        /** @type {Map<string, {html:string, js:{}, css:{}, config:{}}>} */
+        this._pages = new Map();
+        /** @type {string|null} */
+        this._activeId = null;
+        /** @type {Map<string, {onActivate:Function, onDeactivate:Function}>} */
+        this._hooks = new Map();
+        /** @type {boolean} */
+        this._switching = false;
+    }
+
+    /**
+     * 注册插件的页面切换事件钩子。
+     * 由插件 page.js 在初始化时调用。
+     *
+     * @param {string} pluginId
+     * @param {{onActivate?:Function, onDeactivate?:Function}} hooks
+     */
+    registerSwitchHook(pluginId, hooks) {
+        if (!this._hooks.has(pluginId)) {
+            this._hooks.set(pluginId, {});
+        }
+        const existing = this._hooks.get(pluginId);
+        if (hooks.onActivate) existing.onActivate = hooks.onActivate;
+        if (hooks.onDeactivate) existing.onDeactivate = hooks.onDeactivate;
+    }
+
+    /**
+     * 切换到指定插件页面。
+     * 处理：触发旧页面 deactivate → 加载新页面内容 → 注入 DOM → 触发新页面 activate
+     *
+     * @param {string} pluginId - 插件 ID 或 'welcome' / 'log' / 'test' 等内置页面
+     * @returns {Promise<boolean>}
+     */
+    async switchPage(pluginId) {
+        if (this._switching) {
+            console.warn('[PagesManager] 正在切换页面中，忽略重复请求');
+            return false;
+        }
+
+        if (this._activeId === pluginId && this._pages.has(pluginId)) {
+            return true; // 已经是当前页面
+        }
+
+        this._switching = true;
+
+        try {
+            // 1. 触发旧页面 deactivate
+            if (this._activeId) {
+                await this._fireHook(this._activeId, 'onDeactivate');
+            }
+
+            // 2. 加载新页面内容
+            if (!this._pages.has(pluginId)) {
+                const loaded = await this._loadPageContent(pluginId);
+                if (!loaded) {
+                    console.error(`[PagesManager] 加载页面失败: ${pluginId}`);
+                    this._switching = false;
+                    return false;
+                }
+            }
+
+            // 3. 等待 DOM 就绪后注入内容
+            await this._waitForDOM();
+            this._renderPage(pluginId);
+
+            // 4. 触发新页面 activate
+            this._activeId = pluginId;
+            await this._waitForDOM();
+            await this._fireHook(pluginId, 'onActivate');
+
+            // 5. 填充配置到页面元素
+            this._fillConfigForPage(pluginId);
+
+            // 6. 更新导航高亮
+            this._updateNavHighlight(pluginId);
+
+            this._switching = false;
+            return true;
+        } catch (e) {
+            console.error(`[PagesManager] 切换页面异常:`, e);
+            this._switching = false;
+            return false;
+        }
+    }
+
+    /** 从后端加载插件页面内容 */
+    async _loadPageContent(pluginId) {
+        // 内置页面无需从后端加载
+        if (pluginId === 'welcome' || pluginId === 'log' || pluginId === 'test') {
+            this._pages.set(pluginId, { html: null, js: {}, css: {}, config: {} });
+            return true;
+        }
+
+        try {
+            const result = await window.pywebview.api.plugin_activate(pluginId);
+            if (!result.success) {
+                console.error(`[PagesManager] 激活插件失败: ${result.message}`);
+                return false;
+            }
+
+            this._pages.set(pluginId, {
+                html: result.html || '',
+                js: result.js || {},
+                css: result.css || {},
+                config: result.config || {},
+            });
+
+            // 将配置值同步到 ConfigManager 缓存
+            if (result.config) {
+                for (const [path, value] of Object.entries(result.config)) {
+                    configManager.setCachedValue(path, value);
+                }
+            }
+
+            return true;
+        } catch (e) {
+            console.error(`[PagesManager] 加载页面异常:`, e);
+            return false;
+        }
+    }
+
+    /** 将页面 HTML/CSS/JS 渲染到 DOM */
+    _renderPage(pluginId) {
+        const contentArea = document.getElementById('page-content');
+        if (!contentArea) return;
+
+        const page = this._pages.get(pluginId);
+        if (!page) return;
+
+        // 清除旧插件 CSS
+        document.querySelectorAll('style[data-plugin]').forEach(s => s.remove());
+
+        // 隐藏日志/测试等内置 section
+        document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
+
+        // 内置页面：显示对应 section
+        if (pluginId === 'log') {
+            const logSection = document.getElementById('log-section');
+            if (logSection) { logSection.style.display = 'block'; scrollLogToBottom(); }
+            contentArea.innerHTML = '';
+            return;
+        }
+        if (pluginId === 'test') {
+            const testSection = document.getElementById('test-section');
+            if (testSection) testSection.style.display = 'block';
+            contentArea.innerHTML = '';
+            return;
+        }
+        if (pluginId === 'welcome') {
+            contentArea.innerHTML = `<div class="section-header">
+                <h2 class="section-title"><i class="fas fa-language"></i> LCTA - 边狱公司汉化工具箱</h2>
+                <p class="section-subtitle">欢迎使用</p>
+            </div>`;
+            return;
+        }
+
+        // 渲染插件 HTML
+        if (page.html) {
+            contentArea.innerHTML = page.html;
+        }
+
+        // 注入 CSS
+        if (page.css) {
+            Object.entries(page.css).forEach(([filename, css]) => {
+                const style = document.createElement('style');
+                style.textContent = css;
+                style.dataset.plugin = pluginId;
+                document.head.appendChild(style);
+            });
+        }
+
+        // 执行 JS
+        if (page.js) {
+            Object.entries(page.js).forEach(([filename, code]) => {
+                try {
+                    const fn = new Function('pagesManager', 'configManager', 'pluginLoader', code);
+                    fn(pagesManager, configManager, pluginLoader);
+                } catch (e) {
+                    console.error(`[PagesManager] 执行 ${filename} 失败:`, e);
+                }
+            });
+        }
+    }
+
+    /** 将配置值填充到当前页面的 DOM 元素 */
+    _fillConfigForPage(pluginId) {
+        const contentArea = document.getElementById('page-content');
+        if (!contentArea) return;
+
+        const schema = configManager._schema || {};
+        for (const [path, meta] of Object.entries(schema)) {
+            if (meta.plugin_id !== pluginId) continue;
+            const htmlId = meta.html_id;
+            if (!htmlId) continue;
+            const el = document.getElementById(htmlId);
+            if (!el) continue;
+            const value = configManager.getCachedValue(path);
+            if (value === undefined) continue;
+            configManager._applyValueToElement(el, value);
+        }
+    }
+
+    /** 触发页面切换钩子 */
+    async _fireHook(pluginId, event) {
+        const hooks = this._hooks.get(pluginId);
+        const fn = hooks && hooks[event];
+        if (typeof fn === 'function') {
+            try {
+                await fn();
+            } catch (e) {
+                console.error(`[PagesManager] ${event} 钩子执行失败 (${pluginId}):`, e);
+            }
+        }
+    }
+
+    /** 等待 DOM 稳定 */
+    _waitForDOM() {
+        return new Promise(resolve => {
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                // 使用 requestAnimationFrame 确保渲染完成
+                requestAnimationFrame(() => requestAnimationFrame(resolve));
+            } else {
+                document.addEventListener('DOMContentLoaded', () => {
+                    requestAnimationFrame(() => requestAnimationFrame(resolve));
+                }, { once: true });
+            }
+        });
+    }
+
+    /** 更新侧边栏导航高亮 */
+    _updateNavHighlight(pluginId) {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        // 查找对应 nav 按钮：遍历所有按钮，匹配 data-plugin-id
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            if (btn.dataset.pluginId === pluginId) {
+                btn.classList.add('active');
+            }
+        });
+        // 兼容旧 ID 规则: xxx-btn -> xxx 匹配 pluginId
+        if (!document.querySelector('.nav-btn.active')) {
+            const fallback = document.getElementById(`${pluginId}-btn`);
+            if (fallback) fallback.classList.add('active');
+        }
+    }
+
+    /** 获取当前激活的插件 ID */
+    get activeId() {
+        return this._activeId;
+    }
+
+    /** 判断指定页面是否已就绪（内容已加载） */
+    isReady(pluginId) {
+        return this._pages.has(pluginId);
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ConfigManager —— schema 驱动的配置管理
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class ConfigManager {
+    constructor() {
+        /** @type {Object<string, {type:string, default:*, label:string, options:Array, html_id:string, plugin_id:string}>} */
+        this._schema = {};
+        /** @type {Object} 配置值缓存（嵌套对象） */
+        this.configCache = {};
+        /** @type {Object} 待更新队列 */
+        this.pendingUpdates = {};
+        /** @type {number|null} */
+        this.debounceTimer = null;
+        this.debounceDelay = 500;
+    }
+
+    /**
+     * 应用后端返回的全量同步数据（schema + 当前值）。
+     * 由 pluginLoader.init() 在启动时调用。
+     */
+    applyFullSync(schema, values) {
+        this._schema = schema || {};
+
+        // 填充配置缓存
+        if (values) {
+            for (const [path, value] of Object.entries(values)) {
+                this.setCachedValue(path, value);
+            }
+        }
+
+        console.log(`[ConfigManager] 已同步 ${Object.keys(this._schema).length} 个配置项`);
+    }
+
+    /**
+     * 根据 html_id 或 path 获取配置值。
+     * 优先按 html_id 查找 schema，再尝试直接作为 path。
+     */
+    get(idOrPath) {
+        // 先尝试按 html_id 查找
+        for (const [path, meta] of Object.entries(this._schema)) {
+            if (meta.html_id === idOrPath) {
+                return this.getCachedValue(path);
+            }
+        }
+        // 再尝试作为 path 直接读取
+        return this.getCachedValue(idOrPath);
+    }
+
+    /** 获取嵌套缓存值 */
+    getCachedValue(keyPath) {
+        const keys = keyPath.split('.');
+        let value = this.configCache;
+        for (const key of keys) {
+            if (value && typeof value === 'object' && key in value) {
+                value = value[key];
+            } else {
+                return undefined;
+            }
+        }
+        return value;
+    }
+
+    /** 设置嵌套缓存值 */
+    setCachedValue(keyPath, value) {
+        const keys = keyPath.split('.');
+        let obj = this.configCache;
+        for (let i = 0; i < keys.length - 1; i++) {
+            const key = keys[i];
+            if (!(key in obj) || typeof obj[key] !== 'object') {
+                obj[key] = {};
+            }
+            obj = obj[key];
+        }
+        obj[keys[keys.length - 1]] = value;
+    }
+
+    /** 通过 html_id 更新配置值（自动防抖批量发送到后端） */
+    async updateConfigValue(id, value) {
+        // 查找 html_id 对应的 config path
+        let keyPath = null;
+        for (const [path, meta] of Object.entries(this._schema)) {
+            if (meta.html_id === id) {
+                keyPath = path;
+                break;
+            }
+        }
+        if (!keyPath) {
+            // 没有 schema 映射，直接当作 path 使用
+            keyPath = id;
+        }
+
+        this.pendingUpdates[keyPath] = value;
+        this.debounceUpdate();
+        return true;
+    }
+
+    /** 防抖批量发送 */
+    debounceUpdate() {
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => this.flushPendingUpdates(), this.debounceDelay);
+    }
+
+    /** 立即发送所有待更新配置到后端 */
+    async flushPendingUpdates() {
+        if (Object.keys(this.pendingUpdates).length === 0) return;
+
+        const updates = { ...this.pendingUpdates };
+        this.pendingUpdates = {};
+
+        // 更新本地缓存
+        for (const [keyPath, value] of Object.entries(updates)) {
+            this.setCachedValue(keyPath, value);
+        }
+
+        try {
+            const result = await window.pywebview.api.config_set_batch(updates);
+            if (result.success) {
+                console.log(`[ConfigManager] 批量更新成功: ${result.updated} 项`);
+            }
+            return result;
+        } catch (error) {
+            console.error('[ConfigManager] 批量更新失败:', error);
+            return { success: false, message: error.toString() };
+        }
+    }
+
+    /** 将配置值填充到页面上所有匹配的元素 */
+    applyConfigToPage() {
+        for (const [path, meta] of Object.entries(this._schema)) {
+            const htmlId = meta.html_id;
+            if (!htmlId) continue;
+            const el = document.getElementById(htmlId);
+            if (!el) continue;
+            const value = this.getCachedValue(path);
+            if (value !== undefined) {
+                this._applyValueToElement(el, value);
+            }
+        }
+    }
+
+    /** 将值写入 DOM 元素 */
+    _applyValueToElement(el, value) {
+        if (el.type === 'checkbox') {
+            el.checked = Boolean(value);
+        } else if (el.tagName === 'SELECT') {
+            el.value = value != null ? String(value) : '';
+        } else {
+            el.value = value != null ? String(value) : '';
+        }
+    }
+
+    /** 获取 schema 元数据 */
+    getSchema(path) {
+        return this._schema[path] || null;
+    }
+
+    /** 获取某个插件的所有配置项 */
+    getPluginConfig(pluginId) {
+        const result = {};
+        for (const [path, meta] of Object.entries(this._schema)) {
+            if (meta.plugin_id === pluginId) {
+                result[path] = this.getCachedValue(path);
+            }
+        }
+        return result;
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 全局实例
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let configManager;
+let pagesManager;
+let themeManager;
+let dragDropManager;
+
+/** @type {Array<ModalWindow>} */
+let modalWindows = [];
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 工具函数
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function setConfigToCache(obj, prefix = '') {
     for (const [key, value] of Object.entries(obj)) {
         const path = prefix ? `${prefix}.${key}` : key;
-        
         if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
             setConfigToCache(value, path);
         } else {
@@ -161,316 +578,6 @@ function setConfigToCache(obj, prefix = '') {
     }
 }
 
-// 配置管理器
-class ConfigManager {
-    constructor() {
-        // 配置键名对照表：id -> 配置键路径
-        this.configKeyMap = {
-            // 基本设置
-            'game-path': 'game_path',
-            'debug-mode': 'debug',
-            'auto-check-update': 'auto_check_update',
-            'delete-updating': 'delete_updating',
-            'update-use-proxy': 'update_use_proxy',
-            'github-max-workers': 'github_max_workers',
-            'github-timeout': 'github_timeout',
-            'update-only-stable': 'update_only_stable',
-            'enable-cache': 'enable_cache',
-            'cache-path': 'cache_path',
-            'api-crypto': 'api_crypto',
-            'enable-storage': 'enable_storage',
-            'storage-path': 'storage_path',
-            '--theme': 'theme',
-
-            // 老年人模式设置
-            '--elder': 'elder_list',
-            '--elder-character-base': 'elder.character.base',
-            '--elder-character-launcher': 'elder.character.launcher',
-            '--elder-character-translate': 'elder.character.translate',
-            '--elder-character-manage': 'elder.character.manage',
-
-            // 翻译设置
-            "translator-service-select": "ui_default.translator.translator",
-            "fallback": 'ui_default.translator.fallback',
-            "is-text": 'ui_default.translator.is_text',
-            'from-lang': 'ui_default.translator.from_lang',
-            'enable-proper': 'ui_default.translator.enable_proper',
-            'auto-fetch-proper': 'ui_default.translator.auto_fetch_proper',
-            'proper-path': 'ui_default.translator.proper_path',
-            'enable-role': 'ui_default.translator.enable_role',
-            'enable-skill': 'ui_default.translator.enable_skill',
-            'enable-dev-settings': 'ui_default.translator.enable_dev_settings',
-            "en-path": "ui_default.translator.en_path",
-            "kr-path": "ui_default.translator.kr_path",
-            "jp-path": "ui_default.translator.jp_path",
-            "llc-path": "ui_default.translator.llc_path",
-            "has-prefix": "ui_default.translator.has_prefix",
-            "dump-translation": "ui_default.translator.dump",
-            
-            // 安装设置
-            'install-package-directory': 'ui_default.install.package_directory',
-            'package-directory': 'ui_default.install.package_directory',
-            
-            // OurPlay设置
-            'ourplay-font-option': 'ui_default.ourplay.font_option',
-            'ourplay-check-hash': 'ui_default.ourplay.check_hash',
-            'ourplay-use-api': 'ui_default.ourplay.use_api',
-            
-            // 零协设置
-            'llc-zip-type': 'ui_default.zero.zip_type',
-            'llc-download-source': 'ui_default.zero.download_source',
-            'llc-use-proxy': 'ui_default.zero.use_proxy',
-            'llc-use-cache': 'ui_default.zero.use_cache',
-            'llc-dump-default': 'ui_default.zero.dump_default',
-
-            // LCTA-auto-update配置
-            'machine-download-source': 'ui_default.machine.download_source',
-            'machine-use-proxy': 'ui_default.machine.use_proxy',
-
-            // 气泡文本mod配置
-            'bubble-color': 'ui_default.bubble.color',
-            'bubble-llc': 'ui_default.bubble.llc',
-            'bubble-install': 'ui_default.bubble.install',
-
-            // 安装数据管理设置
-            'installed-mod-directory': 'ui_default.manage.mod_path',
-            
-            // 清理设置
-            'clean-progress': 'ui_default.clean.clean_progress',
-            'clean-notice': 'ui_default.clean.clean_notice',
-            'clean-mods': 'ui_default.clean.clean_mods',
-
-            // api配置设置
-            'api-configs': 'api_config',
-            'api-select': 'ui_default.api_config.key',
-
-            'fancy-user': 'user_fancy',
-            'fancy-allow': 'fancy_allow',
-
-            // 抓取设置
-            'proper-join-char': 'ui_default.proper.join_char',
-            'proper-skip-space': 'ui_default.proper.disable_space',
-            'proper-max-count': 'ui_default.proper.max_length',
-            'proper-min-count': 'ui_default.proper.min_length',
-            'proper-output': 'ui_default.proper.output_type',
-            
-            // Launcher设置
-            'launcher-zero-zip-type': 'launcher.zero.zip_type',
-            'launcher-zero-download-source': 'launcher.zero.download_source',
-            'launcher-zero-use-proxy': 'launcher.zero.use_proxy',
-            'launcher-zero-use-cache': 'launcher.zero.use_cache',
-            'machine-zero-download-source': 'launcher.machine.download_source',
-            'machine-zero-use-proxy': 'launcher.machine.use_proxy',
-            'launcher-ourplay-font-option': 'launcher.ourplay.font_option',
-            'launcher-ourplay-use-api': 'launcher.ourplay.use_api',
-            'launcher-work-update': 'launcher.work.update',
-            'launcher-work-mod': 'launcher.work.mod',
-            'launcher-work-bubble': 'launcher.work.bubble',
-            'launcher-work-fancy': 'launcher.work.fancy'
-        };
-        
-        this.configCache = {}; // 配置缓存
-        this.pendingUpdates = {}; // 待更新的配置
-        this.debounceTimer = null;
-        this.debounceDelay = 500; // 防抖延迟
-    }
-
-    async reloadConfig() {
-        obj = await pywebview.api.get_attr('config');
-        window.config = obj;
-        setConfigToCache(obj);
-    }
-    
-    // 批量获取配置值
-    async getConfigValues(ids) {
-        const keyPaths = ids.map(id => this.configKeyMap[id]).filter(path => path);
-        
-        if (keyPaths.length === 0) {
-            return {};
-        }
-        
-        try {
-            const result = await pywebview.api.get_config_batch(keyPaths);
-            if (result.success) {
-                // 更新缓存
-                Object.assign(this.configCache, result.config_values);
-                return result.config_values;
-            }
-            return {};
-        } catch (error) {
-            console.error('批量获取配置失败:', error);
-            return {};
-        }
-    }
-    
-    // 单次配置更新（自动批量化处理）
-    async updateConfigValue(id, value) {
-        const keyPath = this.configKeyMap[id];
-        if (!keyPath) {
-            console.warn(`未找到id对应的配置键: ${id}`);
-            return false;
-        }
-        
-        // 添加到待更新队列
-        this.pendingUpdates[id] = value;
-        
-        // 防抖处理，避免频繁调用
-        this.debounceUpdate();
-        
-        return true;
-    }
-    
-    // 防抖更新
-    debounceUpdate() {
-        if (this.debounceTimer) {
-            clearTimeout(this.debounceTimer);
-        }
-        
-        this.debounceTimer = setTimeout(() => {
-            this.flushPendingUpdates();
-        }, this.debounceDelay);
-    }
-    
-    // 立即执行待更新
-    async flushPendingUpdates() {
-        if (Object.keys(this.pendingUpdates).length === 0) {
-            return;
-        }
-        
-        const updates = { ...this.pendingUpdates };
-        this.pendingUpdates = {};
-        
-        await this.updateConfigValues(updates);
-    }
-    
-    // 批量更新配置值
-    async updateConfigValues(updates) {
-        const configUpdates = {};
-        
-        // 转换id到配置键路径
-        for (const [id, value] of Object.entries(updates)) {
-            const keyPath = this.configKeyMap[id];
-            if (keyPath) {
-                configUpdates[keyPath] = value;
-                // 更新缓存
-                this.setCachedValue(keyPath, value);
-            }
-        }
-        
-        if (Object.keys(configUpdates).length === 0) {
-            return { success: false, message: '没有有效的配置项' };
-        }
-        
-        try {
-            const result = await pywebview.api.update_config_batch(configUpdates);
-            if (result.success) {
-                console.log(`批量更新配置成功: ${result.updated}/${result.total} 项`);
-            }
-            return result;
-        } catch (error) {
-            console.error('批量更新配置失败:', error);
-            return { success: false, message: error.toString() };
-        }
-    }
-    
-    // 获取缓存值
-    getCachedValue(keyPath) {
-        const keys = keyPath.split('.');
-        let value = this.configCache;
-        
-        for (const key of keys) {
-            if (value && typeof value === 'object' && key in value) {
-                value = value[key];
-            } else {
-                return undefined;
-            }
-        }
-        
-        return value;
-    }
-    
-    // 设置缓存值
-    setCachedValue(keyPath, value) {
-        const keys = keyPath.split('.');
-        let obj = this.configCache;
-        
-        for (let i = 0; i < keys.length - 1; i++) {
-            const key = keys[i];
-            if (!(key in obj) || typeof obj[key] !== 'object') {
-                obj[key] = {};
-            }
-            obj = obj[key];
-        }
-        
-        obj[keys[keys.length - 1]] = value;
-    }
-    
-    // 应用配置到UI（批量）
-    async applyConfigToUI() {
-        // 过滤掉 id 以 "--" 开头的配置项
-        const allIds = Object.keys(this.configKeyMap).filter(id => !id.startsWith('--'));
-        const configValues = await this.getConfigValues(allIds);
-        
-        // 遍历所有配置项，更新UI
-        for (const [id, keyPath] of Object.entries(this.configKeyMap)) {
-            if (id.startsWith('--')) continue; // 跳过以 "--" 开头的 id，不应用到 UI
-            if (keyPath in configValues) {
-                this.applyValueToUI(id, configValues[keyPath]);
-            }
-        }
-    }
-    
-    // 将值应用到UI元素
-    applyValueToUI(id, value) {
-        const element = document.getElementById(id);
-        if (!element) return;
-        
-        if (element.type === 'checkbox') {
-            element.checked = Boolean(value);
-        } else if (element.tagName === 'SELECT') {
-            element.value = value || '';
-        } else {
-            element.value = value || '';
-        }
-    }
-    
-    // 从UI收集配置值（批量）
-    collectConfigFromUI() {
-        const updates = {};
-        
-        for (const [id, keyPath] of Object.entries(this.configKeyMap)) {
-            // 跳过以 "--" 开头的 id，这些没有对应的 UI 元素
-            if (id.startsWith('--')) continue;
-            
-            const element = document.getElementById(id);
-            if (element) {
-                let value;
-                
-                if (element.type === 'checkbox') {
-                    value = element.checked;
-                } else if (element.tagName === 'SELECT' || element.tagName === 'INPUT') {
-                    value = element.value;
-                }
-                
-                // 如果值与缓存不同，则添加到更新
-                const cachedValue = this.getCachedValue(keyPath);
-                if (JSON.stringify(value) !== JSON.stringify(cachedValue)) {
-                    updates[id] = value;
-                }
-            }
-        }
-        
-        return updates;
-    }
-}
-
-// 初始化全局配置管理器
-let configManager;
-
-// 存储所有模态窗口的数组
-let modalWindows = [];
-
-// 确保modal-container存在
 function ensureModalContainer() {
     let container = document.getElementById('modal-container');
     if (!container) {
@@ -481,1371 +588,130 @@ function ensureModalContainer() {
     return container;
 }
 
-// 确保最小化窗口容器存在
 function ensureMinimizedContainer() {
     let container = document.getElementById('minimized-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'minimized-container';
-        container.style.position = 'fixed';
-        container.style.top = '80px';
-        container.style.right = '20px';
-        container.style.bottom = '20px';
-        container.style.width = '300px';
-        container.style.display = 'flex';
-        container.style.flexDirection = 'column';
-        container.style.alignItems = 'flex-end';
-        container.style.gap = '10px';
-        container.style.zIndex = '999';
-        container.style.maxHeight = 'calc(100vh - 100px)';
-        container.style.overflowY = 'auto';
-        container.style.overflowX = 'hidden';
-        container.style.padding = '5px';
+        container.style.cssText = 'position:fixed;top:80px;right:20px;bottom:20px;width:300px;display:flex;flex-direction:column;align-items:flex-end;gap:10px;z-index:999;max-height:calc(100vh - 100px);overflow-y:auto;overflow-x:hidden;padding:5px;';
         document.body.appendChild(container);
     }
     return container;
 }
 
-// 切换侧边栏按钮激活状态
-function initNavigation() {
-    document.querySelectorAll('.nav-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            if (button.classList.contains('active')) {
-                return;
-            }
-            
-            document.querySelectorAll('.nav-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            document.querySelectorAll('.nav-indicator').forEach(indicator => {
-                indicator.remove();
-            });
-            
-            button.classList.add('active');
-            
-            const indicator = document.createElement('div');
-            indicator.className = 'nav-indicator';
-            button.appendChild(indicator);
-            
-            document.querySelectorAll('.content-section').forEach(section => {
-                if (section.classList.contains('active')) {
-                    AnimationManager.fadeOut(section, 150);
-                    setTimeout(() => {
-                        section.classList.remove('active');
-                    }, 150);
-                }
-            });
-            
-            const sectionId = button.id.replace('-btn', '-section');
-            const section = document.getElementById(sectionId);
-            if (section) {
-                setTimeout(() => {
-                    section.classList.add('active');
-                    AnimationManager.fadeIn(section, 150);
-                    
-                    if (sectionId === 'log-section') {
-                        scrollLogToBottom();
-                    }
-                    
-                    if (sectionId === 'install-section') {
-                        refreshInstallPackageList();
-                    }
-
-                    if (sectionId === 'manage-section') {
-                        refreshInstalledPackageList();
-                        refreshInstalledModList();
-                        refreshSymlink();
-                    }
-
-                    if (sectionId !== 'test-section') {
-                        goTestSection(false);
-                    }
-
-                    if (sectionId !== 'clean-section') {
-                        goCleanSection(false);
-                    }                    
-                }, 150);
-            }
-        });
-    });
-}
-
-// 滚动日志到底部
 function scrollLogToBottom() {
     const logDisplay = document.getElementById('log-display');
     if (logDisplay) {
-        setTimeout(() => {
-            logDisplay.scrollTop = logDisplay.scrollHeight;
-        }, 100);
+        setTimeout(() => { logDisplay.scrollTop = logDisplay.scrollHeight; }, 100);
     }
 }
 
-// 密码显示/隐藏切换
 function initPasswordToggles() {
     document.querySelectorAll('.toggle-password').forEach(button => {
-        button.addEventListener('click', function() {
+        button.addEventListener('click', function () {
             const input = this.parentElement.querySelector('input');
             const icon = this.querySelector('i');
-            
             if (input.type === 'password') {
-                input.type = 'text';
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-eye-slash');
+                input.type = 'text'; icon.classList.remove('fa-eye'); icon.classList.add('fa-eye-slash');
             } else {
-                input.type = 'password';
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
+                input.type = 'password'; icon.classList.remove('fa-eye-slash'); icon.classList.add('fa-eye');
             }
         });
     });
 }
-/**
- * 使用密码加密文本
- * @param {string} password - 密码字符串
- * @param {string} plaintext - 要加密的文本
- * @returns {Promise<string>} Base64编码的加密结果（包含IV和加密数据）
- */
+
+function browseFile(inputId) { window.pywebview.api.browse_file(inputId); }
+function browseFolder(inputId) { window.pywebview.api.browse_folder(inputId); }
+
+function goAndShow(name) {
+    pagesManager.switchPage(name);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 加密工具
+// ═══════════════════════════════════════════════════════════════════════════════
+
 async function encryptText(password, plaintext) {
     try {
-        // 1. 准备密钥材料
         const encoder = new TextEncoder();
         const passwordBuffer = encoder.encode(password);
-        
-        // 2. 创建密钥
-        const keyMaterial = await crypto.subtle.importKey(
-            'raw',
-            passwordBuffer,
-            { name: 'PBKDF2' },
-            false,
-            ['deriveKey']
-        );
-        
-        // 3. 派生加密密钥
+        const keyMaterial = await crypto.subtle.importKey('raw', passwordBuffer, { name: 'PBKDF2' }, false, ['deriveKey']);
         const salt = crypto.getRandomValues(new Uint8Array(16));
-        const iv = crypto.getRandomValues(new Uint8Array(12)); // GCM推荐12字节IV
-        
+        const iv = crypto.getRandomValues(new Uint8Array(12));
         const key = await crypto.subtle.deriveKey(
-            {
-                name: 'PBKDF2',
-                salt: salt,
-                iterations: 100000,
-                hash: 'SHA-256'
-            },
-            keyMaterial,
-            { name: 'AES-GCM', length: 256 },
-            false,
-            ['encrypt']
+            { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+            keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
         );
-        
-        // 4. 加密数据
-        const plaintextBuffer = encoder.encode(plaintext);
-        const encryptedBuffer = await crypto.subtle.encrypt(
-            {
-                name: 'AES-GCM',
-                iv: iv
-            },
-            key,
-            plaintextBuffer
-        );
-        
-        // 5. 组合结果：salt + iv + 加密数据
-        const combinedBuffer = new Uint8Array(
-            salt.length + iv.length + encryptedBuffer.byteLength
-        );
-        combinedBuffer.set(salt, 0);
-        combinedBuffer.set(iv, salt.length);
-        combinedBuffer.set(new Uint8Array(encryptedBuffer), salt.length + iv.length);
-        
-        // 6. 转换为Base64字符串
-        return btoa(String.fromCharCode(...combinedBuffer));
-        
+        const encryptedBuffer = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(plaintext));
+        const combined = new Uint8Array(salt.length + iv.length + encryptedBuffer.byteLength);
+        combined.set(salt, 0); combined.set(iv, salt.length);
+        combined.set(new Uint8Array(encryptedBuffer), salt.length + iv.length);
+        return btoa(String.fromCharCode(...combined));
     } catch (error) {
         console.error('加密失败:', error);
         throw new Error('加密失败: ' + error.message);
     }
 }
 
-/**
- * 使用密码解密文本
- * @param {string} password - 密码字符串
- * @param {string} encryptedBase64 - Base64编码的加密数据
- * @returns {Promise<string>} 解密后的文本
- */
 async function decryptText(password, encryptedBase64) {
     try {
-        // 1. 解码Base64数据
-        const combinedBuffer = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
-        
-        // 2. 提取各部分数据
-        const salt = combinedBuffer.slice(0, 16);
-        const iv = combinedBuffer.slice(16, 28); // 12字节IV
-        const encryptedData = combinedBuffer.slice(28);
-        
-        // 3. 准备密钥材料
+        const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+        const salt = combined.slice(0, 16);
+        const iv = combined.slice(16, 28);
+        const encryptedData = combined.slice(28);
         const encoder = new TextEncoder();
-        const passwordBuffer = encoder.encode(password);
-        
-        const keyMaterial = await crypto.subtle.importKey(
-            'raw',
-            passwordBuffer,
-            { name: 'PBKDF2' },
-            false,
-            ['deriveKey']
-        );
-        
-        // 4. 派生解密密钥
+        const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
         const key = await crypto.subtle.deriveKey(
-            {
-                name: 'PBKDF2',
-                salt: salt,
-                iterations: 100000,
-                hash: 'SHA-256'
-            },
-            keyMaterial,
-            { name: 'AES-GCM', length: 256 },
-            false,
-            ['decrypt']
+            { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+            keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
         );
-        
-        // 5. 解密数据
-        const decryptedBuffer = await crypto.subtle.decrypt(
-            {
-                name: 'AES-GCM',
-                iv: iv
-            },
-            key,
-            encryptedData
-        );
-        
-        // 6. 转换为字符串
-        const decoder = new TextDecoder();
-        return decoder.decode(decryptedBuffer);
-        
+        const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encryptedData);
+        return new TextDecoder().decode(decrypted);
     } catch (error) {
         console.error('解密失败:', error);
         throw new Error('解密失败: ' + error.message);
     }
 }
 
-// API配置管理器
-class APIConfigManager {
-    constructor() {
-        this.apiServices = null;
-        this.selectedService = null;
-        this.currentSettings = {};
-        this.initialized = false;
-    }
-    
-    // 初始化API服务
-    async init() {
-        if (this.initialized) return;
-        
-        try {
-            // 从后端获取API服务数据
-            const tkitMachine = await pywebview.api.get_attr('TKIT_MACHINE_OBJECT');
-            const LLM_TRANSLATOR = await pywebview.api.get_attr('LLM_TRANSLATOR');
-            if (tkitMachine && LLM_TRANSLATOR) {
-                this.apiServices = tkitMachine;
-                this.llmTranslator = LLM_TRANSLATOR;
-                this.initialized = true;
-                console.log('API服务数据加载成功');
-            };
-            await this.loadSettings();
-            return true;
-        } catch (error) {
-            console.error('加载API服务数据失败:', error);
-            return false;
-        }
-    }
-    
-    // 加载API服务到下拉框
-    loadAPIServices() {
-        if (!this.initialized || !this.apiServices) {
-            console.error('API服务未初始化');
-            return;
-        }
-        
-        const apiSelectContainer = document.querySelector('.api-select');
-        if (!apiSelectContainer) {
-            console.error('找不到.api-select容器');
-            return;
-        }
-        
-        // 清空容器
-        apiSelectContainer.innerHTML = '';
-        
-        // 创建下拉框
-        const selectElement = document.createElement('select');
-        selectElement.id = 'api-service-select';
-        selectElement.className = 'api-service-select';
-        
-        // 添加所有API服务选项
-        Object.keys(this.apiServices).forEach(serviceName => {
-            const option = document.createElement('option');
-            option.value = serviceName;
-            option.textContent = serviceName;
-            selectElement.appendChild(option);
-        });
-        
-        // 添加到容器
-        apiSelectContainer.appendChild(selectElement);
-        
-        // 添加选择事件监听
-        selectElement.addEventListener('change', (e) => {
-            this.onServiceSelected(e.target.value);
-        });
-    }
-    
-    // 当服务被选中时
-    onServiceSelected(serviceKey) {
-        if (!serviceKey || !this.apiServices[serviceKey]) {
-            this.clearSettingsForm();
-            this.clearStatusGrid();
-            this.selectedService = null;
-            return;
-        }
-        
-        this.selectedService = serviceKey;
-        configManager.updateConfigValue('api-select', serviceKey);
-        const service = this.apiServices[serviceKey];
-        
-        // 更新服务状态
-        this.updateServiceStatus(serviceKey, service);
-        
-        // 生成设置表单
-        this.generateSettingsForm(serviceKey, service);
 
-        if (serviceKey === 'LLM通用翻译服务') {
-            this.addLLMServiceSelector();
-        }
-    }
-    
-    // 添加LLM服务选择器到表单
-    addLLMServiceSelector() {
-        if (!this.initialized || !this.llmTranslator) {
-            console.error('LLM翻译器未初始化');
-            return;
-        }
-        
-        const apiSettingsContainer = document.querySelector('.api-settings-form');
-        if (!apiSettingsContainer) {
-            console.error('找不到.api-settings-form容器');
-            return;
-        }
-
-        // 找到第一个设置字段容器，在其前面插入LLM选择器
-        const firstField = apiSettingsContainer.querySelector('.api-setting-field');
-        
-        // 创建LLM选择器容器
-        const selectorContainer = document.createElement('div');
-        selectorContainer.className = 'api-setting-field';
-        
-        // 创建标签
-        const label = document.createElement('label');
-        label.htmlFor = 'api-llm-service-selector';
-        label.textContent = '选择LLM服务';
-        selectorContainer.appendChild(label);
-        
-        // 创建选择框
-        const selectWrapper = document.createElement('div');
-        selectWrapper.className = 'select-wrapper';
-        
-        const select = document.createElement('select');
-        select.id = 'api-llm-service-selector';
-        select.name = 'llm_service_selector';
-        
-        // 添加默认选项
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = '选择以使用预设LLM服务地址...';
-        select.appendChild(defaultOption);
-        
-        // 添加所有LLM服务选项
-        Object.keys(this.llmTranslator).forEach(serviceName => {
-            const option = document.createElement('option');
-            option.value = serviceName;
-            option.textContent = serviceName;
-            select.appendChild(option);
-        });
-        
-        // 添加图标
-        const chevronIcon = document.createElement('i');
-        chevronIcon.className = 'fas fa-chevron-down';
-        
-        selectWrapper.appendChild(select);
-        selectWrapper.appendChild(chevronIcon);
-        selectorContainer.appendChild(selectWrapper);
-        
-        // 添加帮助文本
-        const helpText = document.createElement('small');
-        helpText.className = 'form-hint';
-        helpText.textContent = '选择预设的LLM服务，将自动填充基础地址和模型名称参数';
-        selectorContainer.appendChild(helpText);
-        
-        // 插入到表单顶部
-        if (firstField) {
-            apiSettingsContainer.insertBefore(selectorContainer, firstField);
-        }
-        
-        // 添加选择事件监听
-        select.addEventListener('change', (e) => {
-            this.onLLMSelected(e.target.value);
-        });
-    }
-
-    onLLMSelected(serviceKey) {
-        if (!serviceKey || !this.llmTranslator[serviceKey]) {
-            return;
-        }
-        
-        const service = this.llmTranslator[serviceKey];
-        
-        // 填充对应的表单字段
-        const baseURLElement = document.getElementById('api-base_url');
-        const modelElement = document.getElementById('api-model_name');
-        
-        if (baseURLElement) {
-            baseURLElement.value = service.base_url || '';
-        }
-        if (modelElement) {
-            modelElement.value = service.model || '';
-        }
-    }
-
-    // 加载API服务到翻译下拉框
-    loadAPIServicesTranslator() {
-        if (!this.initialized || !this.apiServices) {
-            console.error('API服务未初始化');
-            return;
-        }
-        
-        const apiSelectContainer = document.querySelector('.translator-services');
-        if (!apiSelectContainer) {
-            console.error('找不到.translator-services容器');
-            return;
-        }
-        
-        // 清空容器
-        apiSelectContainer.innerHTML = '';
-        
-        // 创建下拉框
-        const selectElement = document.createElement('select');
-        selectElement.id = 'translator-service-select';
-        selectElement.className = 'translator-service-select';
-        
-        // 添加所有API服务选项
-        Object.keys(this.apiServices).forEach(serviceName => {
-            const option = document.createElement('option');
-            option.value = serviceName;
-            option.textContent = serviceName;
-            selectElement.appendChild(option);
-        });
-        
-        // 添加到容器
-        apiSelectContainer.appendChild(selectElement);
-    }
-    
-    // 生成API设置表单
-    generateSettingsForm(serviceKey, service) {
-        const apiSettingsContainer = document.querySelector('.api-settings');
-        if (!apiSettingsContainer) {
-            console.error('找不到.api-settings容器');
-            return;
-        }
-        
-        // 清空容器
-        apiSettingsContainer.innerHTML = '';
-        
-        // 获取API设置描述
-        const apiSetting = service['api-setting'];
-        if (!apiSetting || !Array.isArray(apiSetting)) {
-            const noSettings = document.createElement('div');
-            noSettings.className = 'no-settings';
-            noSettings.innerHTML = '<p>此服务无需API配置</p>';
-            apiSettingsContainer.appendChild(noSettings);
-            return;
-        }
-        
-        // 创建表单容器
-        const form = document.createElement('div');
-        form.className = 'api-settings-form';
-        
-        // 添加表单标题
-        const title = document.createElement('h4');
-        title.textContent = 'API参数配置';
-        form.appendChild(title);
-        
-        // 为每个设置项创建表单字段
-        apiSetting.forEach(setting => {
-            const fieldGroup = this.createSettingField(setting);
-            form.appendChild(fieldGroup);
-        });
-        
-        apiSettingsContainer.appendChild(form);
-        
-        // 加载已保存的设置
-        this.loadSavedSettings(serviceKey);
-    }
-    
-    // 创建单个设置字段 - 简化版
-    createSettingField(setting) {
-        const fieldGroup = document.createElement('div');
-        fieldGroup.className = 'api-setting-field';
-        
-        // 创建标签（boolean类型不需要单独的标签）
-        if (setting.type !== 'boolean') {
-            const label = document.createElement('label');
-            label.htmlFor = `api-${setting.id}`;
-            label.textContent = setting.name;
-            if (setting.required) {
-                const requiredSpan = document.createElement('span');
-                requiredSpan.className = 'required';
-                requiredSpan.textContent = ' *';
-                label.appendChild(requiredSpan);
-            }
-            fieldGroup.appendChild(label);
-        }
-        
-        // 根据类型创建输入控件
-        let inputElement;
-        
-        switch(setting.type) {
-            case 'boolean':
-                // 创建复选框结构
-                inputElement = document.createElement('label');
-                inputElement.className = 'checkbox-container';
-                inputElement.htmlFor = `api-${setting.id}`;
-                
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.id = `api-${setting.id}`;
-                checkbox.name = setting.id;
-                
-                const checkmark = document.createElement('span');
-                checkmark.className = 'checkmark';
-                
-                const labelText = document.createElement('span');
-                labelText.textContent = setting.name || '';
-                
-                inputElement.appendChild(checkbox);
-                inputElement.appendChild(checkmark);
-                inputElement.appendChild(labelText);
-                break;
-                
-            default:
-                // 默认文本输入框
-                inputElement = document.createElement('input');
-                inputElement.type = 'text';
-                inputElement.id = `api-${setting.id}`;
-                inputElement.name = setting.id;
-                inputElement.placeholder = setting.description || '';
-                break;
-        }
-        
-        fieldGroup.appendChild(inputElement);
-        
-        // 添加帮助文本（非boolean类型）
-        if (setting.description && setting.type !== 'boolean') {
-            const helpText = document.createElement('small');
-            helpText.className = 'form-hint';
-            helpText.textContent = setting.description;
-            fieldGroup.appendChild(helpText);
-        }
-        
-        return fieldGroup;
-    }
-    
-    // 加载已保存的设置
-    loadSavedSettings(serviceKey) {
-        try {
-            const savedSettings = this.currentSettings[serviceKey];
-            
-            if (savedSettings) {
-                Object.keys(savedSettings).forEach(key => {
-                    const input = document.getElementById(`api-${key}`);
-                    if (input) {
-                        if (input.type === 'checkbox') {
-                            input.checked = savedSettings[key];
-                        } else {
-                            input.value = savedSettings[key];
-                        }
-                    }
-                });
-            }
-        } catch (error) {
-            console.error('加载保存的设置失败:', error);
-        }
-    }
-    
-    // 保存当前设置
-    saveCurrentSettings() {
-        if (!this.selectedService) {
-            showMessage('错误', '请先选择翻译服务');
-            return false;
-        }
-        
-        const service = this.apiServices[this.selectedService];
-        if (!service) {
-            showMessage('错误', '未找到选中的服务');
-            return false;
-        }
-        
-        // 检查是否有 api-setting 配置
-        const apiSetting = service['api-setting'];
-        if (!apiSetting || !Array.isArray(apiSetting) || apiSetting.length === 0) {
-            showMessage('提示', '此服务无需配置');
-            
-            // 如果服务没有配置，保存空对象
-            this.currentSettings[this.selectedService] = {};
-            
-            // 发送到后端
-            this.updateSettings();
-            return true;
-        }
-        
-        const settings = {};
-        let isValid = true;
-        const missingFields = [];
-        
-        // 收集所有设置值
-        apiSetting.forEach(setting => {
-            const input = document.getElementById(`api-${setting.id}`);
-            if (input) {
-                let value;
-                
-                if (input.type === 'checkbox') {
-                    value = input.checked;
-                } else if (input.tagName === 'SELECT') {
-                    value = input.value;
-                } else {
-                    value = input.value.trim();
-                }
-                
-                // 验证必填字段
-                if (setting.required && (!value || value === '')) {
-                    isValid = false;
-                    missingFields.push(setting.name);
-                    
-                    // 添加错误样式
-                    input.classList.add('error');
-                } else {
-                    input.classList.remove('error');
-                }
-                
-                settings[setting.id] = value;
-            }
-        });
-        
-        if (!isValid) {
-            showMessage('错误', `以下必填字段未填写：${missingFields.join(', ')}`);
-            return false;
-        }
-        
-        // 保存到后端
-        try {
-            this.currentSettings[this.selectedService] = settings;
-            
-            // 发送到后端
-            this.updateSettings();
-            
-            return true;
-        } catch (error) {
-            console.error('保存设置失败:', error);
-            showMessage('错误', '保存设置时发生错误');
-            return false;
-        }
-    }
-
-    collectCurrentSettings() {
-        if (!this.selectedService) {
-            showMessage('错误', '请先选择翻译服务');
-            return false;
-        }
-        
-        const service = this.apiServices[this.selectedService];
-        if (!service) {
-            showMessage('错误', '未找到选中的服务');
-            return false;
-        }
-        
-        // 检查是否有 api-setting 配置
-        const apiSetting = service['api-setting'];
-        if (!apiSetting || !Array.isArray(apiSetting) || apiSetting.length === 0) {
-            // 返回空对象表示没有配置
-            return {};
-        }
-        
-        const settings = {};
-        let isValid = true;
-        const missingFields = [];
-        
-        // 收集所有设置值
-        apiSetting.forEach(setting => {
-            const input = document.getElementById(`api-${setting.id}`);
-            if (input) {
-                let value;
-                
-                if (input.type === 'checkbox') {
-                    value = input.checked;
-                } else if (input.tagName === 'SELECT') {
-                    value = input.value;
-                } else {
-                    value = input.value.trim();
-                }
-                
-                // 验证必填字段
-                if (setting.required && (!value || value === '')) {
-                    isValid = false;
-                    missingFields.push(setting.name);
-                    
-                    // 添加错误样式
-                    input.classList.add('error');
-                } else {
-                    input.classList.remove('error');
-                }
-                
-                settings[setting.id] = value;
-            }
-        });
-        
-        if (!isValid) {
-            showMessage('错误', `以下必填字段未填写：${missingFields.join(', ')}`);
-            return false;
-        }
-        
-        return settings;
-    }    
-    async loadSettings() { 
-        try {
-            const savedSettings = configManager.getCachedValue('api_config');
-            let api_settings
-            if (configManager.getCachedValue('api_crypto')) {
-                api_settings = JSON.parse(await decryptText("AutoTranslate", savedSettings));
-            }
-            else {
-                api_settings = JSON.parse(savedSettings);
-            };
-            this.currentSettings = api_settings;
-        } catch (error) {
-            console.error('加载设置失败:', error);
-            addLogMessage('加载api设置时发生错误，清空api设置');
-            this.updateSettings();
-            return false;
-        }
-    }
-
-    // 发送设置到后端
-    async updateSettings() {
-        try {
-            let api_settings
-            if (configManager.getCachedValue('api_crypto')) {
-                api_settings = await encryptText("AutoTranslate", JSON.stringify(this.currentSettings));
-            }
-            else {
-                api_settings = JSON.stringify(this.currentSettings);
-            };
-            configManager.updateConfigValue('api-configs', api_settings);
-            configManager.flushPendingUpdates();
-            return true;
-        } catch (error) {
-            console.error('发送到后端失败:', error);
-            showMessage('错误', '保存到后端时发生错误');
-            return false;
-        }
-    }
-    
-    // 更新服务状态网格
-    updateServiceStatus(serviceKey, service) {
-        const statusGrid = document.querySelector('.api-status-grid');
-        if (!statusGrid) {
-            console.error('找不到.api-status-grid容器');
-            return;
-        }
-        
-        // 清空容器
-        statusGrid.innerHTML = '';
-        
-        // 获取metadata
-        const metadata = service.metadata || {};
-        
-        // 创建状态卡片
-        const statusCard = document.createElement('div');
-        statusCard.className = 'api-status-card';
-        
-        // 服务名称
-        const nameElement = document.createElement('h4');
-        nameElement.textContent = serviceKey;
-        statusCard.appendChild(nameElement);
-        
-        // 服务描述
-        if (metadata.description) {
-            const descElement = document.createElement('p');
-            descElement.className = 'api-description';
-            descElement.textContent = metadata.description;
-            statusCard.appendChild(descElement);
-        }
-
-        // 使用说明
-        if (metadata.usage_documentation) {
-            const shortDescElement = document.createElement('p');
-            shortDescElement.className = 'api-usage-documentation';
-            shortDescElement.textContent = metadata.usage_documentation;
-            statusCard.appendChild(shortDescElement);
-        }
-
-        // 短描述
-        if (metadata.short_description) {
-            const shortDescElement = document.createElement('p');
-            shortDescElement.className = 'api-short-desc';
-            shortDescElement.textContent = metadata.short_description;
-            statusCard.appendChild(shortDescElement);
-        }
-        
-        // 链接
-        const linksContainer = document.createElement('div');
-        linksContainer.className = 'api-links';
-        
-        if (metadata.console_url) {
-            const consoleLink = document.createElement('a');
-            consoleLink.href = metadata.console_url;
-            consoleLink.target = '_blank';
-            consoleLink.textContent = '控制台';
-            consoleLink.className = 'api-link';
-            linksContainer.appendChild(consoleLink);
-        }
-        
-        if (metadata.documentation_url) {
-            const docLink = document.createElement('a');
-            docLink.href = metadata.documentation_url;
-            docLink.target = '_blank';
-            docLink.textContent = '文档';
-            docLink.className = 'api-link';
-            linksContainer.appendChild(docLink);
-        }
-        
-        if (linksContainer.children.length > 0) {
-            statusCard.appendChild(linksContainer);
-        }
-        
-        // 语言代码
-        if (service.langCode) {
-            const langContainer = document.createElement('div');
-            langContainer.className = 'api-lang-codes';
-            
-            const langTitle = document.createElement('h5');
-            langTitle.textContent = '支持的语言代码:';
-            langContainer.appendChild(langTitle);
-            
-            const langList = document.createElement('div');
-            langList.className = 'lang-list';
-            
-            Object.entries(service.langCode).forEach(([key, value]) => {
-                const langItem = document.createElement('span');
-                langItem.className = 'lang-item';
-                langItem.textContent = `${key} → ${value}`;
-                langList.appendChild(langItem);
-            });
-            
-            langContainer.appendChild(langList);
-            statusCard.appendChild(langContainer);
-        }
-        
-        // 添加到网格
-        statusGrid.appendChild(statusCard);
-    }
-    
-    // 清空设置表单
-    clearSettingsForm() {
-        const apiSettingsContainer = document.querySelector('.api-settings');
-        if (apiSettingsContainer) {
-            apiSettingsContainer.innerHTML = '';
-        }
-    }
-    
-    // 清空状态网格
-    clearStatusGrid() {
-        const statusGrid = document.querySelector('.api-status-grid');
-        if (statusGrid) {
-            statusGrid.innerHTML = '';
-        }
-    }
-    
-    // 获取所有服务的设置
-    getAllSettings() {
-        return this.currentSettings;
-    }
-    
-    // 获取特定服务的设置
-    getServiceSettings(serviceKey) {
-        return this.currentSettings[serviceKey] || {};
-    }
-
-    async testAPIConfig() {
-        const modal = new ProgressModal('测试API配置');
-        modal.addLog('正在测试API配置...')
-        const apiConfig = this.collectCurrentSettings();
-
-        if (apiConfig === false) {
-            modal.complete(false, '测试失败');
-            return;
-        }
-        const result = await pywebview.api.test_api(
-            this.selectedService, apiConfig
-        )
-
-        if (result.success) {
-            modal.addLog('API配置测试成功！');
-            modal.addLog('测试信息如下');
-            const result_json = result.message;
-            modal.addLog(`韩文：안녕 -> ${result_json.kr}`);
-            modal.addLog(`英文：hello -> ${result_json.en}`);
-            modal.addLog(`日文：こんにちは -> ${result_json.jp}`);
-            modal.complete(true, '测试成功');
-        } else {
-            modal.addLog('API配置测试失败！');
-            modal.addLog(result.message);
-            modal.complete(false, '测试失败');
-        }
-    }
-}
-
-// 初始化API配置管理器
-let apiConfigManager;
+// ═══════════════════════════════════════════════════════════════════════════════
+// Markdown 加载
+// ═══════════════════════════════════════════════════════════════════════════════
 
 async function loadMarkdownContent(url, className) {
     try {
-        // 请求Markdown文件
         const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
-        }
-        
-        // 获取文本内容
+        if (!response.ok) throw new Error(`加载 ${url} 失败: ${response.status}`);
         const markdownText = await response.text();
-        
-        // 检查simpleMarkdownToHtml函数是否存在
-        if (typeof simpleMarkdownToHtml !== 'function') {
-            throw new Error('simpleMarkdownToHtml函数未定义');
-        }
-        
-        // 转换Markdown为HTML
         const htmlContent = simpleMarkdownToHtml(markdownText);
-        
-        // 找到目标div元素
         const targetDiv = document.querySelector(`.${className}`);
-        
-        if (!targetDiv) {
-            console.warn(`未找到class为${className}的元素`);
-            return;
-        }
-        
-        // 插入HTML内容
-        targetDiv.innerHTML = htmlContent;
-        
-        console.log(`成功加载并渲染: ${url}`);
-        
+        if (targetDiv) targetDiv.innerHTML = htmlContent;
     } catch (error) {
         console.error(`处理 ${url} 时出错:`, error);
-        // 可以选择在对应的div中显示错误信息
         const targetDiv = document.querySelector(`.${className}`);
-        if (targetDiv) {
-            targetDiv.innerHTML = `<p class="error">加载内容失败: ${error.message}</p>`;
-        }
+        if (targetDiv) targetDiv.innerHTML = `<p class="error">加载内容失败: ${error.message}</p>`;
     }
 }
 
 async function loadAndRenderMarkdown() {
-  try {
-    // 定义要加载的文件路径
-    const files = [
-      { url: '/assets/README.md', className: 'about-content' },
-      { url: '/assets/update.md', className: 'update-content' },
-      { url: '/assets/firstUse.md', className: 'use-help' }
-    ];
-
-    // 并发请求所有文件
-    const promises = files.map(async ({ url, className }) => {
-        loadMarkdownContent(url, className);
-    });
-
-    // 等待所有文件加载完成
-    await Promise.allSettled(promises);
-    
-    console.log('所有Markdown文件加载完成');
-    
-  } catch (error) {
-    console.error('加载Markdown文件过程中发生错误:', error);
-  }
-}
-
-// 老年人模式切换相关代码
-
-class ElderManager {
-    async init() {
-        this.targetDiv = document.querySelector('.quetion-content')
-        this.updateList = await pywebview.api.get_attr('updateList');
-        this.refer = await pywebview.api.get_attr('bindRefer');
-        this.relyList = await pywebview.api.get_attr('relyList')
-        const version = '5.0.0'
-        this.version = version.replaceAll('.', '')
-        let elderList = configManager.getCachedValue('elder_list');
-        if (!elderList) {
-            elderList = JSON.stringify(this.updateList);
-            this.historyList = JSON.parse(elderList);
-            for (const value of Object.keys(this.historyList)) {
-                this.historyList[value] = 'new';
-            }
-        } else {
-            this.historyList = JSON.parse(elderList);
-            for (const value of Object.keys(this.updateList)) {
-                if (this.historyList[value] === undefined) {
-                    this.historyList[value] = 'new';
-                }
-            }
-        }
-    }
-
-    async initPage() {
-        this.latestPage = 'main';
-        await this.loadPage('main');
-    }
-
-    evalNextPage() {
-        let hasShowFlag = false;
-        let result = '';
-        for (const value of Object.keys(this.historyList)) {
-            if (!hasShowFlag) {
-                if (value == this.latestPage) {
-                    hasShowFlag = true;
-                }
-                continue;
-            }
-            if (this.historyList[value] == 'new' || this.historyList[value] < this.updateList[value]) {
-                if (this.relyList[value].every(
-                    (rely) => {
-                        if (typeof(rely) == 'string') {
-                            return configManager.getCachedValue(rely)
-                        } else if (rely[0] == 'not'){
-                            return !configManager.getCachedValue(rely[1]);
-                        } else {
-                            const targetValue = configManager.getCachedValue(rely[0]);
-                            return rely.slice(1).some(
-                                (relyValue) => targetValue == relyValue);
-                        }
-                    }
-                )) {
-                    result = value;
-                    break;
-                };
-            }
-        }
-        return result;
-    }
-
-    async savePageRefer() {
-        const pageRefer = this.refer[this.latestPage];
-        for (const value of Object.keys(pageRefer)) {
-            const target = document.getElementById(value);
-            let newValue;
-            if (target.type === 'checkbox') {
-                newValue = target.checked;
-            } else if (target.tagName === 'SELECT' || target.tagName === 'INPUT') {
-                newValue = target.value;
-            }
-            await configManager.updateConfigValue(pageRefer[value][0], newValue);
-        }
-        this.historyList[this.latestPage] = this.version;
-        configManager.updateConfigValue('--elder', JSON.stringify(this.historyList));
-        await configManager.flushPendingUpdates();
-    }
-
-    async loadPageRefer() {
-        const pageRefer = this.refer[this.latestPage];
-        for (const value of Object.keys(pageRefer)) {
-            const target = document.getElementById(value);
-            let newValue = configManager.getCachedValue(pageRefer[value][1]);
-            if (target.type === 'checkbox') {
-                target.checked = newValue;
-            } else if (target.tagName === 'SELECT' || target.tagName === 'INPUT') {
-                target.value = newValue;
-            }
-        }
-    }
-
-    async switchPage() {
-        await this.savePageRefer();
-        const nextPage = this.evalNextPage();
-        if (nextPage) {
-            this.latestPage = nextPage;
-            await this.loadPage(nextPage);
-            this.loadPageRefer();
-        } else {
-            this.loadPage('final');
-        }
-    }
-
-    markdownPrefix(text, value='') {
-        const scripts = [];
-        let processedText = text.replace(/<script>([\s\S]*?)<\/script>/gi, (match, content) => {
-            scripts.push(content); // 收集脚本内容
-            return '';            // 从原文中移除该片段
-        });
-
-        let container = document.getElementById('elder-container');
-        if (!container) {
-            throw new Error('未找到id为elder-container的元素');
-        }
-        scripts.forEach(scriptContent => {
-            scriptContent = `setTimeout(() => {
-                ${scriptContent}
-            }, 100);`
-            const scriptEl = document.createElement('script');
-            scriptEl.type = 'text/javascript';
-            scriptEl.textContent = scriptContent;
-            container.appendChild(scriptEl);
-        });
-
-        const finalText = processedText.replace(/<version>([\s\S]*?)<\/version>/gi, (match, content) => {
-            const trimmed = content.trim();
-            const num = parseFloat(trimmed);
-            if (!isNaN(num) && this.historyList[value] !== 'new' && num > this.historyList[value]) {
-                return '<span style="border: 1px solid #ddd; color: #666; padding: 2px 4px; border-radius: 4px; font-size: 12px;">NEW</span>';
-            }
-            return '';
-        });
-
-        return finalText;
-    }
-
-    async loadPage(name) {
-        const response = await fetch(`elder/${name}.md`);
-            
-        if (!response.ok) {
-            throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
-        }
-        
-        // 获取文本内容
-        const markdownText = await response.text();
-        
-        // 转换Markdown为HTML
-        try {
-            document.getElementById('elder-container').innerHTML = '';
-        } catch (error) {
-            console.log('未找到id为elder-container的元素');
-        }
-        const htmlContent = simpleMarkdownToHtml(this.markdownPrefix(markdownText, name));
-        
-        this.targetDiv.innerHTML = htmlContent;
-        
-        console.log(`成功加载并渲染: ${name}`);
-    }
-
-    
-}
-
-elderManager = new ElderManager();
-
-// 浏览文件函数
-function browseFile(inputId) {
-    pywebview.api.browse_file(inputId);
-}
-
-function browseFolder(inputId) {
-    pywebview.api.browse_folder(inputId);
-}
-
-function toggleCachePathInput() {
-    const enableCacheCheckbox = document.getElementById('enable-cache');
-    const cachePathGroup = document.getElementById('cache-path-group');
-    
-    if (enableCacheCheckbox.checked) {
-        cachePathGroup.style.display = 'block';
-    } else {
-        cachePathGroup.style.display = 'none';
+    try {
+        const files = [
+            { url: 'webui/assets/README.md', className: 'about-content' },
+            { url: 'webui/assets/update.md', className: 'update-content' },
+            { url: 'webui/assets/firstUse.md', className: 'use-help' }
+        ];
+        await Promise.allSettled(files.map(({ url, className }) => loadMarkdownContent(url, className)));
+    } catch (error) {
+        console.error('加载Markdown文件过程中发生错误:', error);
     }
 }
 
-function toggleStoragePathInput() {
-    const enableStorageCheckbox = document.getElementById('enable-storage');
-    const storagePathGroup = document.getElementById('storage-path-group');
-    
-    if (enableStorageCheckbox.checked) {
-        storagePathGroup.style.display = 'block';
-    } else {
-        storagePathGroup.style.display = 'none';
-    }
-}
 
-function toggleDevelopSettings() {
-    const group = document.getElementById('dev-settings');
-    const enable = document.getElementById('enable-dev-settings');
-    if (enable.checked) {
-        group.style.display = 'block';
-    } 
-    else {
-        group.style.display = 'none';
-    }
-};
+// ═══════════════════════════════════════════════════════════════════════════════
+// ModalWindow / ProgressModal
+// ═══════════════════════════════════════════════════════════════════════════════
 
-async function toggleCustomLang() {
-    const checkbox = document.getElementById('enable-lang');
-    const result = await pywebview.api.toggle_installed_package(checkbox.checked);
-    toggleCustomLangGui();
-    if (result.success && result.changed && checkbox.checked) {
-        refreshInstalledPackageList();
-    }
-}
-
-/**
- * 切换“客制化翻译”启用状态，控制遮罩层的显示与隐藏
- */
-function toggleCustomLangGui() {
-    const checkbox = document.getElementById('enable-lang');
-    const group = document.getElementById('installed-package-group');
-    if (!checkbox || !group) return;
-
-    const overlayClass = 'installed-package-overlay';
-    let overlay = group.querySelector('.' + overlayClass);
-
-    if (!checkbox.checked) {
-        // 未启用 → 显示遮罩层
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.className = overlayClass;
-            overlay.innerHTML = `
-                <i class="fas fa-lock"></i>
-                <p>客制化翻译已禁用</p>
-                <small>勾选上方选项以启用此区域</small>
-            `;
-            group.appendChild(overlay);
-        }
-    } else {
-        // 已启用 → 移除遮罩层
-        if (overlay) {
-            overlay.remove();
-        }
-    }
-}
-
-function toggleProper() {
-    const group = document.getElementById('proper-settings');
-    const enable = document.getElementById('enable-proper');
-    if (enable.checked) {
-        group.style.display = 'block';
-    } 
-    else {
-        group.style.display = 'none';
-    }
-};
-
-function toggleAutoProper() {
-    const group = document.getElementById('proper-path-text');
-    const enable = document.getElementById('auto-fetch-proper');
-    if (enable.checked) {
-        group.style.display = 'none';
-    } 
-    else {
-        group.style.display = 'block';
-    }
-};
-
-function toggleSteamCommand() {
-    let command
-    pywebview.api.run_func('get_steam_command').then(function(result) {
-        command=result;
-        const cmdElement = document.getElementById('steam-cmd');
-        cmdElement.value = command;
-    }).catch(function(error) {
-        command=`获取失败 ${error}`;
-        const cmdElement = document.getElementById('steam-cmd');
-        cmdElement.value = command;
-    });
-}
-
-function goTestSection(DIEPLAY){
-    const testButton = document.getElementById('test-btn');
-    if (DIEPLAY) {
-        testButton.style.display = 'block';
-        testButton.click();
-    } 
-    else {
-        testButton.style.display = 'none';
-    }
-};
-
-function goCleanSection(DIEPLAY){
-    const testButton = document.getElementById('clean-btn');
-    if (DIEPLAY) {
-        testButton.style.display = 'block';
-        testButton.click();
-    } 
-    else {
-        testButton.style.display = 'none';
-    }
-};
-
-function copySteamPath() {
-    const cmdElement = document.getElementById('steam-cmd');
-
-    cmdElement.select();
-    cmdElement.setSelectionRange(0, 99999); /* 为移动设备设置 */
-
-    /* 复制内容到文本域 */
-    navigator.clipboard.writeText(cmdElement.value);
-}
-
-// 浏览安装界面的汉化包目录
-async function browseInstallPackageDirectory() {
-    const result = await pywebview.api.browse_folder('install-package-directory');
-    const packageDirInput = document.getElementById('install-package-directory');
-    if (packageDirInput && result) {
-        packageDirInput.value = result;
-        await configManager.updateConfigValue('install-package-directory', result);
-        await configManager.flushPendingUpdates();
-        refreshInstallPackageList();
-    }
-}
-
-// 清空汉化包目录输入框
-async function clearPackageDirectory() {
-    const packageDirInput = document.getElementById('install-package-directory');
-    if (packageDirInput) {
-        packageDirInput.value = '';
-        await configManager.updateConfigValue('install-package-directory', '');
-        await configManager.flushPendingUpdates();
-        refreshInstallPackageList();
-    }
-}
-
-// 浏览安装界面的汉化包目录
-function browseInstallModDirectory() {
-    pywebview.api.browse_folder('installed-mod-directory').then(async function(result) {
-        const modDirInput = document.getElementById('installed-mod-directory');
-        if (modDirInput && result) {
-            modDirInput.value = result;
-            await configManager.updateConfigValue('installed-mod-directory', result);
-            await configManager.flushPendingUpdates();
-            refreshInstalledModList();
-        }
-    }).catch(function(error) {
-        showMessage('错误', '浏览文件夹时发生错误: ' + error);
-    });
-}
-
-// 清空汉化包目录输入框
-async function clearModDirectory() {
-    const modDirInput = document.getElementById('installed-mod-directory');
-    if (modDirInput) {
-        modDirInput.value = '';
-        await configManager.updateConfigValue('installed-mod-directory', '');
-        await configManager.flushPendingUpdates();
-        refreshInstalledModList();
-    }
-}
-
-// 模态窗口基类
 class ModalWindow {
     constructor(title, options = {}) {
         this.id = 'modal-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
@@ -1853,37 +719,25 @@ class ModalWindow {
         this.isMinimized = false;
         this.isCompleted = false;
         this.isPaused = false;
-        this.percent = 0
+        this.percent = 0;
         this.options = {
-            showProgress: false,
-            showCancelButton: true,
-            showPauseButton: false,
-            cancelButtonText: '取消',
-            pauseButtonText: '暂停',
-            resumeButtonText: '继续',
-            confirmButtonText: '确定',
-            showMinimizeButton: true,
-            showLog: true,
-            onCancel: null,
-            onPause: null,
-            onResume: null,
+            showProgress: false, showCancelButton: true, showPauseButton: false,
+            cancelButtonText: '取消', pauseButtonText: '暂停', resumeButtonText: '继续',
+            confirmButtonText: '确定', showMinimizeButton: true, showLog: true,
+            onCancel: null, onPause: null, onResume: null,
             ...options
         };
         this.createModal();
         modalWindows.push(this);
     }
-    
+
     createModal() {
-        const modalContainer = ensureModalContainer();
-        
+        const container = ensureModalContainer();
         this.element = document.createElement('div');
         this.element.className = 'modal-overlay';
-        
-        const currentTheme = document.body.classList.contains('theme-dark') ? 'theme-dark' :
-                           document.body.classList.contains('theme-purple') ? 'theme-purple' : 'theme-light';
-        
-        this.element.classList.add(currentTheme);
-        
+        const theme = document.body.classList.contains('theme-dark') ? 'theme-dark' :
+            document.body.classList.contains('theme-purple') ? 'theme-purple' : 'theme-light';
+        this.element.classList.add(theme);
         this.element.innerHTML = `
             <div class="modal-window">
                 <div class="modal-header">
@@ -1897,2739 +751,271 @@ class ModalWindow {
                     <div class="modal-status" id="modal-status-${this.id}">准备就绪</div>
                     ${this.options.showLog ? `<div class="modal-log" id="modal-log-${this.id}"></div>` : ''}
                     <div class="modal-progress ${this.options.showProgress ? '' : 'hidden'}" id="modal-progress-${this.id}">
-                        <div class="modal-progress-bar">
-                            <div class="modal-progress-fill" id="modal-progress-fill-${this.id}"></div>
-                        </div>
+                        <div class="modal-progress-bar"><div class="modal-progress-fill" id="modal-progress-fill-${this.id}"></div></div>
                     </div>
                 </div>
                 <div class="modal-footer" id="modal-footer-${this.id}">
-                    ${this.getFooterButtons()}
+                    ${this.options.showPauseButton ? `<button class="action-btn" id="pause-btn-${this.id}">${this.options.pauseButtonText}</button>` : ''}
+                    ${this.options.showCancelButton ? `<button class="action-btn" id="cancel-btn-${this.id}">${this.options.cancelButtonText}</button>` : ''}
                 </div>
-            </div>
-        `;
-        
-        modalContainer.appendChild(this.element);
-        
+            </div>`;
+        container.appendChild(this.element);
         this.bindEvents();
         this.updateProgress(0);
     }
-    
-    getFooterButtons() {
-        let buttons = '';
-        if (this.options.showPauseButton) {
-            buttons += `<button class="action-btn" id="pause-btn-${this.id}">${this.options.pauseButtonText}</button>`;
-        }
-        if (this.options.showCancelButton) {
-            buttons += `<button class="action-btn" id="cancel-btn-${this.id}">${this.options.cancelButtonText}</button>`;
-        }
-        return buttons;
-    }
-    
+
     bindEvents() {
-        document.getElementById(`close-btn-${this.id}`).addEventListener('click', () => {
-            this.close();
-        });
-        
+        document.getElementById(`close-btn-${this.id}`).addEventListener('click', () => this.close());
         if (this.options.showMinimizeButton) {
-            document.getElementById(`minimize-btn-${this.id}`).addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.minimize();
-            });
+            document.getElementById(`minimize-btn-${this.id}`).addEventListener('click', (e) => { e.stopPropagation(); this.minimize(); });
         }
-        
         if (this.options.showPauseButton) {
             document.getElementById(`pause-btn-${this.id}`).addEventListener('click', () => {
-                if (this.isPaused) {
-                    this.resume();
-                } else {
-                    this.pause();
-                }
+                this.isPaused ? this.resume() : this.pause();
             });
         }
-        
         if (this.options.showCancelButton) {
             document.getElementById(`cancel-btn-${this.id}`).addEventListener('click', () => {
-                if (this.isCompleted) {
-                    this.close();
-                } else {
-                    this.cancel();
-                }
+                this.isCompleted ? this.close() : this.cancel();
             });
         }
     }
-    
+
     setStatus(status) {
-        const statusElement = document.getElementById(`modal-status-${this.id}`);
-        if (statusElement) {
-            if (typeof status === 'string' && status.includes('\n')) {
-                statusElement.innerHTML = status.replace(/\n/g, '<br>');
-            } else {
-                statusElement.textContent = status;
-            }
+        const el = document.getElementById(`modal-status-${this.id}`);
+        if (el) {
+            el[typeof status === 'string' && status.includes('\n') ? 'innerHTML' : 'textContent'] =
+                typeof status === 'string' && status.includes('\n') ? status.replace(/\n/g, '<br>') : status;
         }
         addLogMessage(`[${this.title}] ${status}`);
         this.updateMinimizedStatus(status);
     }
-    
+
     addLog(message) {
         if (this.options.showLog) {
-            const logElement = document.getElementById(`modal-log-${this.id}`);
-            if (logElement) {
+            const logEl = document.getElementById(`modal-log-${this.id}`);
+            if (logEl) {
                 const now = new Date();
-                const timestamp = `[${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}]`;
-                
-                const logEntry = document.createElement('div');
-                logEntry.textContent = `${timestamp} ${message}`;
-                logElement.appendChild(logEntry);
-                logElement.scrollTop = logElement.scrollHeight;
+                const ts = `[${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
+                const entry = document.createElement('div');
+                entry.textContent = `${ts} ${message}`;
+                logEl.appendChild(entry);
+                logEl.scrollTop = logEl.scrollHeight;
             }
         }
         addLogMessage(`[${this.title}] ${message}`);
     }
-    
+
     showProgress(show = true) {
-        const progressElement = document.getElementById(`modal-progress-${this.id}`);
-        if (progressElement) {
-            if (show) {
-                progressElement.classList.remove('hidden');
-            } else {
-                progressElement.classList.add('hidden');
-            }
+        const el = document.getElementById(`modal-progress-${this.id}`);
+        if (el) el.classList.toggle('hidden', !show);
+    }
+
+    updateProgress(percent, status = null) {
+        this.percent = percent;
+        const fill = document.getElementById(`modal-progress-fill-${this.id}`);
+        if (fill) fill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+        if (status) this.setStatus(status);
+    }
+
+    updateMinimizedStatus(status) {
+        if (this.isMinimized && this.minimizedElement) {
+            const statusEl = this.minimizedElement.querySelector('.minimized-status');
+            if (statusEl) statusEl.textContent = status;
         }
     }
-    
-    updateProgress(percent, text = '') {
-        this.percent = percent
-        const progressFill = document.getElementById(`modal-progress-fill-${this.id}`);
-        if (progressFill) {
-            progressFill.style.width = percent + '%';
-        }
-        
-        if (text) {
-            addLogMessage(`[${this.title}] ${text}`);
-        }
-        
-        const mainProgressFill = document.getElementById('progress-fill');
-        const mainProgressPercent = document.getElementById('progress-percent');
-        const mainProgressText = document.getElementById('progress-text');
-        const progressContainer = document.getElementById('translation-progress');
-        
-        if (mainProgressFill && mainProgressPercent) {
-            mainProgressFill.style.width = percent + '%';
-            mainProgressPercent.textContent = percent + '%';
-            progressContainer.style.display = 'block';
-        }
-        
-        if (mainProgressText && text) {
-            mainProgressText.textContent = text;
-        }
-        
-        this.syncProgressToMinimized(percent);
-    }
-    
-    setCompleted() {
-        this.isCompleted = true;
-        const cancelButton = document.getElementById(`cancel-btn-${this.id}`);
-        const pauseButton = document.getElementById(`pause-btn-${this.id}`);
-        
-        if (cancelButton) {
-            cancelButton.textContent = '完成';
-        }
-        
-        if (pauseButton) {
-            pauseButton.style.display = 'none';
-        }
-        
-        this.updateMinimizedStatus('已完成');
-    }
-    
-    pause() {
-        if (this.isCompleted) return;
-        
-        this.isPaused = true;
-        const pauseButton = document.getElementById(`pause-btn-${this.id}`);
-        if (pauseButton) {
-            pauseButton.textContent = this.options.resumeButtonText;
-        }
-        
-        this.setStatus('已暂停');
-        this.addLog('操作已暂停');
-        
-        if (this.options.onPause && typeof this.options.onPause === 'function') {
-            this.options.onPause(this.id);
-        }
-    }
-    
-    resume() {
-        if (this.isCompleted) return;
-        
-        this.isPaused = false;
-        const pauseButton = document.getElementById(`pause-btn-${this.id}`);
-        if (pauseButton) {
-            pauseButton.textContent = this.options.pauseButtonText;
-        }
-        
-        this.setStatus('正在恢复...');
-        this.addLog('操作已恢复');
-        
-        if (this.options.onResume && typeof this.options.onResume === 'function') {
-            this.options.onResume(this.id);
-        }
-    }
-    
-    cancel() {
-        if (this.options.onCancel && typeof this.options.onCancel === 'function') {
-            this.options.onCancel(this.id);
-        }
-        this.close();
-    }
-    
+
     minimize() {
         if (this.isMinimized) return;
-        
         this.isMinimized = true;
-        const minimizedContainer = ensureMinimizedContainer();
-        
-        const minimizedElement = document.createElement('div');
-        minimizedElement.className = 'minimized-modal';
-        minimizedElement.id = `minimized-${this.id}`;
-        minimizedElement.innerHTML = `
+        const container = ensureMinimizedContainer();
+        this.minimizedElement = document.createElement('div');
+        this.minimizedElement.className = 'minimized-modal';
+        this.minimizedElement.innerHTML = `
             <div class="minimized-header">
-                <div class="minimized-title">${this.title}</div>
-                <div class="minimized-status" id="minimized-status-${this.id}">运行中</div>
-            </div>
-            <div class="minimized-progress">
-                <div class="minimized-progress-bar">
-                    <div class="minimized-progress-fill" id="minimized-progress-fill-${this.id}"></div>
+                <span class="minimized-title">${this.title}</span>
+                <div class="minimized-controls">
+                    <button class="minimized-restore-btn" title="还原">□</button>
+                    <button class="minimized-close-btn" title="关闭">×</button>
                 </div>
             </div>
-        `;
-        
-        minimizedElement.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.restoreFromMinimized();
+            <div class="minimized-status">已最小化</div>`;
+        this.minimizedElement.querySelector('.minimized-restore-btn').addEventListener('click', () => this.restore());
+        this.minimizedElement.querySelector('.minimized-close-btn').addEventListener('click', () => {
+            this.minimizedElement.remove(); this.close();
         });
-        
-        minimizedContainer.appendChild(minimizedElement);
-        this.element.style.display = 'none';
-        this.syncProgressToMinimized(this.percent);
+        container.appendChild(this.minimizedElement);
+        if (this.element) this.element.style.display = 'none';
     }
-    
-    restoreFromMinimized() {
+
+    restore() {
         if (!this.isMinimized) return;
-        
         this.isMinimized = false;
-        const minimizedElement = document.getElementById(`minimized-${this.id}`);
-        if (minimizedElement) {
-            minimizedElement.remove();
-        }
-        
-        this.element.style.display = 'flex';
+        if (this.minimizedElement) { this.minimizedElement.remove(); this.minimizedElement = null; }
+        if (this.element) this.element.style.display = '';
     }
-    
+
     close() {
-        const index = modalWindows.indexOf(this);
-        if (index > -1) {
-            modalWindows.splice(index, 1);
-        }
-        
-        if (this.element) {
-            AnimationManager.fadeOut(this.element);
-            setTimeout(() => {
-                this.element.remove();
-            }, 300);
-        }
-        
-        const minimizedElement = document.getElementById(`minimized-${this.id}`);
-        if (minimizedElement) {
-            minimizedElement.remove();
+        if (this.isMinimized && this.minimizedElement) this.minimizedElement.remove();
+        if (this.element) this.element.remove();
+        modalWindows = modalWindows.filter(m => m !== this);
+        if (this.options.onCancel && !this.isCompleted) this.options.onCancel();
+        if (!this.isCompleted) {
+            try { window.pywebview.api.del_modal_list(this.id); } catch (e) { }
         }
     }
-    
-    syncProgressToMinimized(percent) {
-        if (!this.isMinimized) return;
-        
-        const progressFill = document.getElementById(`minimized-progress-fill-${this.id}`);
-        if (progressFill) {
-            progressFill.style.width = percent + '%';
-        }
-    }
-    
-    updateMinimizedStatus(status) {
-        if (!this.isMinimized) return;
-        
-        const statusElement = document.getElementById(`minimized-status-${this.id}`);
-        if (statusElement) {
-            statusElement.textContent = status;
-        }
-    }
-}
 
-// 消息模态窗口类
-class MessageModal extends ModalWindow {
-    constructor(title, message, onCloseCallback = null) {
-        super(title, {
-            showProgress: false,
-            showCancelButton: true,
-            cancelButtonText: '确定',
-            showMinimizeButton: false,
-            showLog: false
-        });
-        
-        this.onCloseCallback = onCloseCallback;
-        this.setStatus(message);
-        this.setupMessageButton();
-    }
-    
-    setupMessageButton() {
-        const cancelButton = document.getElementById(`cancel-btn-${this.id}`);
-        if (cancelButton) {
-            cancelButton.textContent = '确定';
-            const newCancelButton = cancelButton.cloneNode(true);
-            document.getElementById(`modal-footer-${this.id}`).replaceChild(newCancelButton, cancelButton);
-            
-            newCancelButton.addEventListener('click', () => {
-                this.close();
-                if (this.onCloseCallback && typeof this.onCloseCallback === 'function') {
-                    this.onCloseCallback();
-                }
-            });
-        }
-    }
-}
-
-// 确认模态窗口类
-class ConfirmModal extends ModalWindow {
-    constructor(title, message, onConfirmCallback, onCancelCallback) {
-        super(title, {
-            showProgress: false,
-            showCancelButton: true,
-            cancelButtonText: '取消',
-            showMinimizeButton: false,
-            showLog: false
-        });
-        
-        this.onConfirmCallback = onConfirmCallback;
-        this.onCancelCallback = onCancelCallback;
-        
-        this.setStatus(message);
-        this.setupConfirmButtons();
-    }
-    
-    setupConfirmButtons() {
-        const modalFooter = document.getElementById(`modal-footer-${this.id}`);
-        if (modalFooter) {
-            modalFooter.innerHTML = `
-                <button class="primary-btn" id="confirm-btn-${this.id}">确定</button>
-                <button class="action-btn" id="cancel-btn-${this.id}">取消</button>
-            `;
-            
-            document.getElementById(`confirm-btn-${this.id}`).addEventListener('click', () => {
-                this.close();
-                if (this.onConfirmCallback && typeof this.onConfirmCallback === 'function') {
-                    this.onConfirmCallback();
-                }
-            });
-            
-            document.getElementById(`cancel-btn-${this.id}`).addEventListener('click', () => {
-                this.close();
-                if (this.onCancelCallback && typeof this.onCancelCallback === 'function') {
-                    this.onCancelCallback();
-                }
-            });
-            
-            document.getElementById(`close-btn-${this.id}`).addEventListener('click', () => {
-                this.close();
-                if (this.onCancelCallback && typeof this.onCancelCallback === 'function') {
-                    this.onCancelCallback();
-                }
-            });
-        }
-    }
-    
-    setHtmlContent(htmlContent) {
-        const statusElement = document.getElementById(`modal-status-${this.id}`);
-        if (statusElement) {
-            statusElement.innerHTML = htmlContent;
-        }
-        addLogMessage(`[${this.title}] 更新信息已设置`);
-    }
-}
-
-// 进度模态窗口类
-class ProgressModal extends ModalWindow {
-    constructor(title) {
-        super(title, {
-            showProgress: true,
-            showCancelButton: true,
-            showPauseButton: true,
-            cancelButtonText: '取消',
-            pauseButtonText: '暂停',
-            resumeButtonText: '继续'
-        });
-        
-        this.setStatus('正在初始化...');
-        this.showProgress(true);
-        this.updateProgress(0, '初始化中...');
-        
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.add_modal_id) {
-            pywebview.api.add_modal_id(this.id)
-                .catch(function(error) {
-                    console.error('注册模态ID失败:', error);
-                });
-        }
-    }
-    
-    complete(success = true, message = '操作完成') {
-        if (success) {
-            this.setStatus('操作完成');
-            this.addLog(message);
-            this.updateProgress(100, '完成');
-        } else {
-            this.setStatus('操作失败');
-            this.addLog(message);
-        }
-        this.setCompleted();
-    }
-    
     cancel() {
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.set_modal_running) {
-            pywebview.api.set_modal_running(this.id, 'cancel')
-                .catch(function(error) {
-                    console.error('处理取消操作失败:', error);
-                });
-        }
-        
-        super.cancel();
+        this.updateProgress(0, '已取消');
+        if (this.options.onCancel) this.options.onCancel();
+        try { window.pywebview.api.set_modal_running(this.id, 'cancel'); } catch (e) { }
     }
-    
+
     pause() {
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.set_modal_running) {
-            pywebview.api.set_modal_running(this.id, 'pause')
-                .catch(function(error) {
-                    console.error('处理暂停操作失败:', error);
-                });
-        }
-        
-        super.pause();
+        this.isPaused = true;
+        const btn = document.getElementById(`pause-btn-${this.id}`);
+        if (btn) btn.textContent = this.options.resumeButtonText;
+        this.setStatus('已暂停');
+        if (this.options.onPause) this.options.onPause();
+        try { window.pywebview.api.set_modal_running(this.id, 'pause'); } catch (e) { }
     }
-    
+
     resume() {
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.set_modal_running) {
-            pywebview.api.set_modal_running(this.id, 'running')
-                .catch(function(error) {
-                    console.error('处理恢复操作失败:', error);
-                });
+        this.isPaused = false;
+        const btn = document.getElementById(`pause-btn-${this.id}`);
+        if (btn) btn.textContent = this.options.pauseButtonText;
+        this.setStatus('已继续');
+        if (this.options.onResume) this.options.onResume();
+        try { window.pywebview.api.set_modal_running(this.id, 'running'); } catch (e) { }
+    }
+
+    complete(success = true, message = '完成') {
+        this.isCompleted = true;
+        this.updateProgress(success ? 100 : 0, message);
+        const footer = document.getElementById(`modal-footer-${this.id}`);
+        if (footer) {
+            footer.innerHTML = `<button class="action-btn success" id="confirm-btn-${this.id}">${this.options.confirmButtonText}</button>`;
+            document.getElementById(`confirm-btn-${this.id}`).addEventListener('click', () => this.close());
         }
-        
-        super.resume();
-    }
-}
-
-// 工厂函数
-function showMessage(title, message, onCloseCallback = () => {
-    pywebview.api.log("用户关闭窗口")
-}) {
-    return new MessageModal(title, message, onCloseCallback);
-}
-
-function showConfirm(title, message, onConfirmCallback, onCancelCallback) {
-    return new ConfirmModal(title, message, onConfirmCallback, onCancelCallback);
-}
-
-function showProgress(title) {
-    return new ProgressModal(title);
-}
-
-// 各功能函数
-async function startTranslation() {
-    const modal = new ProgressModal('开始翻译');
-    modal.setStatus('正在初始化翻译过程...');
-    modal.addLog('开始翻译任务');
-    await configManager.updateConfigValues(configManager.collectConfigFromUI());
-    
-    pywebview.api.start_translation(apiConfigManager.currentSettings,
-        modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '翻译任务已完成');
-        } else {
-            modal.complete(false, '翻译失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '翻译过程中发生错误: ' + error);
-    });
-}
-
-// ================================
-// 通用列表管理器（支持多实例、选中状态、自定义回调）
-// ================================
-class ItemListManager {
-    /**
-     * @param {string} containerId - 容器元素ID
-     * @param {Object} options - 配置选项
-     * @param {function} options.onSelect - 当项目被选中时的回调 (item) => {}
-     * @param {string} options.emptyMessage - 列表为空时显示的消息
-     * @param {string} options.itemIcon - 项目图标类名
-     */
-    constructor(containerId, options = {}) {
-        this.containerElement = document.getElementById(containerId);
-        if (!this.containerElement) {
-            console.error(`容器元素未找到: #${containerId}`);
-        }
-        this.items = [];
-        this.selectedItem = null;
-        this.onSelect = options.onSelect || null;
-        this.emptyMessage = options.emptyMessage || '未找到可用的项目';
-        this.itemIcon = options.itemIcon || 'fa-box';
-    }
-
-    // 显示加载中
-    waitList() {
-        if (!this.containerElement) return;
-        this.containerElement.innerHTML = `
-            <div class="list-empty">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>正在加载中...</p>
-            </div>
-        `;
-    }
-
-    // 刷新整个列表（根据 items 数组）
-    updateList() {
-        if (!this.containerElement) return;
-        this.containerElement.innerHTML = '';
-
-        if (this.items.length > 0) {
-            this.items.forEach(item => {
-                const itemElement = this._createItemElement(item);
-                this.containerElement.appendChild(itemElement);
-            });
-        } else {
-            const emptyDiv = document.createElement('div');
-            emptyDiv.className = 'list-empty';
-            emptyDiv.innerHTML = `
-                <i class="fas fa-box-open"></i>
-                <p>${this.emptyMessage}</p>
-            `;
-            this.containerElement.appendChild(emptyDiv);
-        }
-    }
-
-    // 创建单个列表项 DOM
-    _createItemElement(item) {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'list-item';
-        if (this.selectedItem === item) {
-            itemDiv.classList.add('selected');
-            itemDiv.setAttribute('data-selected', 'true');
-        }
-
-        itemDiv.innerHTML = `
-            <div class="list-item-content">
-                <i class="fas ${this.itemIcon}"></i>
-                <span>${item}</span>
-            </div>
-            <div class="list-item-actions">
-                <button class="list-action-btn" title="选择">
-                    <i class="fas fa-check"></i>
-                </button>
-            </div>
-        `;
-
-        // 绑定选择按钮事件
-        const selectBtn = itemDiv.querySelector('.list-action-btn');
-        selectBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.setSelectedItem(item);
-            if (this.onSelect && typeof this.onSelect === 'function') {
-                this.onSelect(item);
-            }
-        });
-
-        return itemDiv;
-    }
-
-    // ----- 数据操作方法 -----
-    setItems(items) {
-        this.items = items;
-        // 如果之前选中的项目已不存在，清空选中
-        if (this.selectedItem && !this.items.includes(this.selectedItem)) {
-            this.selectedItem = null;
-        }
-        this.updateList();
-    }
-
-    addItem(item) {
-        if (!this.items.includes(item)) {
-            this.items.push(item);
-            this.updateList();
-        }
-    }
-
-    removeItem(item) {
-        const index = this.items.indexOf(item);
-        if (index !== -1) {
-            this.items.splice(index, 1);
-            if (this.selectedItem === item) {
-                this.selectedItem = null;
-            }
-            this.updateList();
-        }
-    }
-
-    // ----- 选中状态管理 -----
-    setSelectedItem(item) {
-        if (this.items.includes(item)) {
-            this.selectedItem = item;
-        } else {
-            this.selectedItem = null;
-        }
-        this.updateList(); // 重新渲染以高亮选中项
-    }
-
-    getSelectedItem() {
-        return this.selectedItem;
-    }
-
-    // ----- 错误显示 -----
-    showErrorList(error) {
-        if (!this.containerElement) return;
-        console.error('获取列表失败:', error);
-        this.containerElement.innerHTML = '';
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'list-empty';
-        errorDiv.innerHTML = `
-            <i class="fas fa-exclamation-triangle"></i>
-            <p>获取列表失败: ${error.message || '未知错误'}</p>
-        `;
-        this.containerElement.appendChild(errorDiv);
+        const cancelBtn = document.getElementById(`cancel-btn-${this.id}`);
+        if (cancelBtn) cancelBtn.textContent = '关闭';
+        try { window.pywebview.api.del_modal_list(this.id); } catch (e) { }
     }
 }
 
 
-// 创建汉化包列表管理器实例
-let packageItemManager = new ItemListManager('install-package-list', {
-    emptyMessage: '未找到可用的汉化包',
-    itemIcon: 'fa-box',
-    onSelect: (item) => {
-        addLogMessage(`已选中汉化包: ${item}`, 'info');
-    }
-});
-
-/**
- * 刷新汉化包列表
- * 从后端获取数据后调用管理器的 setItems 和 updateList 进行渲染
- */
-function refreshInstallPackageList() {
-    const packageList = document.getElementById('install-package-list');
-    if (!packageList) return;
-
-    // 显示加载状态
-    packageItemManager.waitList();
-
-    pywebview.api.get_translation_packages()
-        .then(function(result) {
-            if (result.success && result.packages && result.packages.length > 0) {
-                // 设置数据并更新列表
-                packageItemManager.setItems(result.packages);
-            } else {
-                // 空列表也会自动显示 emptyMessage
-                packageItemManager.setItems([]);
-            }
-        })
-        .catch(function(error) {
-            console.error('获取汉化包列表失败:', error);
-            packageItemManager.showErrorList(error);
-        });
-}
-
-/**
- * 安装选中的汉化包
- */
-function installSelectedPackage() {
-    const packageName = packageItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个汉化包');
-        return;
-    }
-
-    const modal = new ProgressModal('安装汉化包');
-    modal.addLog(`开始安装汉化包: ${packageName}`);
-
-    pywebview.api.install_translation(packageName, modal.id)
-        .then(function(result) {
-            if (result.success) {
-                modal.complete(true, '汉化包安装成功');
-            } else {
-                modal.complete(false, '安装失败: ' + result.message);
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '安装过程中发生错误: ' + error);
-        });
-}
-
-/**
- * 删除选中的汉化包
- */
-function deleteSelectedPackage() {
-    const packageName = packageItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个汉化包');
-        return;
-    }
-
-    showConfirm('确认删除', `确定要删除汉化包 "${packageName}" 吗？此操作不可撤销。`,
-        function() {
-            pywebview.api.delete_translation_package(packageName)
-                .then(function(result) {
-                    if (result.success) {
-                        // 从管理器中移除该项，自动更新列表并清空选中状态
-                        packageItemManager.removeItem(packageName);
-                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
-                    } else {
-                        showMessage('删除失败', `删除汉化包失败: ${result.message}`);
-                    }
-                })
-                .catch(function(error) {
-                    showMessage('删除失败', `删除过程中发生错误: ${error}`);
-                });
-        },
-        function() {
-            // 取消删除，无操作
-        }
-    );
-}
-
-async function changeFontForPackage() {
-    const packageName = packageItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('错误', '无法获取选中汉化包的名称');
-        return;
-    }
-
-    showMessage('选择字体文件', '请选择字体文件', 
-        async ()=>{
-            const fontPath = await pywebview.api.browse_file('font-path');
-            if (fontPath) {
-                const modal = new ProgressModal('更换字体');
-                modal.setStatus('开始');
-                const result = await pywebview.api.change_font_for_package(packageName, fontPath, modal.id);
-                if (result.success) {
-                    modal.complete(true, '完成更换字体');
-                    setTimeout(modal.close, 500);
-                    refreshInstallPackageList();
-                } else {
-                    modal.addLog('更换失败');
-                    modal.addLog(result.message);
-                    modal.complete(false, result.message);
-                }
-            }
-        }
-    )
-}
-
-function getFontFromInstalled() {
-    pywebview.api.get_system_fonts_list()
-        .then(function(result) {
-            const modal = new ModalWindow('导出系统字体', {
-                showProgress: false,
-                showCancelButton: true,
-                cancelButtonText: '关闭',
-                showMinimizeButton: true,
-                showLog: false
-            });
-            
-            let modalContent = `
-                <div class="font-selector">
-                    <div class="form-group">
-                        <label for="font-search-${modal.id}">搜索字体:</label>
-                        <input type="text" id="font-search-${modal.id}" placeholder="输入字体名称搜索..." style="width: 100%;">
-                    </div>
-                    <div class="form-group">
-                        <label>系统字体:</label>
-                        <div class="list-container" style="max-height: 200px; overflow-y: auto;">
-                            <div id="font-list-${modal.id}" style="width: 100%; padding: 10px;">
-            `;
-            
-            if (result.success && result.fonts && result.fonts.length > 0) {
-                modalContent += '<div class="list-empty"><p>加载中...</p></div>';
-            } else {
-                modalContent += '<div class="list-empty"><p>未找到系统字体</p></div>';
-            }
-            
-            modalContent += `
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>预览:</label>
-                        <div id="font-preview-${modal.id}" style="border: 1px solid var(--color-border); padding: 10px; min-height: 60px; background-color: var(--color-bg-input); border-radius: var(--radius-md);">
-                            选择字体以预览
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            modal.element.querySelector('.modal-body').innerHTML = modalContent;
-            
-            if (result.success && result.fonts && result.fonts.length > 0) {
-                const fontList = document.getElementById(`font-list-${modal.id}`);
-                fontList.innerHTML = '';
-                
-                result.fonts.forEach(font => {
-                    const fontItem = document.createElement('div');
-                    fontItem.className = 'list-item';
-                    fontItem.innerHTML = `
-                        <div class="list-item-content">
-                            <i class="fas fa-font"></i>
-                            <span>${font}</span>
-                        </div>
-                    `;
-                    fontItem.addEventListener('click', () => {
-                        document.querySelectorAll(`#font-list-${modal.id} .list-item`).forEach(item => {
-                            item.classList.remove('selected');
-                        });
-                        fontItem.classList.add('selected');
-                        
-                        const previewDiv = document.getElementById(`font-preview-${modal.id}`);
-                        previewDiv.innerHTML = `
-                            <div style="font-family: '${font}'; font-size: 16px; margin-bottom: 8px;">
-                                字体预览: ${font}
-                            </div>
-                            <div style="font-family: '${font}';">
-                                The quick brown fox jumps over the lazy dog.<br>
-                                0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>
-                                abcdefghijklmnopqrstuvwxyz<br>
-                                中文示例文本
-                            </div>
-                        `;
-                    });
-                    fontList.appendChild(fontItem);
-                });
-                
-                const searchInput = document.getElementById(`font-search-${modal.id}`);
-                searchInput.addEventListener('input', function() {
-                    const searchTerm = searchInput.value.toLowerCase();
-                    const items = fontList.querySelectorAll('.list-item');
-                    
-                    items.forEach(item => {
-                        const fontName = item.querySelector('span')?.textContent?.toLowerCase() || '';
-                        if (fontName.includes(searchTerm)) {
-                            item.style.display = 'flex';
-                        } else {
-                            item.style.display = 'none';
-                        }
-                    });
-                });
-            }
-            
-            const exportBtn = document.createElement('button');
-            exportBtn.className = 'primary-btn';
-            exportBtn.innerHTML = '<i class="fas fa-file-export"></i> 导出';
-            exportBtn.onclick = function() {
-                const selectedFontItem = document.querySelector(`#font-list-${modal.id} .list-item.selected`);
-                if (!selectedFontItem) {
-                    showMessage('提示', '请先选择一个字体');
-                    return;
-                }
-                
-                const fontName = selectedFontItem.querySelector('span')?.textContent;
-                if (!fontName) {
-                    showMessage('错误', '无法获取选中字体的名称');
-                    return;
-                }
-                
-                pywebview.api.browse_folder('font-export-path')
-                    .then(function(result) {
-                        if (result && result.length > 0) {
-                            const exportPath = result;
-                            
-                            modal.close();
-                            
-                            const progressModal = new ProgressModal('导出字体');
-                            progressModal.addLog(`开始导出字体 "${fontName}" 到 "${exportPath}"`);
-                            
-                            pywebview.api.export_selected_font(fontName, exportPath)
-                                .then(function(result) {
-                                    if (result.success) {
-                                        progressModal.complete(true, '字体导出成功');
-                                    setTimeout(progressModal.close, 250);
-                                    } else {
-                                        progressModal.complete(false, '字体导出失败: ' + result.message);
-                                    }
-                                })
-                                .catch(function(error) {
-                                    progressModal.complete(false, '导出过程中发生错误: ' + error);
-                                });
-                        }
-                    })
-                    .catch(function(error) {
-                        showMessage('错误', '选择导出路径时发生错误: ' + error);
-                    });
-            };
-            
-            const footer = document.getElementById(`modal-footer-${modal.id}`);
-            footer.innerHTML = '';
-            footer.appendChild(exportBtn);
-            
-            const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'action-btn';
-            cancelBtn.textContent = '取消';
-            cancelBtn.onclick = () => {
-                modal.close();
-                modal.setCompleted();
-            };
-            footer.appendChild(cancelBtn);
-        })
-        .catch(function(error) {
-            showMessage('错误', '获取系统字体列表时发生错误: ' + error);
-        });
-}
-
-// 创建汉化包列表管理器实例
-let installedPackageItemManager = new ItemListManager('installed-package-list', {
-    emptyMessage: '未找到已安装汉化包',
-    itemIcon: 'fa-box',
-    onSelect: (item) => {
-        addLogMessage(`已选中汉化包: ${item}`, 'info');
-    }
-});
-
-/**
- * 刷新已安装汉化包列表
- * 从后端获取数据后调用管理器的 setItems 和 updateList 进行渲染
- */
-function refreshInstalledPackageList() {
-    const packageList = document.getElementById('installed-package-list');
-    if (!packageList) return;
-
-    // 显示加载状态
-    installedPackageItemManager.waitList();
-
-    pywebview.api.get_installed_packages()
-        .then(function(result) {
-            const box = document.getElementById('enable-lang');
-            if (result.success && result.enable && result.packages && result.packages.length > 0) {
-                // 设置数据并更新列表
-                box.checked=true;
-                installedPackageItemManager.setItems(result.packages);
-                if (result.selected) {
-                    installedPackageItemManager.setSelectedItem(result.selected);
-                };
-            } else {
-                // 空列表也会自动显示 emptyMessage
-                installedPackageItemManager.setItems([]);
-                if (result.success) {
-                    box.checked=false;
-                }
-            };
-            toggleCustomLangGui();
-        })
-        .catch(function(error) {
-            console.error('获取汉化包列表失败:', error);
-            installedPackageItemManager.showErrorList(error);
-        });
-}
-
-/**
- * 使用选中的汉化包
- */
-function useSelectedPackage() {
-    const packageName = installedPackageItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个汉化包');
-        return;
-    }
-
-    const modal = new ProgressModal('使用选中汉化包');
-    modal.addLog(`开始切换汉化包: ${packageName}`);
-
-    pywebview.api.use_translation(packageName, modal.id)
-        .then(function(result) {
-            if (result.success) {
-                modal.complete(true, '汉化包切换成功');
-
-                setTimeout(
-                    ()=>{modal.close()}, 300
-                )
-            } else {
-                modal.complete(false, '切换失败: ' + result.message);
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '切换过程中发生错误: ' + error);
-        });
-}
-
-/**
- * 删除选中的汉化包
- */
-function deleteInstalledPackage() {
-    const packageName = installedPackageItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个汉化包');
-        return;
-    }
-
-    showConfirm('确认删除', `确定要删除汉化包 "${packageName}" 吗？此操作不可撤销。`,
-        function() {
-            pywebview.api.delete_installed_package(packageName)
-                .then(function(result) {
-                    if (result.success) {
-                        // 从管理器中移除该项，自动更新列表并清空选中状态
-                        packageItemManager.removeItem(packageName);
-                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
-                    } else {
-                        showMessage('删除失败', `删除汉化包失败: ${result.message}`);
-                    }
-                })
-                .catch(function(error) {
-                    showMessage('删除失败', `删除过程中发生错误: ${error}`);
-                });
-        },
-        function() {
-            // 取消删除，无操作
-        }
-    );
-}
-
-/**
- * 支持启用/禁用切换的列表管理器
- * 继承自 ItemListManager
- * @param {string} containerId - 容器元素ID
- * @param {Object} options - 配置选项
- * @param {function} options.onToggle - 切换启用状态时的回调 (item, enabled) => {}
- * @param {boolean|function} options.defaultEnabled - 默认启用状态（可设为函数，接收item返回布尔值）
- * @param {string} options.itemKey - 当item为对象时，用作唯一标识的属性名，默认为 'name'
- * @param {function} options.onSelect - 选中回调 (item) => {}
- * @param {string} options.emptyMessage - 列表为空时的提示文本
- * @param {string} options.itemIcon - 条目图标类名
- */
-class ToggleItemListManager extends ItemListManager {
-    constructor(containerId, options = {}) {
-        super(containerId, options);
-        // 启用状态映射 { itemKey: boolean }
-        this.enabledMap = {};
-        this.defaultEnabled = options.defaultEnabled || false;
-        this.onToggle = options.onToggle || null;
-        this.itemKey = options.itemKey || 'name'; // 从对象中提取键的属性
-    }
-
-    /**
-     * 设置列表数据，同时初始化启用状态映射
-     * @param {Array<string|Object>} items - 可包含字符串或对象，对象需包含 this.itemKey 指定字段
-     */
-    setItems(items) {
-        // 初始化启用状态
-        this.enabledMap = {};
-        if (Array.isArray(items)) {
-            items.forEach(item => {
-                const key = this._getItemKey(item);
-                // 若 defaultEnabled 为函数则调用，否则直接取值
-                const defaultValue = typeof this.defaultEnabled === 'function'
-                    ? this.defaultEnabled(item)
-                    : this.defaultEnabled;
-                this.enabledMap[key] = defaultValue;
-            });
-        }
-        // 调用父类 setItems（会更新 this.items 并触发 updateList）
-        super.setItems(items);
-    }
-
-    /**
-     * 获取条目的唯一标识键
-     */
-    _getItemKey(item) {
-        if (typeof item === 'string') {
-            return item;
-        } else if (item && typeof item === 'object') {
-            return item[this.itemKey] ?? String(item);
-        }
-        return String(item);
-    }
-
-    /**
-     * 获取条目的显示名称（用于列表文本）
-     */
-    _getDisplayName(item) {
-        if (typeof item === 'string') return item;
-        if (item && typeof item === 'object') {
-            return item.displayName || item[this.itemKey] || String(item);
-        }
-        return String(item);
-    }
-
-    /**
-     * 重写列表项 DOM 创建方法，添加启用/禁用按钮
-     */
-    _createItemElement(item) {
-        const key = this._getItemKey(item);
-        const displayName = this._getDisplayName(item);
-        const isEnabled = this.enabledMap[key] || false;
-
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'list-item';
-        if (this.selectedItem === item) {
-            itemDiv.classList.add('selected');
-            itemDiv.setAttribute('data-selected', 'true');
-        }
-
-        itemDiv.innerHTML = `
-            <div class="list-item-content">
-                <i class="fas ${this.itemIcon}"></i>
-                <span>${displayName}</span>
-            </div>
-            <div class="list-item-actions">
-                <button class="list-action-btn toggle-btn" title="${isEnabled ? '禁用' : '启用'}" style="margin-right: 5px;">
-                    <i class="fas ${isEnabled ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
-                </button>
-                <button class="list-action-btn select-btn" title="选择">
-                    <i class="fas fa-check"></i>
-                </button>
-            </div>
-        `;
-
-        // 切换按钮事件
-        const toggleBtn = itemDiv.querySelector('.toggle-btn');
-        toggleBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const newState = !this.enabledMap[key];
-            this.enabledMap[key] = newState;
-            // 更新按钮图标和标题
-            const icon = toggleBtn.querySelector('i');
-            icon.className = `fas ${newState ? 'fa-toggle-on' : 'fa-toggle-off'}`;
-            toggleBtn.title = newState ? '禁用' : '启用';
-            // 触发外部回调
-            if (this.onToggle && typeof this.onToggle === 'function') {
-                this.onToggle(item, newState);
-            }
-        });
-
-        // 选择按钮事件（保留原有选择功能）
-        const selectBtn = itemDiv.querySelector('.select-btn');
-        selectBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.setSelectedItem(item);
-            if (this.onSelect && typeof this.onSelect === 'function') {
-                this.onSelect(item);
-            }
-        });
-
-        // 点击条目内容区域（非按钮部分）也触发选中
-        itemDiv.addEventListener('click', (e) => {
-            if (e.target.closest('.list-action-btn')) {
-                return;
-            }
-            this.setSelectedItem(item);
-            if (this.onSelect && typeof this.onSelect === 'function') {
-                this.onSelect(item);
-            }
-        });
-
-        return itemDiv;
-    }
-
-    /**
-     * 获取当前启用状态映射
-     */
-    getEnabledMap() {
-        return this.enabledMap;
-    }
-
-    /**
-     * 手动设置某个条目的启用状态（会触发重新渲染）
-     * @param {string} key - 条目标识键
-     * @param {boolean} enabled
-     */
-    setEnabled(key, enabled) {
-        if (this.enabledMap.hasOwnProperty(key)) {
-            this.enabledMap[key] = enabled;
-            this.updateList();
-        }
+class ProgressModal extends ModalWindow {
+    constructor(title, options = {}) {
+        super(title, { showProgress: true, showPauseButton: true, ...options });
+        try { window.pywebview.api.add_modal_id(this.id); } catch (e) { }
     }
 }
 
-let modItemManager = new ToggleItemListManager('install-mod-list', {
-    emptyMessage: '未找到模组',
-    itemIcon: 'fa-language',
-    defaultEnabled: false, // 默认全部禁用
-    onSelect: (item) => {
-        console.log('选中翻译器:', item);
-    },
-    onToggle: (item, enabled) => {
-        console.log(`模组 ${item} 状态变为: ${enabled ? '启用' : '禁用'}`);
-        toggleMod(item, enabled)
-    }
-});
 
-async function refreshInstalledModList() {
-    modItemManager.waitList();
-    const result = await pywebview.api.find_installed_mod();
-    if (result.success) {
-        const merge = result.able.concat(result.disable);
-        modItemManager.setItems(merge);
-        result.able.forEach(item =>{
-            modItemManager.enabledMap[item]=true;
-        })
-        modItemManager.updateList();
-    }
-}
-
-async function toggleMod(item, enable) {
-    const result = await pywebview.api.toggle_mod(item, enable);
-}
-
-function openModPath() {
-    pywebview.api.open_mod_path();
-}
-
-async function deleteSelectedMod() {
-    const packageName = modItemManager.getSelectedItem();
-    if (!packageName) {
-        showMessage('提示', '请先选择一个模组');
-        return;
-    }
-
-    showConfirm('确认删除', `确定要删除模组 "${packageName}" 吗？此操作不可撤销。`,
-        async function() {
-            const result = await pywebview.api.delete_mod(packageName, 
-                modItemManager.getEnabledMap[selectedItem]);
-                    if (result.success) {
-                        // 从管理器中移除该项，自动更新列表并清空选中状态
-                        packageItemManager.removeItem(packageName);
-                    } else {
-                        showMessage('删除失败', `删除模组失败: ${result.message}`);
-                    }
-        },
-        function() {
-        }
-    );
-}
-
-/**
- * 支持自定义动作按钮的列表管理器
- * 继承自 ItemListManager，在每个列表项的选中按钮左侧添加一个可配置文本和回调的按钮
- * @param {string} containerId - 容器元素ID
- * @param {Object} options - 配置选项
- * @param {string|function} options.actionButtonText - 按钮显示文本，可以是字符串或接收 item 返回字符串的函数
- * @param {function} options.actionButtonCallback - 按钮点击回调，接收当前 item 作为参数
- * @param {function} options.onSelect - 选中回调 (item) => {}
- * @param {string} options.emptyMessage - 列表为空时显示的提示
- * @param {string} options.itemIcon - 项目图标类名
- */
-class ActionButtonItemListManager extends ItemListManager {
-    constructor(containerId, options = {}) {
-        super(containerId, options);
-        this.actionButtonText = options.actionButtonText || null;
-        this.actionButtonCallback = options.actionButtonCallback || null;
-    }
-
-    /**
-     * 获取条目的显示名称（支持字符串或对象）
-     * @param {string|Object} item
-     * @returns {string}
-     */
-    _getDisplayName(item) {
-        if (typeof item === 'string') return item;
-        if (item && typeof item === 'object') {
-            // 优先使用 displayName 或 name 属性，否则转为字符串
-            return item.displayName || item.name || String(item);
-        }
-        return String(item);
-    }
-
-    /**
-     * 重写列表项 DOM 创建方法，添加自定义动作按钮
-     */
-    _createItemElement(item) {
-        const displayName = this._getDisplayName(item);
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'list-item';
-        if (this.selectedItem === item) {
-            itemDiv.classList.add('selected');
-            itemDiv.setAttribute('data-selected', 'true');
-        }
-
-        // 构建操作区域 HTML
-        let actionsHtml = '<div class="list-item-actions">';
-
-        // 如果配置了动作按钮，添加动作按钮
-        if (this.actionButtonText && this.actionButtonCallback) {
-            const buttonText = typeof this.actionButtonText === 'function'
-                ? this.actionButtonText(item)
-                : this.actionButtonText;
-            actionsHtml += `
-                <button class="list-action-btn action-btn" title="${buttonText}" style="margin-right: 5px;">
-                    <span>${buttonText}</span>
-                </button>
-            `;
-        }
-
-        // 添加原有的选择按钮
-        actionsHtml += `
-            <button class="list-action-btn select-btn" title="选择">
-                <i class="fas fa-check"></i>
-            </button>
-        </div>`;
-
-        itemDiv.innerHTML = `
-            <div class="list-item-content">
-                <i class="fas ${this.itemIcon}"></i>
-                <span>${displayName}</span>
-            </div>
-            ${actionsHtml}
-        `;
-
-        // 绑定动作按钮事件（如果存在）
-        if (this.actionButtonText && this.actionButtonCallback) {
-            const actionBtn = itemDiv.querySelector('.action-btn');
-            actionBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.actionButtonCallback(item);
-            });
-        }
-
-        // 绑定选择按钮事件
-        const selectBtn = itemDiv.querySelector('.select-btn');
-        selectBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.setSelectedItem(item);
-            if (this.onSelect && typeof this.onSelect === 'function') {
-                this.onSelect(item);
-            }
-        });
-
-        // 点击条目内容区域（非按钮部分）也触发选中
-        itemDiv.addEventListener('click', (e) => {
-            if (e.target.closest('.list-action-btn')) {
-                return;
-            }
-            this.setSelectedItem(item);
-            if (this.onSelect && typeof this.onSelect === 'function') {
-                this.onSelect(item);
-            }
-        });
-
-        return itemDiv;
-    }
-}
-
-let symlinkStatus ;
-
-async function loadSymlinkStatus() {
-    try {
-        const result = await pywebview.api.get_symlink_status();
-        symlinkStatus = result.success ? result.status : {} 
-    } catch (error) {
-        console.log(error);
-        addLogMessage(error);
-    }
-}
-
-let symlinkManager;
-
-async function refreshSymlink() {
-    await loadSymlinkStatus();
-
-    symlinkManager = new ActionButtonItemListManager('symlink-list', {
-        actionButtonText: (item) => {
-            let symlink = symlinkStatus[item];
-            switch (symlink.status) {
-                case 'not_exist':
-                    return '不存在'
-                case 'not_symlink':
-                    return '文件夹'
-                case 'symlink':
-                    return '软链接'
-                default:
-                    return '处理错误'
-            }
-        },
-        actionButtonCallback: (item) => {
-            console.log('交互:', item);
-            let symlink = symlinkStatus[item];
-            switch (symlink.status) {
-                case 'not_exist':
-                    break;
-                case 'not_symlink':
-                    openPath(symlink.path);
-                    break;
-                case 'symlink':
-                    openPath(symlink.target);
-                    break;
-                default:
-                    showMessage('无法处理')
-            }
-        },
-        onSelect: (item) => {
-            console.log('选中:', item);
-        },
-        emptyMessage: '暂无数据',
-        itemIcon: 'fa-file'
-    });
-
-    symlinkManager.setItems(['ProjectMoon', 'Unity']);
-}
-
-function openPath(path) {
-    console.log(`打开 ${path}`);
-    pywebview.api.run_func('open_explorer', path);
-}
-
-
-async function createSymlink() {
-    const folderName = symlinkManager.getSelectedItem();
-    const folder = symlinkStatus[folderName];
-    try {
-        if (folder.status === 'symlink') {
-            showConfirm('是否要更换软链接目标？',
-                `您已经创建了一个可用的软链接，它的目录是 ${folder.target}，是否更换目录？
-                如果您确认继续，请选择您想要更换的目标路径`,
-                async function() {
-                    const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
-                    if (!targetDir || targetDir.length === 0) return;
-                    const hasContent = await pywebview.api.run_func('evaluate_path', targetDir);
-                    async function doCreate() {
-                        await pywebview.api.run_func('remove_symlink', folder.path);
-                        await pywebview.api.run_func('create_symlink', targetDir, folder.path);
-                        await pywebview.api.move_folders(folder.target, targetDir);
-                        refreshSymlink();
-                    };
-                    if (hasContent) {
-                        showConfirm('警告', `目标文件夹中含有文件。可能出现非预期行为。
-                            这有可能导致以下错误: 
-                            游戏无法正常启动，点击删除软链接时同时移动目标文件夹下的所有文件。
-                            正常的做法是创建一个空文件夹用来盛放文件。
-                            如果你确定知道自己在做什么，请点击确定`,
-                        doCreate, () => {})
-                    } else {
-                        doCreate();
-                    };
-                },
-                () => {}
-            )
-        } else if (folder.status === 'not_symlink') {
-            showConfirm('是否要创建软链接？',
-                `如果您确认继续，请选择您想要把数据放在的文件夹`,
-                async function() {
-                    const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
-                    if (!targetDir || targetDir.length === 0) return;
-                    const hasContent = await pywebview.api.run_func('evaluate_path', targetDir);
-                    async function doCreate() {
-                        await pywebview.api.move_folders(folder.path, targetDir);
-                        await pywebview.api.run_func('remove_symlink', folder.path);
-                        await pywebview.api.run_func('create_symlink', targetDir, folder.path);
-                        refreshSymlink();
-                    };
-                    if (hasContent) {
-                        showConfirm('警告', `目标文件夹中含有文件。可能出现非预期行为。
-                            这有可能导致以下错误: 
-                            游戏无法正常启动，点击删除软链接时同时移动目标文件夹下的所有文件。
-                            正常的做法是创建一个空文件夹用来盛放文件。
-                            如果你确定知道自己在做什么，请点击确定`,
-                        doCreate, () => {})
-                    } else {
-                        doCreate();
-                    };
-                },
-                () => {}
-            )
-        } else if (folder.status === 'not_exist') {
-            showConfirm('创建软链接',
-                '现在对应位置没有目录，如果您先前手动迁移了数据，那么点击是以创建软链接',
-                () => {
-                    showMessage('提示', '请选择您先前迁移的文件夹',
-                        async ()=> {
-                            const targetDir = await pywebview.api.browse_folder('symlink-target-dir');
-                            if (!targetDir || targetDir.length === 0) return;
-                            await pywebview.api.run_func('create_symlink', targetDir, folder.path);
-                            refreshSymlink();
-                        }
-                    )
-                },
-            ()=>{});
-        } else {
-            showMessage('警告', '请先确保文件正确已安装');
-        };
-    } catch (error) {
-        showMessage('错误', `创建软链接时发生错误
-            ${error}`);
-    };
-}
-
-async function removeSymlink() {
-    const folderName = symlinkManager.getSelectedItem();
-    const folder = symlinkStatus[folderName];
-    try {
-        if (folder.status === 'symlink') {
-            showConfirm('是否要删除软链接？',
-                `您已经创建了一个可用的软链接，它的目录是 ${folder.target}，是否删除？
-                如果您确认继续，这将使文件夹重新回到c盘`,
-                async function() {
-                    await pywebview.api.run_func('remove_symlink', folder.path);
-                    await pywebview.api.run_func('evaluate_path', folder.path);
-                    await pywebview.api.move_folders(folder.target, folder.path);
-                    refreshSymlink();
-                },
-                () => {}
-            )
-        } else {
-            showMessage('警告', '当前数据项不是软链接');
-        };
-    } catch (error) {
-        showMessage('错误', `删除软链接时发生错误
-            ${error}`)
-    };
-}
-
-class FancyManager {
-    constructor() {
-        this.rulesets = [];           // 所有规则集（包含内置和用户自定义），每个对象含 { name, desc, rules, builtin }
-        this.enabledMap = {};          // 启用状态映射，键为规则集名称（需唯一）
-        this.selectedRuleset = null;   // 当前选中的规则集对象
-        this.listManager = null;       // ToggleItemListManager 实例
-        this.initialized = false;
-    }
-
-    async init() {
-        if (this.initialized) return;
-        // 初始化列表管理器
-        this.listManager = new ToggleItemListManager('fancy-ruleset-list', {
-            emptyMessage: '暂无规则集',
-            itemIcon: 'fa-paint-brush',
-            defaultEnabled: false,
-            onSelect: (item) => this.onSelectRuleset(item),
-            onToggle: (item, enabled) => this.onToggleRuleset(item, enabled)
-        });
-
-        await this.loadRulesets();
-        this.initialized = true;
-    }
-
-    async loadRulesets() {
-        // 从后端获取规则集数据（包括内置和用户自定义）
-        try {
-            const result = await pywebview.api.get_fancy_rulesets();
-            if (result.success) {
-                // result.data 应包含 { builtin: [], user: [], enabled: {} }
-                const builtin = result.data.builtin || [];
-                const user = result.data.user || [];
-                this.enabledMap = result.data.enabled || {};
-
-                // 标记内置规则集
-                builtin.forEach(rs => { rs.builtin = true; });
-                user.forEach(rs => { rs.builtin = false; });
-
-                this.rulesets = [...builtin, ...user];
-
-                // 更新列表显示
-                const items = this.rulesets.map(rs => rs.name);
-                this.listManager.setItems(items);
-                // 根据 enabledMap 设置每个条目的启用状态
-                items.forEach(name => {
-                    if (this.enabledMap[name] !== undefined) {
-                        this.listManager.enabledMap[name] = this.enabledMap[name];
-                    }
-                });
-                this.listManager.updateList();
-
-                // 如果有规则集，默认选中第一个
-                if (this.rulesets.length > 0) {
-                    this.listManager.setSelectedItem(this.rulesets[0].name);
-                    this.onSelectRuleset(this.rulesets[0].name);
-                }
-            } else {
-                showMessage('错误', '加载规则集失败: ' + result.message);
-            }
-        } catch (error) {
-            console.error('加载规则集出错:', error);
-            showMessage('错误', '加载规则集时发生异常');
-        }
-    }
-
-    onSelectRuleset(itemName) {
-        const ruleset = this.rulesets.find(rs => rs.name === itemName);
-        if (!ruleset) return;
-        this.selectedRuleset = ruleset;
-        this.updateEditorUI();
-    }
-
-    onToggleRuleset(itemName, enabled) {
-        let conflict = [];
-        this.rulesets.forEach(element => {
-            if (element.name == itemName) {
-                conflict = element.conflict;
-            }
-        });
-        try {
-            let conflictMessage = '';
-            conflict.forEach(element => {
-                if (this.enabledMap[element]) {
-                    conflictMessage += `${element}  `;
-                }
-            });
-            if (conflictMessage) {
-                showMessage('冲突', `无法在启用  ${conflictMessage}  的情况下启用 ${itemName} 。
-                    请先取消冲突的规则的启用后再启用 ${itemName} `);
-                this.listManager.enabledMap[itemName] = false;
-                this.listManager.updateList();
-                return
-            };
-        } catch (e) {
-            console.log(`切换时警告: ${e} 一般而言不是问题`)
-        }
-        this.enabledMap[itemName] = enabled;
-    }
-
-    updateEditorUI() {
-        if (!this.selectedRuleset) {
-            // 清空并禁用
-            document.getElementById('fancy-ruleset-name').value = '';
-            document.getElementById('fancy-ruleset-name').disabled = true;
-            document.getElementById('fancy-ruleset-desc').value = '';
-            document.getElementById('fancy-ruleset-desc').disabled = true;
-            document.getElementById('fancy-ruleset-rules').value = '';
-            document.getElementById('fancy-ruleset-rules').disabled = true;
-            document.getElementById('fancy-ruleset-builtin').checked = false;
-            document.getElementById('fancy-save-current-btn').disabled = true;
-            return;
-        }
-
-        const nameInput = document.getElementById('fancy-ruleset-name');
-        const descInput = document.getElementById('fancy-ruleset-desc');
-        const rulesTextarea = document.getElementById('fancy-ruleset-rules');
-        const builtinCheck = document.getElementById('builtinRule');
-        const saveBtn = document.getElementById('fancy-save-current-btn');
-
-        nameInput.value = this.selectedRuleset.name;
-        descInput.value = this.selectedRuleset.desc || '';
-        rulesTextarea.value = JSON.stringify(this.selectedRuleset.rules, null, 2);
-        builtinCheck.style = (this.selectedRuleset.builtin || false) ? 'display: block;' : 'display: none;' ;
-
-        // 内置规则集不可编辑
-        const isBuiltin = this.selectedRuleset.builtin;
-        nameInput.disabled = isBuiltin;
-        descInput.disabled = isBuiltin;
-        rulesTextarea.disabled = isBuiltin;
-        saveBtn.disabled = isBuiltin;
-    }
-
-    // 保存当前编辑的规则集
-    saveCurrent() {
-        if (!this.selectedRuleset || this.selectedRuleset.builtin) return;
-
-        const newName = document.getElementById('fancy-ruleset-name').value.trim();
-        const newDesc = document.getElementById('fancy-ruleset-desc').value.trim();
-        const rulesText = document.getElementById('fancy-ruleset-rules').value.trim();
-
-        if (!newName) {
-            showMessage('提示', '规则集名称不能为空');
-            return;
-        }
-
-        // 验证 JSON
-        let newRules;
-        try {
-            newRules = JSON.parse(rulesText);
-            if (!Array.isArray(newRules)) throw new Error('规则必须是一个数组');
-        } catch (e) {
-            showMessage('错误', '规则 JSON 格式错误: ' + e.message);
-            return;
-        }
-
-        // 如果名称改变，需要更新 enabledMap 和列表
-        const oldName = this.selectedRuleset.name;
-        if (oldName !== newName) {
-            // 检查新名称是否已存在
-            if (this.rulesets.some(rs => rs.name === newName)) {
-                showMessage('错误', '已存在同名的规则集');
-                return;
-            }
-            // 更新 enabledMap
-            this.enabledMap[newName] = this.enabledMap[oldName];
-            delete this.enabledMap[oldName];
-            // 更新列表项
-            this.listManager.items = this.rulesets.map(rs => rs.name);
-            this.listManager.updateList();
-        }
-
-        // 更新当前规则集对象
-        this.selectedRuleset.name = newName;
-        this.selectedRuleset.desc = newDesc;
-        this.selectedRuleset.rules = newRules;
-
-        // 重新选中该规则集（刷新高亮）
-        this.listManager.setSelectedItem(newName);
-        // 刷新列表显示（名称可能已变）
-        this.listManager.items = this.rulesets.map(rs => rs.name);
-        this.listManager.updateList();
-
-        showMessage('成功', '规则集已保存');
-    }
-
-    // 新建规则集
-    newRuleset() {
-        const newName = prompt('请输入新规则集名称（不可与现有重名）');
-        if (!newName) return;
-
-        if (this.rulesets.some(rs => rs.name === newName)) {
-            showMessage('错误', '名称已存在');
-            return;
-        }
-
-        const newRuleset = {
-            name: newName,
-            desc: '',
-            rules: [],
-            builtin: false
-        };
-        this.rulesets.push(newRuleset);
-        this.enabledMap[newName] = false;  // 默认禁用
-
-        // 更新列表
-        this.listManager.setItems(this.rulesets.map(rs => rs.name));
-        this.listManager.updateList();
-        this.listManager.setSelectedItem(newName);
-        this.onSelectRuleset(newName);
-    }
-
-    // 删除当前选中的规则集（仅限非内置）
-    deleteSelected() {
-        if (!this.selectedRuleset) {
-            showMessage('提示', '请先选中一个规则集');
-            return;
-        }
-        if (this.selectedRuleset.builtin) {
-            showMessage('提示', '内置规则集不能删除');
-            return;
-        }
-
-        showConfirm('确认删除', `确定要删除规则集 "${this.selectedRuleset.name}" 吗？`,
-            () => {
-                const index = this.rulesets.indexOf(this.selectedRuleset);
-                if (index !== -1) {
-                    this.rulesets.splice(index, 1);
-                    delete this.enabledMap[this.selectedRuleset.name];
-                    // 更新列表
-                    this.listManager.setItems(this.rulesets.map(rs => rs.name));
-                    this.listManager.updateList();
-                    this.selectedRuleset = null;
-                    this.updateEditorUI();
-                }
-            },
-            () => {}
-        );
-    }
-
-    // 保存所有规则集及启用状态到后端
-    async saveAll() {
-        // 分离内置和用户规则集（内置不应保存，但启用状态需要保存）
-        const userRulesets = this.rulesets.filter(rs => !rs.builtin);
-        // 移除 builtin 字段后再发送
-        const userData = userRulesets.map(({ builtin, ...rest }) => rest);
-
-        configManager.updateConfigValue('fancy-user', JSON.stringify(userData));
-        configManager.updateConfigValue('fancy-allow', JSON.stringify(this.enabledMap));
-        configManager.flushPendingUpdates();
-    }
-
-    // 格式化当前规则 JSON
-    formatJson() {
-        const textarea = document.getElementById('fancy-ruleset-rules');
-        try {
-            const obj = JSON.parse(textarea.value);
-            textarea.value = JSON.stringify(obj, null, 2);
-        } catch (e) {
-            showMessage('错误', 'JSON 格式错误，无法格式化');
-        }
-    }
-}
-
-// 全局实例
-let fancyManager;
-
-function applyFancy() {
-    const modal = new ProgressModal('应用美化文本');
-    modal.addLog(`开始执行美化`);
-    modal.addLog(`应用规则集${fancyManager.enabledMap}`);
-    pywebview.api.fancy_main(fancyManager.rulesets, fancyManager.enabledMap).then(
-        () => {
-            modal.complete(true, '完成美化');
-            setTimeout(() => {
-                modal.close();
-            }, 2000);
-        }
-    ).catch(
-        (error) => {
-            modal.addLog(`美化执行错误，错误提示${error}`);
-            modal.complete(false, '美化执行失败');
-        }
-    );
-
-};
-
-function fetchProperNouns() {
-    const outputFormat = document.getElementById('proper-output').value;
-    const skipSpace = document.getElementById('proper-skip-space').checked;
-    const maxCount = document.getElementById('proper-max-count').value;
-    const minCount = document.getElementById('proper-min-count').value;
-    const joinChar = document.getElementById('proper-join-char').value;
-    
-    const updates = {
-        'proper-join-char': joinChar,
-        'proper-max-lenth': maxCount,
-        'proper-min-lenth': minCount,
-        'proper-output-type': outputFormat,
-        'proper-disable-space': skipSpace
-    };
-
-    const modal = new ProgressModal('抓取专有词汇');
-    modal.addLog('开始抓取专有词汇...');
-    modal.addLog(`输出格式: ${outputFormat}`);
-    modal.addLog(`跳过含空格词汇: ${skipSpace ? '是' : '否'}`);
-    modal.addLog(`最短长度: ${minCount}`);
-    if (maxCount) {
-        modal.addLog(`最大词汇数量: ${maxCount}`);
-    }
-    if (outputFormat === 'single') {
-        modal.addLog(`文本分割符：${joinChar}`);
-    }
-    
-    configManager.updateConfigValues(updates)
-        .then(() => {
-            pywebview.api.fetch_proper_nouns(modal.id)
-                .then(function(result) {
-                    if (result.success) {
-                        modal.complete(true, '专有词汇抓取成功');
-                    } else {
-                        modal.complete(false, '抓取失败: ' + result.message);
-                    }
-                })
-                .catch(function(error) {
-                    modal.complete(false, '抓取过程中发生错误: ' + error);
-                });
-        })
-}
-
-function downloadOurplay() {
-    const fontOption = document.getElementById('ourplay-font-option').value;
-    const checkHash = document.getElementById('ourplay-check-hash').checked;
-    const useApi = document.getElementById('ourplay-use-api').checked;
-    
-    const modal = new ProgressModal('下载OurPlay汉化包');
-    modal.addLog('开始下载OurPlay汉化包...');
-    modal.addLog(`字体选项: ${fontOption}`);
-    modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
-    modal.addLog(`使用API: ${useApi ? '启用' : '禁用'}`);
-    
-    // 批量更新配置
-    const updates = {
-        'ourplay-font-option': fontOption,
-        'ourplay-check-hash': checkHash,
-        'ourplay-use-api': useApi
-    };
-    
-    configManager.updateConfigValues(updates)
-        .then(() => {
-            pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
-                if (result.success) {
-                    modal.complete(true, 'OurPlay汉化包下载成功');
-                } else {
-                    if (result.message === "已取消") {
-                        modal.cancel();
-                    } else {
-                        modal.complete(false, '下载失败: ' + result.message);
-                    }
-                }
-            }).catch(function(error) {
-                modal.complete(false, '下载过程中发生错误: ' + error);
-            });
-        });
-}
-
-async function downloadBubble() {
-    const modal = new ProgressModal('开始下载');
-    modal.setStatus('正在初始化...');
-    modal.addLog('开始下载任务');
-    await configManager.updateConfigValues(configManager.collectConfigFromUI());
-    
-    pywebview.api.download_bubble(
-        modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '下载任务已完成');
-        } else {
-            modal.complete(false, '下载失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '下载过程中发生错误: ' + error);
-    });
-}
-
-function cleanCache() {
-    const modal = new ProgressModal('清除缓存');
-    
-    // 获取清理选项
-    const cleanProgress = document.getElementById('clean-progress').checked;
-    const cleanNotice = document.getElementById('clean-notice').checked;
-    const cleanMods = document.getElementById('clean-mods').checked;
-    
-    // 获取自定义文件列表
-    const customFilesList = [];
-    const customFilesContainer = document.getElementById('custom-files-list');
-    if (customFilesContainer) {
-        // 从列表项中获取文件路径
-        const fileItems = customFilesContainer.querySelectorAll('.file-item');
-        fileItems.forEach(item => {
-            const filePath = item.querySelector('.file-path').textContent;
-            if (filePath) {
-                customFilesList.push(filePath);
-            }
+// ═══════════════════════════════════════════════════════════════════════════════
+// 消息弹窗
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function showMessage(title, message, callback = null) {
+    const modal = new ModalWindow(title, { showCancelButton: false, showLog: false, showMinimizeButton: false });
+    modal.setStatus(message);
+    const footer = document.getElementById(`modal-footer-${modal.id}`);
+    if (footer) {
+        footer.innerHTML = `<button class="action-btn success" id="msg-confirm-btn-${modal.id}">确定</button>`;
+        document.getElementById(`msg-confirm-btn-${modal.id}`).addEventListener('click', () => {
+            modal.close();
+            if (callback) callback();
         });
     }
-    
-    // 使用配置管理器批量更新配置
-    const updates = {
-        'clean-progress': cleanProgress,
-        'clean-notice': cleanNotice,
-        'clean-mods': cleanMods
-    };
-    
-    // 保存清理配置并执行清理
-    configManager.updateConfigValues(updates)
-        .then(() => {
-            // 配置保存成功后执行清理操作
-            pywebview.api.clean_cache(modal.id, customFilesList, cleanProgress, cleanNotice, cleanMods).then(function(result) {
-                if (result.success) {
-                    modal.complete(true, '缓存清除成功');
-                } else {
-                    if (result.message === '已取消') {
-                        modal.complete(null, '操作已取消');
-                    } else {
-                        modal.complete(false, '清除失败: ' + result.message);
-                    }
-                }
-            }).catch(function(error) {
-                modal.complete(false, '清除过程中发生错误: ' + error);
-            });
-        })
-        .catch(function(error) {
-            console.error('保存清理配置时发生错误:', error);
-            modal.complete(false, '保存配置失败: ' + error);
-        });
+    return modal;
 }
 
-// 添加自定义清理文件/文件夹
-function addCustomFile() {
-    const filePathInput = document.getElementById('custom-file-path');
-    if (filePathInput && filePathInput.value.trim()) {
-        const filePath = filePathInput.value.trim();
-        const customFilesContainer = document.getElementById('custom-files-list');
-        
-        // 检查文件路径是否已存在
-        const existingItems = customFilesContainer.querySelectorAll('.file-path');
-        let exists = false;
-        existingItems.forEach(item => {
-            if (item.textContent === filePath) {
-                exists = true;
-            }
-        });
-        
-        if (exists) {
-            showMessage('提示', '该文件路径已存在列表中');
-            return;
-        }
-        
-        // 创建列表项
-        const fileItem = document.createElement('div');
-        fileItem.className = 'file-item';
-        fileItem.innerHTML = `
-            <div class="file-info">
-                <i class="fas fa-file"></i>
-                <span class="file-path">${filePath}</span>
-            </div>
-            <button class="action-btn small" onclick="removeCustomFile(this)">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
-        
-        customFilesContainer.appendChild(fileItem);
-        filePathInput.value = '';
-        
-        // 更新配置
-        updateCustomFilesConfig();
+function showConfirm(title, message, onConfirm, onCancel = null) {
+    const modal = new ModalWindow(title, { showLog: false, showMinimizeButton: false, cancelButtonText: '取消' });
+    modal.setStatus(message);
+    const footer = document.getElementById(`modal-footer-${modal.id}`);
+    if (footer) {
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'action-btn success';
+        confirmBtn.textContent = '确定';
+        confirmBtn.addEventListener('click', () => { modal.close(); if (onConfirm) onConfirm(); });
+        footer.insertBefore(confirmBtn, footer.firstChild);
     }
-}
-
-// 移除自定义清理文件
-function removeCustomFile(element) {
-    const fileItem = element.closest('.file-item');
-    if (fileItem) {
-        fileItem.remove();
-        updateCustomFilesConfig();
+    const cancelBtn = document.getElementById(`cancel-btn-${modal.id}`);
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => { modal.close(); if (onCancel) onCancel(); });
     }
+    return modal;
 }
 
-// 更新自定义文件配置
-function updateCustomFilesConfig() {
-    const customFilesList = [];
-    const customFilesContainer = document.getElementById('custom-files-list');
-    if (customFilesContainer) {
-        const fileItems = customFilesContainer.querySelectorAll('.file-item');
-        fileItems.forEach(item => {
-            const filePath = item.querySelector('.file-path').textContent;
-            if (filePath) {
-                customFilesList.push(filePath);
-            }
-        });
-    }
-    
-    // 更新配置
-    configManager.updateConfigValue('custom-files', customFilesList);
-}
 
-// 添加浏览文件到自定义清理列表
-function browseCustomFile() {
-    pywebview.api.browse_file('custom-file-path');
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+// 日志面板
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// 添加浏览文件夹到自定义清理列表
-function browseCustomFolder() {
-    pywebview.api.browse_folder('custom-file-path');
-}
-
-// 清空自定义文件列表
-function clearCustomFilesList() {
-    const customFilesContainer = document.getElementById('custom-files-list');
-    if (customFilesContainer) {
-        customFilesContainer.innerHTML = '';
-        updateCustomFilesConfig();
-    }
-}
-
-function downloadLLC() {
-    const zipType = document.getElementById('llc-zip-type').value;
-    const useProxy = document.getElementById('llc-use-proxy').checked;
-    const useCache = document.getElementById('llc-use-cache').checked;
-    const dumpDefault = document.getElementById('llc-dump-default').checked;
-    const download_source = document.getElementById('llc-download-source').value;
-    
-    // 批量更新配置
-    const updates = {
-        'llc-zip-type': zipType,
-        'llc-use-proxy': useProxy,
-        'llc-use-cache': useCache,
-        'llc-dump-default': dumpDefault,
-        'llc-download-source': download_source
-    };
-    
-    configManager.updateConfigValues(updates)
-        .then(() => {
-            const modal = new ProgressModal('下载零协汉化包');
-            modal.addLog('开始下载零协汉化包...');
-            modal.addLog(`压缩格式: ${zipType}`);
-            modal.addLog(`使用代理: ${useProxy ? '是' : '否'}`);
-            modal.addLog(`使用缓存: ${useCache ? '是' : '否'}`);
-            modal.addLog(`导出默认配置: ${dumpDefault ? '是' : '否'}`);
-            modal.addLog(`下载源: ${download_source}`);
-            
-            pywebview.api.download_llc_translation(modal.id).then(function(result) {
-                if (result.success) {
-                    modal.complete(true, '零协汉化包下载成功');
-                } else {
-                    if (result.message === "已取消") {
-                        modal.cancel();
-                    } else {
-                        modal.complete(false, '下载失败: ' + result.message);
-                    }
-                }
-            }).catch(function(error) {
-                modal.complete(false, '下载过程中发生错误: ' + error);
-            });
-        });
-}
-
-async function downloadMachine() {
-    const modal = new ProgressModal('开始下载');
-    modal.setStatus('正在初始化下载过程...');
-    modal.addLog('开始下载任务');
-    await configManager.updateConfigValues(configManager.collectConfigFromUI());
-    
-    pywebview.api.download_LCTA_auto(modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '下载任务已完成');
-        } else {
-            modal.complete(false, '下载失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '下载过程中发生错误: ' + error);
-    });
-}
-
-// ================================
-// 配置管理函数
-// ================================
-
-// 保存设置
-function saveSettings() {
-    const modal = new ProgressModal('保存设置');
-    modal.addLog('正在保存设置...');
-    
-    if (!configManager) {
-        modal.complete(false, '配置管理器未初始化');
-        return;
-    }
-    
-    // 收集所有配置更新
-    const updates = configManager.collectConfigFromUI();
-    
-    if (Object.keys(updates).length === 0) {
-        modal.complete(true, '没有需要保存的更改');
-        configManager.flushPendingUpdates();
-        setTimeout(
-            () => {
-                modal.close();
-            }, 500
-        );
-        return;
-    }
-    
-    // 批量更新配置
-    configManager.updateConfigValues(updates)
-        .then(function(result) {
-            if (result.success) {
-                // 确保所有待更新都已刷新
-                configManager.flushPendingUpdates()
-                    .then(() => {
-                        modal.complete(true, '设置保存成功');
-                        pywebview.api.save_config_to_file();
-                        setTimeout(
-                            () => {
-                            modal.close();
-                        }, 500
-                        )
-                    });
-            } else {
-                modal.complete(false, '保存失败: ' + result.message);
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '保存过程中发生错误: ' + error);
-        });
-}
-
-function useDefaultConfig() {
-    const modal = new ProgressModal('使用默认配置');
-    modal.addLog('正在重置为默认配置...');
-    
-    pywebview.api.use_default_config()
-        .then(function(result) {
-            if (result.success) {
-                modal.complete(true, '已使用默认配置');
-                // 重新加载配置
-                if (configManager) {
-                    configManager.applyConfigToUI();
-                }
-                setTimeout(function() {
-                    modal.close();
-                }, 1000)
-            } else {
-                modal.complete(false, '配置重置失败: ' + result.message);
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '重置过程中发生错误: ' + error);
-        });
-}
-
-function resetConfig() {
-    showConfirm(
-        "确认重置",
-        "确定要重置所有配置吗？这将删除当前配置并恢复为默认设置。",
-        function() {
-            const modal = new ProgressModal('重置配置');
-            modal.addLog('正在重置配置...');
-            
-            pywebview.api.reset_config()
-                .then(function(result) {
-                    if (result.success) {
-                        // 重新加载配置
-                        if (configManager) {
-                            configManager.applyConfigToUI();
-                            modal.complete(true, '配置已重置');
-                            setTimeout(function() {
-                                modal.close();
-                            }, 1000)
-                        }
-                    } else {
-                        modal.complete(false, '配置重置失败: ' + result.message);
-                    }
-                })
-                .catch(function(error) {
-                    modal.complete(false, '重置过程中发生错误: ' + error);
-                });
-        },
-        function() {
-            // 取消操作
-        }
-    );
-}
-
-function manualCheckUpdates() {
-    const modal = new ProgressModal('检查更新');
-    modal.addLog('正在检查是否有可用更新...');
-    
-    pywebview.api.manual_check_update()
-        .then(function(result) {
-            if (result.has_update) {
-                modal.complete(true, `发现新版本 ${result.latest_version}，请前往GitHub下载更新`);
-                setTimeout(() => {
-                    if (!modal.isMinimized) {
-                        modal.close();
-                        showUpdateInfo(result);
-                    }
-                }, 2000);
-            } else {
-                modal.complete(true, '当前已是最新版本');
-                setTimeout(() => {
-                    if (!modal.isMinimized) {
-                        modal.close();
-                    }
-                }, 2000);
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '检查更新时发生错误: ' + error);
-            setTimeout(() => {
-                if (!modal.isMinimized) {
-                    modal.close();
-                }
-            }, 3000);
-        });
-}
-
-// 自动检查更新函数（仅在有更新时显示窗口）
-function autoCheckUpdates() {
-    pywebview.api.manual_check_update()
-        .then(function(result) {
-            if (result.has_update) {
-                showUpdateInfo(result);
-            }
-        })
-        .catch(function(error) {
-            addLogMessage('自动检查更新时发生错误: ' + error, 'error');
-        });
-}
-
-// 更新进度条函数
-function updateProgress(percent, text) {
-    const progressFill = document.getElementById('progress-fill');
-    const progressPercent = document.getElementById('progress-percent');
-    const progressText = document.getElementById('progress-text');
-    const progressContainer = document.getElementById('translation-progress');
-    
-    if (progressFill) {
-        progressFill.style.width = percent + '%';
-    }
-    
-    if (progressPercent) {
-        progressPercent.textContent = percent + '%';
-    }
-    
-    if (progressText && text) {
-        progressText.textContent = text;
-    }
-    
-    if (progressContainer) {
-        progressContainer.style.display = 'block';
-    }
-}
-
-// 添加日志消息
 function addLogMessage(message, level = 'info') {
     const logDisplay = document.getElementById('log-display');
-    if (logDisplay) {
-        const now = new Date();
-        const timestamp = `[${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
-        
-        const logEntry = document.createElement('div');
-        logEntry.className = `log-entry ${level}`;
-        logEntry.innerHTML = `
-            <div class="log-timestamp">${timestamp}</div>
-            <div class="log-level">[${level.toUpperCase()}]</div>
-            <div class="log-message">${message}</div>
-        `;
-        
-        logDisplay.appendChild(logEntry);
-        logDisplay.scrollTop = logDisplay.scrollHeight;
-    };
-    if (window.apiReady) {
-        pywebview.api.log(message).catch(
-            function(error) { console.log(error); })
-    };
+    if (!logDisplay) return;
+    const now = new Date();
+    const timestamp = `[${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${level}`;
+    entry.innerHTML = `<div class="log-timestamp">${timestamp}</div><div class="log-level">[${level.toUpperCase()}]</div><div class="log-message">${message}</div>`;
+    logDisplay.appendChild(entry);
+    logDisplay.scrollTop = logDisplay.scrollHeight;
+    while (logDisplay.children.length > 500) logDisplay.removeChild(logDisplay.firstChild);
 }
 
-const renderer = new marked.Renderer();
 
-// 重写 link 方法
-renderer.link = function (href, title, text) {
-  // 生成原始的链接 HTML
-  const link = marked.Renderer.prototype.link.call(this, href, title, text);
-  // 如果已经是 <a> 标签，则添加 target 和 rel
-  return link.replace('<a', '<a target="_blank" rel="noopener noreferrer"');
-};
+// ═══════════════════════════════════════════════════════════════════════════════
+// Simple Markdown to HTML
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// 使用自定义渲染器
-marked.setOptions({ renderer });
-// 简单Markdown转HTML
-function simpleMarkdownToHtml(text) {
-    const html = marked.parse(text);
-    return html;
-}
-
-// 添加一个变量来跟踪是否已经显示了更新窗口
-let updateModalShown = false;
-
-function doUpdate() {
-            this.close();
-            const progressModal = new ProgressModal('更新程序');
-            progressModal.addLog('开始下载并安装更新...');
-            pywebview.api.perform_update_in_modal(progressModal.id)
-                .then(function(result) {
-                    if (!result) {
-                        progressModal.addLog('更新失败');
-                        progressModal.complete(false, '更新失败');
-                        return;
-                    }
-                    progressModal.addLog('更新完成');
-                    progressModal.addLog('正在重新启动程序...');
-                    progressModal.complete(true, '更新完成');
-                })
-                .catch(function(error) {
-                    progressModal.addLog('更新失败: ' + error);
-                    progressModal.complete(false, '更新失败');
-                });
-        }
-
-
-// 显示更新信息
-async function showUpdateInfo(update_info) {
-    if (updateModalShown) {
-        return;
+function simpleMarkdownToHtml(markdown) {
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({ breaks: true, gfm: true });
+        return marked.parse(markdown);
     }
-    
-    updateModalShown = true;
-    
-    let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-    htmlMessage += `<p><strong>当前版本:</strong> v5.0.0</p>`;
-    
-    if (update_info.title) {
-        htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
-    }
-    
-    if (update_info.body) {
-        let body = update_info.body.trim();
-        const bodyHtml = simpleMarkdownToHtml(body);
-        htmlMessage += `<div><strong>更新详情:</strong></div>`;
-        htmlMessage += `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`;
-    }
-    
-    if (update_info.published_at) {
-        const publishDate = new Date(update_info.published_at);
-        htmlMessage += `<p><strong>发布时间:</strong> ${publishDate.toLocaleDateString('zh-CN')}</p>`;
-    }
-    
-    if (update_info.html_url) {
-        htmlMessage += `<p><strong>发布页面:</strong> <a href="${update_info.html_url}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
-    }
-    
-    const modal = showConfirm(
-        '发现新版本',
-        '',
-        doUpdate,
-        function() {
-            addLogMessage('用户取消了更新');
-            updateModalShown = false;
-        }
-    );
-    
-    const originalClose = modal.close;
-    modal.close = function() {
-        updateModalShown = false;
-        originalClose.call(this);
-    };
-    
-    setTimeout(async function() {
-        const statusElement = document.getElementById(`modal-status-${modal.id}`);
-        if (statusElement) {
-            statusElement.innerHTML = htmlMessage;
-        };
-        let r = await pywebview.api.get_attr('is_frozen');
-        if (!r) {
-            r = r && (await pywebview.api.get_attr('debug') === 'true')
-        };
-        if (r) {
-            const confirmButton = document.getElementById(`confirm-btn-${modal.id}`)
-            confirmButton.removeEventListener('click', doUpdate)
-            confirmButton.addEventListener('click', ()=>{
-                showMessage('当前版本不兼容自动下载');
-                modal.close()
-            })
-        }
-    }, 100);
-}
-
-// 初始化函数
-function init() {
-    // 初始化配置管理器
-    configManager = new ConfigManager();
-    
-    // 初始化主题管理器
-    themeManager = new ThemeManager();
-    
-    // 初始化拖拽文件管理器
-    dragDropManager = new DragDropManager();
-    setupDragDropCallback();
-    
-    // 初始化导航
-    initNavigation();
-    
-    // 初始化密码切换
-    initPasswordToggles();
-    
-    // 添加初始日志
-    addLogMessage('系统已启动，准备就绪');
-    addLogMessage('当前主题: ' + themeManager.currentTheme);
-    addLogMessage('WebUI 初始化完成');
-    
-    // 创建遮罩层
-    createConnectionMask();
-}
-
-// 创建连接遮罩层
-function createConnectionMask() {
-    const mask = document.createElement('div');
-    mask.id = 'connection-mask';
-    mask.className = 'connection-mask';
-    
-    mask.innerHTML = `
-        <div class="mask-content">
-            <div class="spinner"></div>
-            <div class="mask-text">正在连接到API...</div>
-        </div>
-    `;
-    
-    document.body.appendChild(mask);
-    
-    const statusIndicator = document.querySelector('.status-indicator');
-    if (statusIndicator) {
-        const statusDot = statusIndicator.querySelector('.status-dot');
-        const statusText = statusIndicator.querySelector('span');
-        
-        if (statusDot) {
-            statusDot.className = 'status-dot connecting';
-        }
-        
-        if (statusText) {
-            statusText.textContent = '连接中';
-        }
-    }
-}
-
-// 移除连接遮罩层
-function removeConnectionMask() {
-    const mask = document.getElementById('connection-mask');
-    if (mask) {
-        mask.style.opacity = '0';
-        setTimeout(() => {
-            if (mask.parentNode) {
-                mask.parentNode.removeChild(mask);
-            }
-        }, 300);
-    }
-    
-    const statusIndicator = document.querySelector('.status-indicator');
-    if (statusIndicator) {
-        const statusDot = statusIndicator.querySelector('.status-dot');
-        const statusText = statusIndicator.querySelector('span');
-        
-        if (statusDot) {
-            statusDot.className = 'status-dot connected';
-        }
-        
-        if (statusText) {
-            statusText.textContent = '已连接';
-        }
-    }
-}
-
-function goAndShow(name) {
-    const targetButton = document.getElementById(`${name}-btn`);
-    targetButton.style.display = 'block';
-    targetButton.click();
-}
-
-function setupGlobalErrorHandling() {
-    window.preApiErrors = [];
-    window.preApiRejections = [];
-    window.apiReady = false;
-    
-    window.addEventListener('error', function(event) {
-        const errorMessage = `[全局错误] ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`;
-        const stack = event.error && event.error.stack ? event.error.stack : '无堆栈信息';
-        
-        addLogMessage(errorMessage, 'error');
-        addLogMessage(stack, 'error');
-        console.log('已捕捉到异常',errorMessage);
-        
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.log && window.apiReady) {
-            pywebview.api.log(`[前端错误] ${errorMessage}\n堆栈: ${stack}`)
-                .catch(function(error) {
-                    console.error('无法将错误发送到后端:', error);
-                });
-        } else {
-            window.preApiErrors.push({
-                message: errorMessage,
-                stack: stack,
-                timestamp: new Date().toISOString()
-            });
-        }
-    });
-    
-    window.addEventListener('unhandledrejection', function(event) {
-        const errorMessage = `[未处理的Promise拒绝] ${event.reason}`;
-        
-        addLogMessage(errorMessage, 'error');
-        console.log('已捕捉到异常',errorMessage);
-        
-        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.log && window.apiReady) {
-            pywebview.api.log(`[前端Promise错误] ${errorMessage}`)
-                .catch(function(error) {
-                    console.error('无法将Promise错误发送到后端:', error);
-                });
-        } else {
-            window.preApiRejections.push({
-                message: errorMessage,
-                timestamp: new Date().toISOString()
-            });
-        }
-    });
-}
-
-function checkGamePath() {
-    const gamePath = configManager.getCachedValue('game_path');
-    if (!gamePath) {
-        pywebview.api.run_func('find_lcb')
-            .then(function(foundPath) {
-                if (foundPath) {
-                    confirmGamePath(foundPath);
-                } else {
-                    requestGamePath();
-                };
-                configManager.applyConfigToUI();
-            })
-            .catch(function(error) {
-                addLogMessage('检查游戏路径时发生错误: ' + error, 'error');
-            });
-    }
-}
-
-// 添加确认游戏路径的函数
-function confirmGamePath(foundPath) {
-    showConfirm(
-        "确认游戏路径",
-        `这是否是你的游戏路径：\n${foundPath}\n是否使用此路径？`,
-        function() {
-            configManager.updateConfigValue('game-path', foundPath)
-                .then(function(success) {
-                    if (success) {
-                        configManager.flushPendingUpdates();
-                        configManager.applyConfigToUI();
-                        addLogMessage('游戏路径已确认并保存: ' + foundPath, 'success');
-                        pywebview.api.init_cache();
-                    } else {
-                        addLogMessage('保存游戏路径时出错', 'error');
-                    }
-                })
-                .catch(function(error) {
-                    addLogMessage('设置游戏路径时发生错误: ' + error, 'error');
-                });
-            pywebview.api.save_config_to_file();
-        },
-        function() {
-            requestGamePath();
-        }
-    );
-}
-
-// 添加请求用户手动选择游戏路径的函数
-function requestGamePath() {
-    showMessage(
-        "选择游戏路径", 
-        "请手动选择游戏的安装目录（包含LimbusCompany.exe的文件夹）",
-        function() {
-            browseFolder('game-path');
-        }
-    );
-}
-
-async function showGuide(page) {
-    await showMarkdownModal(`guide/${page}.md`, '俺寻思', '正在加载数据内容')
-}
-
-async function showMarkdownModal(link, title= '指导', pre='正在加载数据内容') {
-
-    const modal = showMessage(title, pre)
-
-    const response = await fetch(link);
-
-    let markdownText
-    
-    if (!response.ok) {
-        markdownText = `加载内容失败: ${response.status} ${response.statusText}`;
-    } else {
-        markdownText = await response.text();
-    };
-    
-    const bodyHtml = simpleMarkdownToHtml(markdownText);
-    const showing = `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`
-
-    setTimeout(() => {
-        const statusElement = document.getElementById(`modal-status-${modal.id}`);
-        if (statusElement) {
-            statusElement.innerHTML = showing;
-        }
-    }, 100);
+    return markdown
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
 }
 
 
-(function() {
-  // 按键状态管理
-  let wPressed = false;      // W 键是否正在被按下
-  let wTimer = null;         // 长按计时器 ID
-  const LONG_PRESS_TIME = 1000; // 长按阈值（毫秒）
+// ═══════════════════════════════════════════════════════════════════════════════
+// DragDropManager
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  // 用户自定义的回调函数（此处可替换为具体逻辑）
-  function onLongPressW() {
-    const activeNav = document.querySelector('.nav-btn.active');
-    const page = activeNav.id.replace('-btn', '');
-    console.log('俺寻思', page);
-    showGuide(page);
-  }
-
-  // 重置与 W 键相关的所有状态
-  function resetWState() {
-    if (wTimer) {
-      clearTimeout(wTimer);
-      wTimer = null;
-    }
-    wPressed = false;
-  }
-
-  // 键盘按下事件
-  function handleKeyDown(e) {
-    // 只关心物理按键 W（KeyW 不随键盘布局改变，更稳定）
-    if (e.code === 'KeyW') {
-      if (wPressed) return;
-
-      wPressed = true;
-
-      // 设置 4 秒后触发的计时器
-      wTimer = setTimeout(() => {
-        onLongPressW();       // 执行回调
-        wTimer = null;        // 计时器已触发，清除引用
-      }, LONG_PRESS_TIME);
-    }
-  }
-
-  // 键盘松开事件
-  function handleKeyUp(e) {
-    if (e.code === 'KeyW') {
-      // 松开时无论是否满 4 秒，都清除计时器并重置状态
-      resetWState();
-    }
-  }
-
-  // 窗口失去焦点时重置（例如用户切换到其他应用时可能无法收到 keyup）
-  function handleBlur() {
-    resetWState();
-  }
-
-  // 添加全局事件监听
-  window.addEventListener('keydown', handleKeyDown);
-  window.addEventListener('keyup', handleKeyUp);
-  window.addEventListener('blur', handleBlur);
-
-  // 可选：返回一个清理函数，便于在需要时移除监听（例如在组件卸载时）
-  // 如果你是在模块或单页应用中使用，可以保留此清理逻辑
-  window.removeLongPressW = function() {
-    window.removeEventListener('keydown', handleKeyDown);
-    window.removeEventListener('keyup', handleKeyUp);
-    window.removeEventListener('blur', handleBlur);
-    resetWState();
-  };
-})();
-
-// 拖拽文件管理器
-// 拖拽文件管理器（毛玻璃遮罩版）
 class DragDropManager {
     constructor() {
-        this.dropZoneElement = document.querySelector('.main-content');
         this.maskElement = null;
         this.onFileDropCallback = null;
         this.leaveChecked = 0;
         this.init();
     }
-    
+
     init() {
-        if (!this.dropZoneElement) return;
-        
-        // 阻止页面默认拖拽行为
-        document.body.addEventListener('dragenter', (e) => {
-            console.log('dragenter');
-            e.preventDefault();
-            e.stopPropagation();
-            this.showMask();
-        });
-        
-        document.body.addEventListener('dragover', (e) => {
-            console.log('dragover');
-            e.preventDefault();
-            e.stopPropagation();
-            this.showMask();
-        });
-        
-        document.body.addEventListener('dragleave', (e) => {
-            console.log('dragleave');
-            e.preventDefault();
-            e.stopPropagation();
-            this.hideMask();
-        });
-        
-        document.body.addEventListener('drop', (e) => {
-            console.log('drop');
-            this.maskLoad();
-        });
+        document.body.addEventListener('dragenter', (e) => { e.preventDefault(); e.stopPropagation(); this.showMask(); });
+        document.body.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); this.showMask(); });
+        document.body.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); this.hideMask(); });
+        document.body.addEventListener('drop', (e) => { this.maskLoad(); });
     }
 
     maskLoad() {
-        console.log('start maskLoad');
         if (!this.maskElement) return;
-        const maskElement = document.getElementById('file-mask-char');
-        if (!maskElement) return;
-        maskElement.className = 'spinner';
-        console.log('end maskLoad');
-        return;
+        const maskChar = document.getElementById('file-mask-char');
+        if (maskChar) maskChar.className = 'spinner';
     }
-    
+
     showMask() {
         this.leaveChecked = 0;
         if (this.maskElement) return;
-        
         this.maskElement = document.createElement('div');
         this.maskElement.className = 'drop-zone-mask';
         this.maskElement.innerHTML = `
@@ -4637,299 +1023,333 @@ class DragDropManager {
                 <i id="file-mask-char" class="fas fa-cloud-upload-alt"></i>
                 <p>拖拽文件到这里</p>
                 <small>支持汉化包安装，模组安装或是版本更新</small>
-            </div>
-        `;
+            </div>`;
         document.body.appendChild(this.maskElement);
     }
-    
+
     hideMask() {
         this.leaveChecked = 1;
         setTimeout(() => {
             if (!this.leaveChecked) return;
             this.leaveChecked += 1;
             setTimeout(() => {
-                if (this.leaveChecked >= 2) {
-                    if (this.maskElement) {
-                        this.maskElement.remove();
-                        this.maskElement = null;
-                        this.leaveChecked = 0;
-                    }
+                if (this.leaveChecked >= 2 && this.maskElement) {
+                    this.maskElement.remove(); this.maskElement = null; this.leaveChecked = 0;
                 }
             }, 30);
         }, 30);
     }
-    
-    handleDrop(event) {
-        const files = [];
-        
-        if (event.dataTransfer.items) {
-            for (let i = 0; i < event.dataTransfer.items.length; i++) {
-                const item = event.dataTransfer.items[i];
-                if (item.kind === 'file') {
-                    const file = item.getAsFile();
-                    if (file) {
-                        files.push(file);
-                    }
-                }
-            }
-        } else {
-            for (let i = 0; i < event.dataTransfer.files.length; i++) {
-                files.push(event.dataTransfer.files[i]);
-            }
-        }
-        
-        if (files.length === 0) {
-            addLogMessage('未检测到文件拖拽', 'warning');
-            return;
-        }
-        
-        addLogMessage(`检测到 ${files.length} 个文件被拖入`, 'info');
-        
-        for (const file of files) {
-            addLogMessage(`拖入文件: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`, 'info');
-        }
-        
-        if (this.onFileDropCallback && typeof this.onFileDropCallback === 'function') {
-            this.onFileDropCallback();
-        }
-    }
-    
-    setOnFileDropCallback(callback) {
-        this.onFileDropCallback = callback;
-    }
-}
-// 创建全局拖拽管理器实例
-let dragDropManager;
 
-// 设置拖拽文件回调函数（可根据需要自定义）
+    setOnFileDropCallback(callback) { this.onFileDropCallback = callback; }
+}
+
 function setupDragDropCallback() {
     if (!dragDropManager) return;
-    
     dragDropManager.setOnFileDropCallback(async () => {
         const modal = showConfirm('处理文件', '正在处理拖入的文件...');
-        result = await pywebview.api.handle_dropped_files()
-
+        const result = await window.pywebview.api.handle_dropped_files();
         document.getElementById(`modal-status-${modal.id}`).innerHTML = result.message;
         if (result.success) {
-            modal.eval_dropped_files = function() {
+            modal.eval_dropped_files = function () {
                 modal.close();
-                const modal = new ProgressModal('处理文件');
-                modal.addLog('正在处理文件...');
-                pywebview.api.eval_dropped_files(result.file_info, modal.id);
-            }
+                const pm = new ProgressModal('处理文件');
+                pm.addLog('正在处理文件...');
+                window.pywebview.api.eval_dropped_files(result.file_info, pm.id);
+            };
         }
     });
 }
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', function() {
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 游戏路径
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function checkGamePath() {
+    const gamePath = configManager.getCachedValue('game_path');
+    if (!gamePath) {
+        window.pywebview.api.run_func('find_lcb')
+            .then(foundPath => {
+                if (foundPath) confirmGamePath(foundPath);
+                else requestGamePath();
+            })
+            .catch(error => addLogMessage('检查游戏路径时发生错误: ' + error, 'error'));
+    }
+}
+
+function confirmGamePath(foundPath) {
+    showConfirm("确认游戏路径", `这是否是你的游戏路径：\n${foundPath}\n是否使用此路径？`,
+        () => {
+            configManager.updateConfigValue('game-path', foundPath)
+                .then(() => configManager.flushPendingUpdates())
+                .then(() => {
+                    addLogMessage('游戏路径已确认并保存: ' + foundPath, 'success');
+                    window.pywebview.api.init_cache();
+                })
+                .catch(error => addLogMessage('设置游戏路径时发生错误: ' + error, 'error'));
+            window.pywebview.api.save_config_to_file();
+        },
+        () => requestGamePath()
+    );
+}
+
+function requestGamePath() {
+    showMessage("选择游戏路径", "请手动选择游戏的安装目录（包含LimbusCompany.exe的文件夹）",
+        () => browseFolder('game-path')
+    );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 帮助引导
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function showGuide(page) {
+    await showMarkdownModal(`webui/guide/${page}.md`, '俺寻思', '正在加载数据内容');
+}
+
+async function showMarkdownModal(link, title = '指导', pre = '正在加载数据内容') {
+    const modal = showMessage(title, pre);
+    const response = await fetch(link);
+    let markdownText;
+    if (!response.ok) {
+        markdownText = `加载内容失败: ${response.status} ${response.statusText}`;
+    } else {
+        markdownText = await response.text();
+    }
+    const bodyHtml = simpleMarkdownToHtml(markdownText);
+    setTimeout(() => {
+        const statusEl = document.getElementById(`modal-status-${modal.id}`);
+        if (statusEl) statusEl.innerHTML = `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`;
+    }, 100);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 长按 W 键引导
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function () {
+    let wPressed = false, wTimer = null;
+    const LONG_PRESS_TIME = 1000;
+
+    function onLongPressW() {
+        const activeId = pagesManager ? pagesManager.activeId : null;
+        if (activeId) showGuide(activeId);
+    }
+
+    function resetWState() { if (wTimer) { clearTimeout(wTimer); wTimer = null; } wPressed = false; }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'KeyW' && !wPressed) {
+            wPressed = true;
+            wTimer = setTimeout(() => { onLongPressW(); wTimer = null; }, LONG_PRESS_TIME);
+        }
+    });
+    window.addEventListener('keyup', (e) => { if (e.code === 'KeyW') resetWState(); });
+    window.addEventListener('blur', resetWState);
+})();
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 全局错误处理
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function setupGlobalErrorHandling() {
+    window.preApiErrors = [];
+    window.preApiRejections = [];
+    window.apiReady = false;
+
+    window.addEventListener('error', function (event) {
+        const msg = `[全局错误] ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`;
+        const stack = event.error && event.error.stack ? event.error.stack : '无堆栈信息';
+        addLogMessage(msg, 'error'); addLogMessage(stack, 'error');
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.log && window.apiReady) {
+            pywebview.api.log(`[前端错误] ${msg}\n堆栈: ${stack}`).catch(() => { });
+        } else {
+            window.preApiErrors.push({ message: msg, stack, timestamp: new Date().toISOString() });
+        }
+    });
+
+    window.addEventListener('unhandledrejection', function (event) {
+        const msg = `[未处理的Promise拒绝] ${event.reason}`;
+        addLogMessage(msg, 'error');
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.log && window.apiReady) {
+            pywebview.api.log(`[前端Promise错误] ${msg}`).catch(() => { });
+        } else {
+            window.preApiRejections.push({ message: msg, timestamp: new Date().toISOString() });
+        }
+    });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 连接遮罩
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function createConnectionMask() {
+    const mask = document.createElement('div');
+    mask.id = 'connection-mask';
+    mask.className = 'connection-mask';
+    mask.innerHTML = `<div class="mask-content"><div class="spinner"></div><div class="mask-text">正在连接到API...</div></div>`;
+    document.body.appendChild(mask);
+    const indicator = document.querySelector('.status-indicator');
+    if (indicator) {
+        const dot = indicator.querySelector('.status-dot');
+        const text = indicator.querySelector('span');
+        if (dot) dot.className = 'status-dot connecting';
+        if (text) text.textContent = '连接中';
+    }
+}
+
+function removeConnectionMask() {
+    const mask = document.getElementById('connection-mask');
+    if (mask) { mask.style.opacity = '0'; setTimeout(() => { if (mask.parentNode) mask.parentNode.removeChild(mask); }, 300); }
+    const indicator = document.querySelector('.status-indicator');
+    if (indicator) {
+        const dot = indicator.querySelector('.status-dot');
+        const text = indicator.querySelector('span');
+        if (dot) dot.className = 'status-dot connected';
+        if (text) text.textContent = '已连接';
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 初始化入口
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function init() {
+    configManager = new ConfigManager();
+    pagesManager = new PagesManager();
+    themeManager = new ThemeManager();
+    dragDropManager = new DragDropManager();
+    setupDragDropCallback();
+    initPasswordToggles();
+    addLogMessage('系统已启动，准备就绪');
+    addLogMessage('当前主题: ' + themeManager.currentTheme);
+    addLogMessage('WebUI 初始化完成');
+    createConnectionMask();
+}
+
+// DOM 就绪后初始化核心
+document.addEventListener('DOMContentLoaded', () => {
     init();
     setupGlobalErrorHandling();
     loadAndRenderMarkdown();
 });
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PyWebView 就绪后加载配置和插件
+// ═══════════════════════════════════════════════════════════════════════════════
+
 let first_use;
 
-// 与后端通信的初始化
-window.addEventListener('pywebviewready', function() {
+window.addEventListener('pywebviewready', function () {
     window.apiReady = true;
-    
     addLogMessage('PyWebview API 已准备就绪', 'success');
-    
+
+    // 发送缓冲的错误
     if (window.preApiErrors && window.preApiErrors.length > 0) {
         addLogMessage(`正在发送 ${window.preApiErrors.length} 条之前捕获的错误信息...`, 'info');
-        
-        window.preApiErrors.forEach(function(error) {
-            pywebview.api.log(`[前端错误][延迟发送] ${error.message}\n堆栈: ${error.stack}`)
-                .catch(function(sendError) {
-                    console.error('无法将延迟错误发送到后端:', sendError);
-                });
+        window.preApiErrors.forEach(err => {
+            window.pywebview.api.log(`[前端错误][延迟发送] ${err.message}\n堆栈: ${err.stack}`).catch(() => { });
         });
-        
         window.preApiErrors = [];
     }
-    
     if (window.preApiRejections && window.preApiRejections.length > 0) {
         addLogMessage(`正在发送 ${window.preApiRejections.length} 条之前捕获的Promise拒绝信息...`, 'info');
-        
-        window.preApiRejections.forEach(function(rejection) {
-            pywebview.api.log(`[前端Promise错误][延迟发送] ${rejection.message}`)
-                .catch(function(sendError) {
-                    console.error('无法将延迟Promise错误发送到后端:', sendError);
-                });
+        window.preApiRejections.forEach(rej => {
+            window.pywebview.api.log(`[前端Promise错误][延迟发送] ${rej.message}`).catch(() => { });
         });
-        
         window.preApiRejections = [];
     }
-    
+
     removeConnectionMask();
-    
-    pywebview.api.get_attr('message_config')
-        .then(function(message_config) {
-            if (message_config && Array.isArray(message_config) && message_config.length === 2) {
-            showMessage(message_config[0], message_config[1]);
+
+    // 显示启动消息
+    window.pywebview.api.get_attr('message_config')
+        .then(msgConfig => {
+            if (msgConfig && Array.isArray(msgConfig) && msgConfig.length === 2) {
+                showMessage(msgConfig[0], msgConfig[1]);
             }
         });
 
-    pywebview.api.get_attr('first_use').then(
-        async function(result) {
-            first_use = result
-            if (result) {
-                await loadMarkdownContent('assets/firstUse.md', 'welcome-content');
-                goAndShow('welcome');
-            }
+    // 首次使用检查
+    window.pywebview.api.get_attr('first_use').then(async (result) => {
+        first_use = result;
+        if (result) {
+            await loadMarkdownContent('webui/assets/firstUse.md', 'welcome-content');
+            goAndShow('welcome');
         }
-    );
+    });
 
-    pywebview.api.run_func('change_icon').catch(
-        function(error) {
-            console.log(error)
-        }
-    );
+    // 初始化后端服务
+    window.pywebview.api.run_func('change_icon').catch(e => console.log(e));
+    window.pywebview.api.init_cache().catch(e => console.log(e));
+    window.pywebview.api.set_attr('http_port', window.location.port);
 
-    pywebview.api.init_cache().catch(
-        function(error) {
-            console.log(error)
-        }
-    );
-
-    pywebview.api.set_attr('http_port', window.location.port);
-    
-    pywebview.api.get_attr('config_ok')
-        .then(function(config_ok) {
-            if (config_ok === false) {
-                pywebview.api.get_attr('config_error')
-                    .then(function(config_error) {
-                        let errorMessage = "配置项格式错误，尝试修复?\n失败将会使用默认配置";
-                        if (config_error && Array.isArray(config_error) && config_error.length > 0) {
-                            errorMessage += "\n\n详细错误信息:\n" + config_error.join("\n");
-                        }
-
-                        addLogMessage(errorMessage);
-
-                        {
-                            pywebview.api.get_attr("config")
-                                .then(function(config) {
-                                    return pywebview.api.run_func('fix_config', config);
-                                })
-                                .then(function(fixed_config) {
-                                    return pywebview.api.set_attr("config", fixed_config);
-                                })
-                                .then(function() {
-                                    return pywebview.api.use_inner();
-                                })
-                                .catch(function(error) {
-                                    showMessage("错误", "修复配置时出错，使用默认配置: " + error);
-                                    pywebview.api.use_default()
-                                    .then(function() {
-                                    })
-                                    .catch(function(error) {
-                                        showMessage("错误", "使用默认配置时出错: " + error);
-                                    });
-                                });
-                        }
-                    })
-            }
-            })
-            .catch(function(error) {
-                addLogMessage('检查配置时出错: ' + error, 'error');
+    // 配置修复
+    window.pywebview.api.get_attr('config_ok').then(configOk => {
+        if (configOk === false) {
+            window.pywebview.api.get_attr('config_error').then(configError => {
+                let errMsg = "配置项格式错误，尝试修复?\n失败将会使用默认配置";
+                if (configError && Array.isArray(configError) && configError.length > 0) {
+                    errMsg += "\n\n详细错误信息:\n" + configError.join("\n");
+                }
+                addLogMessage(errMsg);
+                window.pywebview.api.get_attr("config")
+                    .then(config => window.pywebview.api.run_func('fix_config', config))
+                    .then(fixed => window.pywebview.api.set_attr("config", fixed))
+                    .then(() => window.pywebview.api.use_inner())
+                    .catch(() => {
+                        showMessage("错误", "修复配置时出错，使用默认配置");
+                        window.pywebview.api.use_default().catch(() => { });
+                    });
             });
-    
-    pywebview.api.get_attr('config')
-        .then(function(config) {
-            console.log('配置已加载到前端:', config);
-            window.config = config;
-            
-            // 初始化配置管理器的缓存
+        }
+    }).catch(error => addLogMessage('检查配置时出错: ' + error, 'error'));
+
+    // 加载配置和初始化插件系统
+    window.pywebview.api.get_attr('config').then(config => {
+        console.log('配置已加载到前端:', config);
+        window.config = config;
+
+        if (configManager) {
+            setConfigToCache(config);
+        }
+
+        // 初始化插件加载器（获取 schema + 导航 + 构建侧边栏）
+        pluginLoader.init().then(() => {
+            // 应用配置到页面
             if (configManager) {
-                // 将后端配置数据填充到缓存
-                setConfigToCache(config);
-                
-                // 应用配置到UI
-                configManager.applyConfigToUI().then(function() {
-                    toggleCachePathInput();
-                    toggleStoragePathInput();
-                    toggleDevelopSettings();
-                    toggleCustomLangGui();
-                    toggleAutoProper();
-                    toggleSteamCommand();
-                });
-
-                pywebview.api.check_show().then(
-                    (result) => {
-                        if (result.show && !first_use) {
-                            const bodyHtml = simpleMarkdownToHtml(result.message);
-                            const targetDiv = document.querySelector(`.${className}`);
-
-                            targetDiv.innerHTML = bodyHtml;
-                            goAndShow('welcome');
-                        }
-                });
-
-                fancyManager = new FancyManager();
-                fancyManager.init();
-                
-                elderManager.init();
-
+                configManager.applyConfigToPage();
             }
+
+            // 游戏路径检查
             checkGamePath();
-            
+
+            // 自动更新检查
             const autoCheckUpdate = configManager.getCachedValue('auto_check_update');
-            pywebview.api.init_github()
-                .then(function() {
+            window.pywebview.api.init_github().then(() => {
                 if (autoCheckUpdate && !first_use) {
-                    autoCheckUpdates();
-                    }
+                    if (typeof autoCheckUpdates === 'function') autoCheckUpdates();
                 }
-            );
+            });
 
-            pywebview.api.init_log();
+            window.pywebview.api.init_log();
 
-            const current_theme = configManager.getCachedValue('theme') || 'light';
-            themeManager.setTheme(current_theme, true);
+            // 主题
+            const currentTheme = configManager.getCachedValue('theme') || 'light';
+            themeManager.setTheme(currentTheme, true);
 
-            apiConfigManager = new APIConfigManager();
-            apiConfigManager.init().then(success => {
-                if (success) {
-                    apiConfigManager.loadAPIServices();
-                    let current_select_api = configManager.getCachedValue('ui_default.api_config.key')
-                    if (!current_select_api) {
-                        current_select_api = Object.keys(apiConfigManager.apiServices)[0];
-                    }
-                    // 获取选择框元素
-                    const selectBox = document.querySelector('.api-service-select');
-
-                    if (selectBox) {
-                        selectBox.value = current_select_api;
-                        
-                        const changeEvent = new Event('change', {
-                            bubbles: true,
-                            cancelable: true
-                        });
-                        
-                        selectBox.dispatchEvent(changeEvent);
-                    };
-
-                    apiConfigManager.loadAPIServicesTranslator();
-
-                    let current_select_translator = configManager.getCachedValue('ui_default.translator.translator')
-                    if (!current_select_translator) {
-                        current_select_translator = Object.keys(apiConfigManager.apiServices)[0];
-                    }
-                    // 获取选择框元素
-                    const selectBoxtranslator = document.querySelector('.translator-service-select');
-
-                    if (selectBoxtranslator) {
-                        selectBoxtranslator.value = current_select_translator;
-                        
-                        const changeEvent = new Event('change', {
-                            bubbles: true,
-                            cancelable: true
-                        });
-                        
-                        selectBoxtranslator.dispatchEvent(changeEvent);
-                    };
+            // 插件 on_startup 钩子（由各插件 page.js 在注册时执行）
+            window.pywebview.api.check_show().then(result => {
+                if (result.show && !first_use) {
+                    goAndShow('welcome');
                 }
             });
         });
+    });
 });

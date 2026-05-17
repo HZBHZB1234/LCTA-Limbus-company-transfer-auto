@@ -3,83 +3,38 @@
  *
  * 职责:
  *   1. 初始化时从后端获取全量配置 schema + 值 + 导航
- *   2. 按需激活插件页面（动态加载 HTML/JS/CSS）
- *   3. 管理导航按钮的 active 状态
+ *   2. 构建侧边栏导航按钮
+ *   3. 通过 PagesManager 激活插件页面
+ *   4. 管理插件页面的生命周期
  *
- * 用法:
- *   document.addEventListener('DOMContentLoaded', () => pluginLoader.init());
+ * 每个插件封装一个完整页面（HTML + CSS + JS + 后端 API）。
  */
 
 const pluginLoader = {
-    _loadedPlugins: {},
-    _activePluginId: null,
     _navConfig: [],
 
-    /** 初始化：获取配置同步和导航 */
+    /** 初始化：获取配置同步和导航，构建侧边栏 */
     async init() {
         try {
             const sync = await window.pywebview.api.config_get_full_sync();
+
+            // 将 schema + values 同步到 ConfigManager
             if (configManager && configManager.applyFullSync) {
                 configManager.applyFullSync(sync.schema, sync.values);
             }
+
             this._navConfig = sync.nav || [];
             this._buildNav(this._navConfig);
-            console.log(`[pluginLoader] 初始化完成，发现 ${this._navConfig.length} 个导航项`);
+
+            // 版本号更新
+            const versionEl = document.querySelector('.version');
+            if (versionEl && sync.version) {
+                versionEl.textContent = `v${sync.version}`;
+            }
+
+            console.log(`[pluginLoader] 初始化完成，schema: ${Object.keys(sync.schema || {}).length} 项，nav: ${this._navConfig.length} 项`);
         } catch (e) {
             console.error('[pluginLoader] 初始化失败:', e);
-        }
-    },
-
-    /** 激活插件页面 */
-    async activatePlugin(pluginId) {
-        if (this._activePluginId === pluginId) return;
-
-        try {
-            const result = await window.pywebview.api.plugin_activate(pluginId);
-            if (!result.success) {
-                console.error(`[pluginLoader] 激活插件失败: ${result.message}`);
-                return;
-            }
-
-            const contentArea = document.getElementById('page-content');
-            if (!contentArea) return;
-
-            // 清除旧插件 CSS
-            document.querySelectorAll('style[data-plugin]').forEach(s => s.remove());
-
-            // 渲染 HTML
-            if (result.html) {
-                contentArea.innerHTML = result.html;
-            }
-
-            // 动态加载 CSS
-            if (result.css) {
-                Object.entries(result.css).forEach(([filename, css]) => {
-                    const style = document.createElement('style');
-                    style.textContent = css;
-                    style.dataset.plugin = pluginId;
-                    document.head.appendChild(style);
-                });
-            }
-
-            // 动态执行 JS
-            if (result.js) {
-                Object.entries(result.js).forEach(([filename, code]) => {
-                    try {
-                        const fn = new Function('pluginLoader', 'configManager', code);
-                        fn(pluginLoader, configManager);
-                    } catch (e) {
-                        console.error(`[pluginLoader] 执行 ${filename} 失败:`, e);
-                    }
-                });
-            }
-
-            this._activePluginId = pluginId;
-            this._updateActiveNav(pluginId);
-
-            console.log(`[pluginLoader] 已激活插件: ${pluginId}`);
-        } catch (e) {
-            console.error(`[pluginLoader] 激活插件异常:`, e);
         }
     },
 
@@ -89,39 +44,67 @@ const pluginLoader = {
         if (!menu) return;
 
         navConfig.forEach(item => {
-            // 检查是否已存在该按钮
             if (document.getElementById(item.id)) return;
 
             const btn = document.createElement('button');
             btn.id = item.id;
             btn.className = 'nav-btn';
+            btn.dataset.pluginId = item.plugin_id;
             btn.innerHTML = `<i class="${item.icon}"></i><span>${item.label}</span><div class="nav-indicator"></div>`;
-            btn.addEventListener('click', () => this.activatePlugin(item.plugin_id));
+
+            // 点击时通过 PagesManager 切换页面
+            btn.addEventListener('click', () => {
+                if (pagesManager) {
+                    pagesManager.switchPage(item.plugin_id);
+                }
+            });
 
             // 条件可见
             if (item.visible_when && configManager) {
                 const { config_key, equals } = item.visible_when;
-                if (configManager.get(config_key) !== equals) {
+                const val = configManager.get(config_key);
+                if (val !== equals) {
                     btn.style.display = 'none';
                 }
             }
 
             menu.appendChild(btn);
         });
+
+        // 添加日志按钮（内置页面）
+        if (!document.getElementById('log-btn')) {
+            const logBtn = document.createElement('button');
+            logBtn.id = 'log-btn';
+            logBtn.className = 'nav-btn';
+            logBtn.dataset.pluginId = 'log';
+            logBtn.innerHTML = `<i class="fas fa-clipboard-list"></i><span>日志</span><div class="nav-indicator"></div>`;
+            logBtn.addEventListener('click', () => {
+                if (pagesManager) pagesManager.switchPage('log');
+            });
+            menu.appendChild(logBtn);
+        }
+
+        // 添加关于按钮（跳转到 update 插件页面）
+        if (!document.getElementById('about-btn')) {
+            const aboutBtn = document.createElement('button');
+            aboutBtn.id = 'about-btn';
+            aboutBtn.className = 'nav-btn';
+            aboutBtn.dataset.pluginId = 'update';
+            aboutBtn.innerHTML = `<i class="fas fa-info-circle"></i><span>关于</span><div class="nav-indicator"></div>`;
+            aboutBtn.addEventListener('click', () => {
+                if (pagesManager) pagesManager.switchPage('update');
+            });
+            menu.appendChild(aboutBtn);
+        }
     },
 
-    /** 更新导航按钮的 active 状态 */
-    _updateActiveNav(pluginId) {
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        const manifest = this._navConfig.find(n => n.plugin_id === pluginId);
-        if (manifest) {
-            const btn = document.getElementById(manifest.id);
-            if (btn) btn.classList.add('active');
-        }
+    /** 获取导航配置 */
+    getNavConfig() {
+        return this._navConfig;
     },
 
     /** 获取当前活跃的插件 ID */
     getActivePluginId() {
-        return this._activePluginId;
+        return pagesManager ? pagesManager.activeId : null;
     }
 };

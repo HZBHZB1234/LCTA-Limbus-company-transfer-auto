@@ -41,7 +41,7 @@ def setup_logging():
 
 
 def main():
-    html_path = os.path.join(os.getenv('path_'), "webui", "index.html")
+    html_path = os.path.join(os.getenv('path_'), "index.html")
 
     logger = setup_logging()
     logger.info("正在启动 LCTA WebUI")

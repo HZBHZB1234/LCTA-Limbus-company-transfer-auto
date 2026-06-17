@@ -11,7 +11,7 @@
 int setup_environment();
 int find_python_executable(char* python_path, size_t buffer_size);
 int verify_python_hash(const char* python_path);
-int run_python_script(const char* python_path, const char* script_path);
+int run_python_script(const char* python_path, const char* script_path, int hide_console);
 void show_error_message(const char* title, const char* message);
 void set_steam_argv(int argc, char* argv[], int launcher_index);
 int calculate_file_hash(const char* file_path, char* hash_hex, size_t hex_size);
@@ -43,13 +43,14 @@ int main(int argc, char* argv[]) {
     };
     
     // 根据参数决定是否隐藏控制台窗口
-    HWND console = GetConsoleWindow();
+    // Win11兼容: 使用FreeConsole完全分离控制台
+    // GetConsoleWindow()+ShowWindow(SW_HIDE)在Windows Terminal环境下无效
+    // 因为WT管理自己的窗口，隐藏内部conhost句柄不会关闭WT标签页
     if (!show_console) {
-        ShowWindow(console, SW_HIDE);
-        printf("Console window hidden\n");
+        printf("Hiding console window...\n");
+        FreeConsole();
     } else {
-        ShowWindow(console, SW_SHOW);
-        printf("Console window shown\n");
+        printf("Console window shown (launcher/debug mode)\n");
     }
     
     // 如果是launcher模式，设置steam_argv环境变量
@@ -132,7 +133,7 @@ int main(int argc, char* argv[]) {
     
     // 7. 运行Python脚本
     printf("Launching application...\n");
-    if (!run_python_script(python_path, script_path)) {
+    if (!run_python_script(python_path, script_path, !show_console)) {
         show_error_message("Application Error",
             "Failed to start the application.\n\n"
             "Possible causes:\n"
@@ -341,32 +342,36 @@ int calculate_file_hash(const char* file_path, char* hash_hex, size_t hex_size) 
 }
 
 // 运行Python脚本
-int run_python_script(const char* python_path, const char* script_path) {
+int run_python_script(const char* python_path, const char* script_path, int hide_console) {
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
-    
+
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_SHOW;  // 修改为显示控制台窗口
-    
+    // Win11兼容: 隐藏模式下使用SW_HIDE防止控制台窗口闪烁
+    si.wShowWindow = hide_console ? SW_HIDE : SW_SHOW;
+
     ZeroMemory(&pi, sizeof(pi));
-    
+
     // 构建命令行
     char command_line[1024];
     snprintf(command_line, sizeof(command_line),
              "\"%s\" \"%s\"",
              python_path, script_path);
-    
+
     printf("Command line: %s\n", command_line);
-    
+
+    // Win11兼容: CREATE_NO_WINDOW阻止Python子进程创建新控制台窗口
+    DWORD creationFlags = hide_console ? CREATE_NO_WINDOW : 0;
+
     // 创建进程
     if (!CreateProcess(NULL,           // 不使用模块名
                        command_line,   // 命令行
                        NULL,           // 进程句柄不可继承
                        NULL,           // 线程句柄不可继承
                        FALSE,          // 不继承句柄
-                       0,              // 移除CREATE_NO_WINDOW标志
+                       creationFlags,  // 隐藏模式: CREATE_NO_WINDOW
                        NULL,           // 使用父进程环境
                        NULL,           // 使用父进程目录
                        &si,            // 启动信息

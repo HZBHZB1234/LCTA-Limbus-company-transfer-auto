@@ -104,178 +104,146 @@ def download_ourplay(logger_: LogManager = None):
     return download_url, md5, size
 
 
+def _process_ourplay_package(temp_dir, logger_, modal_id, font_option, cache_path, hash_ok=True):
+    """处理已下载的 OurPlay 汉化包：解压、字体处理、重新打包"""
+    logger_.check_running(modal_id)
+    logger_.log_modal_process("开始处理文件", modal_id)
+    logger_.log_modal_status("正在处理文件", modal_id)
+
+    logger_.log("正在解压文件...")
+    save_path = f"{temp_dir}/transfile.zip"
+    with zipfile.ZipFile(save_path, 'r') as zip_file:
+        zip_file.extractall(f'{temp_dir}\\')
+
+    logger_.check_running(modal_id)
+    logger_.log("正在格式化文件...")
+
+    if font_option == "simplify" or font_option == "llc":
+        shutil.rmtree(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Title')
+        os.makedirs(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Title')
+        logger_.log("已精简字体")
+
+    if font_option == "llc":
+        logger_.log("使用缓存字体...")
+        if not(cache_path and os.path.exists(cache_path)):
+            raise Exception("缓存文件不存在")
+        os.remove(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
+        shutil.copy2(cache_path,
+                    f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
+        logger_.log("已替换为缓存字体")
+
+    logger_.log("正在压缩文件...")
+    if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua', 'ourplay.zip', logger_):
+        logger_.log_modal_process("处理文件时出现错误", modal_id)
+        raise
+
+    logger_.log('格式化完成')
+    logger_.log_modal_process("文件处理完成", modal_id)
+    logger_.update_modal_progress(100, "操作完成", modal_id)
+
+    if not hash_ok:
+        logger_.log_modal_process("操作完成，但存在哈希校验失败的文件，请注意使用风险", modal_id)
+        logger_.log_modal_status("操作完成  警告：存在哈希校验失败的文件")
+    else:
+        logger_.log_modal_status("全部操作完成")
+
+
 def function_ourplay_main(modal_id, logger_: LogManager, **kwargs):
     """
     OurPlay 下载主函数
     """
     logger_.log_modal_process("成功链接后端", modal_id)
-    
+
     with tempfile.TemporaryDirectory() as temp_dir:
         logger_.log_modal_process("开始下载 OurPlay 汉化包", modal_id)
         logger_.log_modal_status("正在初始化链接", modal_id)
-        
+
         # 获取下载信息
         download_info = download_ourplay(logger_)
         if not download_info:
             logger_.log_modal_process("获取 OurPlay 下载信息失败", modal_id)
             raise
-            
+
         url, expected_md5, size = download_info
         save_path = f"{temp_dir}/transfile.zip"
-        
+
         logger_.log(f"OurPlay 下载地址: {url}")
         logger_.check_running(modal_id)
         logger_.log_modal_process("开始下载汉化包", modal_id)
         logger_.log_modal_status("正在下载汉化包", modal_id)
-        
+
         # 下载文件
-        if not download_with(url, save_path, size=size, chunk_size=1024*100, 
+        if not download_with(url, save_path, size=size, chunk_size=1024*100,
                             logger_=logger_, modal_id=modal_id, progress_=[0, 50]):
             logger_.log_modal_process("下载 OurPlay 汉化包时出现错误", modal_id)
             raise
-            
+
         logger_.log("OurPlay 汉化包下载完成")
         logger_.log_modal_process("OurPlay 汉化包下载完成", modal_id)
         logger_.update_modal_progress(50, "下载完成", modal_id)
-        
+
         # 验证 MD5
         hash_ok = True
         if kwargs.get("check_hash"):
             logger_.log_modal_process("正在验证文件完整性", modal_id)
             logger_.log_modal_status("正在验证文件", modal_id)
-            
+
             actual_md5 = calculate_md5(save_path, logger_)
             if not actual_md5:
                 logger_.log_modal_process("计算文件 MD5 失败", modal_id)
                 hash_ok = False
-                
-            if actual_md5 != expected_md5:
+            elif actual_md5 != expected_md5:
                 hash_ok = False
                 logger_.log_modal_process(f"文件校验失败，期望值: {expected_md5}, 实际值: {actual_md5}", modal_id)
-                
-            logger_.log_modal_process("文件校验通过", modal_id)
+            else:
+                logger_.log_modal_process("文件校验通过", modal_id)
             logger_.update_modal_progress(60, "文件校验完成", modal_id)
         else:
             logger_.log_modal_process("跳过文件校验", modal_id)
             logger_.update_modal_progress(60, "跳过文件校验", modal_id)
-        
-        logger_.check_running(modal_id)
-        logger_.log_modal_process("开始处理文件", modal_id)
-        logger_.log_modal_status("正在处理文件", modal_id)
-        
-        font_option = kwargs.get("font_option", "keep")
-        
-        logger_.log("正在解压文件...")
-        with zipfile.ZipFile(save_path, 'r') as zip_file:
-            zip_file.extractall(f'{temp_dir}\\')
-            
-        logger_.check_running(modal_id)
-        logger_.log("正在格式化文件...")
-        
 
-        if font_option == "simplify" or font_option == "llc":
-            shutil.rmtree(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Title')
-            os.makedirs(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Title')
-            logger_.log("已精简字体")
-
-        if font_option == "llc":
-            logger_.log("使用缓存字体...")
-            cache_path = kwargs.get('cache_path', "")
-            
-            if not(cache_path and os.path.exists(cache_path)):
-                raise Exception("缓存文件不存在")
-                
-            os.remove(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
-                
-            shutil.copy2(cache_path,
-                        f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
-            logger_.log("已替换为缓存字体")
-                
-        logger_.log("正在压缩文件...")
-        if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua', 'ourplay.zip', logger_):
-            logger_.log_modal_process("处理文件时出现错误", modal_id)
-            raise
-            
-        logger_.log('格式化完成')
-        logger_.log_modal_process("文件处理完成", modal_id)
-        logger_.update_modal_progress(100, "操作完成", modal_id)
-        if not hash_ok:
-            logger_.log_modal_process("操作完成，但存在哈希校验失败的文件，请注意使用风险", modal_id)
-            logger_.log_modal_status("操作完成  警告：存在哈希校验失败的文件")
-        else:
-            logger_.log_modal_status("全部操作完成")
+        _process_ourplay_package(
+            temp_dir, logger_, modal_id,
+            kwargs.get("font_option", "keep"),
+            kwargs.get('cache_path', ""),
+            hash_ok
+        )
             
 def function_ourplay_api(modal_id, logger_: LogManager, **kwargs):
     """
-    OurPlay 下载主函数
+    OurPlay API 下载函数
     """
     logger_.log_modal_process("成功链接后端", modal_id)
-    
+
     with tempfile.TemporaryDirectory() as temp_dir:
         logger_.log_modal_process("开始下载 OurPlay 汉化包", modal_id)
         logger_.log_modal_status("正在初始化链接", modal_id)
-        
+
         note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
         note_.fetch_note_info()
         url = json.loads(note_.note_content).get("ourplay_download_url")
         save_path = f"{temp_dir}/transfile.zip"
-        
+
         logger_.log(f"OurPlay 下载地址: {url}")
         logger_.check_running(modal_id)
         logger_.log_modal_process("开始下载汉化包", modal_id)
         logger_.log_modal_status("正在下载汉化包", modal_id)
-        
+
         # 下载文件
-        if not download_with(url, save_path, chunk_size=1024*100, 
+        if not download_with(url, save_path, chunk_size=1024*100,
                             logger_=logger_, modal_id=modal_id, progress_=[0, 50]):
             logger_.log_modal_process("下载 OurPlay 汉化包时出现错误", modal_id)
             raise
-            
+
         logger_.log("OurPlay 汉化包下载完成")
         logger_.log_modal_process("OurPlay 汉化包下载完成", modal_id)
         logger_.update_modal_progress(50, "下载完成", modal_id)
-        
+
         logger_.log_modal_process("跳过文件校验", modal_id)
         logger_.update_modal_progress(60, "跳过文件校验", modal_id)
-        
-        logger_.check_running(modal_id)
-        logger_.log_modal_process("开始处理文件", modal_id)
-        logger_.log_modal_status("正在处理文件", modal_id)
-        
-        font_option = kwargs.get("font_option", "keep")
-        
-        logger_.log("正在解压文件...")
-        with zipfile.ZipFile(save_path, 'r') as zip_file:
-            zip_file.extractall(f'{temp_dir}\\')
-            
-        logger_.check_running(modal_id)
-        logger_.log("正在格式化文件...")
-        
 
-        if font_option == "simplify" or font_option == "llc":
-            shutil.rmtree(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Title')
-            os.makedirs(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Title')
-            logger_.log("已精简字体")
-
-        if font_option == "llc":
-            logger_.log("使用缓存字体...")
-            cache_path = kwargs.get('cache_path', "")
-            
-            if not(cache_path and os.path.exists(cache_path)):
-                raise Exception("缓存文件不存在")
-                
-            os.remove(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
-                
-            shutil.copy2(cache_path,
-                        f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua\\Font\\Context\\ChineseFont.ttf')
-            logger_.log("已替换为缓存字体")
-                
-        logger_.log("正在压缩文件...")
-        if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua', 'ourplay.zip', logger_):
-            logger_.log_modal_process("处理文件时出现错误", modal_id)
-            raise
-            
-        logger_.log('格式化完成')
-        logger_.log_modal_process("文件处理完成", modal_id)
-        logger_.update_modal_progress(100, "操作完成", modal_id)
-        logger_.log_modal_status("全部操作完成")
+        _process_ourplay_package(
+            temp_dir, logger_, modal_id,
+            kwargs.get("font_option", "keep"),
+            kwargs.get('cache_path', "")
+        )

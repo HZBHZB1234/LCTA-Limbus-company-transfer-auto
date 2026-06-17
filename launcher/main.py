@@ -405,8 +405,8 @@ class LMGUpdate(UpdateBase):
         try:
             GithubDownload.GithubRequester.update_config(use_proxy)
 
-            llc_last_update = GithubDownload.GithubRequester.get_latest_release("HZBHZB1234",
-                                        "LCTA_auto_update").published_at
+            llc_last_update = GithubDownload.GithubRequester.get_latest_release("LocalizeLimbusCompany",
+                                        "LocalizeLimbusCompany").published_at
 
             llc_last_update = datetime.fromisoformat(llc_last_update.replace('Z', '+00:00'))
         except (ValueError, TypeError):

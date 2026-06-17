@@ -20,7 +20,7 @@ def check_lang_enabled(game_path:str) -> bool:
 def find_installed_packages(config) -> Tuple[list, str]:
     game_path = config.get('game_path', '')
     if not game_path:
-        raise
+        raise ValueError("未设置游戏路径")
     if not check_lang_enabled(game_path):
         return [], ''
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
@@ -40,10 +40,10 @@ def find_installed_packages(config) -> Tuple[list, str]:
 def use_translation_package(package_name: str, config):
     game_path = config.get('game_path', '')
     if not package_name or not game_path:
-        raise
+        raise ValueError("未选择汉化包或未设置游戏路径")
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
     if not (lang_path / package_name).exists():
-        raise
+        raise FileNotFoundError(f"汉化包不存在: {package_name}")
     lang_config = lang_path / 'config.json'
     try:
         config_lang = json.loads(lang_config.read_text(encoding='utf-8'))
@@ -56,7 +56,7 @@ def use_translation_package(package_name: str, config):
 def delete_installed_package(package_name: str, config):
     game_path = config.get('game_path', '')
     if not package_name or not game_path:
-        raise
+        raise ValueError("未选择汉化包或未设置游戏路径")
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
     if not (lang_path / package_name).exists():
         return {'success': False, "message": '当前汉化包不存在'}
@@ -74,7 +74,7 @@ def delete_installed_package(package_name: str, config):
 def toggle_install_package(config, enable):
     game_path = config.get('game_path', '')
     if not game_path:
-        raise
+        raise ValueError("未设置游戏路径")
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
     disable_path = Path(game_path) / 'LimbusCompany_Data' / '_lang'
     current = check_lang_enabled(game_path)
@@ -160,7 +160,8 @@ def open_explorer(path):
     """打开资源管理器窗口"""
     if os.path.exists(str(path)):
         subprocess.Popen(['explorer', str(path)])
-    else:raise
+    else:
+        raise FileNotFoundError(f"路径不存在: {path}")
 
 def create_symlink_for(from_dir: str, target_dir: str):
     Path(target_dir).symlink_to(from_dir, target_is_directory=True)

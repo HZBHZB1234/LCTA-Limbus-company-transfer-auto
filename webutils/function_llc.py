@@ -25,9 +25,53 @@ def check_ver_github(from_proxy):
     return GithubFunc.GithubRequester.get_latest_release("LocalizeLimbusCompany",
                                   "LocalizeLimbusCompany").tag_name
 
+def _process_llc_package(temp_dir, logger_: LogManager, modal_id, save_path_text, save_path_font,
+                         final_name, use_cache, cache_path, dump_default):
+    """处理已下载的 LLC 包：解压/保存、字体处理、重新打包"""
+    if dump_default:
+        logger_.log("dump_default")
+        logger_.log_modal_process("检测到设置：保存原文件", modal_id)
+        shutil.copy2(save_path_text, final_name)
+        logger_.log_modal_process("保存文本文件成功", modal_id)
+        if not use_cache:
+            shutil.copy2(save_path_font, "LLCCN-Font.7z")
+            logger_.log_modal_process("保存字体文件成功", modal_id)
+        logger_.update_modal_progress(100, "文件保存完成", modal_id)
+    else:
+        logger_.log("make_zip")
+        logger_.log_modal_process("开始解压文件", modal_id)
+        logger_.log_modal_status("正在解压文件", modal_id)
+        decompress_by_extension(save_path_text, temp_dir, logger_=logger_)
+        logger_.update_modal_progress(80, "成功解压文本文件", modal_id)
+        logger_.log_modal_process("成功解压文本文件", modal_id)
+        logger_.check_running(modal_id)
+        if not use_cache:
+            decompress_by_extension(save_path_font, temp_dir, logger_=logger_)
+            logger_.update_modal_progress(90, "成功解压字体文件", modal_id)
+            logger_.log_modal_process("成功解压字体文件", modal_id)
+            logger_.check_running(modal_id)
+        else:
+            font_path = f"{temp_dir}\\LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context"
+            if not os.path.exists(font_path):
+                os.makedirs(font_path)
+            font_path = f"{font_path}\\{Path(cache_path).name}"
+            shutil.copy2(cache_path, font_path)
+        logger_.log_modal_status("正在打包文件", modal_id)
+        final_zip_path = final_name.replace(".7z", ".zip")
+        logger_.log_modal_process("开始重新打包文件", modal_id)
+        lang_path = f'{temp_dir}\\LimbusCompany_Data\\Lang\\LLC_zh-CN'
+        if not zip_folder(lang_path, final_zip_path, logger_=logger_):
+            logger_.log_modal_process("打包文件时出现错误", modal_id)
+            raise
+        logger_.update_modal_progress(100, "成功打包文件", modal_id)
+        logger_.log_modal_process("成功打包文件", modal_id)
+        logger_.log_modal_status("全部操作完成", modal_id)
+        return final_zip_path
+
+
 def function_llc_main(modal_id, logger_: LogManager, **kwargs):
     logger_.log_modal_process("成功链接后端", modal_id)
-    
+
     # 提前获取常用参数
     from_ = kwargs.get('download_source', 'github')  # 可选值: github, api
     from_proxy = kwargs.get('from_proxy', True)  # 是否使用代理
@@ -35,10 +79,10 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
     use_cache = kwargs.get('use_cache', True)
     cache_path = kwargs.get('cache_path', "")
     dump_default = kwargs.get("dump_default", False)
-    
+
     if use_cache and not(cache_path and os.path.exists(cache_path)):
         raise Exception("缓存文件不存在")
-    
+
     with tempfile.TemporaryDirectory() as temp_dir:
         logger_.log_modal_process("开始下载翻译文件", modal_id)
         logger_.log_modal_status("正在初始化链接", modal_id)
@@ -90,7 +134,7 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
             logger_.log_modal_process("文本文件下载完成")
 
             save_path_font = f"{temp_dir}/LLCCN-Font.7z"
-            
+
             if not use_cache:
                 logger_.log_modal_process("开始下载字体文件", modal_id)
                 logger_.log_modal_status("正在下载字体文件", modal_id)
@@ -102,58 +146,19 @@ def function_llc_main(modal_id, logger_: LogManager, **kwargs):
                 ):
                     logger_.log_modal_process("下载字体文件时出现错误", modal_id)
                     raise
-                
+
                 logger_.log("字体文件下载完成")
                 logger_.log_modal_process("字体文件下载完成", modal_id)
-            
+
             logger_.log_modal_status("保存文件", modal_id)
-            
-            if dump_default:
-                logger_.log("dump_default")
-                logger_.log_modal_process("检测到设置：保存原文件", modal_id)
-                shutil.copy2(save_path_text, last_zip.name)
-                logger_.log_modal_process("保存文本文件成功", modal_id)
-                
-                if not use_cache:
-                    shutil.copy2(save_path_font, "LLCCN-Font.7z")
-                    logger_.log_modal_process("保存字体文件成功", modal_id)
-                
-                logger_.update_modal_progress(100, "文件保存完成", modal_id)
-            else:
-                logger_.log("make_zip")
-                logger_.log_modal_process("开始解压文件", modal_id)
-                logger_.log_modal_status("正在解压文件", modal_id)
 
-                decompress_by_extension(save_path_text, temp_dir, logger_=logger_)
-                logger_.update_modal_progress(80, "成功解压文本文件", modal_id)
-                logger_.log_modal_process("成功解压文本文件", modal_id)
-                logger_.check_running(modal_id)
-
-                if not use_cache:
-                    decompress_by_extension(save_path_font, temp_dir, logger_=logger_)
-                    logger_.update_modal_progress(90, "成功解压字体文件", modal_id)
-                    logger_.log_modal_process("成功解压字体文件", modal_id)
-                    logger_.check_running(modal_id)
-                else:
-                    font_path = f"{temp_dir}\\LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context"
-                    if not os.path.exists(font_path):
-                        os.makedirs(font_path)
-                    font_path = f"{font_path}\\{Path(cache_path).name}"
-                    shutil.copy2(cache_path, font_path)
-                
-                logger_.log_modal_status("正在打包文件", modal_id)
-                final_zip_path = last_zip.name.replace(".7z", ".zip")
-                logger_.log_modal_process("开始重新打包文件", modal_id)
-                
-                lang_path = f'{temp_dir}\\LimbusCompany_Data\\Lang\\LLC_zh-CN'
-                if not zip_folder(lang_path, final_zip_path, logger_=logger_):
-                    logger_.log_modal_process("打包文件时出现错误", modal_id)
-                    raise
-                
-                logger_.update_modal_progress(100, "成功打包文件", modal_id)
-                logger_.log_modal_process("成功打包文件", modal_id)
-                logger_.log_modal_status("全部操作完成", modal_id)
-                return final_zip_path
+            result = _process_llc_package(
+                temp_dir, logger_, modal_id,
+                save_path_text, save_path_font,
+                last_zip.name, use_cache, cache_path, dump_default
+            )
+            if result:
+                return result
 
         logger_.log_modal_status("全部操作完成", modal_id)
 
@@ -226,50 +231,11 @@ def _download_from_api(temp_dir, logger_: LogManager, modal_id, zip_type,
         logger_.log_modal_process("字体文件下载完成", modal_id)
     
     logger_.log_modal_status("保存文件", modal_id)
-    
-    if dump_default:
-        logger_.log("dump_default")
-        logger_.log_modal_process("检测到设置：保存原文件", modal_id)
-        shutil.copy2(save_path_text, file_name)
-        logger_.log_modal_process("保存文本文件成功", modal_id)
-        
-        if not use_cache:
-            shutil.copy2(save_path_font, "LLCCN-Font.7z")
-            logger_.log_modal_process("保存字体文件成功", modal_id)
-        
-        logger_.update_modal_progress(100, "文件保存完成", modal_id)
-    else:
-        logger_.log("make_zip")
-        logger_.log_modal_process("开始解压文件", modal_id)
-        logger_.log_modal_status("正在解压文件", modal_id)
 
-        decompress_by_extension(save_path_text, temp_dir, logger_=logger_)
-        logger_.update_modal_progress(80, "成功解压文本文件", modal_id)
-        logger_.log_modal_process("成功解压文本文件", modal_id)
-        logger_.check_running(modal_id)
-
-        if not use_cache:
-            decompress_by_extension(save_path_font, temp_dir, logger_=logger_)
-            logger_.update_modal_progress(90, "成功解压字体文件", modal_id)
-            logger_.log_modal_process("成功解压字体文件", modal_id)
-            logger_.check_running(modal_id)
-        else:
-            font_path = f"{temp_dir}\\LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context"
-            if not os.path.exists(font_path):
-                os.makedirs(font_path)
-            font_path = f"{font_path}\\{Path(cache_path).name}"
-            shutil.copy2(cache_path, font_path)
-        
-        logger_.log_modal_status("正在打包文件", modal_id)
-        final_zip_path = file_name.replace(".7z", ".zip")
-        logger_.log_modal_process("开始重新打包文件", modal_id)
-        
-        lang_path = f'{temp_dir}\\LimbusCompany_Data\\Lang\\LLC_zh-CN'
-        if not zip_folder(lang_path, final_zip_path, logger_=logger_):
-            logger_.log_modal_process("打包文件时出现错误", modal_id)
-            raise
-        
-        logger_.update_modal_progress(100, "成功打包文件", modal_id)
-        logger_.log_modal_process("成功打包文件", modal_id)
-        logger_.log_modal_status("全部操作完成", modal_id)
-        return final_zip_path
+    result = _process_llc_package(
+        temp_dir, logger_, modal_id,
+        save_path_text, save_path_font,
+        file_name, use_cache, cache_path, dump_default
+    )
+    if result:
+        return result

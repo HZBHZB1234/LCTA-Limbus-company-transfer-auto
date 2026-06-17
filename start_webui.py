@@ -90,7 +90,7 @@ def start_launcher():
     """启动Launcher界面"""
     try:
         init_env()
-        os.environ['steam_argv'] = ' '.join(sys.argv[1:].remove('-launcher')) if len(sys.argv) >=3 else ''
+        os.environ['steam_argv'] = ' '.join([a for a in sys.argv[1:] if a != '-launcher']) if len(sys.argv) >= 2 else ''
         
         from launcher.main import main
         print("正在启动LCTA Launcher...")

@@ -6,6 +6,10 @@ import tempfile
 import json
 import zipfile
 
+from .function_install import install_translation_package
+from .function_manage import get_mod_path
+from .functions import extract_zip_smartly
+
 FOLDERLIST = [
     'BattleAnnouncerDlg',
     'BgmLyrics',
@@ -43,7 +47,7 @@ def evalZip(zip_path):
             return 'FLmod'
         if notJsonAmount >= 3:
             return 'jsononly'
-        if any('requirements.txt' in name for name in notJsonAmount) and any('start_webui.py' in name for name in notJsonAmount):
+        if any('requirements.txt' in name for name in notJson) and any('start_webui.py' in name for name in notJson):
             return 'update'
         return 'invalid'
         
@@ -62,12 +66,12 @@ def evalFolder(folder_path):
     return 'invalid'
 
 def eval7zip(file_path):
-    tmp = tempfile.mkdtemp()
-    try:
-        Archive(file_path).extractall(tmp)
-        return evalFolder(tmp), tmp
-    except Exception as e:
-        return 'invalid', tmp
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            Archive(file_path).extractall(tmp)
+            return evalFolder(tmp), tmp
+        except Exception as e:
+            return 'invalid', tmp
     
 def evalJson(json_path):
     try:
@@ -92,6 +96,10 @@ def evalFile(file_path):
         return eval7zip(file_path)[0]
     if file_path.endswith('.json'):
         return evalJson(file_path)
+    if file_path.endswith('.carra2'):
+        return 'carra'
+    if file_path.endswith('.bank'):
+        return 'bank'
     return 'invalid'
 
 def makeMessage(content):
@@ -117,7 +125,184 @@ def makeMessage(content):
     return message
 
 def evalFiles(files_data, config, logger, modal_id="false"):
-    pass
+    """处理拖入的文件，根据检测到的类型执行相应的安装操作
+
+    Args:
+        files_data: dict, {file_path: type_string}, 由 handle_dropped_files 生成
+        config: 完整应用配置
+        logger: LogManager 实例
+        modal_id: 进度模态窗口 ID
+
+    Returns:
+        dict: {"success": bool, "message": str, "installed": int,
+               "modded": int, "skipped": int, "errors": int,
+               "error_details": list}
+    """
+    if not files_data:
+        logger.log_modal_process("没有需要处理的文件", modal_id)
+        return {"success": True, "message": "没有需要处理的文件",
+                "installed": 0, "modded": 0, "skipped": 0, "errors": 0,
+                "error_details": []}
+
+    game_path = config.get('game_path', '')
+    mod_path = get_mod_path(config)
+    os.makedirs(mod_path, exist_ok=True)
+
+    total = len(files_data)
+    results = {"installed": 0, "modded": 0, "skipped": 0, "errors": 0}
+    error_details = []
+
+    for idx, (file_path, file_type) in enumerate(files_data.items()):
+        # 检查取消 — CancelRunning 会向上传播
+        logger.check_running(modal_id)
+
+        file_name = Path(file_path).name
+        progress_pct = int((idx / total) * 100)
+
+        # 检查文件是否仍然存在
+        if not os.path.exists(file_path):
+            logger.log_modal_process(f"文件不存在，跳过: {file_name}", modal_id)
+            results["skipped"] += 1
+            continue
+
+        try:
+            if file_type in ('full', 'nofont'):
+                logger.log_modal_process(f"正在安装汉化包: {file_name}", modal_id)
+                logger.update_modal_progress(
+                    progress_pct,
+                    f"安装汉化包 ({idx+1}/{total}): {file_name}",
+                    modal_id)
+
+                if not game_path:
+                    raise ValueError("未设置游戏路径，无法安装汉化包")
+
+                install_translation_package(
+                    file_path, game_path, logger, modal_id)
+                results["installed"] += 1
+                logger.log_modal_process(f"汉化包安装完成: {file_name}", modal_id)
+
+            elif file_type == 'FLmod':
+                logger.log_modal_process(f"正在安装模组: {file_name}", modal_id)
+                logger.update_modal_progress(
+                    progress_pct,
+                    f"安装模组 ({idx+1}/{total}): {file_name}",
+                    modal_id)
+
+                target_name = (Path(file_path).stem
+                               if file_path.endswith('.zip')
+                               else Path(file_path).name)
+                target_path = os.path.join(str(mod_path), target_name)
+
+                # 覆盖前删除已有目标 (遵循项目惯例)
+                if os.path.exists(target_path):
+                    if os.path.isdir(target_path):
+                        shutil.rmtree(target_path)
+                    else:
+                        os.remove(target_path)
+
+                if file_path.endswith('.zip'):
+                    extract_zip_smartly(file_path, str(mod_path))
+                else:
+                    shutil.copytree(file_path, target_path)
+
+                results["modded"] += 1
+                logger.log_modal_process(f"模组安装完成: {file_name}", modal_id)
+
+            elif file_type in ('carra', 'bank'):
+                label = NAMEREFER.get(file_type, file_type)
+                logger.log_modal_process(f"正在安装{label}: {file_name}", modal_id)
+                logger.update_modal_progress(
+                    progress_pct,
+                    f"安装{label} ({idx+1}/{total}): {file_name}",
+                    modal_id)
+
+                target_path = os.path.join(str(mod_path), file_name)
+                if os.path.exists(target_path):
+                    os.remove(target_path)
+                shutil.copy2(file_path, str(mod_path))
+
+                results["modded"] += 1
+                logger.log_modal_process(f"{label}安装完成: {file_name}", modal_id)
+
+            elif file_type == 'jsononly':
+                logger.log_modal_process(f"正在安装文本替换包: {file_name}", modal_id)
+                logger.update_modal_progress(
+                    progress_pct,
+                    f"安装文本替换包 ({idx+1}/{total}): {file_name}",
+                    modal_id)
+
+                target_name = Path(file_path).name
+                target_path = os.path.join(str(mod_path), target_name)
+                if os.path.exists(target_path) and os.path.isdir(target_path):
+                    shutil.rmtree(target_path)
+                shutil.copytree(file_path, target_path)
+
+                results["modded"] += 1
+                logger.log_modal_process(f"文本替换包安装完成: {file_name}", modal_id)
+
+            elif file_type in ('textFile', 'LCTAchange', 'FLchange'):
+                label = NAMEREFER.get(file_type, file_type)
+                logger.log_modal_process(f"正在安装{label}: {file_name}", modal_id)
+                logger.update_modal_progress(
+                    progress_pct,
+                    f"安装{label} ({idx+1}/{total}): {file_name}",
+                    modal_id)
+
+                target_path = os.path.join(str(mod_path), file_name)
+                if os.path.exists(target_path):
+                    os.remove(target_path)
+                shutil.copy2(file_path, str(mod_path))
+
+                results["modded"] += 1
+                logger.log_modal_process(f"{label}安装完成: {file_name}", modal_id)
+
+            elif file_type == 'invalid':
+                logger.log_modal_process(f"跳过无效文件: {file_name}", modal_id)
+                results["skipped"] += 1
+
+            elif file_type == 'update':
+                logger.log_modal_process(
+                    f"跳过更新包 (请单独拖入以执行更新): {file_name}", modal_id)
+                results["skipped"] += 1
+
+            else:
+                logger.log_modal_process(
+                    f"未知文件类型 '{file_type}'，跳过: {file_name}", modal_id)
+                results["skipped"] += 1
+
+        except Exception as e:
+            error_msg = f"处理文件 '{file_name}' 时出错: {str(e)}"
+            logger.log_modal_process(error_msg, modal_id)
+            logger.log_error(e)
+            results["errors"] += 1
+            error_details.append({"file": file_name, "error": str(e)})
+
+    # 构建摘要信息
+    parts = []
+    if results["installed"] > 0:
+        parts.append(f"{results['installed']}个汉化包")
+    if results["modded"] > 0:
+        parts.append(f"{results['modded']}个模组")
+    if results["skipped"] > 0:
+        parts.append(f"跳过{results['skipped']}个")
+    if results["errors"] > 0:
+        parts.append(f"失败{results['errors']}个")
+
+    summary = "安装完成: " + ", ".join(parts) if parts else "没有需要安装的文件"
+
+    logger.log_modal_process(summary, modal_id)
+    logger.log_modal_status("处理完成", modal_id)
+    logger.update_modal_progress(100, summary, modal_id)
+
+    return {
+        "success": results["errors"] == 0,
+        "message": summary,
+        "installed": results["installed"],
+        "modded": results["modded"],
+        "skipped": results["skipped"],
+        "errors": results["errors"],
+        "error_details": error_details if error_details else []
+    }
 
 if __name__ == '__main__':
     evalZip(r'E:\desktop\limbus transfer\LCTA-Limbus-company-transfer-auto\LimbusLocalize_2026032001.zip')

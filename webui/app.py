@@ -1167,8 +1167,16 @@ class LCTA_API():
 
     def eval_dropped_files(self, files_data, modal_id="false"):
         """从拖拽的文件安装汉化包"""
-        evalFiles(files_data, self.config, self.log_manager, modal_id)
-        return {"success": True, "message": "安装完成"}
+        try:
+            result = evalFiles(files_data, self.config, self.log_manager, modal_id)
+            return result
+        except CancelRunning:
+            self.log('文件安装任务已取消')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
 def setup_logging():
     """
     配置日志系统，使用TimedRotatingFileHandler按时间轮转日志

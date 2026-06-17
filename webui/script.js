@@ -4707,7 +4707,7 @@ function setupDragDropCallback() {
     
     dragDropManager.setOnFileDropCallback(async () => {
         const modal = showConfirm('处理文件', '正在处理拖入的文件...');
-        result = await pywebview.api.handle_dropped_files()
+        const result = await pywebview.api.handle_dropped_files()
 
         document.getElementById(`modal-status-${modal.id}`).innerHTML = result.message;
         if (result.success) {
@@ -4717,6 +4717,7 @@ function setupDragDropCallback() {
                 modal.addLog('正在处理文件...');
                 pywebview.api.eval_dropped_files(result.file_info, modal.id);
             }
+            modal.onConfirmCallback = modal.eval_dropped_files;
         }
     });
 }

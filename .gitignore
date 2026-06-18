@@ -18,6 +18,8 @@ proper.json
 .idea
 logs
 build
+.build_cache
+venv
 dist
 dev_assets
 .env

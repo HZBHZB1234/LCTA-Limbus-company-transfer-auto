@@ -35,9 +35,21 @@
 3. 运行 **可执行文件(.exe)** 即可启动工具箱
 
 ## 从源码安装 (不推荐)
-1. 确保已安装 [Python3.96](https://www.python.org/downloads) 及以上版本python
+1. 确保已安装 [Python 3.9.6](https://www.python.org/downloads) 及以上版本
 2. 下载项目源码
-3. 运行 `build.ps1` 以初始化代码。根据指引完成操作
+3. 安装依赖：`pip install -r requirements.txt`
+4. 运行 `python start_webui.py` 启动 WebUI；或 `python start_webui.py -launcher` 启动集成启动器
+
+### 构建发布包
+运行 `.\build.ps1` 完成完整构建打包，产物输出到 `dist/` 目录：
+- `LCTA-Portable-Full.zip` — 正常版本
+- `LCTA-Portable-Full-Compatible.zip` — 兼容版（含 PyQt 后备）
+- `LCTA-update.zip` — 源码更新包
+
+构建要求：
+- PowerShell 5.0+
+- MinGW-w64（gcc + windres，用于编译 C 启动器；不可用时自动跳过）
+- 网络连接（首次需下载嵌入式 Python 3.9.6）
 
 ---
 

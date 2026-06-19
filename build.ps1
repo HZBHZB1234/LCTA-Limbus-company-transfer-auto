@@ -6,19 +6,17 @@ $ErrorActionPreference = "Continue"
 $APP_NAME = "LCTA"
 $PYTHON_VERSION = "3.9.6"
 
-# 切换到脚本所在目录（项目根目录）
 Set-Location -Path $PSScriptRoot
 $ProjectRoot = (Get-Location).Path
 $ParentDir = Split-Path -Parent $ProjectRoot
 
-# 构建缓存目录（不修改源代码）
+# 构建缓存目录
 $BuildCacheDir = "$ProjectRoot\.build_cache"
 $PythonZipCache = "$BuildCacheDir\python-$PYTHON_VERSION-embed-amd64.zip"
 $PythonEmbedCache = "$BuildCacheDir\python-embed"
 $CCompileCache = "$BuildCacheDir\c"
 $WebuiBuildCache = "$BuildCacheDir\webui-build"
 
-# 确保缓存目录存在
 foreach ($d in @($BuildCacheDir, $PythonEmbedCache, $CCompileCache)) {
     if (-not (Test-Path $d)) {
         New-Item -ItemType Directory -Path $d -Force | Out-Null
@@ -29,61 +27,85 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  LCTA Build Script" -ForegroundColor Cyan
 Write-Host "  Project: $ProjectRoot" -ForegroundColor Cyan
 Write-Host "  Output:  $ProjectRoot\dist" -ForegroundColor Cyan
+Write-Host "  Cache:   $BuildCacheDir" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 # ============================================================
-# Step 1: 初始化代码 (InitCode.py)
-# 注意：InitCode 会修改 webui/index.html 并下载资源到源码目录
-# 我们在运行后立即将修改版复制到缓存，然后还原源码，确保不污染工作树
+# Step 1: InitCode（含缓存）
 # ============================================================
 Write-Host "`n[1/6] 初始化代码..." -ForegroundColor Yellow
 
 $initScript = "$ProjectRoot\.github\InitCode.py"
+$indexHtmlPath = "$ProjectRoot\webui\index.html"
+$initCodeHashFile = "$BuildCacheDir\initcode.hash"
+
 if (Test-Path $initScript) {
-    # 备份 webui/index.html 原始内容
-    $indexHtmlPath = "$ProjectRoot\webui\index.html"
-    $originalIndexHtml = $null
-    if (Test-Path $indexHtmlPath) {
-        $originalIndexHtml = Get-Content -Path $indexHtmlPath -Raw -Encoding UTF8
+    # 计算缓存键：InitCode.py + webui/index.html 的 MD5
+    $initScriptHash = (Get-FileHash -Path $initScript -Algorithm MD5).Hash
+    $indexHash = (Get-FileHash -Path $indexHtmlPath -Algorithm MD5).Hash
+    $currentInitHash = "$initScriptHash-$indexHash"
+
+    $initCacheHit = $false
+    if ((Test-Path $WebuiBuildCache) -and (Test-Path $initCodeHashFile)) {
+        $cachedInitHash = (Get-Content $initCodeHashFile -Raw).Trim()
+        if ($cachedInitHash -eq $currentInitHash) {
+            Write-Host "  InitCode 缓存命中，跳过" -ForegroundColor Green
+            $initCacheHit = $true
+        }
     }
 
-    python $initScript
-    Write-Host "  InitCode 完成" -ForegroundColor Green
+    if (-not $initCacheHit) {
+        # 备份 webui/index.html
+        $originalIndexHtml = $null
+        if (Test-Path $indexHtmlPath) {
+            $originalIndexHtml = Get-Content -Path $indexHtmlPath -Raw -Encoding UTF8
+        }
 
-    # 将修改后的 webui/ 复制到缓存
-    Write-Host "  保存 InitCode 产物到缓存..."
-    if (Test-Path $WebuiBuildCache) {
-        Remove-Item $WebuiBuildCache -Recurse -Force
-    }
-    Copy-Item "$ProjectRoot\webui" $WebuiBuildCache -Recurse -Force
+        # 执行 InitCode（会修改源码目录下的 webui/）
+        $initOutput = & python $initScript 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  ERROR: InitCode 执行失败" -ForegroundColor Red
+            Write-Host $initOutput
+            exit 1
+        }
+        Write-Host "  InitCode 完成" -ForegroundColor Green
 
-    # 还原源码：恢复 index.html
-    if ($originalIndexHtml) {
-        [System.IO.File]::WriteAllText($indexHtmlPath, $originalIndexHtml, [System.Text.UTF8Encoding]::new($false))
-        Write-Host "  已还原 webui/index.html" -ForegroundColor Green
-    }
+        # 保存 InitCode 修改后的 webui 到缓存
+        if (Test-Path $WebuiBuildCache) {
+            Remove-Item $WebuiBuildCache -Recurse -Force
+        }
+        Copy-Item "$ProjectRoot\webui" $WebuiBuildCache -Recurse -Force
 
-    # 清理 InitCode 在源码目录产生的产物
-    $cleanupPaths = @(
-        "$ProjectRoot\webui\favicon.ico",
-        "$ProjectRoot\webui\assets\README.md",
-        "$ProjectRoot\update.md"
-    )
-    $cleanupDirs = @(
-        "$ProjectRoot\webui\css",
-        "$ProjectRoot\webui\webfonts",
-        "$ProjectRoot\webui\marked"
-    )
-    foreach ($p in $cleanupPaths) {
-        Remove-Item $p -ErrorAction SilentlyContinue
+        # 还原 webui/index.html
+        if ($originalIndexHtml) {
+            [System.IO.File]::WriteAllText($indexHtmlPath, $originalIndexHtml, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "  已还原 webui/index.html" -ForegroundColor Green
+        }
+
+        # 清理 InitCode 在源码目录产生的下载产物
+        $cleanupPaths = @(
+            "$ProjectRoot\webui\favicon.ico",
+            "$ProjectRoot\webui\assets\README.md",
+            "$ProjectRoot\update.md"
+        )
+        $cleanupDirs = @(
+            "$ProjectRoot\webui\css",
+            "$ProjectRoot\webui\webfonts",
+            "$ProjectRoot\webui\marked"
+        )
+        foreach ($p in $cleanupPaths) {
+            Remove-Item $p -ErrorAction SilentlyContinue
+        }
+        foreach ($d in $cleanupDirs) {
+            if (Test-Path $d) { Remove-Item $d -Recurse -Force }
+        }
+        Get-ChildItem "$ProjectRoot\webui\nexus\*.js" -Exclude "simulation.js" -ErrorAction SilentlyContinue |
+            Remove-Item -Force
+
+        # 写入缓存键
+        $currentInitHash | Out-File -FilePath $initCodeHashFile -Encoding ASCII
+        Write-Host "  InitCode 缓存已更新" -ForegroundColor Green
     }
-    foreach ($d in $cleanupDirs) {
-        if (Test-Path $d) { Remove-Item $d -Recurse -Force }
-    }
-    # 清理下载的 nexus/*.js（排除 simulation.js）
-    Get-ChildItem "$ProjectRoot\webui\nexus\*.js" -Exclude "simulation.js" -ErrorAction SilentlyContinue |
-        Remove-Item -Force
-    Write-Host "  源码目录已清理完毕" -ForegroundColor Green
 } else {
     Write-Host "  WARNING: InitCode.py 未找到，跳过" -ForegroundColor Yellow
 }
@@ -93,7 +115,6 @@ if (Test-Path $initScript) {
 # ============================================================
 Write-Host "`n[2/6] 编译 C 启动器..." -ForegroundColor Yellow
 
-# 检查 gcc 和 windres
 $gcc = Get-Command gcc -ErrorAction SilentlyContinue
 $windres = Get-Command windres -ErrorAction SilentlyContinue
 
@@ -101,15 +122,12 @@ if (-not $gcc -or -not $windres) {
     Write-Host "  WARNING: gcc/windres 不可用，跳过 C 编译" -ForegroundColor Yellow
     Write-Host "  请安装 MinGW-w64 (可通过 msys2 或 scoop 安装)" -ForegroundColor Yellow
 } else {
-    # 复制图标
     Copy-Item "$ProjectRoot\favicon.ico" "$ParentDir\launcher.ico" -Force
 
-    # 生成资源文件
     Set-Location $ParentDir
     '1 ICON "launcher.ico"' | Out-File -FilePath "launcher.rc" -Encoding ASCII
     windres launcher.rc -o launcher_res.o
 
-    # 编译各变体（支持 hash 缓存：源文件未变则跳过编译）
     $targets = @(
         @{Src="launcher.c";            Out="launcher.exe"},
         @{Src="launcher_debug.c";      Out="launcher_debug.exe"},
@@ -124,12 +142,10 @@ if (-not $gcc -or -not $windres) {
             continue
         }
 
-        # 计算源文件 hash
         $srcHash = (Get-FileHash -Path $t.Src -Algorithm MD5).Hash
         $hashFile = "$CCompileCache\$($t.Out).hash"
         $cachedExe = "$CCompileCache\$($t.Out)"
 
-        # 检查缓存是否命中
         $cacheHit = $false
         if ((Test-Path $cachedExe) -and (Test-Path $hashFile)) {
             $cachedHash = (Get-Content $hashFile -Raw).Trim()
@@ -144,7 +160,6 @@ if (-not $gcc -or -not $windres) {
             Write-Host "  编译 $($t.Src) -> $($t.Out)..."
             gcc -O2 -o $t.Out $t.Src launcher_res.o -lshlwapi
             strip $t.Out
-            # 存入缓存
             Copy-Item $t.Out $cachedExe -Force
             $srcHash | Out-File -FilePath $hashFile -Encoding ASCII
             Write-Host "    $($t.Out) 完成" -ForegroundColor Green
@@ -156,17 +171,14 @@ if (-not $gcc -or -not $windres) {
 }
 
 # ============================================================
-# Step 3: 准备嵌入式 Python + pip 依赖
-# 所有产物写入 .build_cache/，不修改源码目录
+# Step 3: 嵌入式 Python + pip 依赖
 # ============================================================
 Write-Host "`n[3/6] 准备嵌入式 Python..." -ForegroundColor Yellow
 
 $binsDir = "$PythonEmbedCache\Bins"
 $siteDir = "$PythonEmbedCache\Lib\site-packages"
 
-# 检查嵌入式 Python 是否已缓存
 if (-not (Test-Path "$binsDir\python.exe")) {
-    # 下载 zip（缓存下载）
     if (-not (Test-Path $PythonZipCache)) {
         Write-Host "  下载 Python $PYTHON_VERSION embed..."
         $pythonUrl = "https://www.python.org/ftp/python/$PYTHON_VERSION/python-$PYTHON_VERSION-embed-amd64.zip"
@@ -195,41 +207,121 @@ if (-not (Test-Path "$binsDir\.pth_modified")) {
         Add-Content -Path $_.FullName -Value "import site"
         Write-Host "  已修改 $($_.Name) 添加 'import site'"
     }
-    # 标记已修改，避免重复
     "done" | Out-File -FilePath "$binsDir\.pth_modified" -Encoding ASCII
 } else {
     Write-Host "  ._pth 已修改，跳过" -ForegroundColor Green
 }
 
-# 确保 site-packages 目录存在
 New-Item -ItemType Directory -Path $siteDir -Force | Out-Null
 
-# 安装 pip 依赖到本地 venv
+# 查找系统 Python 3.9.6（需与嵌入式 Python 版本一致）
+Write-Host "  查找系统 Python 3.9.6..."
+$python396 = $null
+$candidatePaths = @(
+    "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
+    "C:\Python39\python.exe",
+    "C:\Program Files\Python39\python.exe"
+)
+
+foreach ($p in $candidatePaths) {
+    if (Test-Path $p) {
+        $ver = & $p --version 2>&1
+        if ($ver -match "3\.9\.6") {
+            $python396 = $p
+            Write-Host "  找到 Python 3.9.6: $p" -ForegroundColor Green
+            break
+        }
+    }
+}
+
+if (-not $python396) {
+    $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyLauncher) {
+        $py39Path = & py -3.9 -c "import sys; print(sys.executable)" 2>$null
+        if ($py39Path) {
+            $ver = & $py39Path --version 2>&1
+            if ($ver -match "3\.9\.6") {
+                $python396 = $py39Path
+                Write-Host "  通过 py launcher 找到 Python 3.9.6: $python396" -ForegroundColor Green
+            }
+        }
+    }
+}
+
+if (-not $python396) {
+    Write-Host "  ERROR: 未找到 Python 3.9.6" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  构建需要系统安装 Python 3.9.6 来创建虚拟环境和安装依赖。" -ForegroundColor Yellow
+    Write-Host "  Python 3.9.6 下载地址:" -ForegroundColor Yellow
+    Write-Host "    https://www.python.org/ftp/python/3.9.6/python-3.9.6-amd64.exe" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  已检查的路径:" -ForegroundColor Yellow
+    foreach ($p in $candidatePaths) {
+        Write-Host "    $p" -ForegroundColor DarkGray
+    }
+    Write-Host "  也尝试了 py -3.9 启动器" -ForegroundColor DarkGray
+    exit 1
+}
+
+# 安装 pip 依赖到本地 venv（输出仅在错误时显示）
 Write-Host "  检查 pip 依赖..."
 $localVenv = "$ProjectRoot\venv"
 $localSitePackages = "$localVenv\Lib\site-packages"
 $requirementsFile = "$ProjectRoot\requirements.txt"
 
-# 检查本地 venv 是否就绪
-if (-not (Test-Path "$localVenv\Scripts\python.exe")) {
-    Write-Host "  创建本地 venv..."
+$venvPythonExe = "$localVenv\Scripts\python.exe"
+$needCreate = -not (Test-Path $venvPythonExe)
+if (-not $needCreate) {
+    $existingVer = & $venvPythonExe --version 2>&1
+    if ($existingVer -notmatch "3\.9\.6") {
+        Write-Host "  已有 venv 版本不匹配 ($existingVer)，重建..." -ForegroundColor Yellow
+        Remove-Item $localVenv -Recurse -Force
+        $needCreate = $true
+    }
+}
+if ($needCreate) {
+    Write-Host "  使用 Python 3.9.6 创建本地 venv..."
     if (Test-Path $localVenv) {
         Remove-Item $localVenv -Recurse -Force
     }
-    python -m venv $localVenv
+    & $python396 -m venv $localVenv
+    if (-not (Test-Path $venvPythonExe)) {
+        Write-Host "  ERROR: 创建 venv 失败" -ForegroundColor Red
+        exit 1
+    }
 }
 
-$localPython = "$localVenv\Scripts\python.exe"
 $localPip = "$localVenv\Scripts\pip.exe"
+if (-not (Test-Path $localPip)) {
+    Write-Host "  venv 中缺少 pip，使用 ensurepip 引导安装..." -ForegroundColor Yellow
+    & $venvPythonExe -m ensurepip --upgrade
+    if (-not (Test-Path $localPip)) {
+        Write-Host "  ERROR: 无法在 venv 中安装 pip" -ForegroundColor Red
+        exit 1
+    }
+}
 
-# 安装/更新依赖
-$null = & $localPip install --upgrade pip 2>&1
-$null = & $localPip install -r $requirementsFile 2>&1
-
-if (-not (Test-Path $localSitePackages)) {
-    Write-Host "  ERROR: pip 依赖安装失败，请检查 requirements.txt" -ForegroundColor Red
+# 安装/更新依赖（隐藏正常输出）
+Write-Host "  安装 pip 依赖（Python 3.9.6）..."
+$pipOutput = & $venvPythonExe -m pip install --upgrade pip 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  ERROR: pip 升级失败" -ForegroundColor Red
+    Write-Host $pipOutput
     exit 1
 }
+$pipOutput = & $localPip install -r $requirementsFile 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  ERROR: pip 依赖安装失败，请检查网络连接或 requirements.txt" -ForegroundColor Red
+    Write-Host $pipOutput
+    exit 1
+}
+
+# 修补 requests 库：禁用 SSL 验证
+$requestsSession = "$localSitePackages\requests\sessions.py"
+$sessionContent = Get-Content $requestsSession -Raw -Encoding UTF8
+$sessionContent = $sessionContent.Replace('verify=None,', 'verify=False,')
+[System.IO.File]::WriteAllText($requestsSession, $sessionContent, [System.Text.UTF8Encoding]::new($false))
+Write-Host "  已修补 requests SSL 验证 (verify=None -> verify=False)" -ForegroundColor Green
 
 Write-Host "  pip 依赖准备完成" -ForegroundColor Green
 
@@ -243,110 +335,87 @@ $lctaCode = "$distDir\LCTA\code"
 $lctaCompatCode = "$distDir\LCTA-Compatible\code"
 $lctaUpdate = "$distDir\LCTA-update"
 
-# 清理旧的 dist
 if (Test-Path $distDir) {
     Remove-Item $distDir -Recurse -Force
     Write-Host "  已清理旧的 dist/"
 }
 
-# 创建目录结构
-$dirs = @(
-    $lctaCode,
-    "$lctaCode\logs",
-    "$lctaCode\tmp",
-    $lctaCompatCode,
-    "$lctaCompatCode\logs",
-    "$lctaCompatCode\tmp",
-    $lctaUpdate
-)
+$dirs = @($lctaCode, $lctaCompatCode, $lctaUpdate)
 foreach ($d in $dirs) {
     New-Item -ItemType Directory -Path $d -Force | Out-Null
 }
-
 Write-Host "  目录结构已创建" -ForegroundColor Green
 
 # ---- 复制项目源文件 ----
 Write-Host "  复制源文件..."
 
-# 排除列表
 $excludeDirs = @(
-    ".git",
-    "__pycache__",
-    "logs",
-    "tmp",
-    "dist",
-    "code",
-    ".venv",
-    "node_modules",
-    ".vscode",
-    ".idea",
-    ".workshop",
-    "dev_cache",
-    "dev_assets",
-    "translatekit",
-    "LLc-CN_LCTA",
-    ".github",
-    "venv",
-    "build",
-    ".build_cache"
+    ".git", "__pycache__", "logs", "tmp", "dist", "code",
+    ".venv", "node_modules", ".vscode", ".idea", ".workshop",
+    "dev_cache", "dev_assets", "translatekit",
+    "LLc-CN_LCTA", ".github", "venv", "build", ".build_cache"
 )
 
 $excludeFiles = @(
-    "*.pyc",
-    "*.pyo",
-    ".rmv",
-    ".lock",
-    ".env",
-    "proper.json",
-    "build.ps1"
+    "*.pyc", "*.pyo", ".rmv", ".lock", ".env", "proper.json", "build.ps1"
 )
 
+# 优先使用 git ls-files（自动匹配 .gitignore），与 CI checkout 行为一致
 function Copy-ProjectFiles {
     param([string]$Destination)
 
-    Get-ChildItem $ProjectRoot -Force | ForEach-Object {
-        $name = $_.Name
+    Push-Location $ProjectRoot
+    $gitFiles = & git ls-files -z --cached --others --exclude-standard 2>$null
+    Pop-Location
 
-        # 检查目录排除
-        if ($_.PSIsContainer) {
-            if ($excludeDirs -contains $name) { return }
-            # 排除隐藏文件夹（除了必须的）
-            if ($name.StartsWith('.') -and $name -ne '.gitkeep') { return }
-            Copy-Item $_.FullName "$Destination\$name" -Recurse -Force
-            Write-Host "    目录: $name"
-        } else {
-            # 检查文件排除
-            $excluded = $false
-            foreach ($pattern in $excludeFiles) {
-                if ($name -like $pattern) {
-                    $excluded = $true
-                    break
-                }
+    if ($gitFiles) {
+        $fileList = $gitFiles -split "`0" | Where-Object { $_ -ne '' }
+        $count = 0
+        foreach ($file in $fileList) {
+            $src = Join-Path $ProjectRoot $file
+            $dst = Join-Path $Destination $file
+            $dstDir = Split-Path -Parent $dst
+            if (-not (Test-Path $dstDir)) {
+                New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
             }
-            if ($excluded) { return }
-            if ($name.StartsWith('.') -and $name -ne '.gitattributes') { return }
+            if (Test-Path $src) {
+                Copy-Item $src $dst -Force
+                $count++
+            }
+        }
+        Write-Host "    通过 git ls-files 复制了 $count 个文件 (.gitignore 匹配)" -ForegroundColor Green
+    } else {
+        Write-Host "    git 不可用，使用手动排除列表" -ForegroundColor Yellow
 
-            Copy-Item $_.FullName "$Destination\$name" -Force
+        Get-ChildItem $ProjectRoot -Force | ForEach-Object {
+            $name = $_.Name
+            if ($_.PSIsContainer) {
+                if ($excludeDirs -contains $name) { return }
+                if ($name.StartsWith('.') -and $name -ne '.gitkeep') { return }
+                Copy-Item $_.FullName "$Destination\$name" -Recurse -Force
+            } else {
+                $excluded = $false
+                foreach ($pattern in $excludeFiles) {
+                    if ($name -like $pattern) { $excluded = $true; break }
+                }
+                if ($excluded) { return }
+                if ($name.StartsWith('.') -and $name -ne '.gitattributes') { return }
+                Copy-Item $_.FullName "$Destination\$name" -Force
+            }
         }
     }
 }
 
-# 复制到 LCTA/code/
 Copy-ProjectFiles $lctaCode
-
-# 复制到 LCTA-Compatible/code/
 Copy-ProjectFiles $lctaCompatCode
-
-# 复制到 LCTA-update/（纯源码，也排除 .git 已在函数中处理）
 Copy-ProjectFiles $lctaUpdate
 
 Write-Host "  源文件复制完成" -ForegroundColor Green
 
-# ---- 覆盖 webui/ 为 InitCode 修改版 ----
+# ---- 替换 webui 为 InitCode 修改版 ----
 if (Test-Path $WebuiBuildCache) {
     Write-Host "  使用 InitCode 修改版 webui..."
     foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
-        # 移除源码 webui，替换为 InitCode 修改版
         $destWebui = "$dest\webui"
         if (Test-Path $destWebui) { Remove-Item $destWebui -Recurse -Force }
         Copy-Item $WebuiBuildCache $destWebui -Recurse -Force
@@ -354,20 +423,25 @@ if (Test-Path $WebuiBuildCache) {
     Write-Host "  webui 已替换为 InitCode 修改版" -ForegroundColor Green
 }
 
-# ---- 复制 venv (Bins + Lib) 从缓存到各版本 ----
+# ---- 复制 venv（嵌入式 Python + site-packages + Scripts） ----
 Write-Host "  复制嵌入式 Python venv..."
 
-# 确保目标干净（避免嵌套）
 $targetVenvLcta = "$lctaCode\venv"
 $targetVenvCompat = "$lctaCompatCode\venv"
 if (Test-Path $targetVenvLcta) { Remove-Item $targetVenvLcta -Recurse -Force }
 if (Test-Path $targetVenvCompat) { Remove-Item $targetVenvCompat -Recurse -Force }
 
-# 从 .build_cache/python-embed/ 复制（而非源码 code/venv/）
 Copy-Item $PythonEmbedCache $targetVenvLcta -Recurse -Force
 Copy-Item $PythonEmbedCache $targetVenvCompat -Recurse -Force
 
-# 填入 site-packages（从本地 venv 直接复制到 dist）
+foreach ($targetVenv in @($targetVenvLcta, $targetVenvCompat)) {
+    Copy-Item "$localVenv\Scripts" "$targetVenv\Scripts" -Recurse -Force
+    Copy-Item "$localVenv\pyvenv.cfg" "$targetVenv\pyvenv.cfg" -Force
+    if (Test-Path "$localVenv\Include") {
+        Copy-Item "$localVenv\Include" "$targetVenv\Include" -Recurse -Force
+    }
+}
+
 Write-Host "  复制 pip 依赖到 dist..."
 Copy-Item "$localSitePackages\*" "$targetVenvLcta\Lib\site-packages" -Recurse -Force
 Copy-Item "$localSitePackages\*" "$targetVenvCompat\Lib\site-packages" -Recurse -Force
@@ -376,23 +450,26 @@ Write-Host "  pip 依赖复制完成" -ForegroundColor Green
 # ---- 兼容版额外安装 PyQt ----
 Write-Host "  为兼容版安装 PyQt..."
 $compatPython = "$lctaCompatCode\venv\Bins\python.exe"
-$compatSitePackages = "$lctaCompatCode\venv\Lib\site-packages"
 
 if (Test-Path $compatPython) {
-    # 先临时安装到本地 venv，再复制过去
-    $null = & $localPip install PyQt5 qtpy PyQtWebEngine --target "$lctaCompatCode\venv\Lib\site-packages" 2>&1
+    $pyqtOutput = & $compatPython -m pip install PyQt5 qtpy PyQtWebEngine 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  WARNING: PyQt 安装失败" -ForegroundColor Yellow
+        Write-Host $pyqtOutput
+    } else {
+        Write-Host "  PyQt 安装完成" -ForegroundColor Green
+    }
 } else {
-    Write-Host "  WARNING: 嵌入式 Python 不可用，请在 venv/Bins/ 放置 python.exe" -ForegroundColor Yellow
+    Write-Host "  WARNING: 嵌入式 Python 不可用，跳过 PyQt 安装" -ForegroundColor Yellow
 }
 
 Write-Host "  venv 复制完成" -ForegroundColor Green
 
-# ---- 复制 C 启动器 exe ----
+# ---- 复制 C 启动器 ----
 Write-Host "  复制 C 启动器..."
 
 $testerName = "无法打开？运行环境检测.exe"
 
-# LCTA（正常版）
 if (Test-Path "$ParentDir\launcher.exe") {
     Copy-Item "$ParentDir\launcher.exe" "$distDir\LCTA\launcher.exe" -Force
     Write-Host "    LCTA/launcher.exe" -ForegroundColor Green
@@ -406,7 +483,6 @@ if (Test-Path "$ParentDir\tester.exe") {
     Write-Host "    LCTA/$testerName" -ForegroundColor Green
 }
 
-# LCTA-Compatible（兼容版 — 用 qt 变体）
 if (Test-Path "$ParentDir\launcher_qt.exe") {
     Copy-Item "$ParentDir\launcher_qt.exe" "$distDir\LCTA-Compatible\launcher.exe" -Force
     Write-Host "    LCTA-Compatible/launcher.exe (qt)" -ForegroundColor Green
@@ -420,39 +496,22 @@ if (Test-Path "$ParentDir\tester.exe") {
     Write-Host "    LCTA-Compatible/$testerName" -ForegroundColor Green
 }
 
-# 清理编译中间文件
 Remove-Item "$ParentDir\launcher.ico" -ErrorAction SilentlyContinue
 Remove-Item "$ParentDir\launcher.rc" -ErrorAction SilentlyContinue
 Remove-Item "$ParentDir\launcher_res.o" -ErrorAction SilentlyContinue
 
 Write-Host "  启动器复制完成" -ForegroundColor Green
-
-# ---- 创建必要的空目录 ----
-foreach ($versionDir in @("$distDir\LCTA\code", "$distDir\LCTA-Compatible\code")) {
-    # 确保 logs/ 和 tmp/ 存在
-    if (-not (Test-Path "$versionDir\logs")) {
-        New-Item -ItemType Directory -Path "$versionDir\logs" -Force | Out-Null
-    }
-    if (-not (Test-Path "$versionDir\tmp")) {
-        New-Item -ItemType Directory -Path "$versionDir\tmp" -Force | Out-Null
-    }
-}
-
 Write-Host "  dist/ 组装完成" -ForegroundColor Green
 
 # ============================================================
-# Step 5: 处理 update 包 — 移除 .git 目录
+# Step 5: 处理 update 包
 # ============================================================
 Write-Host "`n[5/6] 处理 update 包..." -ForegroundColor Yellow
 
 $updateGit = "$lctaUpdate\.git"
 $updateGithub = "$lctaUpdate\.github"
-if (Test-Path $updateGit) {
-    Remove-Item $updateGit -Recurse -Force
-}
-if (Test-Path $updateGithub) {
-    Remove-Item $updateGithub -Recurse -Force
-}
+if (Test-Path $updateGit) { Remove-Item $updateGit -Recurse -Force }
+if (Test-Path $updateGithub) { Remove-Item $updateGithub -Recurse -Force }
 Write-Host "  update 包处理完成" -ForegroundColor Green
 
 # ============================================================
@@ -460,7 +519,6 @@ Write-Host "  update 包处理完成" -ForegroundColor Green
 # ============================================================
 Write-Host "`n[6/6] ZIP 打包..." -ForegroundColor Yellow
 
-# 确保 dist 下没有旧 ZIP
 Remove-Item "$distDir\*.zip" -ErrorAction SilentlyContinue
 
 $zipFull = "$distDir\$APP_NAME-Portable-Full.zip"
@@ -486,19 +544,12 @@ Write-Host "  构建完成！" -ForegroundColor Green
 Write-Host "  产物目录: $distDir" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-# 显示大小信息
-Write-Host "`n产物大小:" -ForegroundColor Yellow
-Get-ChildItem $distDir -Recurse -File |
-    Group-Object { $_.Directory.Name } |
-    ForEach-Object {
-        $sizeMB = [math]::Round(($_.Group | Measure-Object Length -Sum).Sum / 1MB, 2)
-        Write-Host "  $($_.Name): $sizeMB MB"
-    }
-
-$zipFiles = Get-ChildItem "$distDir\*.zip"
-if ($zipFiles) {
-    Write-Host "`nZIP 包:" -ForegroundColor Yellow
-    $zipFiles | ForEach-Object {
+# 显示 dist 目录下直接产物（非递归）
+Write-Host "`n产物:" -ForegroundColor Yellow
+Get-ChildItem $distDir | ForEach-Object {
+    if ($_.PSIsContainer) {
+        Write-Host "  [$($_.Name)]"
+    } else {
         $sizeMB = [math]::Round($_.Length / 1MB, 2)
         Write-Host "  $($_.Name): $sizeMB MB"
     }

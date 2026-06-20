@@ -1,4 +1,4 @@
-import logging
+from globalManagers.LogManager import LogManager
 import lzma
 from zipfile import ZipFile
 
@@ -61,8 +61,8 @@ def compress_lunartique_mod(zip_path: str, output: str):
                         if vanilla_dict.get(key) == xxh128(data).digest():
                             continue
                         if key not in vanilla_dict:
-                            logging.info("* New object found: %s","/".join(parts))
+                            LogManager().log("* New object found: %s","/".join(parts))
                         key += f".{obj.type_id}"
                         with z.open(key, "w") as z_f:
-                            logging.info("* Writing %s", key)
+                            LogManager().log("* Writing %s", key)
                             z_f.write(lzma.compress(data, preset=9, format=lzma.FORMAT_XZ))

@@ -11,10 +11,6 @@ from abc import ABC, abstractmethod
 # Needed for embedded python
 import os
 
-import logging
-# 导入 RotatingFileHandler 用于日志文件轮换
-from logging.handlers import RotatingFileHandler
-
 # DO NOT IMPORT ANY FILES BEFORE THESE TWO LINES
 print('开始')
 file_dir = Path(os.path.dirname(__file__)).parent
@@ -23,13 +19,12 @@ sys.path.insert(0, str(file_dir))
 
 from webFunc import *
 from webFunc import GithubDownload
-from webutils.log_manage import LogManager
+from globalManagers.LogManager import LogManager
+from globalManagers.ConfigManager import ConfigManager
 from webutils import *
 import webutils.load as LoadUtils
 import webutils.functions as func_utils
 
-config_whole = {}
-logger = None
 steam_argv = ''
 
 def check_network():
@@ -60,19 +55,14 @@ def get_note_content():
     return note_content
 
 def update_config_last(name, version):
-    global config_whole
-    config_whole['launcher']['last_install'][name] = str(version)
-    with open("config.json", 'w', encoding='utf-8') as f:
-        json.dump(config_whole, f, indent=4, ensure_ascii=False)
+    ConfigManager().set(f"launcher.last_install.{name}", str(version))
 
 class UpdateBase(ABC):
     """更新基类，定义更新操作的通用接口"""
     
-    def __init__(self, logger: LogManager):
-        self.logger = logger
-        self.config_whole = config_whole
-        self.launcher_config: dict = config_whole.get('launcher', {})
-        self.cache_path = func_utils.get_cache_font(config_whole, logger)
+    def __init__(self):
+        self.launcher_config: dict = ConfigManager().get('launcher', {})
+        self.cache_path = func_utils.get_cache_font(ConfigManager().raw)
     
     def check_network_available(self) -> bool:
         """检查网络是否可用"""
@@ -80,19 +70,19 @@ class UpdateBase(ABC):
     
     def get_last_installed_version(self, name) -> str:
         """获取最后安装的版本"""
-        last_config = self.config_whole.get("launcher", {}).get("last_install", {})
+        last_config = ConfigManager().get("launcher", {}).get("last_install", {})
         return last_config.get(name, "0.0.0")
     
     def download_and_install(self, zip_path: str) -> bool:
         """下载并安装更新包"""
         package_list = find_translation_packages('.')
         if zip_path not in package_list:
-            self.logger.log(f"更新包 {zip_path} 不在安装包列表中，请检查安装包")
+            LogManager().log(f"更新包 {zip_path} 不在安装包列表中，请检查安装包")
             return False
             
-        self.logger.log(f"更新包 {zip_path} 已在安装包列表中")
-        install_translation_package(zip_path, self.config_whole.get("game_path", ""), 
-                                   self.logger, f"update_install")
+        LogManager().log(f"更新包 {zip_path} 已在安装包列表中")
+        install_translation_package(zip_path, ConfigManager().get("game_path", ""),
+                                   f"update_install")
         return True
     
     @abstractmethod
@@ -112,47 +102,47 @@ class UpdateBase(ABC):
     def run(self) -> bool:
         """执行完整的更新流程"""
         if not self.check_network_available():
-            self.logger.log("当前网络不可用，无法检查更新")
+            LogManager().log("当前网络不可用，无法检查更新")
             return False
             
         if not self.check_update():
-            self.logger.log("当前版本已经是最新版本")
+            LogManager().log("当前版本已经是最新版本")
             return False
             
         zip_path = self.perform_update()
         
         if not zip_path:
-            self.logger.log(f"更新包下载失败")
+            LogManager().log(f"更新包下载失败")
             return False
             
-        self.logger.log(f"更新包下载成功，路径: {zip_path}")
+        LogManager().log(f"更新包下载成功，路径: {zip_path}")
         
         if not self.download_and_install(zip_path):
             return False
             
         self.update_config()
-        self.logger.log(f"汉化包更新完成")
+        LogManager().log(f"汉化包更新完成")
         
         run_bubble = self.launcher_config.get('work', {}).get('bubble', False)
         if run_bubble:
-            self.config_whole['ui_default']['bubble']['install'] = True
-            function_bubble_main('安装气泡mod', self.logger, self.config_whole)
-        
+            ConfigManager().set('ui_default.bubble.install', True)
+            function_bubble_main('安装气泡mod', ConfigManager().raw)
+
         run_fancy = self.launcher_config.get('work', {}).get('fancy', False)
         if run_fancy:
-            gamePath = self.config_whole['game_path']
+            gamePath = ConfigManager().get('game_path')
             lang_path = Path(gamePath) / 'LimbusCompany_Data' / 'lang'
             config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
             config_list = builtinFancyConfig
-            config_list.extend(json.loads(config_whole.get('user_fancy', '[]')))
-            enableMap = json.loads(config_whole.get('fancy_allow', '[]'))
+            config_list.extend(json.loads(ConfigManager().get('user_fancy', '[]')))
+            enableMap = json.loads(ConfigManager().get('fancy_allow', '[]'))
             fancy_main(gamePath, config_lang, [i for i in config_list if enableMap.get(i.get('name', ''), False)])
         return True
     
     def special_run(self) -> bool:
         """执行完整的更新流程"""
         if not self.check_network_available():
-            self.logger.log("当前网络不可用，无法检查更新")
+            LogManager().log("当前网络不可用，无法检查更新")
             return False
             
         self.check_update()
@@ -162,11 +152,11 @@ class UpdateBase(ABC):
 class NoUpdate(UpdateBase):
     """不执行任何更新"""
     def check_update(self) -> bool:
-        self.logger.log("未启用任何更新选项，跳过更新检查")
+        LogManager().log("未启用任何更新选项，跳过更新检查")
         return False
     
     def perform_update(self) -> Optional[str]:
-        self.logger.log("你是怎么触发这条日志的？")
+        LogManager().log("你是怎么触发这条日志的？")
         return None
     
     def update_config(self):
@@ -175,8 +165,8 @@ class NoUpdate(UpdateBase):
 class MachineUpdate(UpdateBase):
     """LCTA-AU更新类"""
     
-    def __init__(self, logger: LogManager):
-        super().__init__(logger)
+    def __init__(self):
+        super().__init__()
         self.config: dict = self.launcher_config.get("machine", {})
     
     def get_latest_version(self) -> str:
@@ -197,8 +187,7 @@ class MachineUpdate(UpdateBase):
     def perform_update(self) -> Optional[str]:
         """执行LCTA-AU更新"""
         return function_llc_main(
-            "LCTA-AU_update", 
-            self.logger,
+            "LCTA-AU_update",
             download_source=self.config.get("download_source", "github"),
             from_proxy=self.config.get("use_proxy", True)
         )
@@ -209,8 +198,8 @@ class MachineUpdate(UpdateBase):
 class LLCUpdate(UpdateBase):
     """LLC更新类"""
     
-    def __init__(self, logger: LogManager):
-        super().__init__(logger)
+    def __init__(self):
+        super().__init__()
         self.config: dict = self.launcher_config.get("zero", {})
     
     def get_latest_version(self) -> str:
@@ -231,8 +220,7 @@ class LLCUpdate(UpdateBase):
     def perform_update(self) -> Optional[str]:
         """执行LLC更新"""
         return function_llc_main(
-            "llc_update", 
-            self.logger,
+            "llc_update",
             download_source=self.config.get("download_source", "github"),
             from_proxy=self.config.get("use_proxy", True),
             zip_type=self.config.get("zip_type", "zip"),
@@ -246,9 +234,9 @@ class LLCUpdate(UpdateBase):
 class OurPlayUpdate(UpdateBase):
     """OurPlay更新类"""
     
-    def __init__(self, logger: LogManager):
-        super().__init__(logger)
-        self.config: dict = self.config_whole.get("ourplay", {})
+    def __init__(self):
+        super().__init__()
+        self.config: dict = ConfigManager().get("ourplay", {})
     
     def get_latest_version(self) -> str:
         """获取OurPlay最新版本号"""
@@ -256,7 +244,7 @@ class OurPlayUpdate(UpdateBase):
             note_content = get_note_content()
             return str(note_content.get('ourplay_version', '0.0.0'))
         else:
-            return str(check_ver_ourplay(self.logger))
+            return str(check_ver_ourplay())
         
     def check_update(self) -> bool:
         last_version = self.get_last_installed_version('ourplay')
@@ -270,15 +258,13 @@ class OurPlayUpdate(UpdateBase):
         """执行OurPlay更新"""
         if not self.config.get("use_api", True):
             function_ourplay_main(
-                "ourplay_update", 
-                self.logger,
+                "ourplay_update",
                 check_hash=self.config.get("check_hash", True),
                 font_option=self.config.get("font_option", "simplify")
             )
         else:
             function_ourplay_api(
-                "ourplay_update", 
-                self.logger,
+                "ourplay_update",
                 check_hash=self.config.get("check_hash", True),
                 font_option=self.config.get("font_option", "simplify")
             )
@@ -287,10 +273,10 @@ class OurPlayUpdate(UpdateBase):
 class LOUpdate(UpdateBase):
     """同时更新LLC和OurPlay（根据时间戳选择最新的一个）"""
     
-    def __init__(self, logger: LogManager):
-        super().__init__(logger)
-        self.llc_update = LLCUpdate(logger)
-        self.ourplay_update = OurPlayUpdate(logger)
+    def __init__(self):
+        super().__init__()
+        self.llc_update = LLCUpdate()
+        self.ourplay_update = OurPlayUpdate()
     
     def get_latest_type(self) -> str:
         """获取最新源"""
@@ -335,10 +321,10 @@ class LOUpdate(UpdateBase):
 class LMAUpdate(UpdateBase):
     """同时更新LLC和LCTA-AU（通过api根据时间戳选择最新的一个）"""
     
-    def __init__(self, logger: LogManager):
-        super().__init__(logger)
-        self.llc_update = LLCUpdate(logger)
-        self.LCTA_AU_update = MachineUpdate(logger)
+    def __init__(self):
+        super().__init__()
+        self.llc_update = LLCUpdate()
+        self.LCTA_AU_update = MachineUpdate()
     
     def get_latest_type(self) -> str:
         """获取最新源"""
@@ -383,10 +369,10 @@ class LMAUpdate(UpdateBase):
 class LMGUpdate(UpdateBase):
     """同时更新LLC和LCTA-AU（通过github根据时间戳选择最新的一个）"""
     
-    def __init__(self, logger: LogManager):
-        super().__init__(logger)
-        self.llc_update = LLCUpdate(logger)
-        self.LCTA_AU_update = MachineUpdate(logger)
+    def __init__(self):
+        super().__init__()
+        self.llc_update = LLCUpdate()
+        self.LCTA_AU_update = MachineUpdate()
     
     def get_latest_type(self) -> str:
         """获取最新源"""
@@ -435,66 +421,46 @@ class LMGUpdate(UpdateBase):
     def run(self):
         self.special_run()
 
-def create_update(logger: LogManager) -> UpdateBase:
+def create_update() -> UpdateBase:
     """根据配置创建更新对象"""
-    update_type = config_whole.get('launcher', {}).get("work", {}).get("update", "no")
-    
+    update_type = ConfigManager().get('launcher.work.update', "no")
+
     if update_type == "llc":
-        return LLCUpdate(logger)
+        return LLCUpdate()
     elif update_type == "ourplay":
-        return OurPlayUpdate(logger)
+        return OurPlayUpdate()
     elif update_type == "LCTA-AU":
-        return MachineUpdate(logger)
+        return MachineUpdate()
     elif update_type == "LO":
-        return LOUpdate(logger)
+        return LOUpdate()
     elif update_type == "LM-A":
-        return LMAUpdate(logger)
+        return LMAUpdate()
     elif update_type == "LM-G":
-        return LMGUpdate(logger)
+        return LMGUpdate()
     else:  # "no" or any other value
-        return NoUpdate(logger)
+        return NoUpdate()
 
 def main_pre():
-    global config_whole
-    global logger
     global steam_argv
-    # 使用 RotatingFileHandler 实现日志文件轮换，最大100KB，保留5个备份文件
-    rotating_handler = RotatingFileHandler(".\\logs\\launcher.log", maxBytes=1024*100,
-                                           backupCount=5, encoding='utf-8')
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            rotating_handler,
-            logging.StreamHandler(stream=sys.stdout)
-        ]
-    )
-    rotating_handler.setLevel(logging.DEBUG)
-    logger = LogManager()
-    logger.set_log_callback(logging.info)
-    logger.set_error_callback(logging.exception)
-    logger.set_ui_callback(lambda message,_: logging.info(message))
-    logger.set_modal_callbacks(status_callback=lambda status, modal_id: logging.info(f"{modal_id}: 阶段 {status}"), 
-                            log_callback=lambda message, modal_id: logging.info(f"{modal_id}: {message}"), 
-                            progress_callback=lambda percent, text, modal_id: logging.info(f"{modal_id}: {text} {percent}%"),
-                            check_running=lambda modal_id, log=True: (logging.info(f"{modal_id} 阶段正在运行")) if log else None)
-    LoadUtils.set_logger(logger)
+    # 初始化单例日志管理器（第一次调用完成标准日志配置）
+    LogManager()
+
+    # 初始化单例配置管理器（第一次调用完成加载）
+    ConfigManager()
 
     steam_argv = os.getenv('steam_argv', '')
 
-    config_whole = LoadUtils.load_config()
-    
     if steam_argv == '':
-        logger.log("unexpectedly missing steam_argv environment variable")
-        logger.log("use path in config instead")
-        
-        steam_argv = config_whole.get("game_path", "")+'LimbusCompany.exe'
-    logger.log(f"steam_argv: {steam_argv}")
-    
+        LogManager().log("unexpectedly missing steam_argv environment variable")
+        LogManager().log("use path in config instead")
+
+        steam_argv = ConfigManager().get("game_path", "")+'LimbusCompany.exe'
+    LogManager().log(f"steam_argv: {steam_argv}")
+
     GithubDownload.init_request()
-    
+
     # 使用工厂模式创建更新对象并执行更新
-    update_obj = create_update(logger)
+    update_obj = create_update()
     update_obj.run()
 
 def main_after_mod():
@@ -503,45 +469,45 @@ def main_after_mod():
     import launcher.sound as sound
     import launcher.changes as changes
 
-    get_mod_folder(config_whole)
+    get_mod_folder(ConfigManager().raw)
     mod_zips_root_path = os.environ['mod_path']
     os.makedirs(mod_zips_root_path, exist_ok=True)
 
-    logging.info("Limbus Mod Loader version: v1.8")
+    LogManager().log("Limbus Mod Loader version: v1.8")
 
     def kill_handler(*args) -> None:
         sys.exit(0)
 
     def cleanup_assets():
         try:
-            logging.info("Cleaning up assets")
+            LogManager().log("Cleaning up assets")
             patch.cleanup_assets()
             sound.restore_sound()
             changes.cleanup_patch(steam_argv)
         except Exception as e:
-            logging.error("Error: %s", e)
+            LogManager().log_error(e)
 
     try:
-        logging.info("Limbus args: %s", sys.argv)
+        LogManager().log("Limbus args: %s", sys.argv)
         cleanup_assets()
         #atexit.register(cleanup_assets)
-        logging.info("Detecting lunartique mods")
+        LogManager().log("Detecting lunartique mods")
         patch.detect_lunartique_mods(mod_zips_root_path)
-        logging.info("Patching text data")
+        LogManager().log("Patching text data")
         changes.apply_patch(mod_zips_root_path, steam_argv)
         tmp_asset_root = tempfile.mkdtemp()
-        logging.info("Extracting mod assets to %s", tmp_asset_root)
+        LogManager().log("Extracting mod assets to %s", tmp_asset_root)
         patch.extract_assets(tmp_asset_root, mod_zips_root_path)
-        logging.info("Backing up data and patching assets....")
+        LogManager().log("Backing up data and patching assets....")
         patch.patch_assets(tmp_asset_root)
         patch.shutil.rmtree(tmp_asset_root)
         sound.replace_sound(mod_zips_root_path,steam_argv)
-        logging.info("Starting game")
+        LogManager().log("Starting game")
         subprocess.call(steam_argv)
         cleanup_assets()
 
     except Exception as e:
-        logging.error("Error: %s", e)
+        LogManager().log_error(e)
         sys.exit(1)
 
 def main_after_game():
@@ -551,22 +517,15 @@ def main():
     try:
         main_pre()
     except Exception as e:
-        if logger:
-            logger.log_error(e)
-        else:
-            print(f"Error in main_pre: {e}")
+        LogManager().log_error(e)
     try:
-        if config_whole.get("launcher", {}).get("work", {}).get("mod", False):
+        if ConfigManager().get("launcher.work.mod", False):
             main_after_mod()
         else:
             main_after_game()
     except Exception as e:
-        if logger:
-            logger.log_error(e)
-        else:
-            print(f"Error in main_after: {e}")
-    if logger:
-        logger.log('正常退出')
+        LogManager().log_error(e)
+    LogManager().log('正常退出')
 
 if __name__ == '__main__':
     main()

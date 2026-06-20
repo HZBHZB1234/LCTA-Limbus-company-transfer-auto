@@ -23,7 +23,8 @@ sys.path.insert(0, str(project_root))
 
 
 import webFunc.GithubDownload as GithubDownload
-from webutils.log_manage import LogManager
+from globalManagers.LogManager import LogManager
+from globalManagers.ConfigManager import ConfigManager
 import webutils.load as load_util
 import webutils.function_llc as function_llc
 from webutils.functions import get_cache_font, get_steam_command, change_icon, _move_folders
@@ -38,14 +39,18 @@ class CancelRunning(Exception):
     pass
 
 class LCTA_API():
-    def __init__(self,logger:logging):
+    @property
+    def config(self):
+        """提供 config 属性给前端 JS 通过 get_attr('config') 访问"""
+        return ConfigManager().raw
+
+    def __init__(self, logger: logging.Logger):
         self._window: webview.Window = None
-        # 初始化日志管理器
-        self.logger =logger
+        # 保持标准 logger 引用（setup_logging 返回的）用于兼容
+        self.logger = logger
+        # 初始化单例管理器
         self.log_manager = LogManager()
-        self.log_manager.set_log_callback(self.logger.info)
-        self.log_manager.set_error_callback(self.logger.exception)
-        self.log_manager.set_ui_callback(self.log_ui)
+        ConfigManager()
         self.modal_list = []
         self.http_port = 0
 
@@ -66,7 +71,6 @@ class LCTA_API():
         self.init_config()
 
     def set_function(self):
-        load_util.set_logger(self.log_manager)
         self.find_lcb = load_util.find_lcb
         self.load_config = load_util.load_config
         self.check_game_path = load_util.check_game_path
@@ -89,32 +93,31 @@ class LCTA_API():
             return None
         
     def init_config(self):
-        self.config = self.load_config()
         self.first_use = False
-        if self.config is None:
+        config_data = ConfigManager().raw
+        if not config_data:
             self.log("在初始化时未找到配置文件")
-            self.config = self.load_config_default()
-            if self.config is None:
+            ConfigManager().use_default()
+            if not ConfigManager().raw:
                 self.log("未知致命错误，理应不会触发，无法找到内置默认配置")
                 return False
             else:
                 try:
-                    self.use_default()
                     self.log("已生成默认配置文件")
                     self.first_use = True
                 except Exception as e:
                     self.log("生成默认配置文件时出现问题")
                     self.message_config=(["错误","生成默认配置文件时出现问题"])
                     self.log_error(e)
-        self.config_ok, self.config_error = self.validate_config(self.config)
+        self.config_ok, self.config_error = ConfigManager().validate()
         if not self.config_ok:
             self.log("配置文件格式错误")
             self.log("\n".join(self.config_error))
-        self.debug_mode = self.config.get('debug', False)
+        self.debug_mode = ConfigManager().get('debug', False)
 
     def init_github(self):
-        max_workers:str = self.config.get('github_max_workers', "4")
-        timeout:str = self.config.get('github_timeout', "8")
+        max_workers:str = ConfigManager().get('github_max_workers', "4")
+        timeout:str = ConfigManager().get('github_timeout', "8")
         GithubDownload.init_request(
             max_workers=int(max_workers) if max_workers.isdigit() else 4,
             timeout=int(timeout) if timeout.isdigit() else 8
@@ -123,12 +126,12 @@ class LCTA_API():
         function_llc.font_assets_raw.proxys = GithubDownload.GithubRequester.proxy_manager
     
     def init_cache(self):
-        if self.config.get('enable_cache', False):
-            os.makedirs(self.config.get('cache_path', ''), exist_ok=True)
-            if self.config.get('game_path', ''):
-                cache_path = Path(self.config.get('cache_path', '')) / 'ChineseFont.ttf'
+        if ConfigManager().get('enable_cache', False):
+            os.makedirs(ConfigManager().get('cache_path', ''), exist_ok=True)
+            if ConfigManager().get('game_path', ''):
+                cache_path = Path(ConfigManager().get('cache_path', '')) / 'ChineseFont.ttf'
                 if not cache_path.exists():
-                    shutil.copy2(get_cache_font(self.config, self.log_manager), cache_path)  
+                    shutil.copy2(get_cache_font(ConfigManager().raw), cache_path)  
                     
     def init_log(self):
         for i in Path('logs').glob('app.log.*'):
@@ -143,9 +146,9 @@ class LCTA_API():
                 self.log_error(e)
 
     def check_show(self):
-        last_version = self.config.get('last_version', 'v1.0.0')
+        last_version = ConfigManager().get('last_version', 'v1.0.0')
         if last_version != os.environ["__version__"]:
-            self.config['last_version'] = os.environ["__version__"]
+            ConfigManager().set('last_version', os.environ["__version__"])
             update_note = (Path(__file__).parent / 'assets' / 'update.md').read_text(encoding='utf-8').split('\n')
             r = []
             flag = False
@@ -166,19 +169,17 @@ class LCTA_API():
     def resetElder(self):
         defaultConfig = self.load_config_default()
         if defaultConfig:
-            self.config['elder'] = defaultConfig.get('elder', {})
+            ConfigManager().set('elder', defaultConfig.get('elder', {}))
         else:
             raise Exception("无法加载内置默认配置，重置老年人模式失败")
 
     def use_inner(self):
         """使用默认配置并保存"""
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(self.config, f, ensure_ascii=False, indent=4)
+        ConfigManager().save()
 
     def use_default(self):
         """使用内置默认配置并保存"""
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(self.load_config_default(), f, ensure_ascii=False, indent=4)
+        ConfigManager().use_default()
         self.log("已生成内置默认配置文件")
         
     def set_window(self, window):
@@ -310,10 +311,9 @@ class LCTA_API():
         """开始翻译"""
         try:
             self.add_modal_log("开始翻译...", modal_id)
-            os.environ['DUMP'] = str(self.config.get('ui_default', {}).get('translator', {})
-                                  .get('dump', False)).lower()
-            translate_main(modal_id, self.log_manager,
-                           self.config, translator_config,
+            os.environ['DUMP'] = str(ConfigManager().get('ui_default.translator.dump', False)).lower()
+            translate_main(modal_id,
+                           ConfigManager().raw, translator_config,
                            formating_function=self.format_api_settings)
             self.add_modal_log("翻译完成", modal_id)
             return {"success": True, "message": "翻译完成"}
@@ -338,7 +338,7 @@ class LCTA_API():
         '''获取翻译包列表'''
         try:
             # 从配置中获取汉化包目录，如果没有设置则使用当前工作目录
-            target_dir = self.config.get("ui_default", {}).get("install", {}).get("package_directory", "")
+            target_dir = ConfigManager().get("ui_default.install.package_directory", "")
             if not target_dir:
                 target_dir = os.getcwd()
             packages = find_translation_packages(target_dir)
@@ -353,10 +353,10 @@ class LCTA_API():
         '''删除指定的翻译包'''
         try:
             # 从配置中获取汉化包目录，如果没有设置则使用当前工作目录
-            target_path = self.config.get("ui_default", {}).get("install", {}).get("package_directory", "")
+            target_path = ConfigManager().get("ui_default.install.package_directory", "")
             if not target_path:
                 target_path = os.getcwd()
-            result = delete_translation_package(package_name, target_path, self.log_manager)
+            result = delete_translation_package(package_name, target_path)
             if result["success"]:
                 self.log(f"成功删除翻译包: {package_name}")
                 return result
@@ -377,14 +377,14 @@ class LCTA_API():
                 return {"success": False, "message": "传参错误"}
             
             # 获取游戏路径
-            game_path = self.config.get("game_path", "")
+            game_path = ConfigManager().get("game_path", "")
             if not game_path:
                 return {"success": False, "message": "请先设置游戏路径"}
                 
             self.add_modal_log(f"开始安装汉化包: {package_name}", modal_id)
             
             # 从配置中获取汉化包目录，如果没有设置则使用当前工作目录
-            package_dir = self.config.get("ui_default", {}).get("install", {}).get("package_directory", "")
+            package_dir = ConfigManager().get("ui_default.install.package_directory", "")
             if not package_dir:
                 package_dir = os.getcwd()
             
@@ -395,8 +395,7 @@ class LCTA_API():
             success, message = install_translation_package(
                 package_path, 
                 game_path,
-                logger_=self.log_manager,
-                modal_id=modal_id
+                                modal_id=modal_id
             )
             
             if success:
@@ -411,7 +410,7 @@ class LCTA_API():
         
     def toggle_installed_package(self, able):
         try:
-            changed = toggle_install_package(self.config, able)
+            changed = toggle_install_package(ConfigManager().raw, able)
             return {"success": True, "changed": changed}
         except Exception as e:
             self.log(f"切换可用状态失败: {str(e)}")
@@ -421,10 +420,10 @@ class LCTA_API():
     def get_installed_packages(self):
         '''获取翻译包列表'''
         try:
-            enable = check_lang_enabled(self.config.get('game_path', ''))
+            enable = check_lang_enabled(ConfigManager().get('game_path', ''))
             if not enable:
                 return {"success": True, "enable": False}
-            packages, selected = find_installed_packages(self.config)
+            packages, selected = find_installed_packages(ConfigManager().raw)
             self.log(f"找到 {len(packages)} 个翻译包")
             return {"success": True, "packages": packages,
                     "selected": selected, 'enable': True}
@@ -436,7 +435,7 @@ class LCTA_API():
     def delete_installed_package(self, package_name):
         '''删除指定的翻译包'''
         try:
-            return delete_installed_package(package_name, self.config)
+            return delete_installed_package(package_name, ConfigManager().raw)
         except Exception as e:
             error_msg = f"删除翻译包时出错: {str(e)}"
             self.log(error_msg)
@@ -449,8 +448,8 @@ class LCTA_API():
             self.add_modal_log(f"开始切换汉化包: {package_name}", modal_id)
             # 调用安装函数
             success = use_translation_package(
-                package_name, 
-                self.config
+                package_name,
+                ConfigManager().raw
             )
             if success:
                 return {"success": True, "message": "成功切换汉化包"}
@@ -464,7 +463,7 @@ class LCTA_API():
         
     def find_installed_mod(self):
         try:
-            able, disable = fing_mod(self.config)
+            able, disable = fing_mod(ConfigManager().raw)
             return {"success": True, "able": able, "disable": disable}
         except Exception as e:
             error_msg = f"查找已安装mod出错: {str(e)}"
@@ -475,7 +474,7 @@ class LCTA_API():
     def toggle_mod(self, mod_name, enable):
         try:
             self.log_manager.log(f'修改mod可用性 {mod_name} 为 {enable}')
-            changed = toggle_mod(self.config, mod_name, enable)
+            changed = toggle_mod(ConfigManager().raw, mod_name, enable)
             return {"success": True, "changed": changed}
         except Exception as e:
             error_msg = f"切换mod出错: {str(e)}"
@@ -486,7 +485,7 @@ class LCTA_API():
     def delete_mod(self, mod_name, enable):
         try:
             self.log_manager.log(f'删除mod {mod_name} 状态 {enable}')
-            success = delete_mod(self.config, mod_name, enable)
+            success = delete_mod(ConfigManager().raw, mod_name, enable)
             return {"success": success, "message": ""}
         except Exception as e:
             error_msg = f"删除mod出错: {str(e)}"
@@ -497,7 +496,7 @@ class LCTA_API():
     def open_mod_path(self):
         try:
             self.log_manager.log('打开mod文件夹')
-            open_mod_path(self.config)
+            open_mod_path(ConfigManager().raw)
             return {"success": True, "message": ""}
         except Exception as e:
             error_msg = f"打开mod路径出错: {str(e)}"
@@ -527,7 +526,7 @@ class LCTA_API():
         '''为指定翻译包更换字体'''
         try:
             self.log(f"开始为翻译包 {package_name} 更换字体")
-            result = change_font_for_package(package_name, font_path, self.log_manager, modal_id)
+            result = change_font_for_package(package_name, font_path, modal_id)
             if result[0]:  # 成功
                 self.log(f"为翻译包 {package_name} 更换字体成功")
                 return {"success": True, "message": result[1]}
@@ -561,7 +560,7 @@ class LCTA_API():
         '''导出选定的字体'''
         try:
             self.log(f"开始导出字体 {font_name} 到 {destination_path}")
-            result = export_system_font(font_name, destination_path, self.log_manager)
+            result = export_system_font(font_name, destination_path)
             if result["success"]:
                 self.log(f"成功导出字体 {font_name}")
                 return result
@@ -580,13 +579,13 @@ class LCTA_API():
             self.add_modal_log("开始下载OurPlay汉化包...", modal_id)
             
             # 从配置中读取字体处理选项
-            font_option = self.config.get("ui_default", {}).get("ourplay", {}).get("font_option", "keep")
-            check_hash = self.config.get("ui_default", {}).get("ourplay", {}).get("check_hash", True)
-            use_api = self.config.get("ui_default", {}).get("ourplay", {}).get("use_api", False)
+            font_option = ConfigManager().get("ui_default.ourplay.font_option", "keep")
+            check_hash = ConfigManager().get("ui_default.ourplay.check_hash", True)
+            use_api = ConfigManager().get("ui_default.ourplay.use_api", False)
             if use_api:
-                function_ourplay_api(modal_id, self.log_manager, font_option=font_option, check_hash=check_hash)
+                function_ourplay_api(modal_id, font_option=font_option, check_hash=check_hash)
             else:
-                function_ourplay_main(modal_id, self.log_manager, font_option=font_option, check_hash=check_hash)
+                function_ourplay_main(modal_id, font_option=font_option, check_hash=check_hash)
             
             self.add_modal_log("OurPlay汉化包下载成功", modal_id)
             return {"success": True, "message": "OurPlay汉化包下载成功"}
@@ -608,11 +607,11 @@ class LCTA_API():
             
             # 如果参数未从前端传递，则从配置中获取
             if clean_progress is None:
-                clean_progress = self.config.get("ui_default", {}).get("clean", {}).get("clean_progress", False)
+                clean_progress = ConfigManager().get("ui_default.clean.clean_progress", False)
             if clean_notice is None:
-                clean_notice = self.config.get("ui_default", {}).get("clean", {}).get("clean_notice", False)
+                clean_notice = ConfigManager().get("ui_default.clean.clean_notice", False)
             if clean_mods is None:
-                clean_mods = self.config.get("ui_default", {}).get("clean", {}).get("clean_mods", False)
+                clean_mods = ConfigManager().get("ui_default.clean.clean_mods", False)
             
             if clean_mods:
                 roaming_path = Path.home() / "AppData" / "Roaming"
@@ -622,8 +621,7 @@ class LCTA_API():
             # 调用清理函数
             clean_config_main(
                 modal_id=modal_id,
-                logger_=self.log_manager,
-                clean_progress=clean_progress,
+                                clean_progress=clean_progress,
                 clean_notice=clean_notice,
                 custom_files=custom_files
             )
@@ -644,8 +642,8 @@ class LCTA_API():
     def get_fancy_rulesets(self):
         return {'success': True, 'data': {
             'builtin': builtinFancyConfig,
-            'user': json.loads(self.config.get('user_fancy', [])),
-            'enabled': json.loads(self.config.get('fancy_allow',
+            'user': json.loads(ConfigManager().get('user_fancy', [])),
+            'enabled': json.loads(ConfigManager().get('fancy_allow',
                  "{\"技能文本美化(FL Like)\": true,\"气泡文本渐变(FL Like)\": true,\"EGO文本渐变(FL Like)\": true}"))
         }}
 
@@ -654,17 +652,16 @@ class LCTA_API():
         try:
             self.add_modal_log("开始下载零协汉化包...", modal_id)
             # 从配置中读取参数
-            dump_default = self.config.get("ui_default", {}).get("zero", {}).get("dump_default", False)
-            zip_type = self.config.get("ui_default", {}).get("zero", {}).get("zip_type", "zip")
-            use_proxy = self.config.get("ui_default", {}).get("zero", {}).get("use_proxy", True)
-            use_cache = self.config.get("ui_default", {}).get("zero", {}).get("use_cache", False)
-            download_source = self.config.get("ui_default", {}).get("zero", {}).get("download_source", "github")
-            cache_path = get_cache_font(self.config, self.log_manager)
+            dump_default = ConfigManager().get("ui_default.zero.dump_default", False)
+            zip_type = ConfigManager().get("ui_default.zero.zip_type", "zip")
+            use_proxy = ConfigManager().get("ui_default.zero.use_proxy", True)
+            use_cache = ConfigManager().get("ui_default.zero.use_cache", False)
+            download_source = ConfigManager().get("ui_default.zero.download_source", "github")
+            cache_path = get_cache_font(ConfigManager().raw)
             
             # 传递新参数给function_llc_main
             function_llc_main(
-                modal_id, 
-                self.log_manager, 
+                modal_id,
                 dump_default=dump_default,
                 download_source=download_source,
                 from_proxy=use_proxy,
@@ -690,7 +687,7 @@ class LCTA_API():
         """开始翻译"""
         try:
             self.add_modal_log("开始翻译...", modal_id)
-            function_LCTA_auto_main(modal_id, self.log_manager,self.config)
+            function_LCTA_auto_main(modal_id, ConfigManager().raw)
             self.add_modal_log("翻译完成", modal_id)
             return {"success": True, "message": "翻译完成"}
         except CancelRunning:
@@ -703,7 +700,7 @@ class LCTA_API():
 
     def fancy_main(self, config_list, enableMap):
         try:
-            gamePath = self.config['game_path']
+            gamePath = ConfigManager().get('game_path')
             lang_path = Path(gamePath) / 'LimbusCompany_Data' / 'lang'
             config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
         except Exception as e:
@@ -715,10 +712,9 @@ class LCTA_API():
         """获取专有词汇"""
         try:
             self.add_modal_log("开始抓取专有词汇...", modal_id)
-            proper_config = self.config.get('ui_default', {}).get('proper',{})
+            proper_config = ConfigManager().get('ui_default.proper', {})
             function_fetch_main(
                 modal_id,
-                self.log_manager,
                 **proper_config
             )
             self.add_modal_log("专有词汇抓取成功", modal_id)
@@ -783,8 +779,8 @@ class LCTA_API():
         """开始下载"""
         try:
             self.add_modal_log("开始下载...", modal_id)
-            function_bubble_main(modal_id, self.log_manager,
-                           self.config)
+            function_bubble_main(modal_id,
+                           ConfigManager().raw)
             self.add_modal_log("下载完成", modal_id)
             return {"success": True, "message": "下载完成"}
         except CancelRunning:
@@ -878,8 +874,7 @@ class LCTA_API():
     def save_config_to_file(self):
         """将当前配置保存到文件"""
         try:
-            with open("config.json", "w", encoding="utf-8") as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=4)
+            ConfigManager().save()
             return True
         except Exception as e:
             self.log_error(e)
@@ -899,35 +894,13 @@ class LCTA_API():
     def update_config_value(self, key_path, value, create_missing=True):
         """
         更新配置中的特定值
-        :param key_path: 配置键路径，例如 "ui_default.game_path" 
+        :param key_path: 配置键路径，例如 "ui_default.game_path"
         :param value: 要设置的值
         :param create_missing: 是否创建缺失的键路径
         :return: 更新是否成功
         """
         try:
-            keys = key_path.split('.')
-            current = self.config
-            
-            # 遍历到倒数第二个键
-            for key in keys[:-1]:
-                if key not in current:
-                    if create_missing:
-                        current[key] = {}
-                    else:
-                        return False
-                current = current[key]
-                
-                # 如果中间某个值不是字典，无法继续
-                if not isinstance(current, dict):
-                    self.log(f"无法设置配置值: {key_path} - 中间路径不是字典")
-                    return False
-            
-            # 设置最终值
-            final_key = keys[-1]
-            current[final_key] = value
-            
-            # 立即保存到文件，减少前端请求
-            self.save_config_to_file()
+            ConfigManager().set(key_path, value)
             return True
         except Exception as e:
             self.log(f"更新配置值时出错: {key_path} = {value}, 错误: {e}")
@@ -980,16 +953,7 @@ class LCTA_API():
         :return: 配置值或默认值
         """
         try:
-            keys = key_path.split('.')
-            current = self.config
-            
-            for key in keys:
-                if isinstance(current, dict) and key in current:
-                    current = current[key]
-                else:
-                    return default_value
-                    
-            return current
+            return ConfigManager().get(key_path, default_value)
         except Exception as e:
             self.log(f"获取配置值时出错: {key_path}, 错误: {e}")
             self.log_error(e)
@@ -998,16 +962,10 @@ class LCTA_API():
     def save_settings(self, game_path, debug_mode, auto_update):
         """保存设置"""
         try:
-            # 更新配置
-            self.config["game_path"] = game_path
-            self.config["debug"] = debug_mode
-            self.config["auto_check_update"] = auto_update
-            
-            # 保存到文件
-            success = self.save_config_to_file()
-            if not success:
-                return {"success": False, "message": "保存配置文件失败"}
-            
+            ConfigManager().set("game_path", game_path)
+            ConfigManager().set("debug", debug_mode)
+            ConfigManager().set("auto_check_update", auto_update)
+
             self.log(f"设置已保存: 游戏路径={game_path}, 调试模式={debug_mode}")
             return {"success": True, "message": "设置保存成功"}
         except Exception as e:
@@ -1017,18 +975,7 @@ class LCTA_API():
     def use_default_config(self):
         """使用默认配置"""
         try:
-            default_config = self.load_config_default()
-            if default_config is None:
-                return {"success": False, "message": "无法加载默认配置"}
-            
-            # 更新内存中的配置
-            self.config = default_config
-            
-            # 保存到文件
-            success = self.save_config_to_file()
-            if not success:
-                return {"success": False, "message": "保存配置文件失败"}
-            
+            ConfigManager().use_default()
             self.log("已重置为默认配置")
             return {"success": True, "message": "已重置为默认配置"}
         except Exception as e:
@@ -1038,23 +985,9 @@ class LCTA_API():
     def reset_config(self):
         """重置配置"""
         try:
-            # 删除现有配置文件
-            if os.path.exists("config.json"):
-                os.remove("config.json")
-            
-            # 重新加载默认配置
-            default_config = self.load_config_default()
-            if default_config is None:
-                return {"success": False, "message": "无法加载默认配置"}
-            
-            # 更新内存中的配置
-            self.config = default_config
-            
-            # 保存到文件
-            success = self.save_config_to_file()
-            if not success:
-                return {"success": False, "message": "保存配置文件失败"}
-            
+            ConfigManager().reset()
+            # 重新初始化
+            ConfigManager()
             self.log("配置已重置")
             return {"success": True, "message": "配置已重置"}
         except Exception as e:
@@ -1065,7 +998,7 @@ class LCTA_API():
         """自动检查更新"""
         try:
             # 只有在配置允许时才检查更新
-            if not self.config.get("auto_check_update", True):
+            if not ConfigManager().get("auto_check_update", True):
                 return {"has_update": False}
                 
             self.current_version = get_app_version()
@@ -1075,10 +1008,9 @@ class LCTA_API():
             updater = Updater(
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
-                delete_old_files=self.config.get("delete_updating", True),
-                logger_=self.log_manager,
-                use_proxy=self.config.get("update_use_proxy", True),
-                only_stable=self.config.get("update_only_stable", False)
+                delete_old_files=ConfigManager().get("delete_updating", True),
+                                use_proxy=ConfigManager().get("update_use_proxy", True),
+                only_stable=ConfigManager().get("update_only_stable", False)
             )
             
             update_info = updater.check_for_updates(self.current_version)
@@ -1098,10 +1030,9 @@ class LCTA_API():
             updater = Updater(
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
-                delete_old_files=self.config.get("delete_updating", True),
-                logger_=self.log_manager,
-                use_proxy=self.config.get("update_use_proxy", True),
-                only_stable=self.config.get("update_only_stable", False)
+                delete_old_files=ConfigManager().get("delete_updating", True),
+                                use_proxy=ConfigManager().get("update_use_proxy", True),
+                only_stable=ConfigManager().get("update_only_stable", False)
             )
             
             update_info = updater.check_for_updates(self.current_version)
@@ -1124,10 +1055,9 @@ class LCTA_API():
             updater = Updater(
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
-                delete_old_files=self.config.get("delete_updating", True),
-                logger_=self.log_manager,
-                use_proxy=self.config.get("update_use_proxy", True),
-                only_stable=self.config.get("update_only_stable", False)
+                delete_old_files=ConfigManager().get("delete_updating", True),
+                                use_proxy=ConfigManager().get("update_use_proxy", True),
+                only_stable=ConfigManager().get("update_only_stable", False)
             )
             
             # 执行更新
@@ -1168,7 +1098,7 @@ class LCTA_API():
     def eval_dropped_files(self, files_data, modal_id="false"):
         """从拖拽的文件安装汉化包"""
         try:
-            result = evalFiles(files_data, self.config, self.log_manager, modal_id)
+            result = evalFiles(files_data, ConfigManager().raw, modal_id)
             return result
         except CancelRunning:
             self.log('文件安装任务已取消')
@@ -1240,17 +1170,17 @@ def main():
     window.events.closed += api.save_setting_from
     atexit.register(api.save_config_to_file)
     # 设置模态窗口相关的回调
-    api.log_manager.set_modal_callbacks(
+    LogManager().set_modal_callbacks(
         status_callback=api.set_modal_status,
         log_callback=api.add_modal_log,
         progress_callback=api.update_modal_progress,
         check_running=api.check_modal_running
     )
-    
+
     logger.info("WebUI窗口已创建")
 
-    debug_mode = api.config.get("debug", False)
-    enable_storage = api.config.get('enable_storage', False)
+    debug_mode = ConfigManager().get("debug", False)
+    enable_storage = ConfigManager().get('enable_storage', False)
 
     webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
     webview.settings['ALLOW_DOWNLOADS'] = True
@@ -1267,7 +1197,7 @@ def main():
         window.dom.document.events.drop += DOMEventHandler(api.on_drop, True, True)
 
     if enable_storage:
-        stPath = api.config.get('storage_path', 'tmp')
+        stPath = ConfigManager().get('storage_path', 'tmp')
         webview.start(
             func=start_func,
             debug=debug_mode,

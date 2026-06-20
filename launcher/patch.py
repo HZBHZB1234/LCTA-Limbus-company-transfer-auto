@@ -3,7 +3,7 @@ import xxhash
 import lzma
 import os.path
 import shutil
-import logging
+from globalManagers.LogManager import LogManager
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -31,13 +31,13 @@ def file_digest(file_path):
 
 def detect_lunartique_mods(mod_zips_root: str):
     for mod_zip in Path(mod_zips_root).rglob("*.zip"):
-        logging.info("Compressing lunartique format mod (might take a while!): %s", mod_zip)
+        LogManager().log("Compressing lunartique format mod (might take a while!): %s", mod_zip)
         try:
             compress_lunartique_mod(mod_zip, mod_zip.with_suffix(".carra2"))
             os.remove(mod_zip)
-            logging.info("* Done")
+            LogManager().log("* Done")
         except Exception as e:
-            logging.info("* Error: %s", e)
+            LogManager().log("* Error: %s", e)
 
 
 def mod_file_size(file):
@@ -52,10 +52,10 @@ def extract_assets(mod_asset_root: str, mod_zips_root: str):
         mod_zip = os.path.normpath(mod_zip)
         try:
             with ZipFile(mod_zip) as z:
-                logging.info("Extracting %s", mod_zip)
+                LogManager().log("Extracting %s", mod_zip)
                 z.extractall(mod_asset_root)
         except Exception as e:
-            logging.info("Error processing %s: %s", mod_zip, e)
+            LogManager().log("Error processing %s: %s", mod_zip, e)
 
     for mod_carra in glob.glob(f"{mod_asset_root}/*/*/*"):
         mod_carra_path = Path(mod_carra)
@@ -64,7 +64,7 @@ def extract_assets(mod_asset_root: str, mod_zips_root: str):
 
 
 def cleanup_assets(bundle_data=bundle_data_paths):
-    logging.info("Restoring data")
+    LogManager().log("Restoring data")
     for bundle_root in bundle_data():
         bundle_path = os.path.join(bundle_root, "__data")
         new_path = os.path.join(bundle_root, "__original")
@@ -77,16 +77,16 @@ def cleanup_assets(bundle_data=bundle_data_paths):
                 os.remove(new_path)
                 continue
         except Exception as e:
-            logging.info("Corrupted file detected %s: %s", bundle_path, e)
+            LogManager().log("Corrupted file detected %s: %s", bundle_path, e)
 
-        logging.info("Restoring %s", bundle_path)
+        LogManager().log("Restoring %s", bundle_path)
         os.replace(new_path, bundle_path)
 
 
 def patch_bundle_asset(env: UnityPy.Environment, mod_path: str):
     for f in env.file.files.values():
         if not isinstance(f, SerializedFile):
-            logging.info("Expected serialized file but got a %s instead?? Skipped", type(f))
+            LogManager().log("Expected serialized file but got a %s instead?? Skipped", type(f))
             return
 
         objects = f.objects
@@ -105,16 +105,16 @@ def patch_bundle_asset(env: UnityPy.Environment, mod_path: str):
                 continue
             if obj := objects.get(path_id):
                 if not isinstance(obj, ObjectReader):
-                    logging.error("- Object is not ObjectReader, wtf?")
+                    LogManager().log_error("- Object is not ObjectReader, wtf?")
                     continue
-                logging.info("- Loading %s", mod_part_path)
+                LogManager().log("- Loading %s", mod_part_path)
                 if type_id > 0 and type_id != obj.type_id:
-                    logging.info("- Mismatching asset type, vanilla: %d, modded: %d, skipped", obj.type_id, type_id)
+                    LogManager().log("- Mismatching asset type, vanilla: %d, modded: %d, skipped", obj.type_id, type_id)
                     continue
                 with open(mod_part_path, "rb") as mf:
                     obj.set_raw_data(lzma.decompress(mf.read(), format=lzma.FORMAT_XZ))
             elif type_id > 0:
-                logging.info("- Adding unused mod asset of type %d: %s", type_id, mod_part_path)
+                LogManager().log("- Adding unused mod asset of type %d: %s", type_id, mod_part_path)
                 reader = EndianBinaryReader(bytes(bytearray(1024)))
                 obj = ObjectReader(assets_file=f, reader=reader)
                 obj.path_id = path_id
@@ -135,15 +135,15 @@ def patch_assets(mod_asset_root: str, bundle_data=bundle_data_paths):
         bundle_path = os.path.join(bundle_root, "__data")
         new_path = os.path.join(bundle_root, "__original")
         os.chmod(bundle_path, 0o777)
-        logging.info("Backing up %s", bundle_path)
+        LogManager().log("Backing up %s", bundle_path)
         os.replace(bundle_path, new_path)
 
-        logging.info("Patching %s", bundle_path)
+        LogManager().log("Patching %s", bundle_path)
         env = UnityPy.load(new_path)
         patch_bundle_asset(env, mod_path)
 
         env.file.version_player = "limbus_modded"
         with open(bundle_path, "wb") as f:
             f.write(env.file.save(packer="none"))
-        logging.info("* Patching complete %s (%d) -> %s (%d)", file_digest(new_path), os.path.getsize(new_path),
+        LogManager().log("* Patching complete %s (%d) -> %s (%d)", file_digest(new_path), os.path.getsize(new_path),
                      file_digest(bundle_path), os.path.getsize(bundle_path))

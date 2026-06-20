@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
 import json
 import sys
 import shutil
-import logging
+from globalManagers.LogManager import LogManager
 import re
 import os
 from dataclasses import dataclass, field
@@ -11,9 +11,6 @@ from copy import deepcopy
 from contextlib import suppress
 if TYPE_CHECKING:
     from translatekit import TranslatorBase
-
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
 print(sys.path)
 _project_root = Path(__file__).parent.parent
@@ -305,12 +302,12 @@ class RequestTextBuilder:
                     break
             
             if all_valid:
-                logger.info(f"文本过长，已分割成 {num_parts} 部分")
+                LogManager().log(f"文本过长，已分割成 {num_parts} 部分")
                 self.split_requests = parts
                 return
         
         # 如果无法分割成满足条件的部分，尝试更激进的分割
-        logger.warning(f"警告：文本过长且无法合理分割，尝试强制分割")
+        LogManager().log(f"警告：文本过长且无法合理分割，尝试强制分割")
         
         # 简单按固定大小分割
         parts = []
@@ -363,7 +360,7 @@ class RequestTextBuilder:
             try:
                 return translate_doc.SKILLL_DOC
             except Exception as e:
-                logger.warning(f"获取技能翻译指南时出现错误: {e}")
+                LogManager().log(f"获取技能翻译指南时出现错误: {e}")
                 return "技能翻译指南：请保持技能名称和描述的一致性，注意状态效果的准确翻译。"
         return ""
     
@@ -556,7 +553,7 @@ class RequestTextBuilder:
         ok_flag = True
         try:
             next(translated_texts_iter)
-            logger.warning("警告：翻译文本数量多于预期，可能有多个多余的翻译文本")
+            LogManager().log("警告：翻译文本数量多于预期，可能有多个多余的翻译文本")
             ok_flag = False
         except StopIteration:
             pass
@@ -631,7 +628,7 @@ class SimpleRequestTextBuilder():
         ok_flag = True
         try:
             next(translated_iter)
-            logger.warning("警告：翻译文本数量多于预期，可能有多个多余的翻译文本")
+            LogManager().log("警告：翻译文本数量多于预期，可能有多个多余的翻译文本")
             ok_flag = False
         except StopIteration:
             pass
@@ -694,17 +691,15 @@ class MatcherOrganizer:
 class FileProcessor:
     
     def __init__(self, path_config: FilePathConfig, matcher: MatcherOrganizer,
-                 request_config: RequestConfig = RequestConfig(),
-                 logger: logging.Logger = logging.getLogger(__name__)):
+                 request_config: RequestConfig = RequestConfig()):
         self.path_config = path_config
         self.matcher = matcher
-        self.logger = logger
         self.request_config = request_config
         self._dump = os.getenv('DUMP', 'False').lower() == 'true'
         
     def dump(self, content):
         if self._dump:
-            self.logger.debug(content)
+            LogManager().log(content)
         
     def process_file(self):
         # 1. 加载JSON文件
@@ -797,7 +792,7 @@ class FileProcessor:
                 # 将当前部分的结果添加到总结果中
                 result.extend(result_list)
                 
-                self.logger.info(f"第 {i+1} 部分翻译完成，获得 {len(result_list)} 条结果")
+                LogManager().log(f"第 {i+1} 部分翻译完成，获得 {len(result_list)} 条结果")
             
         else:
             # 使用非LLM翻译器
@@ -811,13 +806,13 @@ class FileProcessor:
             # 调用翻译器进行批量翻译
             result = self.request_config.translator.translate(request_texts)
             self.dump(result)
-            self.logger.info(f"获得 {len(result)} 条结果")
+            LogManager().log(f"获得 {len(result)} 条结果")
             
         try:
             translated_text = builder.deBuild(result)
             self.dump(translated_text)
         except StopIteration:
-            self.logger.warning(f"翻译结果还原时出现问题：返回值长度问题")
+            LogManager().log(f"翻译结果还原时出现问题：返回值长度问题")
             self._save_except()
             raise ProcesserExit("translation_length_error")
         
@@ -835,23 +830,23 @@ class FileProcessor:
                 with open(self.path_config.EN_path, 'r', encoding='utf-8-sig') as f:
                     self.en_json:Dict = json.load(f)
             except FileNotFoundError:
-                self.logger.warning(f"{self.path_config.real_name}不存在en文件，使用kr文件")
+                LogManager().log(f"{self.path_config.real_name}不存在en文件，使用kr文件")
                 self.en_json = deepcopy(self.kr_json)
             try:
                 with open(self.path_config.JP_path, 'r', encoding='utf-8-sig') as f:
                     self.jp_json: Dict = json.load(f)
             except FileNotFoundError:
-                self.logger.warning(f"{self.path_config.real_name}不存在jp文件，跳过jp文件处理")
+                LogManager().log(f"{self.path_config.real_name}不存在jp文件，跳过jp文件处理")
                 self.jp_json = deepcopy(self.kr_json)
             try:
                 with open(self.path_config.LLC_path, 'r', encoding='utf-8-sig') as f:
                     self.llc_json = json.load(f)
             except FileNotFoundError:
-                self.logger.warning(f"{self.path_config.real_name}不存在llc文件，使用空文件")
+                LogManager().log(f"{self.path_config.real_name}不存在llc文件，使用空文件")
                 self.llc_json = {}
         except json.JSONDecodeError as e:
-            self.logger.warning(f"{self.path_config.real_name}文件解析错误，跳过")
-            self.logger.exception(e)
+            LogManager().log(f"{self.path_config.real_name}文件解析错误，跳过")
+            LogManager().log_error(e)
             self._save_except()
             raise ProcesserExit("json_decode_error")
 
@@ -880,8 +875,8 @@ class FileProcessor:
                     try:
                         self._save_kr()
                     except Exception as e:
-                        self.logger.exception(e)
-                        self.logger.error(f"保存文件{self.path_config.real_name}，请检查文件路径")
+                        LogManager().log_error(e)
+                        LogManager().log_error(f"保存文件{self.path_config.real_name}，请检查文件路径")
                         raise ProcesserExit("save_except_except")
     
     def _save_result(self, json_data):
@@ -891,13 +886,13 @@ class FileProcessor:
             with open(self.path_config.target_file, 'w', encoding='utf-8-sig') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=4)
         except Exception as e:
-            self.logger.exception(e)
+            LogManager().log_error(e)
             raise ProcesserExit("success_save_error")
         raise ProcesserExit("success_save")
             
     def _check_empty(self):
         if self.kr_json in EMPTY_DATA or self.kr_json.get('dataList', []) in EMPTY_DATA_LIST:
-            self.logger.warning(f"{self.path_config.real_name}文件为空，跳过")
+            LogManager().log(f"{self.path_config.real_name}文件为空，跳过")
             if self.path_config.LLC_path.exists():
                 self._save_llc()
                 raise ProcesserExit("empty_llc")
@@ -943,7 +938,7 @@ class FileProcessor:
         
     def _check_translated(self):
         if not len(self.jp_index)==len(self.kr_index)==len(self.en_index):
-            self.logger.warning(f"""{self.path_config.real_name}文件三语长度不同
+            LogManager().log(f"""{self.path_config.real_name}文件三语长度不同
                 jp:{len(self.jp_index)} kr:{len(self.kr_index)} en:{len(self.en_index)}""")
             def change_len(dict_:dict, dict_kr:dict) -> dict:
                 result = {}

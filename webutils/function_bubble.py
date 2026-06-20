@@ -12,17 +12,17 @@ from contextlib import suppress
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from webutils.log_manage import LogManager
+from globalManagers.LogManager import LogManager
 from webutils.functions import download_with
 from webFunc.LanzouFolder import GetAllFileListByUrl
 
 BASE_LANZOU_URL = "https://wwyi.lanzoub.com/"
 BASE_DIRECT = "http://lz.qaiu.top/parser?url="
 
-def check_bubble(modal_id, logger_: LogManager, filelists):
-    logger_.log_modal_process("开始检查气泡", modal_id)
+def check_bubble(modal_id, filelists):
+    LogManager().log_modal_process("开始检查气泡", modal_id)
     if not filelists:
-        logger_.log_modal_process("无法获取文件列表", modal_id)
+        LogManager().log_modal_process("无法获取文件列表", modal_id)
         return ''
     r = []
     for file in filelists:
@@ -36,7 +36,7 @@ def check_bubble(modal_id, logger_: LogManager, filelists):
         if all(i.isdigit() for i in file_split):
             r.append('.'.join(file_split))
     if not r:
-        logger_.log_modal_process("无法获取文件列表", modal_id)
+        LogManager().log_modal_process("无法获取文件列表", modal_id)
         return ''
     r = Counter(r)
     return r.most_common(1)[0][0]
@@ -44,17 +44,15 @@ def check_bubble(modal_id, logger_: LogManager, filelists):
 def get_direct_download(file_id):
     return f'{BASE_DIRECT}{BASE_LANZOU_URL}{file_id}'
     
-def download_bubble(modal_id, logger_: LogManager, save_path: Path, color, llc, filelists):
+def download_bubble(modal_id, save_path: Path, color, llc, filelists):
     color = '彩色' if color else '无色'
     files = [i for i in filelists if (color in i['name_all'] and '替换' in i['name_all'])]
     if not llc:
         url = get_direct_download([file for file in files if '无随机' in file['name_all']][0]['id'])
-        download_with(url, save_path / 'bubble_mod.zip', logger_=logger_,
-                        modal_id=modal_id, validate=False)
+        download_with(url, save_path / 'bubble_mod.zip', modal_id=modal_id, validate=False)
     else:
         url = get_direct_download([file for file in files if not '无随机' in file['name_all']][0]['id'])
-        download_with(url, save_path / 'bubble_mod.zip', logger_=logger_,
-                        modal_id=modal_id, validate=False)
+        download_with(url, save_path / 'bubble_mod.zip', modal_id=modal_id, validate=False)
                     
 def install_bubble_mod(mod_path: Path, lang_path: Path):
     config_path = lang_path / 'config.json'
@@ -66,7 +64,7 @@ def install_bubble_mod(mod_path: Path, lang_path: Path):
 def fetch_file_list():
     return GetAllFileListByUrl("https://wwyi.lanzoub.com/b014wpn02j",'fib6')
 
-def function_bubble_main(modal_id, logger_: LogManager, whole_config):
+def function_bubble_main(modal_id, whole_config):
     bubble_config = whole_config.get('ui_default', {}).get('bubble', {})
     color = bubble_config.get('color', False)
     llc = bubble_config.get('llc', False)
@@ -82,18 +80,18 @@ def function_bubble_main(modal_id, logger_: LogManager, whole_config):
         mod_.unlink()
     
     if enable_cache:
-        version = check_bubble(modal_id, logger_, file_list)
+        version = check_bubble(modal_id, file_list)
         cache_key = f'{color},{llc}'
         version = f'{version}\n{cache_key}'
         version_config = cache_path / 'version.txt'
         cache_mod = cache_path / 'bubble_mod.zip'
         if version_config.exists() and version == version_config.read_text(encoding='utf-8'):
-            logger_.log_modal_process("缓存已存在，无需下载", modal_id)
+            LogManager().log_modal_process("缓存已存在，无需下载", modal_id)
             shutil.copy(cache_mod, './')
         else:
-            download_bubble(modal_id, logger_, Path('.'), color, llc, file_list)
+            download_bubble(modal_id, Path('.'), color, llc, file_list)
     else:
-        download_bubble(modal_id, logger_, Path('.'), color, llc, file_list)
+        download_bubble(modal_id, Path('.'), color, llc, file_list)
         
     if install:
         install_bubble_mod(mod_, lang_path)

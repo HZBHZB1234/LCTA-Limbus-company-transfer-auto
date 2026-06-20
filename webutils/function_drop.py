@@ -9,6 +9,7 @@ import zipfile
 from .function_install import install_translation_package
 from .function_manage import get_mod_path
 from .functions import extract_zip_smartly
+from globalManagers.LogManager import LogManager
 
 FOLDERLIST = [
     'BattleAnnouncerDlg',
@@ -124,13 +125,12 @@ def makeMessage(content):
         return 'none'
     return message
 
-def evalFiles(files_data, config, logger, modal_id="false"):
+def evalFiles(files_data, config, modal_id="false"):
     """处理拖入的文件，根据检测到的类型执行相应的安装操作
 
     Args:
         files_data: dict, {file_path: type_string}, 由 handle_dropped_files 生成
         config: 完整应用配置
-        logger: LogManager 实例
         modal_id: 进度模态窗口 ID
 
     Returns:
@@ -139,7 +139,7 @@ def evalFiles(files_data, config, logger, modal_id="false"):
                "error_details": list}
     """
     if not files_data:
-        logger.log_modal_process("没有需要处理的文件", modal_id)
+        LogManager().log_modal_process("没有需要处理的文件", modal_id)
         return {"success": True, "message": "没有需要处理的文件",
                 "installed": 0, "modded": 0, "skipped": 0, "errors": 0,
                 "error_details": []}
@@ -154,21 +154,21 @@ def evalFiles(files_data, config, logger, modal_id="false"):
 
     for idx, (file_path, file_type) in enumerate(files_data.items()):
         # 检查取消 — CancelRunning 会向上传播
-        logger.check_running(modal_id)
+        LogManager().check_running(modal_id)
 
         file_name = Path(file_path).name
         progress_pct = int((idx / total) * 100)
 
         # 检查文件是否仍然存在
         if not os.path.exists(file_path):
-            logger.log_modal_process(f"文件不存在，跳过: {file_name}", modal_id)
+            LogManager().log_modal_process(f"文件不存在，跳过: {file_name}", modal_id)
             results["skipped"] += 1
             continue
 
         try:
             if file_type in ('full', 'nofont'):
-                logger.log_modal_process(f"正在安装汉化包: {file_name}", modal_id)
-                logger.update_modal_progress(
+                LogManager().log_modal_process(f"正在安装汉化包: {file_name}", modal_id)
+                LogManager().update_modal_progress(
                     progress_pct,
                     f"安装汉化包 ({idx+1}/{total}): {file_name}",
                     modal_id)
@@ -177,13 +177,13 @@ def evalFiles(files_data, config, logger, modal_id="false"):
                     raise ValueError("未设置游戏路径，无法安装汉化包")
 
                 install_translation_package(
-                    file_path, game_path, logger, modal_id)
+                    file_path, game_path, LogManager(), modal_id)
                 results["installed"] += 1
-                logger.log_modal_process(f"汉化包安装完成: {file_name}", modal_id)
+                LogManager().log_modal_process(f"汉化包安装完成: {file_name}", modal_id)
 
             elif file_type == 'FLmod':
-                logger.log_modal_process(f"正在安装模组: {file_name}", modal_id)
-                logger.update_modal_progress(
+                LogManager().log_modal_process(f"正在安装模组: {file_name}", modal_id)
+                LogManager().update_modal_progress(
                     progress_pct,
                     f"安装模组 ({idx+1}/{total}): {file_name}",
                     modal_id)
@@ -206,12 +206,12 @@ def evalFiles(files_data, config, logger, modal_id="false"):
                     shutil.copytree(file_path, target_path)
 
                 results["modded"] += 1
-                logger.log_modal_process(f"模组安装完成: {file_name}", modal_id)
+                LogManager().log_modal_process(f"模组安装完成: {file_name}", modal_id)
 
             elif file_type in ('carra', 'bank'):
                 label = NAMEREFER.get(file_type, file_type)
-                logger.log_modal_process(f"正在安装{label}: {file_name}", modal_id)
-                logger.update_modal_progress(
+                LogManager().log_modal_process(f"正在安装{label}: {file_name}", modal_id)
+                LogManager().update_modal_progress(
                     progress_pct,
                     f"安装{label} ({idx+1}/{total}): {file_name}",
                     modal_id)
@@ -222,11 +222,11 @@ def evalFiles(files_data, config, logger, modal_id="false"):
                 shutil.copy2(file_path, str(mod_path))
 
                 results["modded"] += 1
-                logger.log_modal_process(f"{label}安装完成: {file_name}", modal_id)
+                LogManager().log_modal_process(f"{label}安装完成: {file_name}", modal_id)
 
             elif file_type == 'jsononly':
-                logger.log_modal_process(f"正在安装文本替换包: {file_name}", modal_id)
-                logger.update_modal_progress(
+                LogManager().log_modal_process(f"正在安装文本替换包: {file_name}", modal_id)
+                LogManager().update_modal_progress(
                     progress_pct,
                     f"安装文本替换包 ({idx+1}/{total}): {file_name}",
                     modal_id)
@@ -238,12 +238,12 @@ def evalFiles(files_data, config, logger, modal_id="false"):
                 shutil.copytree(file_path, target_path)
 
                 results["modded"] += 1
-                logger.log_modal_process(f"文本替换包安装完成: {file_name}", modal_id)
+                LogManager().log_modal_process(f"文本替换包安装完成: {file_name}", modal_id)
 
             elif file_type in ('textFile', 'LCTAchange', 'FLchange'):
                 label = NAMEREFER.get(file_type, file_type)
-                logger.log_modal_process(f"正在安装{label}: {file_name}", modal_id)
-                logger.update_modal_progress(
+                LogManager().log_modal_process(f"正在安装{label}: {file_name}", modal_id)
+                LogManager().update_modal_progress(
                     progress_pct,
                     f"安装{label} ({idx+1}/{total}): {file_name}",
                     modal_id)
@@ -254,26 +254,26 @@ def evalFiles(files_data, config, logger, modal_id="false"):
                 shutil.copy2(file_path, str(mod_path))
 
                 results["modded"] += 1
-                logger.log_modal_process(f"{label}安装完成: {file_name}", modal_id)
+                LogManager().log_modal_process(f"{label}安装完成: {file_name}", modal_id)
 
             elif file_type == 'invalid':
-                logger.log_modal_process(f"跳过无效文件: {file_name}", modal_id)
+                LogManager().log_modal_process(f"跳过无效文件: {file_name}", modal_id)
                 results["skipped"] += 1
 
             elif file_type == 'update':
-                logger.log_modal_process(
+                LogManager().log_modal_process(
                     f"跳过更新包 (请单独拖入以执行更新): {file_name}", modal_id)
                 results["skipped"] += 1
 
             else:
-                logger.log_modal_process(
+                LogManager().log_modal_process(
                     f"未知文件类型 '{file_type}'，跳过: {file_name}", modal_id)
                 results["skipped"] += 1
 
         except Exception as e:
             error_msg = f"处理文件 '{file_name}' 时出错: {str(e)}"
-            logger.log_modal_process(error_msg, modal_id)
-            logger.log_error(e)
+            LogManager().log_modal_process(error_msg, modal_id)
+            LogManager().log_error(e)
             results["errors"] += 1
             error_details.append({"file": file_name, "error": str(e)})
 
@@ -290,9 +290,9 @@ def evalFiles(files_data, config, logger, modal_id="false"):
 
     summary = "安装完成: " + ", ".join(parts) if parts else "没有需要安装的文件"
 
-    logger.log_modal_process(summary, modal_id)
-    logger.log_modal_status("处理完成", modal_id)
-    logger.update_modal_progress(100, summary, modal_id)
+    LogManager().log_modal_process(summary, modal_id)
+    LogManager().log_modal_status("处理完成", modal_id)
+    LogManager().update_modal_progress(100, summary, modal_id)
 
     return {
         "success": results["errors"] == 0,

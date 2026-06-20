@@ -1,12 +1,10 @@
 import jsonpatch
 import shlex
-import logging
+from globalManagers.LogManager import LogManager
 from pathlib import Path
 import json
 import shutil
 import os
-
-logging.basicConfig(level=logging.INFO)
 
 def apply_patch(mod_path, _path):
     game_path = shlex.split(_path)[0]
@@ -17,7 +15,7 @@ def apply_patch(mod_path, _path):
         # Apply the patch to the corresponding language file
         for _lang_file in patch_data.get('patchs', {}):
             lang_file = lang_path / _lang_file
-            logging.info("Patching %s", lang_file)
+            LogManager().log("Patching %s", lang_file)
             shutil.copyfile(lang_file, lang_file.with_suffix(".bak"))
             if lang_file.exists():
                 with open(lang_file, "r") as f:

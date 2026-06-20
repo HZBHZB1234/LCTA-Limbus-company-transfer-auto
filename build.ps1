@@ -38,15 +38,34 @@ Write-Host "`n[1/6] 初始化代码..." -ForegroundColor Yellow
 $initScript = "$ProjectRoot\.github\InitCode.py"
 $indexHtmlPath = "$ProjectRoot\webui\index.html"
 $initCodeHashFile = "$BuildCacheDir\initcode.hash"
+$initCodeCSourcesCache = "$BuildCacheDir\initcode-c-sources"
 
 if (Test-Path $initScript) {
-    # 计算缓存键：InitCode.py + webui/index.html 的 MD5
-    $initScriptHash = (Get-FileHash -Path $initScript -Algorithm MD5).Hash
-    $indexHash = (Get-FileHash -Path $indexHtmlPath -Algorithm MD5).Hash
-    $currentInitHash = "$initScriptHash-$indexHash"
+    # 计算缓存键：InitCode.py 读取的所有输入文件的 MD5（与 InitCode.py 的读取逻辑同步）
+    # InitCode.py 读取的文件: InitCode.py 自身, launcher.c, webui/index.html,
+    #   webui/assets/update.md, favicon.ico, README.md
+    $initInputFiles = @(
+        @{Path=$initScript;                              Label="InitCode.py"},
+        @{Path="$ProjectRoot\launcher.c";                Label="launcher.c"},
+        @{Path=$indexHtmlPath;                           Label="index.html"},
+        @{Path="$ProjectRoot\webui\assets\update.md";    Label="update.md"},
+        @{Path="$ProjectRoot\favicon.ico";              Label="favicon.ico"},
+        @{Path="$ProjectRoot\README.md";                 Label="README.md"}
+    )
+
+    $hashParts = [System.Collections.Generic.List[string]]::new()
+    foreach ($f in $initInputFiles) {
+        if (Test-Path $f.Path) {
+            $h = (Get-FileHash -Path $f.Path -Algorithm MD5).Hash
+            $hashParts.Add("$($f.Label)=$h")
+        } else {
+            $hashParts.Add("$($f.Label)=MISSING")
+        }
+    }
+    $currentInitHash = $hashParts -join "|"
 
     $initCacheHit = $false
-    if ((Test-Path $WebuiBuildCache) -and (Test-Path $initCodeHashFile)) {
+    if ((Test-Path $WebuiBuildCache) -and (Test-Path $initCodeHashFile) -and (Test-Path $initCodeCSourcesCache)) {
         $cachedInitHash = (Get-Content $initCodeHashFile -Raw).Trim()
         if ($cachedInitHash -eq $currentInitHash) {
             Write-Host "  InitCode 缓存命中，跳过" -ForegroundColor Green
@@ -61,7 +80,7 @@ if (Test-Path $initScript) {
             $originalIndexHtml = Get-Content -Path $indexHtmlPath -Raw -Encoding UTF8
         }
 
-        # 执行 InitCode（会修改源码目录下的 webui/）
+        # 执行 InitCode（会修改源码目录下的 webui/ 并在 ParentDir 写入 C 源码）
         $initOutput = & python $initScript 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  ERROR: InitCode 执行失败" -ForegroundColor Red
@@ -75,6 +94,21 @@ if (Test-Path $initScript) {
             Remove-Item $WebuiBuildCache -Recurse -Force
         }
         Copy-Item "$ProjectRoot\webui" $WebuiBuildCache -Recurse -Force
+
+        # 保存 InitCode 生成的 C 源文件到缓存
+        if (Test-Path $initCodeCSourcesCache) {
+            Remove-Item $initCodeCSourcesCache -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $initCodeCSourcesCache -Force | Out-Null
+        $generatedCSources = @("launcher.c", "launcher_debug.c", "launcher_qt.c",
+                               "launcher_qt_debug.c", "test.c")
+        foreach ($cf in $generatedCSources) {
+            $srcPath = "$ParentDir\$cf"
+            if (Test-Path $srcPath) {
+                Copy-Item $srcPath "$initCodeCSourcesCache\$cf" -Force
+            }
+        }
+        Write-Host "  C 源文件已缓存" -ForegroundColor Green
 
         # 还原 webui/index.html
         if ($originalIndexHtml) {
@@ -105,6 +139,12 @@ if (Test-Path $initScript) {
         # 写入缓存键
         $currentInitHash | Out-File -FilePath $initCodeHashFile -Encoding ASCII
         Write-Host "  InitCode 缓存已更新" -ForegroundColor Green
+    } else {
+        # 从缓存恢复 C 源文件到父目录（供 Step 2 编译使用）
+        Get-ChildItem "$initCodeCSourcesCache\*" -ErrorAction SilentlyContinue | ForEach-Object {
+            Copy-Item $_.FullName "$ParentDir\$($_.Name)" -Force
+        }
+        Write-Host "  已从缓存恢复 C 源文件到父目录" -ForegroundColor Green
     }
 } else {
     Write-Host "  WARNING: InitCode.py 未找到，跳过" -ForegroundColor Yellow
@@ -158,7 +198,10 @@ if (-not $gcc -or -not $windres) {
 
         if (-not $cacheHit) {
             Write-Host "  编译 $($t.Src) -> $($t.Out)..."
-            gcc -O2 -o $t.Out $t.Src launcher_res.o -lshlwapi
+            # -mwindows: 编译为GUI子系统，双击启动时不显示控制台窗口
+            # tester.exe 不加 -mwindows，因其为诊断工具需要控制台
+            $guiFlag = if ($t.Out -eq "tester.exe") { "" } else { "-mwindows" }
+            gcc -O2 $guiFlag -o $t.Out $t.Src launcher_res.o -lshlwapi
             strip $t.Out
             Copy-Item $t.Out $cachedExe -Force
             $srcHash | Out-File -FilePath $hashFile -Encoding ASCII

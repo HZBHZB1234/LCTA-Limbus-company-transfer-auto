@@ -64,22 +64,24 @@ jobs:
         windres launcher.rc -o launcher_res.o
         
         # 编译C启动器并链接图标资源
-        gcc -O2 -o launcher.exe launcher.c launcher_res.o -lshlwapi
+        # -mwindows: 编译为GUI子系统，双击启动时不显示控制台窗口
+        gcc -O2 -mwindows -o launcher.exe launcher.c launcher_res.o -lshlwapi
         strip launcher.exe
         mv launcher.exe release\${{ env.APP_NAME }}\launcher.exe
-        
-        gcc -O2 -o launcher_debug.exe launcher_debug.c launcher_res.o -lshlwapi
+
+        gcc -O2 -mwindows -o launcher_debug.exe launcher_debug.c launcher_res.o -lshlwapi
         strip launcher_debug.exe
         mv launcher_debug.exe release\${{ env.APP_NAME }}\launcher_debug.exe
-        
-        gcc -O2 -o launcher.exe launcher_qt.c launcher_res.o -lshlwapi
+
+        gcc -O2 -mwindows -o launcher.exe launcher_qt.c launcher_res.o -lshlwapi
         strip launcher.exe
         mv launcher.exe release\${{ env.APP_NAME }}-Compatible\launcher.exe
-        
-        gcc -O2 -o launcher_debug.exe launcher_qt_debug.c launcher_res.o -lshlwapi
+
+        gcc -O2 -mwindows -o launcher_debug.exe launcher_qt_debug.c launcher_res.o -lshlwapi
         strip launcher_debug.exe
         mv launcher_debug.exe release\${{ env.APP_NAME }}-Compatible\launcher_debug.exe
 
+        # tester.exe 不加 -mwindows，因其为诊断工具需要控制台
         gcc -O2 -o tester.exe test.c launcher_res.o -lshlwapi
         strip tester.exe
         cp tester.exe release\${{ env.APP_NAME }}\${{ env.TESTER_NAME }}.exe

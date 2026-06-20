@@ -19,21 +19,17 @@ int calculate_file_hash(const char* file_path, char* hash_hex, size_t hex_size);
 #define EXPECTED_PYTHON_HASH "0fe699e2cb61a2cbe449a34eee56bd6175fbeb6ee7dc1261b0c338574c010d2b"
 
 int main(int argc, char* argv[]) {
-    printf("Starting LCTA Launcher...\n");
-    
-    // 检查命令行参数
     int is_debug = 0;
     int use_qt = 0;
     int show_console = 0;
     char script_name[MAX_PATH] = "code\\start_webui.py";
-    
+
     int launcher_index = -1;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-launcher") == 0) {
             show_console = 1;  // 显示控制台窗口
             strcpy(script_name, "code\\launcher\\main.py");
             launcher_index = i; // 记录-launcher参数的位置
-            printf("Launcher mode detected, starting launcher GUI...\n");
             break;
         }
     };
@@ -41,15 +37,29 @@ int main(int argc, char* argv[]) {
     if (is_debug) {
         show_console = 1;
     };
-    
-    // 根据参数决定是否隐藏控制台窗口
-    // Win11兼容: 使用FreeConsole完全分离控制台
-    // GetConsoleWindow()+ShowWindow(SW_HIDE)在Windows Terminal环境下无效
-    // 因为WT管理自己的窗口，隐藏内部conhost句柄不会关闭WT标签页
-    if (!show_console) {
-        printf("Hiding console window...\n");
-        FreeConsole();
-    } else {
+
+    // 控制台管理策略：
+    // - 默认模式（双击启动）：无控制台，-mwindows编译为GUI子系统，不分配控制台
+    // - Launcher/Debug模式：若已编译为GUI子系统，通过AttachConsole附加到父控制台
+    //   或通过AllocConsole创建新控制台，以保证诊断输出可见
+    // 完全避免使用FreeConsole()：在Windows Terminal环境下会导致终端标签页关闭
+    // 和进程树状态异常，进而导致Python子进程的WebUI窗口无法正常显示。
+    if (show_console && GetConsoleWindow() == NULL) {
+        // 编译为GUI子系统（-mwindows）时没有默认控制台
+        // 尝试附加到父进程控制台（如从cmd.exe启动）
+        if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
+            // 没有父控制台（如通过带-launcher参数双击启动），创建新控制台
+            AllocConsole();
+        }
+        // 将stdin/stdout/stderr重定向到新附加/分配的控制台
+        freopen("CONOUT$", "w", stdout);
+        freopen("CONOUT$", "w", stderr);
+        freopen("CONIN$", "r", stdin);
+    }
+
+    printf("Starting LCTA Launcher...\n");
+
+    if (show_console) {
         printf("Console window shown (launcher/debug mode)\n");
     }
     
@@ -130,7 +140,7 @@ int main(int argc, char* argv[]) {
     
     printf("Script path: %s\n", script_path);
     printf("PYTHONPATH: %s\n", pythonpath);
-    
+
     // 7. 运行Python脚本
     printf("Launching application...\n");
     if (!run_python_script(python_path, script_path, !show_console)) {
@@ -184,7 +194,7 @@ void set_steam_argv(int argc, char* argv[], int launcher_index) {
     // 设置环境变量
     SetEnvironmentVariable("steam_argv", steam_argv);
     printf("Set steam_argv to: %s\n", steam_argv);
-    
+
     // 释放内存
     free(steam_argv);
 }
@@ -348,9 +358,6 @@ int run_python_script(const char* python_path, const char* script_path, int hide
 
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    // Win11兼容: 隐藏模式下使用SW_HIDE防止控制台窗口闪烁
-    si.wShowWindow = hide_console ? SW_HIDE : SW_SHOW;
 
     ZeroMemory(&pi, sizeof(pi));
 
@@ -362,10 +369,13 @@ int run_python_script(const char* python_path, const char* script_path, int hide
 
     printf("Command line: %s\n", command_line);
 
-    // Win11兼容: CREATE_NO_WINDOW阻止Python子进程创建新控制台窗口
+    // 创建进程
+    // CREATE_NO_WINDOW: 子进程作为控制台应用运行但不创建控制台窗口。
+    // 这是自Windows 7起推荐的做法，替代CREATE_NEW_CONSOLE + SW_HIDE组合。
+    // Python在无控制台环境下可正常初始化——stdout/stderr写入被静默丢弃，
+    // 不影响web服务器启动和浏览器窗口创建。
     DWORD creationFlags = hide_console ? CREATE_NO_WINDOW : 0;
 
-    // 创建进程
     if (!CreateProcess(NULL,           // 不使用模块名
                        command_line,   // 命令行
                        NULL,           // 进程句柄不可继承
@@ -379,16 +389,16 @@ int run_python_script(const char* python_path, const char* script_path, int hide
         printf("CreateProcess failed (%lu)\n", GetLastError());
         return 0;
     }
-    
+
     printf("Application started (PID: %lu)\n", pi.dwProcessId);
-    
-    // 等待进程结束（可选）
+
+    // 等待进程结束
     WaitForSingleObject(pi.hProcess, INFINITE);
-    
+
     // 关闭句柄
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-    
+
     return 1;
 }
 

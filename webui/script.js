@@ -1036,7 +1036,7 @@ class APIConfigManager {
         }
         
         fieldGroup.appendChild(inputElement);
-        
+
         // 添加帮助文本（非boolean类型）
         if (setting.description && setting.type !== 'boolean') {
             const helpText = document.createElement('small');
@@ -1044,7 +1044,21 @@ class APIConfigManager {
             helpText.textContent = setting.description;
             fieldGroup.appendChild(helpText);
         }
-        
+
+        // 添加悬停提示（所有类型）
+        if (setting.description) {
+            if (setting.type === 'boolean') {
+                // 布尔类型：提示放在 checkbox-container 上
+                inputElement.setAttribute('data-tooltip', setting.description);
+            } else {
+                // 其他类型：提示放在 label 上
+                const label = fieldGroup.querySelector('label:not(.checkbox-container)');
+                if (label) {
+                    label.setAttribute('data-tooltip', setting.description);
+                }
+            }
+        }
+
         return fieldGroup;
     }
     
@@ -4298,8 +4312,122 @@ function init() {
     addLogMessage('当前主题: ' + themeManager.currentTheme);
     addLogMessage('WebUI 初始化完成');
     
+    // 初始化配置项悬停提示
+    initTooltips();
+
     // 创建遮罩层
     createConnectionMask();
+}
+
+// 配置项悬停提示映射
+const TOOLTIP_DATA = {
+    // ===== 翻译工具 =====
+    'enable-proper': '翻译时参考专有名词表，提高人名、地名等术语的翻译一致性。LLM翻译专用，默认开启。若出现大量匹配错误可关闭。',
+    'auto-fetch-proper': '翻译过程中自动重新提取专有词汇。如需使用自定义专有名词文件，请关闭此选项并在下方手动指定文件路径。',
+    'proper-path': '关闭"自动抓取专有词汇"后，可手动指定自定义的专有名词 JSON 文件路径。',
+    'enable-role': '为 LLM 翻译添加上下文标记，帮助模型理解当前文本属于哪个角色，提升角色对话的翻译准确性。',
+    'enable-skill': '为 LLM 翻译添加状态效果标记，帮助模型理解技能描述中的游戏机制术语，提高技能翻译质量。',
+    'enable-dev-settings': '开启后可手动指定各语言的源文本路径。通常情况下无需手动设置，程序会自动检测。',
+    'kr-path-text': '原始韩文游戏文本所在的文件夹路径。仅在自动检测失败或需要特殊处理时手动配置。',
+    'jp-path-text': '日文游戏文本所在的文件夹路径。仅在自动检测失败或需要特殊处理时手动配置。',
+    'en-path-text': '英文游戏文本所在的文件夹路径。仅在自动检测失败或需要特殊处理时手动配置。',
+    'llc-path-text': '参考中文文本（零协会汉化）所在的文件夹路径。如果未安装零协会汉化，需手动指定。',
+    'has-prefix': '按带前缀的文件名格式处理源文件。如果源文件按特定前缀命名规则组织，请开启此选项。',
+    'dump-translation': '将请求文本与响应文本输出至日志文件，方便调试和排查翻译问题。',
+    'fallback': '当 LLM 返回的翻译格式不符合预期时，自动切换请求格式重试。建议开启，否则可能出现较多漏翻。',
+    'is-text': '使用自然语言文本格式而非 JSON 格式向 LLM 发送翻译请求。建议关闭，否则可能出现较多翻译错位。',
+    'from-lang': '选择要翻译的源语言。LLM 翻译无需选择此项，程序会自动检测语言。',
+
+    // ===== 安装已有汉化 =====
+    'install-package-directory': '存放汉化包的目录路径。留空则使用程序所在目录。修改后会自动扫描目录下的汉化包。',
+    'clean-progress': '清理游戏存档中的进度文件，可解决因进度数据导致的游戏异常问题。',
+    'clean-notice': '清理游戏中的通知缓存文件，可解决通知显示异常或重复提示的问题。',
+    'clean-mods': '清理默认 MOD 资源文件，适用于因 MOD 残留文件导致的启动或运行问题。',
+
+    // ===== 汉化包下载 =====
+    'ourplay-font-option': 'OurPlay 汉化包携带两份相同字体文件。"保留原字体"不做处理；"精简字体"去除冗余文件节省空间；"使用本地字体缓存"使用已缓存的字体避免重复下载。',
+    'ourplay-check-hash': '下载完成后校验文件完整性。如果文件不完整，程序会提出警告。建议开启以确保下载文件正确。',
+    'ourplay-use-api': '通过 Webnote API 获取下载链接。具有延迟，不建议开启。关闭后使用直连下载，速度更快。',
+    'llc-zip-type': '零协会汉化包的压缩格式。ZIP 格式兼容性更好无需额外软件；7Z 格式压缩率更高文件更小，但需 7-Zip 支持。',
+    'llc-download-source': '零协会汉化包的下载来源。GitHub 更新最及时；公益镜像通过 API 代理下载，适合 GitHub 访问不稳定的情况。',
+    'llc-use-proxy': '通过代理服务器加速 GitHub 下载请求。建议开启，解决国内访问 GitHub 不稳定、下载慢的问题。',
+    'llc-use-cache': '使用本地已缓存的字体文件而非重新下载。缓存路径可在"设置"页面配置。',
+    'llc-dump-default': '下载的汉化包将被解压并保留原始文件结构，而非保存为压缩包格式。此为历史遗留选项，一般无需开启。',
+    'machine-download-source': 'LCTA-AU 汉化包的下载来源。LCTA-AU 翻译延迟仅 1-3 小时且翻译质量高于 OurPlay，建议优先使用。',
+    'machine-use-proxy': '通过代理服务器加速 LCTA-AU 汉化包的 GitHub 下载。建议开启。',
+    'bubble-color': '下载彩色气泡文本模组，使游戏中的对话气泡显示不同颜色。效果参考相关视频链接。',
+    'bubble-llc': '下载包含随机加载文本的气泡文本版本，在战斗加载页面显示零协会曾使用的加载文本。',
+    'bubble-install': '下载完成后自动安装气泡文本到当前汉化包。建议开启，省去手动安装步骤。',
+
+    // ===== 设置 =====
+    'game-path': '游戏 Limbus Company 的安装根目录。选择正确的游戏路径后，程序才能自动定位游戏文件和汉化包安装位置。',
+    'debug-mode': '开启调试模式后，程序会输出更详细的日志信息，方便排查问题。一般用户无需开启。',
+    'auto-check-update': '程序启动时自动检查 LCTA 工具箱是否有新版本。建议开启以保持工具为最新状态。',
+    'delete-updating': '更新时自动删除已被弃用的旧版本文件，保持程序目录整洁。',
+    'update-use-proxy': '通过镜像源加速程序更新下载。建议开启以解决国内访问 GitHub 不稳定的问题。',
+    'update-only-stable': '仅更新到经过测试的稳定版本，跳过预览版和测试版。建议开启以确保工具运行稳定。',
+    'api-crypto': '对 API 配置信息（密钥、地址等）进行加密存储，防止敏感信息以明文形式保存。修改后需在 API 配置界面保存。',
+    'github-max-workers': 'GitHub 代理下载时的最大并发线程数。数值越大下载越快，但过高可能导致被限制访问。建议保持默认值。',
+    'github-timeout': 'GitHub 代理请求的超时等待时间（秒）。若网络状况较差，可适当增大此值。',
+    'enable-cache': '启用资源文件（如字体）的本地缓存，避免每次操作都重新下载，加快后续操作速度。',
+    'enable-storage': '启用数据持久化存储，保存用户配置和运行状态。关闭后部分设置可能在重启后丢失。',
+
+    // ===== Launcher配置 =====
+    'launcher-zero-zip-type': '零协会汉化包的压缩格式。ZIP 兼容性更好；7Z 压缩率更高但需 7-Zip 支持。',
+    'launcher-zero-download-source': '零协会汉化包的下载来源。GitHub 更新最及时；公益镜像通过 API 代理，适合网络不稳时使用。',
+    'launcher-zero-use-proxy': '通过代理服务器加速零协会汉化包的 GitHub 下载。建议开启。',
+    'launcher-zero-use-cache': '使用本地已有的字体文件，跳过字体下载步骤，加快更新速度。',
+    'launcher-ourplay-font-option': 'OurPlay 汉化包的字体处理方式。"保留原字体"不做处理；"精简字体"去除冗余；"使用本地缓存"复用已下载的字体。',
+    'launcher-ourplay-use-api': '通过 Webnote API 获取 OurPlay 版本信息。具有延迟，适合直连获取版本信息失败时使用。',
+    'launcher-machine-download-source': 'LCTA-AU 汉化包的下载来源。建议优先使用 LCTA-AU 源，翻译质量更高。',
+    'launcher-machine-use-proxy': '通过代理服务器加速 LCTA-AU 汉化包的 GitHub 下载。建议开启。',
+    'launcher-work-update': '启动器自动更新模式。可选择不更新、仅更新指定汉化源，或组合更新多个汉化源。',
+    'launcher-work-mod': '启动游戏时自动加载 MOD 支持。启用后可使用各类游戏模组。',
+    'launcher-work-fancy': '更新汉化包后自动进行文本美化处理。相关美化选项请在"文本美化"页面配置。',
+    'launcher-work-bubble': '自动更新气泡文本模组，使游戏中的对话气泡显示特效。相关设置请在"汉化包下载"页面配置。',
+    'steam-command': '用于通过 Steam 启动游戏的命令行参数。复制后可粘贴到 Steam 游戏属性中的启动选项。',
+
+    // ===== 抓取专有词汇 =====
+    'proper-output': '专有名词的输出格式。"JSON格式"输出标准 JSON 文件；"单文件格式"将所有词汇合并在一个文件中；"双文件格式"将词汇分为两个文件输出。',
+    'proper-skip-space': '跳过包含空格的词汇，避免将多词短语错误识别为专有名词。',
+    'proper-max-count': '限制最多提取的专有名词数量。留空表示不限制。数值越大结果越多但可能包含更多噪声。',
+    'proper-min-count': '专有名词的最小字符长度。增大此值可减少短词汇的错误匹配，提高提取精度。',
+    'proper-join-char': '单文件格式输出时的词汇分隔符，默认使用逗号。仅在输出格式为"单文件格式"时生效。',
+};
+
+// 初始化所有静态配置项的悬停提示
+function initTooltips() {
+    // 为 form-group 中已知 ID 的元素添加 tooltip
+    Object.entries(TOOLTIP_DATA).forEach(([id, description]) => {
+        const element = document.getElementById(id);
+        if (!element) return;
+
+        // 查找最合适的父级元素来放置 tooltip
+        let tooltipTarget = null;
+
+        if (element.tagName === 'INPUT' && element.type === 'checkbox') {
+            // 复选框：使用 .checkbox-container 作为 tooltip 目标
+            tooltipTarget = element.closest('.checkbox-container');
+        } else if (element.tagName === 'INPUT' || element.tagName === 'SELECT' || element.tagName === 'TEXTAREA') {
+            // 普通输入框/下拉框：优先使用关联的 label
+            const formGroup = element.closest('.form-group');
+            if (formGroup) {
+                const label = formGroup.querySelector('label:not(.checkbox-container)');
+                if (label && label.getAttribute('for') === id) {
+                    tooltipTarget = label;
+                } else {
+                    tooltipTarget = formGroup;
+                }
+            }
+        } else {
+            // 其他元素（如 DIV 容器）：使用元素本身或其 form-group
+            tooltipTarget = element.closest('.form-group') || element;
+        }
+
+        if (tooltipTarget) {
+            tooltipTarget.setAttribute('data-tooltip', description);
+        }
+    });
 }
 
 // 创建连接遮罩层

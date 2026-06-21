@@ -727,7 +727,7 @@ body {
     border: 1px solid var(--color-border);
     transition: all var(--transition-speed) var(--transition-easing);
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .setting-card::before {
@@ -849,6 +849,56 @@ label {
     margin-top: 4px;
     font-size: 12px;
     color: var(--color-text-secondary);
+}
+
+/* 配置项悬停提示 */
+label[data-tooltip],
+.checkbox-container[data-tooltip],
+.form-group[data-tooltip] {
+    position: relative;
+    cursor: help;
+}
+
+label[data-tooltip]::after,
+.checkbox-container[data-tooltip]::after,
+.form-group[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 4px;
+    margin-bottom: 6px;
+    padding: 8px 14px;
+    background: #2d2d2d;
+    color: #f0f0f0;
+    font-size: 12px;
+    font-weight: 400;
+    border-radius: 6px;
+    white-space: normal;
+    max-width: 340px;
+    min-width: 120px;
+    width: max-content;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    z-index: 9999;
+    pointer-events: none;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+label[data-tooltip]:hover::after,
+.checkbox-container[data-tooltip]:hover::after,
+.form-group[data-tooltip]:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* 暗色主题下提示背景稍亮 */
+.theme-dark label[data-tooltip]::after,
+.theme-dark .checkbox-container[data-tooltip]::after,
+.theme-dark .form-group[data-tooltip]::after {
+    background: #4a4a4a;
 }
 
 /* 输入框样式 */

@@ -1,5 +1,36 @@
-# 欢迎使用 LCTA
+# 欢迎使用 LCTA 工具箱
 
-你好你好你好
+LCTA (Limbus Company Transfer Auto) 是一款为《边狱公司》游戏打造的全面辅助工具集，提供汉化、管理、启动、美化等一系列自动化功能。
 
-[点个star](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto)
+## 快速开始
+
+### 我只需要汉化
+前往 **汉化包下载** 页面，选择任一汉化源（推荐 LCTA-AU）下载即可。下载完成后在 **安装已有汉化** 页面点击安装。
+
+### 我想要自动汉化更新
+配置 **Launcher配置** 页面：
+1. 选择更新模式（推荐 LCTA-AU）
+2. 按需启用 MOD 支持、气泡文本、文本美化
+3. 保存配置，复制 Steam 启动命令
+4. 在 Steam 游戏属性中将命令粘贴到"启动选项"
+
+### 我想要自己翻译
+1. 在 **配置汉化API** 页面配置翻译服务（推荐 Deepseek，性价比高）
+2. 在 **翻译工具** 页面选择源语言和翻译服务
+3. 点击"开始翻译"
+
+### 我想要安装模组
+1. 从 [Nexus Mods](https://www.nexusmods.com/limbuscompany/mods) 下载模组
+2. 在 **已安装数据管理** 页面启用模组支持
+3. 将模组文件放入模组文件夹
+
+## 使用帮助
+
+- 在任意页面标题旁点击 **?** 按钮，或长按键盘 **W** 键 2 秒，即可查看当前页面的详细帮助
+- 侧边栏点击 **设置向导**，可以分步完成初始配置
+- 遇到问题请查看 **日志** 页面或加入 **QQ 群：1081988645**
+
+## 反馈
+
+- [GitHub Issues](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues)
+- QQ 群：1081988645

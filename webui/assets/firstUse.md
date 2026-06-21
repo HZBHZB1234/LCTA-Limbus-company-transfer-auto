@@ -9,7 +9,7 @@ LCTA 工具箱是一款为《边狱公司》游戏打造的全面辅助工具集
 
 <button class="primary-btn" onclick="goAndShow('elder');elderManager.initPage();">
     <i class="fas fa-play"></i>
-    使用老年人模式
+    使用设置向导
 </button>
 
 

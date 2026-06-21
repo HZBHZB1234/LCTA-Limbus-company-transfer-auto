@@ -4369,8 +4369,13 @@ function removeConnectionMask() {
 
 function goAndShow(name) {
     const targetButton = document.getElementById(`${name}-btn`);
+    if (!targetButton) return;
     targetButton.style.display = 'block';
     targetButton.click();
+    // 如果切换到首页，刷新仪表盘
+    if (name === 'dashboard') {
+        refreshDashboard();
+    }
 }
 
 function setupGlobalErrorHandling() {
@@ -4477,8 +4482,368 @@ function requestGamePath() {
     );
 }
 
+// ============================================
+// 帮助抽屉管理器
+// ============================================
+const helpDrawer = {
+    overlay: null,
+    drawer: null,
+    body: null,
+    searchInput: null,
+    currentPage: null,
+    currentTab: 'page-help',
+
+    init() {
+        this.overlay = document.getElementById('help-drawer-overlay');
+        this.drawer = document.getElementById('help-drawer');
+        this.body = document.getElementById('help-drawer-body');
+        this.searchInput = document.getElementById('help-drawer-search-input');
+
+        // Escape 关闭抽屉
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.drawer && this.drawer.classList.contains('open')) {
+                // 不关闭抽屉如果焦点在搜索框中
+                if (document.activeElement === this.searchInput) {
+                    this.searchInput.blur();
+                    return;
+                }
+                this.close();
+            }
+        });
+    },
+
+    async open(page) {
+        if (!this.drawer) this.init();
+        this.currentPage = page;
+        this.switchTab('page-help');
+
+        this.overlay.classList.add('open');
+        this.drawer.classList.add('open');
+
+        // 清除搜索框
+        if (this.searchInput) this.searchInput.value = '';
+
+        // 加载页面对应的帮助文档
+        await this.loadContent(`guide/${page}.md`);
+    },
+
+    async openIndex() {
+        if (!this.drawer) this.init();
+        this.currentPage = 'index';
+
+        this.overlay.classList.add('open');
+        this.drawer.classList.add('open');
+        if (this.searchInput) this.searchInput.value = '';
+
+        this.body.innerHTML = `
+            <div class="markdown-body">
+                <h2><i class="fas fa-compass"></i> 欢迎使用 LCTA 帮助中心</h2>
+                <p>LCTA 工具箱是一款为《边狱公司》打造的全面辅助工具。选择下方入口获取帮助：</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;">
+                    <div class="setting-card" style="padding:16px;cursor:pointer;margin:0;"
+                         onclick="helpDrawer.switchTab('page-help')">
+                        <h4 style="margin-top:0;"><i class="fas fa-file-alt"></i> 页面帮助</h4>
+                        <p style="font-size:13px;color:var(--color-text-secondary);">当前页面的详细操作说明</p>
+                    </div>
+                    <div class="setting-card" style="padding:16px;cursor:pointer;margin:0;"
+                         onclick="helpDrawer.switchTab('guide')">
+                        <h4 style="margin-top:0;"><i class="fas fa-book"></i> 使用指南</h4>
+                        <p style="font-size:13px;color:var(--color-text-secondary);">完整功能手册与最佳实践</p>
+                    </div>
+                    <div class="setting-card" style="padding:16px;cursor:pointer;margin:0;"
+                         onclick="helpDrawer.switchTab('faq')">
+                        <h4 style="margin-top:0;"><i class="fas fa-comments"></i> 常见问题</h4>
+                        <p style="font-size:13px;color:var(--color-text-secondary);">常见问题与排查方法</p>
+                    </div>
+                    <div class="setting-card" style="padding:16px;cursor:pointer;margin:0;"
+                         onclick="goAndShow('elder');elderManager.initPage();helpDrawer.close();">
+                        <h4 style="margin-top:0;"><i class="fas fa-play-circle"></i> 设置向导</h4>
+                        <p style="font-size:13px;color:var(--color-text-secondary);">分步引导完成初始配置</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    close() {
+        if (this.overlay) this.overlay.classList.remove('open');
+        if (this.drawer) this.drawer.classList.remove('open');
+    },
+
+    switchTab(tab) {
+        this.currentTab = tab;
+        // 更新 tab 样式
+        if (this.drawer) {
+            this.drawer.querySelectorAll('.help-drawer-tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.tab === tab);
+            });
+        }
+
+        switch(tab) {
+            case 'page-help':
+                if (this.currentPage && this.currentPage !== 'index') {
+                    this.loadContent(`guide/${this.currentPage}.md`);
+                }
+                break;
+            case 'guide':
+                this.loadContent('guide/welcome.md');
+                break;
+            case 'faq':
+                this.showFAQ();
+                break;
+        }
+    },
+
+    onSearch(query) {
+        // 搜索功能（后续阶段实现全文索引）
+        console.log('帮助搜索:', query);
+    },
+
+    async loadContent(url) {
+        if (!this.body) return;
+        this.body.innerHTML = '<div class="help-drawer-loading"><i class="fas fa-spinner fa-spin"></i>&nbsp; 加载中...</div>';
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`${response.status} ${response.statusText}`);
+            }
+            const markdownText = await response.text();
+            const htmlContent = simpleMarkdownToHtml(markdownText);
+            this.body.innerHTML = `${htmlContent}`;
+        } catch (e) {
+            this.body.innerHTML = `
+                <div class="help-drawer-error">
+                    <i class="fas fa-exclamation-circle" style="font-size:36px;"></i>
+                    <div><strong>帮助内容加载失败</strong></div>
+                    <small>${e.message}</small>
+                    <small>文件: ${url}</small>
+                </div>
+            `;
+        }
+    },
+
+    showFAQ() {
+        if (!this.body) return;
+        this.body.innerHTML = `
+            <div class="markdown-body">
+                <h2>常见问题解答</h2>
+
+                <h3>Q: 如果遇到 Bug 或有改进建议，应该如何反馈？</h3>
+                <p><strong>A:</strong> 推荐通过以下渠道反馈：</p>
+                <ol>
+                    <li><a href="https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues" target="_blank">GitHub Issues</a>（国内访问可借助 Steam Community302 加速）</li>
+                    <li><strong>QQ 群：1081988645</strong></li>
+                </ol>
+                <p><strong>反馈时请务必提供：</strong>Bug 出现的具体步骤、使用的 LCTA 版本号、相关的日志文件</p>
+
+                <h3>Q: 如何获取日志文件？</h3>
+                <p><strong>A:</strong> 打开软件安装目录 → 进入 <code>logs</code> 文件夹 → 若 Bug 发生在当天上传 <code>app.log</code>，否则根据日期选择对应日志文件</p>
+
+                <h3>Q: 翻译失败，报错字样中带有 SSL Error？</h3>
+                <p><strong>A:</strong> 请关闭加速器或代理后重试。</p>
+
+                <h3>Q: Deepseek 报错 402？</h3>
+                <p><strong>A:</strong> 请充值。更多报错码请看 <a href="https://api-docs.deepseek.com/zh-cn/quick_start/error_codes" target="_blank">Deepseek API 文档</a></p>
+
+                <h3>Q: 汉化包更新失败怎么办？</h3>
+                <p><strong>A:</strong></p>
+                <ul>
+                    <li>检查网络连接是否正常</li>
+                    <li>尝试切换下载源（GitHub → 公益镜像）</li>
+                    <li>开启/关闭代理加速选项</li>
+                    <li>手动下载汉化包放入程序目录，使用"安装已有汉化"功能</li>
+                </ul>
+
+                <h3>Q: 气泡文本不显示？</h3>
+                <p><strong>A:</strong> 每次切换或更新汉化包后需要重新安装气泡文本。如需自动安装，请在 Launcher 配置中启用"启用气泡文本"选项。</p>
+            </div>
+        `;
+    }
+};
+
+// 页面加载时初始化帮助抽屉和帮助入口按钮
+document.addEventListener('DOMContentLoaded', () => {
+    helpDrawer.init();
+    injectHelpButtons();
+    restoreSidebarState();
+});
+
+// ============================================
+// 仪表盘刷新
+// ============================================
+async function refreshDashboard() {
+    if (!window.apiReady) return;
+
+    const packageEl = document.getElementById('dash-package-value');
+    const packageCard = document.getElementById('dash-translation-status');
+    const launcherEl = document.getElementById('dash-launcher-value');
+    const launcherCard = document.getElementById('dash-launcher-status');
+    const apiEl = document.getElementById('dash-api-value');
+    const apiCard = document.getElementById('dash-api-status');
+    const updateEl = document.getElementById('dash-update-value');
+    const updateCard = document.getElementById('dash-update-status');
+
+    try {
+        // 并行获取：汉化包列表 + 批量配置值
+        const [packageResult, configBatch] = await Promise.all([
+            pywebview.api.get_installed_packages().catch(() => null),
+            pywebview.api.get_config_batch([
+                'auto_check_update',
+                'game_path',
+                'launcher_work_update'
+            ]).catch(() => null)
+        ]);
+
+        // === 汉化包状态 ===
+        if (packageEl && packageCard) {
+            if (packageResult && packageResult.success && packageResult.enable) {
+                const count = (packageResult.packages && packageResult.packages.length) || 0;
+                packageEl.textContent = count > 0 ? `已安装 ${count} 个汉化包` : '未安装汉化包';
+                packageCard.className = 'dashboard-card status-card ' + (count > 0 ? 'success' : 'warning');
+            } else if (packageResult && packageResult.success && !packageResult.enable) {
+                packageEl.textContent = '未启用';
+                packageCard.className = 'dashboard-card status-card warning';
+            } else {
+                packageEl.textContent = '无法检测';
+                packageCard.className = 'dashboard-card status-card';
+            }
+        }
+
+        // === 启动器配置状态 ===
+        if (launcherEl && launcherCard) {
+            const configValues = configBatch && configBatch.success ? configBatch.config_values : {};
+            const launcherMode = configValues['launcher_work_update'];
+            const gamePath = configValues['game_path'];
+            if (launcherMode && launcherMode !== 'no') {
+                launcherEl.textContent = '已配置（' + launcherMode + '）';
+                launcherCard.className = 'dashboard-card status-card success';
+            } else if (gamePath) {
+                launcherEl.textContent = '游戏已设置，未配置启动器';
+                launcherCard.className = 'dashboard-card status-card';
+            } else {
+                launcherEl.textContent = '未配置';
+                launcherCard.className = 'dashboard-card status-card warning';
+            }
+        }
+
+        // === 更新状态 ===
+        if (updateEl && updateCard) {
+            const configValues = configBatch && configBatch.success ? configBatch.config_values : {};
+            const autoUpdate = configValues['auto_check_update'];
+            if (autoUpdate === true || autoUpdate === 'true') {
+                updateEl.textContent = '自动更新已开启';
+                updateCard.className = 'dashboard-card status-card success';
+            } else if (autoUpdate !== undefined && autoUpdate !== null) {
+                updateEl.textContent = '自动更新未开启';
+                updateCard.className = 'dashboard-card status-card';
+            } else {
+                updateEl.textContent = '状态未知';
+                updateCard.className = 'dashboard-card status-card';
+            }
+        }
+
+        // === API 配置状态 ===
+        if (apiEl && apiCard) {
+            // 通过 get_attr('config') 获取全量配置来检测 API key
+            try {
+                const fullConfig = await pywebview.api.get_attr('config');
+                let apiCount = 0;
+                if (fullConfig && typeof fullConfig === 'object') {
+                    // 遍历 api_settings 相关键统计已配置的服务
+                    for (const key of Object.keys(fullConfig)) {
+                        if (key.startsWith('api_') && key.endsWith('_key') && fullConfig[key]) {
+                            apiCount++;
+                        }
+                    }
+                }
+                if (apiCount > 0) {
+                    apiEl.textContent = `已配置 ${apiCount} 个服务`;
+                    apiCard.className = 'dashboard-card status-card success';
+                } else {
+                    apiEl.textContent = '未配置 API';
+                    apiCard.className = 'dashboard-card status-card warning';
+                }
+            } catch (e) {
+                apiEl.textContent = '点击配置';
+                apiCard.className = 'dashboard-card status-card';
+            }
+        }
+    } catch (e) {
+        console.log('仪表盘刷新失败:', e);
+    }
+
+}
+
+// 侧边栏折叠切换
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    try {
+        localStorage.setItem('lcta-sidebar-collapsed', isCollapsed ? '1' : '0');
+    } catch (e) { /* ignore */ }
+}
+
+// 恢复侧边栏折叠状态
+function restoreSidebarState() {
+    try {
+        if (localStorage.getItem('lcta-sidebar-collapsed') === '1') {
+            document.querySelector('.sidebar').classList.add('collapsed');
+        }
+    } catch (e) { /* ignore */ }
+}
+
+// 侧边栏搜索
+function onSidebarSearch(query) {
+    const navBtns = document.querySelectorAll('.sidebar-menu .nav-btn');
+    const groups = document.querySelectorAll('.sidebar-menu .nav-group');
+    const lower = query.toLowerCase().trim();
+
+    if (!lower) {
+        // 显示全部
+        navBtns.forEach(b => b.style.display = '');
+        groups.forEach(g => g.style.display = '');
+        return;
+    }
+
+    groups.forEach(g => {
+        let hasVisible = false;
+        g.querySelectorAll('.nav-btn').forEach(btn => {
+            const text = btn.textContent.toLowerCase();
+            if (text.includes(lower)) {
+                btn.style.display = '';
+                hasVisible = true;
+            } else {
+                btn.style.display = 'none';
+            }
+        });
+        // 隐藏空分组
+        g.style.display = hasVisible ? '' : 'none';
+    });
+}
+
+// 动态注入帮助按钮到导航栏和页面标题
+function injectHelpButtons() {
+    // 为每个导航按钮添加 ? 帮助图标
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        // 避免重复添加
+        if (btn.querySelector('.nav-help-btn')) return;
+        const helpBtn = document.createElement('button');
+        helpBtn.className = 'nav-help-btn';
+        helpBtn.innerHTML = '<i class="fas fa-question"></i>';
+        helpBtn.title = '打开页面帮助';
+        helpBtn.onclick = (e) => {
+            e.stopPropagation();
+            const page = btn.id.replace('-btn', '');
+            helpDrawer.open(page);
+        };
+        btn.appendChild(helpBtn);
+    });
+
+}
+
 async function showGuide(page) {
-    await showMarkdownModal(`guide/${page}.md`, '俺寻思', '正在加载数据内容')
+    await helpDrawer.open(page);
 }
 
 async function showMarkdownModal(link, title= '指导', pre='正在加载数据内容') {
@@ -4488,13 +4853,13 @@ async function showMarkdownModal(link, title= '指导', pre='正在加载数据�
     const response = await fetch(link);
 
     let markdownText
-    
+
     if (!response.ok) {
         markdownText = `加载内容失败: ${response.status} ${response.statusText}`;
     } else {
         markdownText = await response.text();
     };
-    
+
     const bodyHtml = simpleMarkdownToHtml(markdownText);
     const showing = `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`
 
@@ -4509,16 +4874,81 @@ async function showMarkdownModal(link, title= '指导', pre='正在加载数据�
 
 (function() {
   // 按键状态管理
-  let wPressed = false;      // W 键是否正在被按下
-  let wTimer = null;         // 长按计时器 ID
-  const LONG_PRESS_TIME = 1000; // 长按阈值（毫秒）
+  let wPressed = false;         // W 键是否正在被按下
+  let wTimer = null;            // 长按计时器 ID
+  let wProgressInterval = null; // 进度环更新间隔
+  let wStartTime = 0;           // 长按开始时间
+  const LONG_PRESS_TIME = 2000; // 长按阈值（毫秒）- 与文档统一为2秒
+  const PROGRESS_STEP = 50;     // 进度更新间隔（毫秒）
 
-  // 用户自定义的回调函数（此处可替换为具体逻辑）
-  function onLongPressW() {
+  // 创建进度指示器 DOM
+  function createWProgressIndicator() {
+    const existing = document.getElementById('w-press-indicator');
+    if (existing) return existing;
+
+    const indicator = document.createElement('div');
+    indicator.id = 'w-press-indicator';
+    indicator.className = 'w-press-indicator';
+    indicator.innerHTML = `
+      <div class="w-press-ring">
+        <svg viewBox="0 0 60 60" width="60" height="60">
+          <circle class="w-press-track" cx="30" cy="30" r="25" fill="none"
+                  stroke="var(--color-border)" stroke-width="3"/>
+          <circle class="w-press-fill" cx="30" cy="30" r="25" fill="none"
+                  stroke="var(--color-primary)" stroke-width="3"
+                  stroke-dasharray="157" stroke-dashoffset="157" stroke-linecap="round"
+                  transform="rotate(-90 30 30)"/>
+        </svg>
+        <div class="w-press-icon">?</div>
+      </div>
+      <div class="w-press-label">按住 <kbd>W</kbd> 键打开帮助</div>
+    `;
+    document.body.appendChild(indicator);
+    // 触发进场动画
+    requestAnimationFrame(() => indicator.classList.add('visible'));
+    return indicator;
+  }
+
+  // 移除进度指示器
+  function removeWProgressIndicator() {
+    const indicator = document.getElementById('w-press-indicator');
+    if (indicator) {
+      indicator.classList.remove('visible');
+      setTimeout(() => indicator.remove(), 200);
+    }
+  }
+
+  // 更新进度环
+  function updateWProgress(elapsed) {
+    const progress = Math.min(elapsed / LONG_PRESS_TIME, 1);
+    const indicator = document.getElementById('w-press-indicator');
+    if (!indicator) return;
+    const fill = indicator.querySelector('.w-press-fill');
+    if (fill) {
+      const circumference = 2 * Math.PI * 25; // ~157
+      fill.style.strokeDashoffset = circumference * (1 - progress);
+    }
+    // 快完成时脉冲动画
+    if (progress > 0.75) {
+      indicator.classList.add('nearly-done');
+    }
+  }
+
+  // 用户自定义的回调函数
+  async function onLongPressW() {
+    removeWProgressIndicator();
     const activeNav = document.querySelector('.nav-btn.active');
+    if (!activeNav) {
+      console.warn('俺寻思: 未找到活跃导航项');
+      return;
+    }
     const page = activeNav.id.replace('-btn', '');
     console.log('俺寻思', page);
-    showGuide(page);
+    try {
+      await showGuide(page);
+    } catch (e) {
+      console.error('俺寻思: 加载帮助失败', e);
+    }
   }
 
   // 重置与 W 键相关的所有状态
@@ -4527,34 +4957,53 @@ async function showMarkdownModal(link, title= '指导', pre='正在加载数据�
       clearTimeout(wTimer);
       wTimer = null;
     }
+    if (wProgressInterval) {
+      clearInterval(wProgressInterval);
+      wProgressInterval = null;
+    }
+    removeWProgressIndicator();
     wPressed = false;
+    wStartTime = 0;
   }
 
   // 键盘按下事件
   function handleKeyDown(e) {
-    // 只关心物理按键 W（KeyW 不随键盘布局改变，更稳定）
-    if (e.code === 'KeyW') {
-      if (wPressed) return;
+    if (e.code !== 'KeyW') return;
 
-      wPressed = true;
-
-      // 设置 4 秒后触发的计时器
-      wTimer = setTimeout(() => {
-        onLongPressW();       // 执行回调
-        wTimer = null;        // 计时器已触发，清除引用
-      }, LONG_PRESS_TIME);
+    // 排除输入框、文本域、下拉框、可编辑元素内的长按
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) {
+      return;
     }
+
+    if (wPressed) return;
+    wPressed = true;
+    wStartTime = Date.now();
+
+    // 显示进度指示器
+    createWProgressIndicator();
+    updateWProgress(0);
+
+    // 定期更新进度环
+    wProgressInterval = setInterval(() => {
+      updateWProgress(Date.now() - wStartTime);
+    }, PROGRESS_STEP);
+
+    // 设置长按计时器
+    wTimer = setTimeout(() => {
+      wTimer = null;
+      onLongPressW();
+    }, LONG_PRESS_TIME);
   }
 
   // 键盘松开事件
   function handleKeyUp(e) {
     if (e.code === 'KeyW') {
-      // 松开时无论是否满 4 秒，都清除计时器并重置状态
       resetWState();
     }
   }
 
-  // 窗口失去焦点时重置（例如用户切换到其他应用时可能无法收到 keyup）
+  // 窗口失去焦点时重置
   function handleBlur() {
     resetWState();
   }
@@ -4564,14 +5013,33 @@ async function showMarkdownModal(link, title= '指导', pre='正在加载数据�
   window.addEventListener('keyup', handleKeyUp);
   window.addEventListener('blur', handleBlur);
 
-  // 可选：返回一个清理函数，便于在需要时移除监听（例如在组件卸载时）
-  // 如果你是在模块或单页应用中使用，可以保留此清理逻辑
+  // 清理函数
   window.removeLongPressW = function() {
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
     window.removeEventListener('blur', handleBlur);
     resetWState();
   };
+})();
+
+// Ctrl+K / Cmd+K 聚焦侧边栏搜索
+(function() {
+  document.addEventListener('keydown', function(e) {
+    // Ctrl+K 或 Cmd+K
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      const searchInput = document.getElementById('sidebar-search-input');
+      if (searchInput) {
+        // 如果侧边栏折叠，先展开
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar && sidebar.classList.contains('collapsed')) {
+          toggleSidebar();
+        }
+        searchInput.focus();
+        searchInput.select();
+      }
+    }
+  });
 })();
 
 // 拖拽文件管理器
@@ -4778,6 +5246,9 @@ window.addEventListener('pywebviewready', function() {
             if (result) {
                 await loadMarkdownContent('assets/firstUse.md', 'welcome-content');
                 goAndShow('welcome');
+            } else {
+                // 非首次使用则刷新仪表盘
+                refreshDashboard();
             }
         }
     );

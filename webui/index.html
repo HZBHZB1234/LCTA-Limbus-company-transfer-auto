@@ -24,6 +24,9 @@
 
     <div class="sidebar">
         <div class="sidebar-header">
+            <button class="sidebar-toggle" onclick="toggleSidebar()" title="折叠侧边栏">
+                <i class="fas fa-bars"></i>
+            </button>
             <div class="logo">
                 <i class="fas fa-language"></i>
                 <h2>LCTA <span class="version">v4.1.5</span></h2>
@@ -32,83 +35,102 @@
         </div>
 
         <div class="sidebar-menu">
-            <button id="welcome-btn" class="nav-btn" style="display: none;">
-                <i class="fas fa-user-circle"></i>
-                <span>欢迎</span>
-                <div class="nav-indicator"></div>
-            </button>
+            <!-- 常用工具组 -->
+            <div class="nav-group">
+                <div class="nav-group-title">
+                    <i class="fas fa-star"></i> 常用工具
+                </div>
+                <button id="dashboard-btn" class="nav-btn active">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>首页</span>
+                </button>
+                <button id="translate-btn" class="nav-btn">
+                    <i class="fas fa-language"></i>
+                    <span>翻译工具</span>
+                    <div class="nav-indicator"></div>
+                </button>
+                <button id="download-btn" class="nav-btn">
+                    <i class="fas fa-cloud-download-alt"></i>
+                    <span>汉化包下载</span>
+                </button>
+                <button id="install-btn" class="nav-btn">
+                    <i class="fas fa-download"></i>
+                    <span>安装已有汉化</span>
+                </button>
+                <button id="fancy-btn" class="nav-btn">
+                    <i class="fas fa-paint-brush"></i>
+                    <span>文本美化</span>
+                </button>
+            </div>
 
-            <button id="elder-btn" class="nav-btn" style="display: none;">
-                <i class="fas fa-compass"></i>
-                <span>老年人模式</span>
-                <div class="nav-indicator"></div>
-            </button>
-            
-            <button id="translate-btn" class="nav-btn active">
-                <i class="fas fa-language"></i>
-                <span>翻译工具</span>
-                <div class="nav-indicator"></div>
-            </button>
-            
-            <button id="install-btn" class="nav-btn">
-                <i class="fas fa-download"></i>
-                <span>安装已有汉化</span>
-            </button>
-            
-            <button id="download-btn" class="nav-btn">
-                <i class="fas fa-users"></i>
-                <span>汉化包下载</span>
-            </button>
-            
-            <button id="clean-btn" class="nav-btn" style="display: none;">
-                <i class="fas fa-broom"></i>
-                <span>清除本地缓存</span>
-            </button>
+            <!-- 管理配置组 -->
+            <div class="nav-group">
+                <div class="nav-group-title">
+                    <i class="fas fa-sliders-h"></i> 管理配置
+                </div>
+                <button id="manage-btn" class="nav-btn">
+                    <i class="fas fa-archive"></i>
+                    <span>已安装数据管理</span>
+                </button>
+                <button id="launcher-config-btn" class="nav-btn">
+                    <i class="fas fa-rocket"></i>
+                    <span>Launcher配置</span>
+                </button>
+                <button id="config-btn" class="nav-btn">
+                    <i class="fas fa-cog"></i>
+                    <span>配置汉化API</span>
+                </button>
+                <button id="proper-btn" class="nav-btn">
+                    <i class="fas fa-book"></i>
+                    <span>抓取专有词汇</span>
+                </button>
+            </div>
 
-            <button id="fancy-btn" class="nav-btn">
-                <i class="fas fa-paint-brush"></i>
-                <span>文本美化</span>
-            </button>
+            <!-- 系统组 -->
+            <div class="nav-group">
+                <div class="nav-group-title">
+                    <i class="fas fa-server"></i> 系统
+                </div>
+                <button id="log-btn" class="nav-btn">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>日志</span>
+                </button>
+                <button id="settings-btn" class="nav-btn">
+                    <i class="fas fa-wrench"></i>
+                    <span>设置</span>
+                </button>
+                <button id="about-btn" class="nav-btn">
+                    <i class="fas fa-info-circle"></i>
+                    <span>关于</span>
+                </button>
+            </div>
 
-            <button id="manage-btn" class="nav-btn">
-                <i class="fas fa-archive"></i>
-                <span>已安装数据管理</span>
-            </button>
+            <!-- 特殊（默认隐藏） -->
+            <div class="nav-group hidden-nav-items" style="display:none;">
+                <button id="welcome-btn" class="nav-btn" style="display: none;">
+                    <i class="fas fa-user-circle"></i>
+                    <span>欢迎</span>
+                </button>
+                <button id="elder-btn" class="nav-btn" style="display: none;">
+                    <i class="fas fa-compass"></i>
+                    <span>设置向导</span>
+                </button>
+                <button id="clean-btn" class="nav-btn" style="display: none;">
+                    <i class="fas fa-broom"></i>
+                    <span>清除本地缓存</span>
+                </button>
+                <button id="test-btn" class="nav-btn" style="display: none;">
+                    <i class="fas fa-flask"></i>
+                    <span>测试界面</span>
+                </button>
+            </div>
+        </div>
 
-            <button id="launcher-config-btn" class="nav-btn">
-                <i class="fas fa-rocket"></i>
-                <span>Launcher配置</span>
-            </button>
-
-            <button id="config-btn" class="nav-btn">
-                <i class="fas fa-cog"></i>
-                <span>配置汉化api</span>
-            </button>
-            
-            <button id="proper-btn" class="nav-btn">
-                <i class="fas fa-book"></i>
-                <span>抓取专有词汇</span>
-            </button>
-            
-            <button id="log-btn" class="nav-btn">
-                <i class="fas fa-clipboard-list"></i>
-                <span>日志</span>
-            </button>
-            
-            <button id="about-btn" class="nav-btn">
-                <i class="fas fa-info-circle"></i>
-                <span>关于</span>
-            </button>
-            
-            <button id="settings-btn" class="nav-btn">
-                <i class="fas fa-sliders-h"></i>
-                <span>设置</span>
-            </button>
-
-            <button id="test-btn" class="nav-btn" style="display: none;">
-                <i class="fas fa-sliders-h"></i>
-                <span>测试界面</span>
-            </button>
+        <!-- 侧边栏搜索 -->
+        <div class="sidebar-search">
+            <i class="fas fa-search"></i>
+            <input type="text" id="sidebar-search-input" placeholder="搜索功能或帮助..."
+                   oninput="onSidebarSearch(this.value)">
         </div>
 
         <div class="sidebar-footer">
@@ -120,8 +142,84 @@
     </div>
 
     <div class="main-content">
+        <!-- 仪表盘首页 -->
+        <div class="content-section active" id="dashboard-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-tachometer-alt"></i>
+                    首页
+                </h2>
+                <p class="section-subtitle">LCTA 工具箱状态总览</p>
+            </div>
+
+            <div class="dashboard-grid">
+                <!-- 状态卡片 -->
+                <div class="dashboard-card status-card" id="dash-translation-status">
+                    <div class="dash-card-icon">
+                        <i class="fas fa-language"></i>
+                    </div>
+                    <div class="dash-card-content">
+                        <div class="dash-card-label">汉化包状态</div>
+                        <div class="dash-card-value" id="dash-package-value">检测中...</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-card status-card" id="dash-launcher-status">
+                    <div class="dash-card-icon">
+                        <i class="fas fa-rocket"></i>
+                    </div>
+                    <div class="dash-card-content">
+                        <div class="dash-card-label">启动器配置</div>
+                        <div class="dash-card-value" id="dash-launcher-value">检测中...</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-card status-card" id="dash-update-status">
+                    <div class="dash-card-icon">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                    <div class="dash-card-content">
+                        <div class="dash-card-label">LCTA-AU 更新</div>
+                        <div class="dash-card-value" id="dash-update-value">检测中...</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-card status-card" id="dash-api-status">
+                    <div class="dash-card-icon">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    <div class="dash-card-content">
+                        <div class="dash-card-label">API 配置</div>
+                        <div class="dash-card-value" id="dash-api-value">检测中...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 快速操作 -->
+            <div class="settings-grid" style="margin-top: var(--spacing-lg);">
+                <div class="setting-card" style="padding:20px;">
+                    <h3 class="setting-title"><i class="fas fa-bolt"></i> 快速操作</h3>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                        <button class="action-btn" onclick="manualCheckUpdates()">
+                            <i class="fas fa-sync-alt"></i> 检查更新
+                        </button>
+                        <button class="primary-btn" onclick="goAndShow('elder');elderManager.initPage();">
+                            <i class="fas fa-play-circle"></i> 设置向导
+                        </button>
+                        <button class="action-btn secondary" onclick="helpDrawer.openIndex()">
+                            <i class="fas fa-question-circle"></i> 帮助中心
+                        </button>
+                        <button class="action-btn" onclick="goAndShow('download')">
+                            <i class="fas fa-download"></i> 下载汉化包
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
         <!-- 翻译工具界面 -->
-        <div class="content-section active" id="translate-section">
+        <div class="content-section" id="translate-section">
             <div class="section-header">
                 <h2 class="section-title">
                     <i class="fas fa-language"></i>
@@ -1062,14 +1160,14 @@
             </div>
         </div>
 
-        <!-- 老年人模式 -->
+        <!-- 设置向导 -->
         <div id="elder-section" class="content-section">
             <div class="section-header">
                 <h2 class="section-title">
                     <i class="fas fa-compass"></i>
-                    老年人模式
+                    设置向导
                 </h2>
-                <p class="section-subtitle">简单方便，不需要动脑的指引程序</p>
+                <p class="section-subtitle">分步引导，快速完成初始配置</p>
             </div>
             
             <div class="question-container">
@@ -1505,6 +1603,44 @@
 
     <!-- 最小化窗口容器 -->
     <div id="minimized-container"></div>
+
+    <!-- 帮助抽屉 -->
+    <div class="help-drawer-overlay" id="help-drawer-overlay" onclick="helpDrawer.close()"></div>
+    <div class="help-drawer" id="help-drawer">
+        <div class="help-drawer-header">
+            <div class="help-drawer-title">
+                <i class="fas fa-question-circle"></i>
+                <span>LCTA 帮助中心</span>
+            </div>
+            <button class="help-drawer-close" onclick="helpDrawer.close()" title="关闭 (Esc)">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="help-drawer-search">
+            <input type="text" id="help-drawer-search-input" placeholder="搜索帮助内容..."
+                   oninput="helpDrawer.onSearch(this.value)">
+        </div>
+        <div class="help-drawer-tabs">
+            <button class="help-drawer-tab active" data-tab="page-help" onclick="helpDrawer.switchTab('page-help')">
+                <i class="fas fa-file-alt"></i> 页面帮助
+            </button>
+            <button class="help-drawer-tab" data-tab="guide" onclick="helpDrawer.switchTab('guide')">
+                <i class="fas fa-book"></i> 使用指南
+            </button>
+            <button class="help-drawer-tab" data-tab="faq" onclick="helpDrawer.switchTab('faq')">
+                <i class="fas fa-comments"></i> 常见问题
+            </button>
+        </div>
+        <div class="help-drawer-body markdown-body" id="help-drawer-body">
+            <div class="help-drawer-loading">
+                <i class="fas fa-spinner fa-spin"></i>&nbsp; 加载中...
+            </div>
+        </div>
+        <div class="help-drawer-footer">
+            <i class="fas fa-lightbulb"></i>
+            提示：在任意页面长按 <kbd>W</kbd> 键 2 秒即可打开帮助
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>

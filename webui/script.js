@@ -517,16 +517,8 @@ function initNavigation() {
             document.querySelectorAll('.nav-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            
-            document.querySelectorAll('.nav-indicator').forEach(indicator => {
-                indicator.remove();
-            });
-            
+
             button.classList.add('active');
-            
-            const indicator = document.createElement('div');
-            indicator.className = 'nav-indicator';
-            button.appendChild(indicator);
             
             document.querySelectorAll('.content-section').forEach(section => {
                 if (section.classList.contains('active')) {
@@ -4489,7 +4481,6 @@ const helpDrawer = {
     overlay: null,
     drawer: null,
     body: null,
-    searchInput: null,
     currentPage: null,
     currentTab: 'page-help',
 
@@ -4497,16 +4488,10 @@ const helpDrawer = {
         this.overlay = document.getElementById('help-drawer-overlay');
         this.drawer = document.getElementById('help-drawer');
         this.body = document.getElementById('help-drawer-body');
-        this.searchInput = document.getElementById('help-drawer-search-input');
 
         // Escape 关闭抽屉
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.drawer && this.drawer.classList.contains('open')) {
-                // 不关闭抽屉如果焦点在搜索框中
-                if (document.activeElement === this.searchInput) {
-                    this.searchInput.blur();
-                    return;
-                }
                 this.close();
             }
         });
@@ -4520,9 +4505,6 @@ const helpDrawer = {
         this.overlay.classList.add('open');
         this.drawer.classList.add('open');
 
-        // 清除搜索框
-        if (this.searchInput) this.searchInput.value = '';
-
         // 加载页面对应的帮助文档
         await this.loadContent(`guide/${page}.md`);
     },
@@ -4533,7 +4515,6 @@ const helpDrawer = {
 
         this.overlay.classList.add('open');
         this.drawer.classList.add('open');
-        if (this.searchInput) this.searchInput.value = '';
 
         this.body.innerHTML = `
             <div class="markdown-body">
@@ -4592,11 +4573,6 @@ const helpDrawer = {
                 this.showFAQ();
                 break;
         }
-    },
-
-    onSearch(query) {
-        // 搜索功能（后续阶段实现全文索引）
-        console.log('帮助搜索:', query);
     },
 
     async loadContent(url) {
@@ -4838,6 +4814,14 @@ function injectHelpButtons() {
             helpDrawer.open(page);
         };
         btn.appendChild(helpBtn);
+    });
+
+    // 为每个导航按钮添加绿色指示点（预留空间）
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        if (btn.querySelector('.nav-indicator')) return;
+        const indicator = document.createElement('div');
+        indicator.className = 'nav-indicator';
+        btn.appendChild(indicator);
     });
 
 }

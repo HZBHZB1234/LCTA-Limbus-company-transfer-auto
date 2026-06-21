@@ -47,7 +47,6 @@
                 <button id="translate-btn" class="nav-btn">
                     <i class="fas fa-language"></i>
                     <span>翻译工具</span>
-                    <div class="nav-indicator"></div>
                 </button>
                 <button id="download-btn" class="nav-btn">
                     <i class="fas fa-cloud-download-alt"></i>
@@ -1615,10 +1614,6 @@
             <button class="help-drawer-close" onclick="helpDrawer.close()" title="关闭 (Esc)">
                 <i class="fas fa-times"></i>
             </button>
-        </div>
-        <div class="help-drawer-search">
-            <input type="text" id="help-drawer-search-input" placeholder="搜索帮助内容..."
-                   oninput="helpDrawer.onSearch(this.value)">
         </div>
         <div class="help-drawer-tabs">
             <button class="help-drawer-tab active" data-tab="page-help" onclick="helpDrawer.switchTab('page-help')">

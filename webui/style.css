@@ -214,7 +214,7 @@ body {
 
 /* 侧边栏 */
 .sidebar {
-    width: 260px;
+    width: 272px;
     background: var(--color-bg-sidebar);
     display: flex;
     flex-direction: column;
@@ -337,12 +337,18 @@ body {
 }
 
 .nav-indicator {
-    margin-left: auto;
+    visibility: hidden;
+    margin-left: 4px;
     width: 8px;
     height: 8px;
     background: var(--color-success);
     border-radius: 50%;
     animation: pulse 2s infinite;
+    flex-shrink: 0;
+}
+
+.nav-btn.active .nav-indicator {
+    visibility: visible;
 }
 
 @keyframes pulse {
@@ -1998,10 +2004,6 @@ button {
 
 /* 响应式设计 */
 @media (max-width: 1200px) {
-    .settings-grid {
-        grid-template-columns: 1fr;
-    }
-
     .dashboard-grid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -2010,6 +2012,10 @@ button {
 @media (max-width: 1024px) {
     .sidebar {
         width: 220px;
+    }
+
+    .settings-grid {
+        grid-template-columns: 1fr;
     }
 
     .help-drawer {
@@ -2879,40 +2885,6 @@ button {
     background: var(--color-danger);
     color: white;
     border-color: var(--color-danger);
-}
-
-.help-drawer-search {
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-bottom: 1px solid var(--color-border-light);
-    flex-shrink: 0;
-}
-
-.help-drawer-search input {
-    width: 100%;
-    padding: 8px 12px 8px 36px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    font-size: 14px;
-    background: var(--color-bg-input);
-    color: var(--color-text-primary);
-}
-
-.help-drawer-search {
-    position: relative;
-}
-
-.help-drawer-search::before {
-    content: '\f002';
-    font-family: 'Font Awesome 6 Free';
-    font-weight: 900;
-    position: absolute;
-    left: 28px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--color-text-secondary);
-    font-size: 14px;
-    z-index: 1;
-    pointer-events: none;
 }
 
 .help-drawer-tabs {

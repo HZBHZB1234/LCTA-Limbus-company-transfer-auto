@@ -1489,6 +1489,23 @@ async function loadAndRenderMarkdown() {
 // 老年人模式切换相关代码
 
 class ElderManager {
+    // 向导步骤定义（页面key → 显示名 + 图标）
+    static PAGE_ORDER = [
+        { key: 'main',             label: '开始',       icon: 'fa-home' },
+        { key: 'gamepath',         label: '游戏路径',   icon: 'fa-folder-open' },
+        { key: 'character',        label: '功能选择',   icon: 'fa-list-check' },
+        { key: 'base',             label: '基础设置',   icon: 'fa-cog' },
+        { key: 'network',          label: '网络更新',   icon: 'fa-globe' },
+        { key: 'launcher',         label: '启动器',     icon: 'fa-rocket' },
+        { key: 'launcher-source',  label: '启动器来源', icon: 'fa-download' },
+        { key: 'translate',        label: '翻译设置',   icon: 'fa-language' },
+        { key: 'download',         label: '下载设置',   icon: 'fa-cloud-download-alt' },
+        { key: 'bubble',           label: '气泡文本',   icon: 'fa-comment-dots' },
+        { key: 'mod',              label: '模组',       icon: 'fa-puzzle-piece' },
+        { key: 'manage',           label: '数据管理',   icon: 'fa-archive' },
+        { key: 'final',            label: '完成',       icon: 'fa-flag-checkered' },
+    ];
+
     async init() {
         this.targetDiv = document.querySelector('.quetion-content')
         this.updateList = await pywebview.api.get_attr('updateList');
@@ -1511,6 +1528,22 @@ class ElderManager {
                 }
             }
         }
+
+        // 事件委托：处理 data-warn-uncheck 复选框警告
+        this._setupEventDelegation();
+    }
+
+    _setupEventDelegation() {
+        const contentEl = document.querySelector('.quetion-content');
+        if (!contentEl) return;
+        contentEl.addEventListener('change', (e) => {
+            const target = e.target;
+            if (target.type === 'checkbox' && target.dataset.warnUncheck) {
+                if (!target.checked && typeof showMessage === 'function') {
+                    showMessage(target.dataset.warnUncheck, '(ó﹏ò｡)');
+                }
+            }
+        });
     }
 
     async initPage() {
@@ -1552,15 +1585,19 @@ class ElderManager {
 
     async savePageRefer() {
         const pageRefer = this.refer[this.latestPage];
+        if (!pageRefer) return;
         for (const value of Object.keys(pageRefer)) {
             const target = document.getElementById(value);
+            if (!target) continue;
             let newValue;
             if (target.type === 'checkbox') {
                 newValue = target.checked;
             } else if (target.tagName === 'SELECT' || target.tagName === 'INPUT') {
                 newValue = target.value;
             }
-            await configManager.updateConfigValue(pageRefer[value][0], newValue);
+            if (newValue !== undefined) {
+                await configManager.updateConfigValue(pageRefer[value][0], newValue);
+            }
         }
         this.historyList[this.latestPage] = this.version;
         configManager.updateConfigValue('--elder', JSON.stringify(this.historyList));
@@ -1569,8 +1606,10 @@ class ElderManager {
 
     async loadPageRefer() {
         const pageRefer = this.refer[this.latestPage];
+        if (!pageRefer) return;
         for (const value of Object.keys(pageRefer)) {
             const target = document.getElementById(value);
+            if (!target) continue;
             let newValue = configManager.getCachedValue(pageRefer[value][1]);
             if (target.type === 'checkbox') {
                 target.checked = newValue;
@@ -1588,67 +1627,201 @@ class ElderManager {
             await this.loadPage(nextPage);
             this.loadPageRefer();
         } else {
-            this.loadPage('final');
+            this.latestPage = 'final';
+            await this.loadPage('final');
         }
     }
 
+    // 简化的 markdownPrefix：仅做文本直通，不再处理 script/version
+    // 所有动态逻辑已移至 processVersionBadges() 和 renderPageDynamic()
     markdownPrefix(text, value='') {
-        const scripts = [];
-        let processedText = text.replace(/<script>([\s\S]*?)<\/script>/gi, (match, content) => {
-            scripts.push(content); // 收集脚本内容
-            return '';            // 从原文中移除该片段
-        });
+        // 移除旧的 <version> 标签和 <script> 标签文本（兼容旧 markdown 文件）
+        // 新文件使用 data-version 属性，此方法作为兼容层存在
+        let processedText = text.replace(/<script>[\s\S]*?<\/script>/gi, '');
+        processedText = processedText.replace(/<version>[\s\S]*?<\/version>/gi, '');
+        return processedText;
+    }
 
-        let container = document.getElementById('elder-container');
-        if (!container) {
-            throw new Error('未找到id为elder-container的元素');
-        }
-        scripts.forEach(scriptContent => {
-            scriptContent = `setTimeout(() => {
-                ${scriptContent}
-            }, 100);`
-            const scriptEl = document.createElement('script');
-            scriptEl.type = 'text/javascript';
-            scriptEl.textContent = scriptContent;
-            container.appendChild(scriptEl);
-        });
-
-        const finalText = processedText.replace(/<version>([\s\S]*?)<\/version>/gi, (match, content) => {
-            const trimmed = content.trim();
-            const num = parseFloat(trimmed);
-            if (!isNaN(num) && this.historyList[value] !== 'new' && num > this.historyList[value]) {
-                return '<span style="border: 1px solid #ddd; color: #666; padding: 2px 4px; border-radius: 4px; font-size: 12px;">NEW</span>';
+    // 处理 [data-version] 元素，注入 NEW 标记
+    processVersionBadges(name) {
+        const container = this.targetDiv;
+        if (!container) return;
+        const versionElements = container.querySelectorAll('[data-version]');
+        versionElements.forEach(el => {
+            const dataVer = el.getAttribute('data-version').trim();
+            const num = parseFloat(dataVer);
+            if (isNaN(num)) return;
+            const historyVer = this.historyList[name];
+            if (historyVer === 'new' || num > historyVer) {
+                const badge = document.createElement('span');
+                badge.className = 'elder-badge--new';
+                badge.textContent = 'NEW';
+                // 插入到元素内部的开头
+                if (el.firstChild) {
+                    el.insertBefore(badge, el.firstChild);
+                } else {
+                    el.appendChild(badge);
+                }
             }
-            return '';
         });
+    }
 
-        return finalText;
+    // 页面特定动态渲染
+    renderPageDynamic(name) {
+        switch (name) {
+            case 'main':
+                this._renderMainPage();
+                break;
+            case 'final':
+                this._renderFinalSummary();
+                break;
+            default:
+                break;
+        }
+    }
+
+    // main.md 三态面板逻辑
+    _renderMainPage() {
+        const panels = this.targetDiv.querySelectorAll('[data-state]');
+        if (panels.length === 0) return;
+
+        let activeState;
+        if (typeof first_use !== 'undefined' && first_use) {
+            activeState = 'first-use';
+        } else if (this.evalNextPage()) {
+            activeState = 'continue';
+        } else {
+            activeState = 'all-complete';
+        }
+
+        panels.forEach(panel => {
+            if (panel.getAttribute('data-state') === activeState) {
+                panel.style.display = 'block';
+            } else {
+                panel.style.display = 'none';
+            }
+        });
+    }
+
+    // final.md 摘要生成
+    _renderFinalSummary() {
+        const summaryDiv = document.getElementById('elder-summary');
+        if (!summaryDiv) return;
+
+        const items = [];
+
+        // 游戏路径
+        const gamePath = configManager.getCachedValue('game_path');
+        if (gamePath) {
+            items.push({ icon: 'fa-folder-open', title: '游戏路径', desc: gamePath });
+        }
+
+        // 功能选择
+        if (configManager.getCachedValue('elder.character.base')) {
+            items.push({ icon: 'fa-info-circle', title: '基础介绍', desc: '已阅读' });
+        }
+        if (configManager.getCachedValue('elder.character.launcher')) {
+            const updateMap = {
+                'no': '不自动更新',
+                'llc': '零协 (LLC)',
+                'ourplay': 'OurPlay',
+                'LCTA-AU': 'LCTA-AU',
+                'LO': 'LO',
+                'LM-G': 'LM-G',
+                'LM-A': 'LM-A',
+            };
+            const updateVal = configManager.getCachedValue('launcher.work.update') || 'LM-G';
+            const updateLabel = updateMap[updateVal] || updateVal;
+            const extras = [];
+            if (configManager.getCachedValue('launcher.work.mod')) extras.push('MOD');
+            if (configManager.getCachedValue('launcher.work.bubble')) extras.push('气泡文本');
+            if (configManager.getCachedValue('launcher.work.fancy')) extras.push('文本美化');
+            const extraStr = extras.length > 0 ? '（' + extras.join(' + ') + '）' : '';
+            items.push({ icon: 'fa-rocket', title: '启动器模式', desc: '更新源：' + updateLabel + ' ' + extraStr });
+        }
+        if (configManager.getCachedValue('elder.character.translate')) {
+            const translator = configManager.getCachedValue('ui_default.translator.translator') || '未设置';
+            items.push({ icon: 'fa-language', title: '手动翻译', desc: '翻译服务：' + translator });
+        }
+        if (configManager.getCachedValue('elder.character.manage')) {
+            items.push({ icon: 'fa-archive', title: '数据管理', desc: '已启用' });
+        }
+
+        // 基础设置
+        if (configManager.getCachedValue('auto_check_update')) {
+            items.push({ icon: 'fa-sync-alt', title: '自动检查更新', desc: '已启用' });
+        }
+        const theme = configManager.getCachedValue('theme') || 'light';
+        const themeMap = { 'light': '亮色', 'dark': '暗色', 'purple': '紫色' };
+        items.push({ icon: 'fa-palette', title: '主题', desc: themeMap[theme] || theme });
+
+        if (items.length === 0) {
+            items.push({ icon: 'fa-smile', title: '基础设置已完成', desc: '你可以随时在侧边栏探索更多功能' });
+        }
+
+        let html = '';
+        items.forEach(item => {
+            html += `<div class="elder-summary-item">
+                <i class="fas ${item.icon}"></i>
+                <div><strong>${item.title}</strong><span>${item.desc}</span></div>
+            </div>`;
+        });
+        summaryDiv.innerHTML = html;
+    }
+
+    // 重置向导进度
+    async resetElder() {
+        let elderList = JSON.stringify(this.updateList);
+        this.historyList = JSON.parse(elderList);
+        for (const value of Object.keys(this.historyList)) {
+            this.historyList[value] = 'new';
+        }
+        configManager.updateConfigValue('--elder', JSON.stringify(this.historyList));
+        await configManager.flushPendingUpdates();
+        await pywebview.api.resetElder();
+        await configManager.reloadConfig();
+        this.initPage();
+    }
+
+    // 更新步骤进度指示器
+    updateProgress(name) {
+        const fillBar = document.getElementById('elder-progress-fill');
+        if (!fillBar) return;
+
+        const steps = ElderManager.PAGE_ORDER;
+        const currentIdx = steps.findIndex(s => s.key === name);
+        if (currentIdx < 0) return;
+
+        const pct = steps.length > 1 ? (currentIdx / (steps.length - 1)) * 100 : 0;
+        fillBar.style.width = pct + '%';
     }
 
     async loadPage(name) {
         const response = await fetch(`elder/${name}.md`);
-            
+
         if (!response.ok) {
-            throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
+            throw new Error(`加载 elder/${name}.md 失败: ${response.status} ${response.statusText}`);
         }
-        
-        // 获取文本内容
+
         const markdownText = await response.text();
-        
-        // 转换Markdown为HTML
+
+        // 清空 elder-container
         try {
             document.getElementById('elder-container').innerHTML = '';
         } catch (error) {
             console.log('未找到id为elder-container的元素');
         }
+
         const htmlContent = simpleMarkdownToHtml(this.markdownPrefix(markdownText, name));
-        
         this.targetDiv.innerHTML = htmlContent;
-        
+
+        // 后处理管线
+        this.processVersionBadges(name);
+        this.renderPageDynamic(name);
+        this.updateProgress(name);
+
         console.log(`成功加载并渲染: ${name}`);
     }
-
-    
 }
 
 elderManager = new ElderManager();

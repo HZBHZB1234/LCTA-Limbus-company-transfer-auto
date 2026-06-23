@@ -1600,61 +1600,62 @@ button {
 
 .question-container .about-card h1 {
     font-size: 26px;
-    margin-bottom: var(--spacing-sm);
-    padding-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-lg);
     border-bottom: 2px solid var(--color-border);
 }
 
 .question-container .about-card h2 {
     font-size: 20px;
     margin-top: var(--spacing-xl);
-    margin-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
     color: var(--color-text-primary);
 }
 
 .question-container .about-card h3 {
     font-size: 17px;
-    margin-top: var(--spacing-lg);
-    margin-bottom: var(--spacing-sm);
+    margin-top: var(--spacing-xl);
+    margin-bottom: var(--spacing-md);
     color: var(--color-text-primary);
 }
 
 .question-container .about-card h4 {
     font-size: 15px;
-    margin-top: var(--spacing-md);
-    margin-bottom: var(--spacing-sm);
+    margin-top: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
     color: var(--color-text-secondary);
 }
 
 .question-container .about-card p {
     line-height: 1.75;
-    margin-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
     font-size: 15px;
 }
 
 .question-container .about-card ul,
 .question-container .about-card ol {
     padding-left: 1.5em;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    margin-top: var(--spacing-sm);
 }
 
 .question-container .about-card li {
     line-height: 1.75;
-    margin-bottom: 4px;
+    margin-bottom: 8px;
     font-size: 15px;
 }
 
 .question-container .about-card img {
     max-width: 100%;
     border-radius: 8px;
-    margin: var(--spacing-sm) 0;
+    margin: var(--spacing-md) 0;
     box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 
 .question-container .about-card blockquote {
     border-left: 4px solid var(--color-primary);
-    padding: var(--spacing-sm) var(--spacing-md);
-    margin: var(--spacing-md) 0;
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin: var(--spacing-lg) 0;
     background: var(--color-bg-secondary);
     border-radius: 0 6px 6px 0;
 }
@@ -1663,9 +1664,15 @@ button {
     margin-bottom: 0;
 }
 
+.question-container .about-card hr {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: var(--spacing-xl) 0;
+}
+
 .question-container .about-card .form-group {
-    margin: var(--spacing-md) 0;
-    padding: var(--spacing-sm) var(--spacing-md);
+    margin: var(--spacing-lg) 0;
+    padding: var(--spacing-md) var(--spacing-lg);
     background: var(--color-bg-secondary);
     border-radius: 8px;
     border: 1px solid var(--color-border);
@@ -1685,12 +1692,6 @@ button {
 
 .question-container .about-card .primary-btn i {
     margin-right: 8px;
-}
-
-.question-container .about-card hr {
-    border: none;
-    border-top: 1px solid var(--color-border);
-    margin: var(--spacing-xl) 0;
 }
 
 /* 向导步骤过渡动画 */
@@ -1719,7 +1720,606 @@ button {
     border-color: var(--color-primary);
 }
 
-/* 响应式适配 */
+/* ============================================
+   设置向导 — 步骤进度指示器
+   ============================================ */
+.elder-progress-bar {
+    max-width: 780px;
+    margin: 0 auto var(--spacing-lg) auto;
+    padding: 0 20px;
+}
+
+.elder-progress-track {
+    height: 4px;
+    background: var(--color-border-light);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.elder-progress-fill {
+    height: 100%;
+    background: var(--color-primary);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    width: 0%;
+}
+
+/* ============================================
+   设置向导 — 卡片系统
+   ============================================ */
+
+/* 功能选择网格 (character.md) */
+.elder-feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+    margin: var(--spacing-lg) 0;
+}
+
+.elder-feature-card {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    transition: all 0.25s ease;
+}
+
+.elder-feature-card:hover {
+    border-color: var(--color-primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.elder-feature-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-sm);
+    background: var(--color-primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    margin-bottom: var(--spacing-sm);
+}
+
+.elder-feature-body h4 {
+    font-size: 16px;
+    margin: 0 0 4px 0;
+    color: var(--color-text-primary);
+    border: none;
+    padding: 0;
+}
+
+.elder-feature-body p {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-sm);
+    line-height: 1.5;
+}
+
+.elder-feature-body details {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--color-bg-primary);
+    border-radius: var(--radius-sm);
+}
+
+.elder-feature-body details summary {
+    cursor: pointer;
+    color: var(--color-primary);
+    font-weight: 500;
+}
+
+/* 选项卡片 (launcher.md, bubble.md, translate.md) */
+.elder-option-card {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: flex-start;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+    transition: all 0.25s ease;
+}
+
+.elder-option-card:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 12px var(--shadow-color);
+}
+
+.elder-option-icon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--color-primary);
+    border: 2px solid var(--color-border);
+    background: var(--color-bg-primary);
+}
+
+.elder-option-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.elder-option-body h4 {
+    font-size: 15px;
+    margin: 0 0 4px 0;
+    color: var(--color-text-primary);
+    border: none;
+    padding: 0;
+}
+
+.elder-option-body p {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-sm);
+    line-height: 1.5;
+}
+
+/* 信息卡片 (base.md, network.md 通用) */
+.elder-info-card {
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+    border-left: 4px solid var(--color-primary);
+}
+
+.elder-info-card h4 {
+    font-size: 15px;
+    margin: 0 0 var(--spacing-sm) 0;
+    color: var(--color-text-primary);
+    border: none;
+    padding: 0;
+}
+
+.elder-info-card h4 i {
+    margin-right: 6px;
+    color: var(--color-primary);
+}
+
+.elder-info-card p {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-sm);
+    line-height: 1.6;
+}
+
+/* 警告卡片 (bubble.md 重要提示) */
+.elder-warning-card {
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+    border-left: 4px solid var(--color-warning);
+}
+
+.elder-warning-card h4 {
+    font-size: 15px;
+    margin: 0 0 var(--spacing-sm) 0;
+    color: var(--color-warning);
+    border: none;
+    padding: 0;
+}
+
+.elder-warning-card h4 i {
+    margin-right: 6px;
+}
+
+.elder-warning-card p {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-bottom: 0;
+    line-height: 1.6;
+}
+
+/* 提示卡片 (通用绿色提示) */
+.elder-tip-card {
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+    border: 1px solid rgba(46, 204, 113, 0.3);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.elder-tip-card i {
+    color: var(--color-success);
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+/* ============================================
+   设置向导 — 英雄区 & 摘要
+   ============================================ */
+.elder-hero {
+    text-align: center;
+    padding: var(--spacing-xl) var(--spacing-md);
+}
+
+.elder-hero-icon {
+    font-size: 56px;
+    margin-bottom: var(--spacing-md);
+    display: block;
+}
+
+.elder-hero-icon .fa-check-circle {
+    color: var(--color-success);
+}
+
+.elder-hero-icon .fa-rocket {
+    color: var(--color-primary);
+}
+
+.elder-hero-icon .fa-sync-alt {
+    color: var(--color-warning);
+}
+
+.elder-hero-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.elder-hero-subtitle {
+    font-size: 15px;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+}
+
+/* 摘要容器 (final.md) */
+.elder-summary-container {
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    margin: var(--spacing-lg) 0;
+    border: 1px solid var(--color-border);
+}
+
+.elder-summary-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.elder-summary-item:last-child {
+    border-bottom: none;
+}
+
+.elder-summary-item i {
+    color: var(--color-primary);
+    font-size: 16px;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.elder-summary-item strong {
+    display: block;
+    font-size: 14px;
+    color: var(--color-text-primary);
+}
+
+.elder-summary-item span {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+/* 下一步骤 (final.md) */
+.elder-next-step {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    margin-bottom: var(--spacing-sm);
+    transition: all 0.2s ease;
+}
+
+.elder-next-step:hover {
+    border-color: var(--color-primary);
+}
+
+.elder-step-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.elder-next-step p {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin: 2px 0 0 0;
+    line-height: 1.5;
+}
+
+.elder-next-step strong {
+    font-size: 14px;
+    color: var(--color-text-primary);
+}
+
+/* ============================================
+   设置向导 — 标签 & 徽章
+   ============================================ */
+.elder-tag {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Consolas', 'Courier New', monospace;
+    margin-right: 4px;
+}
+
+.elder-tag--format {
+    background: rgba(52, 152, 219, 0.12);
+    color: var(--color-primary);
+    border: 1px solid rgba(52, 152, 219, 0.25);
+}
+
+.elder-tag--audio {
+    background: rgba(243, 156, 18, 0.12);
+    color: var(--color-warning);
+    border: 1px solid rgba(243, 156, 18, 0.25);
+}
+
+.elder-badge--new {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-primary);
+    background: rgba(52, 152, 219, 0.12);
+    border: 1px solid rgba(52, 152, 219, 0.25);
+    margin-left: 6px;
+    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ============================================
+   设置向导 — 表单元素增强
+   ============================================ */
+
+/* 路径输入组 (gamepath.md, manage.md) */
+.elder-path-input {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin: var(--spacing-md) 0;
+}
+
+.elder-path-input input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+}
+
+.elder-path-input input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+}
+
+/* 下拉选择框增强 */
+select.elder-select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    appearance: auto;
+    margin: var(--spacing-sm) 0;
+}
+
+select.elder-select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+}
+
+/* 主题三选一按钮组 (base.md) */
+.elder-theme-switch {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin: var(--spacing-md) 0;
+}
+
+.elder-theme-btn {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.elder-theme-btn:hover {
+    border-color: var(--color-primary);
+    background: var(--color-bg-secondary);
+}
+
+.elder-theme-btn.active {
+    border-color: var(--color-primary);
+    background: rgba(52, 152, 219, 0.08);
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.elder-theme-btn i {
+    display: block;
+    font-size: 20px;
+    margin-bottom: 4px;
+}
+
+/* 来源卡片 (launcher-source.md, download.md) */
+.elder-source-card {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+}
+
+.elder-source-card h4 {
+    font-size: 16px;
+    margin: 0 0 var(--spacing-sm) 0;
+    color: var(--color-text-primary);
+    border: none;
+    padding: 0;
+}
+
+.elder-source-card h4 i {
+    margin-right: 6px;
+    color: var(--color-primary);
+}
+
+.elder-source-card .elder-source-options {
+    margin-top: var(--spacing-sm);
+}
+
+.elder-source-card .elder-source-options .form-group {
+    margin: var(--spacing-sm) 0;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--color-bg-primary);
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    transition: border-color 0.2s ease;
+}
+
+.elder-source-card .elder-source-options .form-group:hover {
+    border-color: var(--color-border);
+}
+
+/* 设置项行内组 */
+.elder-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) 0;
+    gap: var(--spacing-md);
+}
+
+.elder-setting-row label {
+    font-size: 14px;
+    color: var(--color-text-primary);
+    flex: 1;
+    min-width: 0;
+}
+
+.elder-setting-row input[type="text"],
+.elder-setting-row input[type="number"] {
+    width: 80px;
+    padding: 6px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    text-align: center;
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+}
+
+.elder-setting-row input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.elder-setting-hint {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin-top: 2px;
+}
+
+/* ============================================
+   设置向导 — 按钮增强
+   ============================================ */
+.question-container .about-card .primary-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: var(--spacing-lg);
+    padding: 14px 36px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    background: var(--color-primary);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.question-container .about-card .primary-btn:hover {
+    background: var(--color-primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.question-container .about-card .primary-btn:active {
+    transform: translateY(0);
+}
+
+.question-container .about-card .elder-btn-reset {
+    font-size: 12px;
+    padding: 8px 18px;
+    opacity: 0.6;
+    background: transparent;
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    box-shadow: none;
+    margin-top: var(--spacing-sm);
+}
+
+.question-container .about-card .elder-btn-reset:hover {
+    opacity: 1;
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-dark);
+    transform: none;
+    box-shadow: none;
+}
+
+/* ============================================
+   设置向导 — 响应式适配
+   ============================================ */
 @media (max-width: 768px) {
     .question-container .about-card {
         padding: var(--spacing-md);
@@ -1731,6 +2331,24 @@ button {
 
     .question-container .about-card h2 {
         font-size: 18px;
+    }
+}
+
+@media (max-width: 600px) {
+    .elder-feature-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .elder-option-card {
+        flex-direction: column;
+    }
+
+    .elder-theme-switch {
+        flex-direction: column;
+    }
+
+    .elder-path-input {
+        flex-direction: column;
     }
 }
 

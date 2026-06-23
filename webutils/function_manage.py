@@ -7,6 +7,7 @@ from typing import Tuple
 import json
 
 from .functions import *
+from globalManagers.ConfigManager import ConfigManager
 
 def check_lang_enabled(game_path:str) -> bool:
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
@@ -17,8 +18,8 @@ def check_lang_enabled(game_path:str) -> bool:
         lang_path.mkdir()
     return False
 
-def find_installed_packages(config) -> Tuple[list, str]:
-    game_path = config.get('game_path', '')
+def find_installed_packages() -> Tuple[list, str]:
+    game_path = ConfigManager().get('game_path', '')
     if not game_path:
         raise ValueError("未设置游戏路径")
     if not check_lang_enabled(game_path):
@@ -37,8 +38,8 @@ def find_installed_packages(config) -> Tuple[list, str]:
         config_lang = {}
     return r, config_lang.get('lang', '')
 
-def use_translation_package(package_name: str, config):
-    game_path = config.get('game_path', '')
+def use_translation_package(package_name: str):
+    game_path = ConfigManager().get('game_path', '')
     if not package_name or not game_path:
         raise ValueError("未选择汉化包或未设置游戏路径")
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
@@ -53,8 +54,8 @@ def use_translation_package(package_name: str, config):
     lang_config.write_text(json.dumps(config_lang, indent=4, ensure_ascii=False))
     return True
 
-def delete_installed_package(package_name: str, config):
-    game_path = config.get('game_path', '')
+def delete_installed_package(package_name: str):
+    game_path = ConfigManager().get('game_path', '')
     if not package_name or not game_path:
         raise ValueError("未选择汉化包或未设置游戏路径")
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
@@ -71,8 +72,8 @@ def delete_installed_package(package_name: str, config):
     shutil.rmtree(lang_path / package_name)
     return {'success': True, "message": '已删除'}
 
-def toggle_install_package(config, enable):
-    game_path = config.get('game_path', '')
+def toggle_install_package(enable):
+    game_path = ConfigManager().get('game_path', '')
     if not game_path:
         raise ValueError("未设置游戏路径")
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
@@ -90,16 +91,16 @@ def toggle_install_package(config, enable):
 def get_default_mod_path():
     return Path.home() / 'AppData' /  'Roaming' / 'LimbusCompanyMods'
 
-def get_mod_path(config):
-    mod_path = config.get('ui_default').get('manage', {}).get('mod_path', '')
+def get_mod_path():
+    mod_path = ConfigManager().get('ui_default.manage.mod_path', '')
     if not mod_path:
         mod_path = get_default_mod_path()
     else:
         mod_path = Path(mod_path)
     return mod_path
 
-def fing_mod(config):
-    mod_path = get_mod_path(config)
+def fing_mod():
+    mod_path = get_mod_path()
     r = list(mod_path.glob('*.carra2'))
     r.extend(list(mod_path.glob('*.bank')))
     r.extend(list(mod_path.glob('*.zip')))
@@ -114,8 +115,8 @@ def fing_mod(config):
     rd = [(i.name).rstrip('_disable') for i in rd]
     return r, rd
 
-def toggle_mod(config, mod_name: str, enable):
-    mod_path = get_mod_path(config)
+def toggle_mod(mod_name: str, enable):
+    mod_path = get_mod_path()
     mod = mod_path / (mod_name if not enable else f'{mod_name}_disable')
     if mod.exists():
         shutil.move(mod, mod_path / (mod_name if enable else f'{mod_name}_disable'))
@@ -123,8 +124,8 @@ def toggle_mod(config, mod_name: str, enable):
     else:
         return False
     
-def delete_mod(config, mod_name: str, enable):
-    mod_path = get_mod_path(config)
+def delete_mod(mod_name: str, enable):
+    mod_path = get_mod_path()
     mod = mod_path / (mod_name if enable else f'{mod_name}_disable')
     if mod.exists():
         if mod.is_dir():
@@ -135,8 +136,8 @@ def delete_mod(config, mod_name: str, enable):
     else:
         return False
 
-def open_mod_path(config):
-    mod_path = get_mod_path(config)
+def open_mod_path():
+    mod_path = get_mod_path()
     os.system(f'explorer {mod_path}')
     
 LOCAL_BASE = Path.home() / 'AppData' / 'LocalLow'

@@ -1,5 +1,6 @@
 import glob
 from globalManagers.LogManager import LogManager
+_log_manager = LogManager()
 import os
 import shutil
 import time
@@ -28,10 +29,10 @@ def wait_for_validation():
 def sound_replace_thread(mod_folder: str):
     wait_for_validation()
 
-    LogManager().log("Validation complete, replacing sound files")
+    _log_manager.log("Validation complete, replacing sound files")
     target_folder = sound_folder()
     for sound_file in Path(mod_folder).rglob("*.bank"):
-        LogManager().log("Replacing %s", sound_file)
+        _log_manager.log("Replacing %s", sound_file)
         target = os.path.join(target_folder, sound_file.name)
         os.replace(target, target + ".bak")
         shutil.copyfile(sound_file, target)
@@ -49,4 +50,4 @@ def replace_sound(mod_folder: str, game_path: str):
     if any(file_name.endswith(".bank") for file_name in os.listdir(mod_zips_root_path)):
         Thread(target=sound_replace_thread, args=(mod_folder,)).start()
     else:
-        LogManager().log("No .bank found, skip sound replacing process.")
+        _log_manager.log("No .bank found, skip sound replacing process.")

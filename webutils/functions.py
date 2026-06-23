@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Optional, Set
 import shutil
 import tempfile
 from globalManagers.LogManager import LogManager
+from globalManagers.ConfigManager import ConfigManager
+_log_manager = LogManager()
 if TYPE_CHECKING:
     from webFunc.GithubDownload import ReleaseAsset
 
@@ -33,8 +35,8 @@ def zip_folder(folder_path, output_path):
                     zipf.write(file_path, arc_path)
         return True
     except Exception as e:
-        LogManager().log(f"压缩文件夹失败: {e}")
-        LogManager().log_error(e)
+        _log_manager.log(f"压缩文件夹失败: {e}")
+        _log_manager.log_error(e)
         return False
     
 def extract_zip_smartly(zip_path: str, target_dir: str) -> Optional[str]:
@@ -92,7 +94,7 @@ def extract_zip_smartly(zip_path: str, target_dir: str) -> Optional[str]:
 
 def decompress_7z(file_path, output_dir='.'):
     if not os.path.exists(file_path):
-        LogManager().log(f"压缩文件不存在: {file_path}")
+        _log_manager.log(f"压缩文件不存在: {file_path}")
         return False
 
     if output_dir is None:
@@ -102,13 +104,13 @@ def decompress_7z(file_path, output_dir='.'):
     os.makedirs(output_dir, exist_ok=True)
 
     try:
-        LogManager().log(f"开始解压文件: {file_path}")
+        _log_manager.log(f"开始解压文件: {file_path}")
         Archive(file_path).extractall(output_dir)
-        LogManager().log(f"解压完成")
+        _log_manager.log(f"解压完成")
         return True
     except Exception as e:
-        LogManager().log(f"解压失败: {e}")
-        LogManager().log_error(e)
+        _log_manager.log(f"解压失败: {e}")
+        _log_manager.log_error(e)
         return False
 
 def download_with(url, save_path, size=0, chunk_size=1024*100,
@@ -125,26 +127,26 @@ def download_with(url, save_path, size=0, chunk_size=1024*100,
             chunk_len = total_size//chunk_size +1
             downloaded_chunk = 0
 
-            LogManager().log(f"开始下载文件，总大小: {total_size // 1024} KB")
+            _log_manager.log(f"开始下载文件，总大小: {total_size // 1024} KB")
 
             with open(save_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=chunk_size):
                     if modal_id:
-                        LogManager().check_running(modal_id, log=False)
+                        _log_manager.check_running(modal_id, log=False)
                     f.write(chunk)
 
                     downloaded_chunk += 1
-                    LogManager().update_modal_progress(
+                    _log_manager.update_modal_progress(
                         progress_[0] + (progress_[1]-progress_[0]) * downloaded_chunk / chunk_len,
                         f"已下载 {downloaded_chunk * chunk_size // 1024} KB / {total_size // 1024} KB",
                         modal_id, log=False
                     )
 
-            LogManager().log("\n下载完成")
+            _log_manager.log("\n下载完成")
         return True
     except Exception as e:
-        LogManager().log(f"\n下载失败: {e}")
-        LogManager().log_error(e)
+        _log_manager.log(f"\n下载失败: {e}")
+        _log_manager.log_error(e)
         return False
 
 def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
@@ -164,7 +166,7 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
         bool: 下载是否成功
     """
     if not asset:
-        LogManager().log("ReleaseAsset为空，无法下载")
+        _log_manager.log("ReleaseAsset为空，无法下载")
         return False
 
     # 确保保存目录存在
@@ -174,7 +176,7 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
 
     if not use_proxy or not hasattr(asset, 'proxys') or not asset.proxys:
         # 不使用代理，直接下载
-        LogManager().log(f"不使用代理，直接下载: {asset.name}")
+        _log_manager.log(f"不使用代理，直接下载: {asset.name}")
         return download_with(
             asset.download_url, save_path,
             size=asset.size, chunk_size=chunk_size,
@@ -189,14 +191,14 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
         proxy_url = proxy_url.rstrip('/') + '/' + asset.download_url.lstrip('/')
         return proxy_url
 
-    LogManager().log(f"开始下载 {asset.name} (大小: {asset.size} bytes)")
+    _log_manager.log(f"开始下载 {asset.name} (大小: {asset.size} bytes)")
 
     # 尝试所有URL直到成功
     len_proxies = len(proxy_manager.proxies)
     for i, proxy in enumerate(proxy_manager.get_proxies()):
         try:
             url = _build_url(proxy)
-            LogManager().log(f"尝试下载 (代理 {i+1}/{len_proxies}): {url}")
+            _log_manager.log(f"尝试下载 (代理 {i+1}/{len_proxies}): {url}")
 
             # 使用download_with函数下载
             success = download_with(
@@ -215,27 +217,27 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
                 if os.path.exists(save_path):
                     actual_size = os.path.getsize(save_path)
                     if asset.size > 0 and actual_size != asset.size:
-                        LogManager().log(f"警告: 文件大小不匹配。期望: {asset.size}, 实际: {actual_size}")
+                        _log_manager.log(f"警告: 文件大小不匹配。期望: {asset.size}, 实际: {actual_size}")
                         # 文件大小不匹配，继续尝试下一个URL
                         continue
 
-                    LogManager().log(f"下载成功! 使用链接 {url}")
+                    _log_manager.log(f"下载成功! 使用链接 {url}")
                     proxy_manager.set_proxy_by_url(proxy)
                     return True
                 else:
-                    LogManager().log(f"文件未创建: {save_path}")
+                    _log_manager.log(f"文件未创建: {save_path}")
                     raise FileNotFoundError(f"文件未创建: {save_path}")
             else:
-                LogManager().log(f"下载失败 (URL {i+1}/{len_proxies})")
+                _log_manager.log(f"下载失败 (URL {i+1}/{len_proxies})")
 
         except Exception as e:
-            LogManager().log(f"下载失败 (URL {i+1}/{len_proxies}): {e}")
-            LogManager().log_error(e)
+            _log_manager.log(f"下载失败 (URL {i+1}/{len_proxies}): {e}")
+            _log_manager.log_error(e)
 
             # 短暂延迟后重试
             time.sleep(0.1)
 
-    LogManager().log(f"所有下载尝试都失败: {asset.name}")
+    _log_manager.log(f"所有下载尝试都失败: {asset.name}")
     return False
 
 def calculate_sha256(file_path):
@@ -249,7 +251,7 @@ def calculate_sha256(file_path):
         str: 文件的SHA256哈希值，如果出错则返回None
     """
     if not os.path.exists(file_path):
-        LogManager().log(f"文件不存在: {file_path}")
+        _log_manager.log(f"文件不存在: {file_path}")
         return None
 
     sha256_hash = hashlib.sha256()
@@ -260,8 +262,8 @@ def calculate_sha256(file_path):
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
     except Exception as e:
-        LogManager().log(f"计算文件SHA256失败: {e}")
-        LogManager().log_error(e)
+        _log_manager.log(f"计算文件SHA256失败: {e}")
+        _log_manager.log_error(e)
         return None
 
 def calculate_md5(file_path):
@@ -275,7 +277,7 @@ def calculate_md5(file_path):
         str: 文件的MD5哈希值，如果出错则返回None
     """
     if not os.path.exists(file_path):
-        LogManager().log(f"文件不存在: {file_path}")
+        _log_manager.log(f"文件不存在: {file_path}")
         return None
 
     md5_hash = hashlib.md5()
@@ -286,13 +288,13 @@ def calculate_md5(file_path):
                 md5_hash.update(byte_block)
         return md5_hash.hexdigest()
     except Exception as e:
-        LogManager().log(f"计算文件MD5失败: {e}")
-        LogManager().log_error(e)
+        _log_manager.log(f"计算文件MD5失败: {e}")
+        _log_manager.log_error(e)
         return None
 
 def decompress_zip(file_path, output_dir='.'):
     if not os.path.exists(file_path):
-        LogManager().log(f"压缩文件不存在: {file_path}")
+        _log_manager.log(f"压缩文件不存在: {file_path}")
         return False
     if output_dir is None:
         base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -303,14 +305,15 @@ def decompress_zip(file_path, output_dir='.'):
         with zipfile.ZipFile(file_path, 'r') as zip_ref:
             zip_ref.extractall(output_dir)
     except Exception as e:
-        LogManager().log(f"解压失败: {e}")
-        LogManager().log_error(e)
+        _log_manager.log(f"解压失败: {e}")
+        _log_manager.log_error(e)
         return False
 
-def get_cache_font(config: dict = {}) -> str:
-    cache_normal = os.path.join(config['game_path'], 'LimbusCompany_Data', 'lang', 'LLC_zh-CN', 'Font', 'Context', 'ChineseFont.ttf')
-    if config.get('enable_cache', False):
-        cache_path = Path(config.get('cache_path', '')) / 'ChineseFont.ttf'
+def get_cache_font() -> str:
+    game_path = ConfigManager().get('game_path', '')
+    cache_normal = os.path.join(game_path, 'LimbusCompany_Data', 'lang', 'LLC_zh-CN', 'Font', 'Context', 'ChineseFont.ttf')
+    if ConfigManager().get('enable_cache', False):
+        cache_path = Path(ConfigManager().get('cache_path', '')) / 'ChineseFont.ttf'
         if cache_path.exists():
             return cache_path
         else:
@@ -325,11 +328,11 @@ def get_cache_font(config: dict = {}) -> str:
                     chunk_size=1024 * 100
                     )
                     r = decompress_7z(Path(temp_dir) / 'font.7z',
-                                  config.get('cache_path', '.'))
+                                  ConfigManager().get('cache_path', '.'))
                     if r:
-                        return get_cache_font(config)
+                        return get_cache_font()
             except Exception as e:
-                LogManager().log_error(e)
+                _log_manager.log_error(e)
                 return cache_normal
 
     cache_path = Path(cache_normal)

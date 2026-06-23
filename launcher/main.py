@@ -20,6 +20,7 @@ sys.path.insert(0, str(file_dir))
 from webFunc import *
 from webFunc import GithubDownload
 from globalManagers.LogManager import LogManager
+_log_manager = LogManager()
 from globalManagers.ConfigManager import ConfigManager
 from webutils import *
 import webutils.load as LoadUtils
@@ -62,7 +63,7 @@ class UpdateBase(ABC):
     
     def __init__(self):
         self.launcher_config: dict = ConfigManager().get('launcher', {})
-        self.cache_path = func_utils.get_cache_font(ConfigManager().raw)
+        self.cache_path = func_utils.get_cache_font()
     
     def check_network_available(self) -> bool:
         """检查网络是否可用"""
@@ -77,10 +78,10 @@ class UpdateBase(ABC):
         """下载并安装更新包"""
         package_list = find_translation_packages('.')
         if zip_path not in package_list:
-            LogManager().log(f"更新包 {zip_path} 不在安装包列表中，请检查安装包")
+            _log_manager.log(f"更新包 {zip_path} 不在安装包列表中，请检查安装包")
             return False
             
-        LogManager().log(f"更新包 {zip_path} 已在安装包列表中")
+        _log_manager.log(f"更新包 {zip_path} 已在安装包列表中")
         install_translation_package(zip_path, ConfigManager().get("game_path", ""),
                                    f"update_install")
         return True
@@ -102,31 +103,31 @@ class UpdateBase(ABC):
     def run(self) -> bool:
         """执行完整的更新流程"""
         if not self.check_network_available():
-            LogManager().log("当前网络不可用，无法检查更新")
+            _log_manager.log("当前网络不可用，无法检查更新")
             return False
             
         if not self.check_update():
-            LogManager().log("当前版本已经是最新版本")
+            _log_manager.log("当前版本已经是最新版本")
             return False
             
         zip_path = self.perform_update()
         
         if not zip_path:
-            LogManager().log(f"更新包下载失败")
+            _log_manager.log(f"更新包下载失败")
             return False
             
-        LogManager().log(f"更新包下载成功，路径: {zip_path}")
+        _log_manager.log(f"更新包下载成功，路径: {zip_path}")
         
         if not self.download_and_install(zip_path):
             return False
             
         self.update_config()
-        LogManager().log(f"汉化包更新完成")
+        _log_manager.log(f"汉化包更新完成")
         
         run_bubble = self.launcher_config.get('work', {}).get('bubble', False)
         if run_bubble:
             ConfigManager().set('ui_default.bubble.install', True)
-            function_bubble_main('安装气泡mod', ConfigManager().raw)
+            function_bubble_main('安装气泡mod')
 
         run_fancy = self.launcher_config.get('work', {}).get('fancy', False)
         if run_fancy:
@@ -142,7 +143,7 @@ class UpdateBase(ABC):
     def special_run(self) -> bool:
         """执行完整的更新流程"""
         if not self.check_network_available():
-            LogManager().log("当前网络不可用，无法检查更新")
+            _log_manager.log("当前网络不可用，无法检查更新")
             return False
             
         self.check_update()
@@ -152,11 +153,11 @@ class UpdateBase(ABC):
 class NoUpdate(UpdateBase):
     """不执行任何更新"""
     def check_update(self) -> bool:
-        LogManager().log("未启用任何更新选项，跳过更新检查")
+        _log_manager.log("未启用任何更新选项，跳过更新检查")
         return False
     
     def perform_update(self) -> Optional[str]:
-        LogManager().log("你是怎么触发这条日志的？")
+        _log_manager.log("你是怎么触发这条日志的？")
         return None
     
     def update_config(self):
@@ -442,20 +443,17 @@ def create_update() -> UpdateBase:
 
 def main_pre():
     global steam_argv
-    # 初始化单例日志管理器（第一次调用完成标准日志配置）
-    LogManager()
-
     # 初始化单例配置管理器（第一次调用完成加载）
     ConfigManager()
 
     steam_argv = os.getenv('steam_argv', '')
 
     if steam_argv == '':
-        LogManager().log("unexpectedly missing steam_argv environment variable")
-        LogManager().log("use path in config instead")
+        _log_manager.log("unexpectedly missing steam_argv environment variable")
+        _log_manager.log("use path in config instead")
 
         steam_argv = ConfigManager().get("game_path", "")+'LimbusCompany.exe'
-    LogManager().log(f"steam_argv: {steam_argv}")
+    _log_manager.log(f"steam_argv: {steam_argv}")
 
     GithubDownload.init_request()
 
@@ -469,45 +467,45 @@ def main_after_mod():
     import launcher.sound as sound
     import launcher.changes as changes
 
-    get_mod_folder(ConfigManager().raw)
+    get_mod_folder()
     mod_zips_root_path = os.environ['mod_path']
     os.makedirs(mod_zips_root_path, exist_ok=True)
 
-    LogManager().log("Limbus Mod Loader version: v1.8")
+    _log_manager.log("Limbus Mod Loader version: v1.8")
 
     def kill_handler(*args) -> None:
         sys.exit(0)
 
     def cleanup_assets():
         try:
-            LogManager().log("Cleaning up assets")
+            _log_manager.log("Cleaning up assets")
             patch.cleanup_assets()
             sound.restore_sound()
             changes.cleanup_patch(steam_argv)
         except Exception as e:
-            LogManager().log_error(e)
+            _log_manager.log_error(e)
 
     try:
-        LogManager().log("Limbus args: %s", sys.argv)
+        _log_manager.log("Limbus args: %s", sys.argv)
         cleanup_assets()
         #atexit.register(cleanup_assets)
-        LogManager().log("Detecting lunartique mods")
+        _log_manager.log("Detecting lunartique mods")
         patch.detect_lunartique_mods(mod_zips_root_path)
-        LogManager().log("Patching text data")
+        _log_manager.log("Patching text data")
         changes.apply_patch(mod_zips_root_path, steam_argv)
         tmp_asset_root = tempfile.mkdtemp()
-        LogManager().log("Extracting mod assets to %s", tmp_asset_root)
+        _log_manager.log("Extracting mod assets to %s", tmp_asset_root)
         patch.extract_assets(tmp_asset_root, mod_zips_root_path)
-        LogManager().log("Backing up data and patching assets....")
+        _log_manager.log("Backing up data and patching assets....")
         patch.patch_assets(tmp_asset_root)
         patch.shutil.rmtree(tmp_asset_root)
         sound.replace_sound(mod_zips_root_path,steam_argv)
-        LogManager().log("Starting game")
+        _log_manager.log("Starting game")
         subprocess.call(steam_argv)
         cleanup_assets()
 
     except Exception as e:
-        LogManager().log_error(e)
+        _log_manager.log_error(e)
         sys.exit(1)
 
 def main_after_game():
@@ -517,15 +515,15 @@ def main():
     try:
         main_pre()
     except Exception as e:
-        LogManager().log_error(e)
+        _log_manager.log_error(e)
     try:
         if ConfigManager().get("launcher.work.mod", False):
             main_after_mod()
         else:
             main_after_game()
     except Exception as e:
-        LogManager().log_error(e)
-    LogManager().log('正常退出')
+        _log_manager.log_error(e)
+    _log_manager.log('正常退出')
 
 if __name__ == '__main__':
     main()

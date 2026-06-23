@@ -8,6 +8,8 @@ import sys
 from typing import Dict, List, Tuple, Union, Any, Optional
 
 from globalManagers.LogManager import LogManager
+from globalManagers.ConfigManager import ConfigManager
+_log_manager = LogManager()
 
 
 def find_lcb() -> Optional[str]:
@@ -28,8 +30,8 @@ def find_lcb() -> Optional[str]:
                 
         return None
     except Exception as e:
-        LogManager().log(f"查找游戏路径时出错: {str(e)}")
-        LogManager().log_error(e)
+        _log_manager.log(f"查找游戏路径时出错: {str(e)}")
+        _log_manager.log_error(e)
         return None
 
 def load_config_types() -> Dict[str, Any]:
@@ -65,50 +67,9 @@ def validate_config_value(value: Any, expected_type: Union[str, List[Any]]) -> b
         return value in expected_type
     return False
 
-def validate_config(config: Dict[str, Any], config_types: Optional[Dict[str, Any]]=None) -> Tuple[bool, List[str]]:
-    """
-    验证配置对象是否符合类型定义
-    
-    Args:
-        config (dict): 实际配置
-        config_types (dict): 配置类型定义，如果为None则自动加载
-    
-    Returns:
-        tuple: (is_valid, errors) 其中is_valid是布尔值，errors是错误列表
-    """
-    if config_types is None:
-        config_types = load_config_types()
-    
-    errors = []
-    
-    def _validate_recursive(current_config: Dict[str, Any], current_types: Dict[str, Any], path: str=""):
-        if not isinstance(current_types, dict):
-            return
-            
-        for key, expected_type in current_types.items():
-            current_path = f"{path}.{key}" if path else key
-            
-            # 检查键是否存在
-            if key not in current_config:
-                errors.append(f"Missing key: {current_path}")
-                continue
-                
-            value = current_config[key]
-            
-            # 如果期望类型是字典且实际值也是字典，则递归检查
-            if isinstance(expected_type, dict) and isinstance(value, dict):
-                _validate_recursive(value, expected_type, current_path)
-            else:
-                # 检查基本类型
-                if not validate_config_value(value, expected_type):
-                    errors.append(
-                        f"Type mismatch for key '{current_path}': "
-                        f"expected {expected_type}, got {type(value).__name__} "
-                        f"(value: {value})"
-                    )
-    
-    _validate_recursive(config, config_types)
-    return len(errors) == 0, errors
+def validate_config(config: Dict[str, Any] = None, config_types: Optional[Dict[str, Any]]=None) -> Tuple[bool, List[str]]:
+    """验证配置对象是否符合类型定义（委托给 ConfigManager）"""
+    return ConfigManager().validate()
 
 def check_config_type(key_path: str, value: Any) -> Tuple[bool, Union[str, Dict[str, Any]], str]:
     """
@@ -138,10 +99,8 @@ def check_config_type(key_path: str, value: Any) -> Tuple[bool, Union[str, Dict[
 
 def load_config() -> Optional[Dict[str, Any]]:
     try:
-        with open('config.json','r',encoding='utf-8') as f:
-            config = json.load(f)
-            return config
-    except FileNotFoundError:
+        return ConfigManager().raw
+    except Exception:
         return None
 
 def load_config_default() -> Optional[Dict[str, Any]]:
@@ -155,99 +114,7 @@ def load_config_default() -> Optional[Dict[str, Any]]:
 def check_game_path(game_path: str) -> bool:
     return os.path.exists(game_path + 'LimbusCompany.exe')
 
-def fix_config(config: Dict[str, Any], config_default: Optional[Dict[str, Any]]=None, config_check: Optional[Dict[str, Any]]=None) -> Dict[str, Any]:
-    """
-    修复配置文件中的错误
-    
-    Args:
-        config (dict): 当前配置
-        config_default (dict): 默认配置，如果为None则自动加载
-        config_check (dict): 配置类型定义，如果为None则自动加载
-    
-    Returns:
-        dict: 修复后的配置
-    """
-    if config_default is None:
-        config_default = load_config_default()
-    
-    if config_check is None:
-        config_check = load_config_types()
-    
-    if config_default is None or config_check is None:
-        # 如果无法加载默认配置或类型定义，则返回原配置
-        LogManager().log("警告: 无法加载默认配置或配置类型定义，跳过配置修复")
-        return config
-    
-    def _fix_recursive(current_config: Dict[str, Any], current_default: Dict[str, Any], current_check: Dict[str, Any], path: str=""):
-        """
-        递归修复配置
-        """
-        if not isinstance(current_check, dict):
-            return
-        
-        for key, expected_type in current_check.items():
-            current_path = f"{path}.{key}" if path else key
-            
-            # 如果键不存在于当前配置中，从默认配置复制
-            if key not in current_config:
-                if key in current_default:
-                    current_config[key] = current_default[key]
-                    LogManager().log(f"修复配置: 添加缺失的键 '{current_path}' = {current_default[key]}")
-                else:
-                    # 默认配置中也没有此键，根据类型设置默认值
-                    if expected_type == "null":
-                        current_config[key] = None
-                    elif expected_type == "str":
-                        current_config[key] = ""
-                    elif expected_type == "int":
-                        current_config[key] = 0
-                    elif expected_type == "bool":
-                        current_config[key] = False
-                    elif expected_type == "dict":
-                        current_config[key] = {}
-                    elif isinstance(expected_type, list):
-                        current_config[key] = expected_type[0] if expected_type else None
-                    LogManager().log(f"修复配置: 添加缺失的键 '{current_path}' 并设置默认值")
-                continue
-                
-            value = current_config[key]
-            
-            # 如果期望类型是字典但实际值是None，则用空字典替换
-            if isinstance(expected_type, dict) and value is None:
-                current_config[key] = {}
-                value = current_config[key]
-                LogManager().log(f"修复配置: 将None值的键 '{current_path}' 修正为空字典")
-            
-            # 如果期望类型是字典且实际值也是字典，则递归检查
-            if isinstance(expected_type, dict) and isinstance(value, dict):
-                # 确保默认配置也有对应的键
-                if key not in current_default or not isinstance(current_default[key], dict):
-                    current_default[key] = {}
-                _fix_recursive(value, current_default[key], expected_type, current_path)
-            else:
-                # 检查基本类型
-                if not validate_config_value(value, expected_type):
-                    # 类型不匹配，尝试从默认配置获取正确的值
-                    if key in current_default and validate_config_value(current_default[key], expected_type):
-                        current_config[key] = current_default[key]
-                        LogManager().log(f"修复配置: 修正键 '{current_path}' 的值为默认值 {current_default[key]}")
-                    else:
-                        # 默认配置中也没有有效值，根据类型设置默认值
-                        if expected_type == "null":
-                            current_config[key] = None
-                        elif expected_type == "str":
-                            current_config[key] = ""
-                        elif expected_type == "int":
-                            current_config[key] = 0
-                        elif expected_type == "bool":
-                            current_config[key] = False
-                        elif expected_type == "dict":
-                            current_config[key] = {}
-                        elif isinstance(expected_type, list):
-                            current_config[key] = expected_type[0] if expected_type else None
-                        LogManager().log(f"修复配置: 重置键 '{current_path}' 为类型相关的默认值")
-    
-    # 创建配置副本以避免修改原始配置
-    fixed_config = json.loads(json.dumps(config))
-    _fix_recursive(fixed_config, config_default, config_check)
-    return fixed_config
+def fix_config(config: Dict[str, Any] = None, config_default: Optional[Dict[str, Any]]=None, config_check: Optional[Dict[str, Any]]=None) -> Dict[str, Any]:
+    """修复配置文件中的错误（委托给 ConfigManager）"""
+    ConfigManager().fix()
+    return json.loads(json.dumps(ConfigManager().raw))

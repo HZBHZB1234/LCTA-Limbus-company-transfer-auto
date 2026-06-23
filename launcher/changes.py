@@ -1,6 +1,7 @@
 import jsonpatch
 import shlex
 from globalManagers.LogManager import LogManager
+_log_manager = LogManager()
 from pathlib import Path
 import json
 import shutil
@@ -15,7 +16,7 @@ def apply_patch(mod_path, _path):
         # Apply the patch to the corresponding language file
         for _lang_file in patch_data.get('patchs', {}):
             lang_file = lang_path / _lang_file
-            LogManager().log("Patching %s", lang_file)
+            _log_manager.log("Patching %s", lang_file)
             shutil.copyfile(lang_file, lang_file.with_suffix(".bak"))
             if lang_file.exists():
                 with open(lang_file, "r") as f:

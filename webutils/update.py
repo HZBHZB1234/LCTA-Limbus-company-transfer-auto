@@ -9,6 +9,7 @@ from contextlib import suppress
 import webFunc.GithubDownload as GithubDownload
 from webFunc.GithubDownload import ReleaseInfo, ReleaseAsset, GitHubReleaseFetcher
 from globalManagers.LogManager import LogManager
+_log_manager = LogManager()
 from .functions import download_with_github
 
 APPLICATION_PATH = Path(__file__).parent.parent
@@ -47,8 +48,8 @@ class Updater:
                 return release_info.tag_name
             return None
         except Exception as e:
-            LogManager().log(f"获取最新版本失败: {e}")
-            LogManager().log_modal_process(f"获取最新版本失败: {e}", self.modal_id)
+            _log_manager.log(f"获取最新版本失败: {e}")
+            _log_manager.log_modal_process(f"获取最新版本失败: {e}", self.modal_id)
             return None
     
     def compare_versions(self, current_version: str, latest_version: str) -> bool:
@@ -103,8 +104,8 @@ class Updater:
         """根据新的requirements.txt安装依赖"""
         requirements_path = source_dir / "requirements.txt"
         if not os.path.exists(requirements_path):
-            LogManager().log("未找到requirements.txt文件")
-            LogManager().log_modal_process("未找到requirements.txt文件", self.modal_id)
+            _log_manager.log("未找到requirements.txt文件")
+            _log_manager.log_modal_process("未找到requirements.txt文件", self.modal_id)
             return False
         try:
             with open(APPLICATION_PATH / "requirements.txt", 'r', encoding='utf-8') as file:
@@ -115,33 +116,33 @@ class Updater:
 
             for i in set(requirements_new) - set(requirements_old):
                 try:
-                    LogManager().log(f"执行安装 {i}")
-                    LogManager().log_modal_process(f"执行安装 {i}", self.modal_id)
+                    _log_manager.log(f"执行安装 {i}")
+                    _log_manager.log_modal_process(f"执行安装 {i}", self.modal_id)
                     subprocess.check_call([sys.executable, "-m", "pip", "install", i])
                 except subprocess.CalledProcessError as e:
-                    LogManager().log(f"安装依赖错误: {e}")
-                    LogManager().log_modal_process(f"安装依赖错误: {e}", self.modal_id)
-                    LogManager().log(f"退出码: {e.returncode}，错误输出{e.stderr}")
-                    LogManager().log_modal_process(f"退出码: {e.returncode}，错误输出{e.stderr}", self.modal_id)
+                    _log_manager.log(f"安装依赖错误: {e}")
+                    _log_manager.log_modal_process(f"安装依赖错误: {e}", self.modal_id)
+                    _log_manager.log(f"退出码: {e.returncode}，错误输出{e.stderr}")
+                    _log_manager.log_modal_process(f"退出码: {e.returncode}，错误输出{e.stderr}", self.modal_id)
 
             if not self.delete_old_files:
                 return True
             
             for i in set(requirements_old) - set(requirements_new):
                 try:
-                    LogManager().log(f"执行卸载 {i}")
-                    LogManager().log_modal_process(f"执行卸载 {i}", self.modal_id)
+                    _log_manager.log(f"执行卸载 {i}")
+                    _log_manager.log_modal_process(f"执行卸载 {i}", self.modal_id)
                     subprocess.check_call([sys.executable, "-m", "pip", "uninstall", i, "-y"])
                 except subprocess.CalledProcessError as e:
-                    LogManager().log(f"卸载依赖错误: {e}")
-                    LogManager().log_modal_process(f"卸载依赖错误: {e}", self.modal_id)
-                    LogManager().log(f"退出码: {e.returncode}，错误输出{e.stderr}")
-                    LogManager().log_modal_process(f"退出码: {e.returncode}，错误输出{e.stderr}", self.modal_id)
+                    _log_manager.log(f"卸载依赖错误: {e}")
+                    _log_manager.log_modal_process(f"卸载依赖错误: {e}", self.modal_id)
+                    _log_manager.log(f"退出码: {e.returncode}，错误输出{e.stderr}")
+                    _log_manager.log_modal_process(f"退出码: {e.returncode}，错误输出{e.stderr}", self.modal_id)
                 return True
         except Exception as e:
-            LogManager().log(f"安装依赖失败: {e}")
-            LogManager().log_modal_process(f"安装依赖失败: {e}", self.modal_id)
-            LogManager().log_error(e)
+            _log_manager.log(f"安装依赖失败: {e}")
+            _log_manager.log_modal_process(f"安装依赖失败: {e}", self.modal_id)
+            _log_manager.log_error(e)
             return False
     
     def update_files(self, source_dir: Path) -> bool:
@@ -150,34 +151,34 @@ class Updater:
             for item in APPLICATION_PATH.iterdir():
                 if item.is_file():
                     item.unlink()
-                    LogManager().log(f"删除文件 {item.name}")
-                    LogManager().log_modal_process(f"删除文件 {item.name}", self.modal_id)
+                    _log_manager.log(f"删除文件 {item.name}")
+                    _log_manager.log_modal_process(f"删除文件 {item.name}", self.modal_id)
                 elif item.is_dir() and not item.name == 'venv':
                     shutil.rmtree(item)
-                    LogManager().log(f"删除目录 {item.name}")
-                    LogManager().log_modal_process(f"删除目录 {item.name}", self.modal_id)
+                    _log_manager.log(f"删除目录 {item.name}")
+                    _log_manager.log_modal_process(f"删除目录 {item.name}", self.modal_id)
                     
             for item in source_dir.iterdir():
                 if item.is_file():
                     shutil.copy(item, APPLICATION_PATH)
-                    LogManager().log(f"复制文件 {item.name}")
-                    LogManager().log_modal_process(f"复制文件 {item.name}", self.modal_id)
+                    _log_manager.log(f"复制文件 {item.name}")
+                    _log_manager.log_modal_process(f"复制文件 {item.name}", self.modal_id)
                 elif item.is_dir():
                     shutil.copytree(item, APPLICATION_PATH / item.name)
-                    LogManager().log(f"复制目录 {item.name}")
-                    LogManager().log_modal_process(f"复制目录 {item.name}", self.modal_id)
+                    _log_manager.log(f"复制目录 {item.name}")
+                    _log_manager.log_modal_process(f"复制目录 {item.name}", self.modal_id)
             return True
         except Exception as e:
-            LogManager().log(f"更新文件失败: {e}")
-            LogManager().log_modal_process(f"更新文件失败: {e}", self.modal_id)
-            LogManager().log_error(e)
+            _log_manager.log(f"更新文件失败: {e}")
+            _log_manager.log_modal_process(f"更新文件失败: {e}", self.modal_id)
+            _log_manager.log_error(e)
             return False
     
     def check_and_update(self, current_version: str, _cache_dir: str = "updateCache") -> bool:
         """检查并执行更新"""
-        LogManager().log("开始检查更新...")
-        LogManager().log_modal_process("开始检查更新...", self.modal_id)
-        LogManager().log_modal_status("正在检查更新...", self.modal_id)
+        _log_manager.log("开始检查更新...")
+        _log_manager.log_modal_process("开始检查更新...", self.modal_id)
+        _log_manager.log_modal_status("正在检查更新...", self.modal_id)
         
         cache_dir = Path(_cache_dir)
         
@@ -186,9 +187,9 @@ class Updater:
             if cache_dir.exists():
                 shutil.rmtree(str(cache_dir))
         except Exception as e:
-            LogManager().log(f"清理缓存目录失败: {e}")
-            LogManager().log_modal_process(f"清理缓存目录失败: {e}", self.modal_id)
-            LogManager().log_error(e)
+            _log_manager.log(f"清理缓存目录失败: {e}")
+            _log_manager.log_modal_process(f"清理缓存目录失败: {e}", self.modal_id)
+            _log_manager.log_error(e)
         
         # 根据only_stable参数决定获取最新版本还是稳定版本
         if self.only_stable:
@@ -201,34 +202,34 @@ class Updater:
             )
             
         if not release_info:
-            LogManager().log("获取最新版本信息失败")
-            LogManager().log_modal_process("获取最新版本信息失败", self.modal_id)
+            _log_manager.log("获取最新版本信息失败")
+            _log_manager.log_modal_process("获取最新版本信息失败", self.modal_id)
             return False
         
         latest_version = release_info.tag_name
-        LogManager().log(f"当前版本: {current_version}, 最新版本: {latest_version}")
-        LogManager().log_modal_process(f"当前版本: {current_version}, 最新版本: {latest_version}", self.modal_id)
+        _log_manager.log(f"当前版本: {current_version}, 最新版本: {latest_version}")
+        _log_manager.log_modal_process(f"当前版本: {current_version}, 最新版本: {latest_version}", self.modal_id)
         
         # 比较版本
         if not self.compare_versions(current_version, latest_version):
-            LogManager().log("当前已是最新版本")
-            LogManager().log_modal_process("当前已是最新版本", self.modal_id)
+            _log_manager.log("当前已是最新版本")
+            _log_manager.log_modal_process("当前已是最新版本", self.modal_id)
             return False
         
-        LogManager().log("发现新版本，开始更新...")
-        LogManager().log_modal_process("发现新版本，开始更新...", self.modal_id)
-        LogManager().log_modal_status("正在更新...", self.modal_id)
-        LogManager().log(f"更新内容: {release_info.name}")
-        LogManager().log_modal_process(f"更新内容: {release_info.name}", self.modal_id)
+        _log_manager.log("发现新版本，开始更新...")
+        _log_manager.log_modal_process("发现新版本，开始更新...", self.modal_id)
+        _log_manager.log_modal_status("正在更新...", self.modal_id)
+        _log_manager.log(f"更新内容: {release_info.name}")
+        _log_manager.log_modal_process(f"更新内容: {release_info.name}", self.modal_id)
         if release_info.body:
-            LogManager().log(f"更新详情: {release_info.body[:200]}...")
-            LogManager().log_modal_process(f"更新详情: {release_info.body[:200]}...", self.modal_id)
+            _log_manager.log(f"更新详情: {release_info.body[:200]}...")
+            _log_manager.log_modal_process(f"更新详情: {release_info.body[:200]}...", self.modal_id)
         
         # 下载最新版本
         zip_path = self.download_latest_release(cache_dir, release_info)
         if not zip_path:
-            LogManager().log("下载最新版本失败")
-            LogManager().log_modal_process("下载最新版本失败", self.modal_id)
+            _log_manager.log("下载最新版本失败")
+            _log_manager.log_modal_process("下载最新版本失败", self.modal_id)
             return False
         
         # 解压文件
@@ -237,32 +238,32 @@ class Updater:
             with zipfile.ZipFile(zip_path, "r") as zip_file:
                 zip_file.extractall(extract_to)
         except Exception as e:
-            LogManager().log(f"解压更新包失败: {e}")
-            LogManager().log_modal_process(f"解压更新包失败: {e}", self.modal_id)
-            LogManager().log_error(e)
+            _log_manager.log(f"解压更新包失败: {e}")
+            _log_manager.log_modal_process(f"解压更新包失败: {e}", self.modal_id)
+            _log_manager.log_error(e)
             return False
         
         # 安装新依赖
-        LogManager().log("正在检查依赖更新...")
-        LogManager().log_modal_process("正在检查依赖更新...", self.modal_id)
-        LogManager().log_modal_status("正在安装新依赖...", self.modal_id)
+        _log_manager.log("正在检查依赖更新...")
+        _log_manager.log_modal_process("正在检查依赖更新...", self.modal_id)
+        _log_manager.log_modal_status("正在安装新依赖...", self.modal_id)
         if not self.install_requirements(extract_to):
-            LogManager().log("安装新依赖失败")
-            LogManager().log_modal_process("安装新依赖失败", self.modal_id)
+            _log_manager.log("安装新依赖失败")
+            _log_manager.log_modal_process("安装新依赖失败", self.modal_id)
             # 继续执行，依赖更新不是致命错误
         
         # 更新文件
-        LogManager().log("正在更新文件...")
-        LogManager().log_modal_process("正在更新文件...", self.modal_id)
-        LogManager().log_modal_status("正在替换文件...", self.modal_id)
+        _log_manager.log("正在更新文件...")
+        _log_manager.log_modal_process("正在更新文件...", self.modal_id)
+        _log_manager.log_modal_status("正在替换文件...", self.modal_id)
         if not self.update_files(extract_to):
-            LogManager().log("更新文件失败")
-            LogManager().log_modal_process("更新文件失败", self.modal_id)
+            _log_manager.log("更新文件失败")
+            _log_manager.log_modal_process("更新文件失败", self.modal_id)
             return False
         
-        LogManager().log("更新完成！")
-        LogManager().log_modal_process("更新完成！", self.modal_id)
-        LogManager().log_modal_status("更新完成！", self.modal_id)
+        _log_manager.log("更新完成！")
+        _log_manager.log_modal_process("更新完成！", self.modal_id)
+        _log_manager.log_modal_status("更新完成！", self.modal_id)
         
         # 清理缓存
         try:
@@ -308,8 +309,8 @@ class Updater:
                 
             if not release_info:
                 raise Exception("无法获取release信息")
-            LogManager().log(f"获取最新版本信息成功: {release_info.tag_name}")
-            LogManager().log_modal_process(f"获取最新版本信息成功: {release_info.tag_name}", self.modal_id)
+            _log_manager.log(f"获取最新版本信息成功: {release_info.tag_name}")
+            _log_manager.log_modal_process(f"获取最新版本信息成功: {release_info.tag_name}", self.modal_id)
             
             latest_version = release_info.tag_name
             has_update = self.compare_versions(current_version, latest_version)
@@ -340,7 +341,7 @@ class Updater:
                 "asset_count": len(release_info.assets)
             }
         except Exception as e:
-            LogManager().log(f"检查更新失败: {e}")
+            _log_manager.log(f"检查更新失败: {e}")
             # 返回默认值
             return {
                 "has_update": False,
@@ -367,7 +368,7 @@ def run_update_check(only_stable: bool = True, modal_id: str = ''):
                       only_stable=only_stable, modal_id=modal_id)
     current_version = get_app_version()
     if not current_version:
-        LogManager().log("无法获取当前版本信息，请检查版本文件或配置文件")
+        _log_manager.log("无法获取当前版本信息，请检查版本文件或配置文件")
     return updater.check_and_update(current_version)
 
 

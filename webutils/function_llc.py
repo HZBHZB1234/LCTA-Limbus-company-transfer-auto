@@ -1,4 +1,5 @@
 from globalManagers.LogManager import LogManager
+_log_manager = LogManager()
 import tempfile
 from .functions import *
 import shutil
@@ -29,48 +30,48 @@ def _process_llc_package(temp_dir, modal_id, save_path_text, save_path_font,
                          final_name, use_cache, cache_path, dump_default):
     """处理已下载的 LLC 包：解压/保存、字体处理、重新打包"""
     if dump_default:
-        LogManager().log("dump_default")
-        LogManager().log_modal_process("检测到设置：保存原文件", modal_id)
+        _log_manager.log("dump_default")
+        _log_manager.log_modal_process("检测到设置：保存原文件", modal_id)
         shutil.copy2(save_path_text, final_name)
-        LogManager().log_modal_process("保存文本文件成功", modal_id)
+        _log_manager.log_modal_process("保存文本文件成功", modal_id)
         if not use_cache:
             shutil.copy2(save_path_font, "LLCCN-Font.7z")
-            LogManager().log_modal_process("保存字体文件成功", modal_id)
-        LogManager().update_modal_progress(100, "文件保存完成", modal_id)
+            _log_manager.log_modal_process("保存字体文件成功", modal_id)
+        _log_manager.update_modal_progress(100, "文件保存完成", modal_id)
     else:
-        LogManager().log("make_zip")
-        LogManager().log_modal_process("开始解压文件", modal_id)
-        LogManager().log_modal_status("正在解压文件", modal_id)
+        _log_manager.log("make_zip")
+        _log_manager.log_modal_process("开始解压文件", modal_id)
+        _log_manager.log_modal_status("正在解压文件", modal_id)
         decompress_by_extension(save_path_text, temp_dir)
-        LogManager().update_modal_progress(80, "成功解压文本文件", modal_id)
-        LogManager().log_modal_process("成功解压文本文件", modal_id)
-        LogManager().check_running(modal_id)
+        _log_manager.update_modal_progress(80, "成功解压文本文件", modal_id)
+        _log_manager.log_modal_process("成功解压文本文件", modal_id)
+        _log_manager.check_running(modal_id)
         if not use_cache:
             decompress_by_extension(save_path_font, temp_dir)
-            LogManager().update_modal_progress(90, "成功解压字体文件", modal_id)
-            LogManager().log_modal_process("成功解压字体文件", modal_id)
-            LogManager().check_running(modal_id)
+            _log_manager.update_modal_progress(90, "成功解压字体文件", modal_id)
+            _log_manager.log_modal_process("成功解压字体文件", modal_id)
+            _log_manager.check_running(modal_id)
         else:
             font_path = f"{temp_dir}\\LimbusCompany_Data\\lang\\LLC_zh-CN\\Font\\Context"
             if not os.path.exists(font_path):
                 os.makedirs(font_path)
             font_path = f"{font_path}\\{Path(cache_path).name}"
             shutil.copy2(cache_path, font_path)
-        LogManager().log_modal_status("正在打包文件", modal_id)
+        _log_manager.log_modal_status("正在打包文件", modal_id)
         final_zip_path = final_name.replace(".7z", ".zip")
-        LogManager().log_modal_process("开始重新打包文件", modal_id)
+        _log_manager.log_modal_process("开始重新打包文件", modal_id)
         lang_path = f'{temp_dir}\\LimbusCompany_Data\\Lang\\LLC_zh-CN'
         if not zip_folder(lang_path, final_zip_path):
-            LogManager().log_modal_process("打包文件时出现错误", modal_id)
+            _log_manager.log_modal_process("打包文件时出现错误", modal_id)
             raise
-        LogManager().update_modal_progress(100, "成功打包文件", modal_id)
-        LogManager().log_modal_process("成功打包文件", modal_id)
-        LogManager().log_modal_status("全部操作完成", modal_id)
+        _log_manager.update_modal_progress(100, "成功打包文件", modal_id)
+        _log_manager.log_modal_process("成功打包文件", modal_id)
+        _log_manager.log_modal_status("全部操作完成", modal_id)
         return final_zip_path
 
 
 def function_llc_main(modal_id, **kwargs):
-    LogManager().log_modal_process("成功链接后端", modal_id)
+    _log_manager.log_modal_process("成功链接后端", modal_id)
 
     # 提前获取常用参数
     from_ = kwargs.get('download_source', 'github')  # 可选值: github, api
@@ -84,13 +85,13 @@ def function_llc_main(modal_id, **kwargs):
         raise Exception("缓存文件不存在")
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        LogManager().log_modal_process("开始下载翻译文件", modal_id)
-        LogManager().log_modal_status("正在初始化链接", modal_id)
-        LogManager().log(f'配置信息: {str(kwargs)}')
+        _log_manager.log_modal_process("开始下载翻译文件", modal_id)
+        _log_manager.log_modal_status("正在初始化链接", modal_id)
+        _log_manager.log(f'配置信息: {str(kwargs)}')
 
         # 根据from_参数选择不同的下载源
         if from_ == 'api':
-            LogManager().log_modal_process("使用API模式下载", modal_id)
+            _log_manager.log_modal_process("使用API模式下载", modal_id)
             _download_from_api(temp_dir, modal_id, zip_type, from_proxy,
                                dump_default, use_cache, cache_path)
         else:
@@ -98,8 +99,8 @@ def function_llc_main(modal_id, **kwargs):
             GithubFunc.GithubRequester.update_config(use_proxy=from_proxy)
             GithubDownloader = GithubFunc.GithubRequester
 
-            LogManager().log_modal_process("开始请求版本", modal_id)
-            LogManager().log_modal_status("正在请求版本", modal_id)
+            _log_manager.log_modal_process("开始请求版本", modal_id)
+            _log_manager.log_modal_status("正在请求版本", modal_id)
 
             last_ver = GithubDownloader.get_latest_release(
                 "LocalizeLimbusCompany",
@@ -107,50 +108,50 @@ def function_llc_main(modal_id, **kwargs):
             )
             last_zip = last_ver.get_assets_by_extension(".7z") if zip_type == "seven" else last_ver.get_assets_by_extension(".zip")
             if not last_zip:
-                LogManager().log_modal_process("未找到合适的版本文件", modal_id)
+                _log_manager.log_modal_process("未找到合适的版本文件", modal_id)
                 raise Exception("未找到合适的版本文件")
 
             last_zip = last_zip[0]
-            LogManager().check_running(modal_id)
+            _log_manager.check_running(modal_id)
 
-            LogManager().log_modal_process("版本请求完毕", modal_id)
-            LogManager().update_modal_progress(20, "版本请求完毕", modal_id)
+            _log_manager.log_modal_process("版本请求完毕", modal_id)
+            _log_manager.update_modal_progress(20, "版本请求完毕", modal_id)
 
             save_path_text = f"{temp_dir}/{last_zip.name}"
-            LogManager().log(f"下载地址获取完毕 {last_zip.download_url}")
+            _log_manager.log(f"下载地址获取完毕 {last_zip.download_url}")
 
-            LogManager().log_modal_process("开始下载文本文件", modal_id)
-            LogManager().log_modal_status("正在下载文本文件", modal_id)
+            _log_manager.log_modal_process("开始下载文本文件", modal_id)
+            _log_manager.log_modal_status("正在下载文本文件", modal_id)
 
             if not download_with_github(
                 last_zip, save_path_text,
                 chunk_size=1024 * 100,
                 modal_id=modal_id, progress_=[20, 50]
             ):
-                LogManager().log_modal_process("下载文本文件时出现错误", modal_id)
+                _log_manager.log_modal_process("下载文本文件时出现错误", modal_id)
                 raise
 
-            LogManager().log("文本文件下载完成")
-            LogManager().log_modal_process("文本文件下载完成")
+            _log_manager.log("文本文件下载完成")
+            _log_manager.log_modal_process("文本文件下载完成")
 
             save_path_font = f"{temp_dir}/LLCCN-Font.7z"
 
             if not use_cache:
-                LogManager().log_modal_process("开始下载字体文件", modal_id)
-                LogManager().log_modal_status("正在下载字体文件", modal_id)
+                _log_manager.log_modal_process("开始下载字体文件", modal_id)
+                _log_manager.log_modal_status("正在下载字体文件", modal_id)
 
                 if not download_with_github(
                     font_assets_seven, save_path_font,
                     chunk_size=1024 * 100,
                     modal_id=modal_id, progress_=[50, 70]
                 ):
-                    LogManager().log_modal_process("下载字体文件时出现错误", modal_id)
+                    _log_manager.log_modal_process("下载字体文件时出现错误", modal_id)
                     raise
 
-                LogManager().log("字体文件下载完成")
-                LogManager().log_modal_process("字体文件下载完成", modal_id)
+                _log_manager.log("字体文件下载完成")
+                _log_manager.log_modal_process("字体文件下载完成", modal_id)
 
-            LogManager().log_modal_status("保存文件", modal_id)
+            _log_manager.log_modal_status("保存文件", modal_id)
 
             result = _process_llc_package(
                 temp_dir, modal_id,
@@ -160,7 +161,7 @@ def function_llc_main(modal_id, **kwargs):
             if result:
                 return result
 
-        LogManager().log_modal_status("全部操作完成", modal_id)
+        _log_manager.log_modal_status("全部操作完成", modal_id)
 
 
 def _download_from_api(temp_dir, modal_id, zip_type,
@@ -173,7 +174,7 @@ def _download_from_api(temp_dir, modal_id, zip_type,
     try:
         api_data = json.loads(note_.note_content)
     except json.JSONDecodeError:
-        LogManager().log_modal_process("API数据解析失败", modal_id)
+        _log_manager.log_modal_process("API数据解析失败", modal_id)
         raise Exception("API数据解析失败")
     
     # 获取相应的下载链接
@@ -183,54 +184,54 @@ def _download_from_api(temp_dir, modal_id, zip_type,
         download_url = api_data.get('llc_download_mirror', {}).get('zip', {}).get('direct')
     
     if not download_url:
-        LogManager().log_modal_process("未能从API获取有效的下载链接", modal_id)
+        _log_manager.log_modal_process("未能从API获取有效的下载链接", modal_id)
         raise Exception("未能从API获取有效的下载链接")
     
-    LogManager().log_modal_process("开始请求版本", modal_id)
-    LogManager().log_modal_status("正在请求版本", modal_id)
+    _log_manager.log_modal_process("开始请求版本", modal_id)
+    _log_manager.log_modal_status("正在请求版本", modal_id)
     
     version = api_data.get('llc_version', 'unknown')
-    LogManager().check_running(modal_id)
-    LogManager().log_modal_process(f"版本请求完毕: {version}", modal_id)
-    LogManager().update_modal_progress(20, "版本请求完毕", modal_id)
+    _log_manager.check_running(modal_id)
+    _log_manager.log_modal_process(f"版本请求完毕: {version}", modal_id)
+    _log_manager.update_modal_progress(20, "版本请求完毕", modal_id)
     
     # 确定文件名
     file_name = f"LimbusLocalize_{version}.7z" if zip_type == "seven" else f"LimbusLocalize_{version}.zip"
     save_path_text = f"{temp_dir}/{file_name}"
-    LogManager().log(f"下载地址获取完毕 {download_url}")
+    _log_manager.log(f"下载地址获取完毕 {download_url}")
 
-    LogManager().log_modal_process("开始下载文本文件", modal_id)
-    LogManager().log_modal_status("正在下载文本文件", modal_id)
+    _log_manager.log_modal_process("开始下载文本文件", modal_id)
+    _log_manager.log_modal_status("正在下载文本文件", modal_id)
 
     if not download_with(
         download_url, save_path_text,
         chunk_size=1024 * 100,
         modal_id=modal_id, progress_=[20, 50]
     ):
-        LogManager().log_modal_process("下载文本文件时出现错误", modal_id)
+        _log_manager.log_modal_process("下载文本文件时出现错误", modal_id)
         raise
 
-    LogManager().log("文本文件下载完成")
-    LogManager().log_modal_process("文本文件下载完成")
+    _log_manager.log("文本文件下载完成")
+    _log_manager.log_modal_process("文本文件下载完成")
 
     save_path_font = f"{temp_dir}/LLCCN-Font.7z"
     
     if not use_cache:
-        LogManager().log_modal_process("开始下载字体文件", modal_id)
-        LogManager().log_modal_status("正在下载字体文件", modal_id)
+        _log_manager.log_modal_process("开始下载字体文件", modal_id)
+        _log_manager.log_modal_status("正在下载字体文件", modal_id)
 
         if not download_with_github(
             font_assets_seven, save_path_font,
             chunk_size=1024 * 100,
             modal_id=modal_id, progress_=[50, 70]
         ):
-            LogManager().log_modal_process("下载字体文件时出现错误", modal_id)
+            _log_manager.log_modal_process("下载字体文件时出现错误", modal_id)
             raise
         
-        LogManager().log("字体文件下载完成")
-        LogManager().log_modal_process("字体文件下载完成", modal_id)
+        _log_manager.log("字体文件下载完成")
+        _log_manager.log_modal_process("字体文件下载完成", modal_id)
     
-    LogManager().log_modal_status("保存文件", modal_id)
+    _log_manager.log_modal_status("保存文件", modal_id)
 
     result = _process_llc_package(
         temp_dir, modal_id,

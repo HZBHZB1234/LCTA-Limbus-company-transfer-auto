@@ -223,6 +223,12 @@ class ConfigManager {
             "llc-path": "ui_default.translator.llc_path",
             "has-prefix": "ui_default.translator.has_prefix",
             "dump-translation": "ui_default.translator.dump",
+            "max-workers": "ui_default.translator.max_workers",
+            "enable-concurrent": "ui_default.translator.enable_concurrent",
+            "translation-mode": "ui_default.translator.translation_mode",
+            "enable-self-check": "ui_default.translator.enable_self_check",
+            "disambiguation-mode": "ui_default.translator.disambiguation_mode",
+            "min-confidence": "ui_default.translator.min_confidence",
             
             // 安装设置
             'install-package-directory': 'ui_default.install.package_directory',

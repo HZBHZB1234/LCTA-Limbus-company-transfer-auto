@@ -385,8 +385,71 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="setting-card">
+                    <h3 class="setting-title">高级管线配置</h3>
+
+                    <div class="form-group">
+                        <label for="max-workers">并发线程数:</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-hashtag"></i>
+                            <input type="number" id="max-workers" placeholder="4" min="1" max="16">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="enable-concurrent" checked>
+                            <span class="checkmark"></span>
+                            启用并发处理
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="translation-mode">翻译模式:</label>
+                        <div class="select-wrapper">
+                            <select id="translation-mode">
+                                <option value="multi_stage">多阶段翻译</option>
+                                <option value="single_stage">单阶段翻译</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="enable-self-check">
+                            <span class="checkmark"></span>
+                            启用翻译自检
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="disambiguation-mode">消歧模式:</label>
+                        <div class="select-wrapper">
+                            <select id="disambiguation-mode">
+                                <option value="hybrid">混合模式（推荐）</option>
+                                <option value="similarity">相似度匹配</option>
+                                <option value="llm">LLM消歧</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="min-confidence">最低匹配置信度:</label>
+                        <div class="select-wrapper">
+                            <select id="min-confidence">
+                                <option value="medium">中（推荐）</option>
+                                <option value="high">高</option>
+                                <option value="low">低</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                </div>
             </div>
-            
+
             <div class="action-area">
                 <button class="primary-btn" onclick="startTranslation()">
                     <i class="fas fa-play"></i>

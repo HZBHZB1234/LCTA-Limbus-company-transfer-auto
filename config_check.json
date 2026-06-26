@@ -1,6 +1,6 @@
 {
     "ui_default": {
-        "translator":{
+        "translator": {
             "translator": "str",
             "fallback": "bool",
             "is_text": "bool",
@@ -16,9 +16,15 @@
             "jp_path": "str",
             "llc_path": "str",
             "has_prefix": "bool",
-            "dump": "bool"
+            "dump": "bool",
+            "max_workers": "int",
+            "enable_concurrent": "bool",
+            "translation_mode": "str",
+            "enable_self_check": "bool",
+            "disambiguation_mode": "str",
+            "min_confidence": "str"
         },
-        "install":{
+        "install": {
             "package_directory": "str"
         },
         "zero": {
@@ -42,7 +48,7 @@
             "clean_notice": "bool",
             "clean_mods": "bool"
         },
-        "api_config": { 
+        "api_config": {
             "key": "str"
         },
         "bubble": {
@@ -57,7 +63,7 @@
             "join_char": "str",
             "disable_space": "bool",
             "max_length": "str",
-            "min_length": "str",            
+            "min_length": "str",
             "output_type": "str"
         }
     },
@@ -110,7 +116,7 @@
             "fancy": "bool"
         },
         "last_install": {
-            "llc" : "str",
+            "llc": "str",
             "ourplay": "str",
             "machine": "str"
         }

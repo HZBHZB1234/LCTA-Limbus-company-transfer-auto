@@ -1,6 +1,6 @@
 {
-    "ui_default":{
-        "translator":{
+    "ui_default": {
+        "translator": {
             "translator": "LLM通用翻译服务",
             "fallback": true,
             "is_text": false,
@@ -11,6 +11,12 @@
             "enable_role": true,
             "enable_skill": true,
             "enable_dev_settings": false,
+            "max_workers": 4,
+            "enable_concurrent": true,
+            "translation_mode": "multi_stage",
+            "enable_self_check": false,
+            "disambiguation_mode": "hybrid",
+            "min_confidence": "medium",
             "en_path": "",
             "kr_path": "",
             "jp_path": "",
@@ -18,7 +24,7 @@
             "has_prefix": true,
             "dump": false
         },
-        "install":{
+        "install": {
             "package_directory": ""
         },
         "zero": {
@@ -32,7 +38,7 @@
             "use_proxy": true,
             "download_source": "github"
         },
-        "ourplay":{
+        "ourplay": {
             "font_option": "simplify",
             "check_hash": true,
             "use_api": false
@@ -45,20 +51,20 @@
         "manage": {
             "mod_path": ""
         },
-        "api_config": { 
+        "api_config": {
             "key": ""
         },
-        "clean":{
+        "clean": {
             "clean_progress": false,
             "clean_notice": false,
             "clean_mods": false
         },
-        "proper":{
-            "join_char":"|||",
-            "disable_space":false,
-            "max_length":"0",
-            "min_length":"0",
-            "output_type":"json"
+        "proper": {
+            "join_char": "|||",
+            "disable_space": false,
+            "max_length": "0",
+            "min_length": "0",
+            "output_type": "json"
         }
     },
     "elder": {
@@ -75,8 +81,8 @@
     "fancy_allow": "{\"技能文本美化(FL Like)\":true,\"气泡文本渐变(FL Like)\":true,\"EGO文本渐变(FL Like)\":false,\"EGO名称渐变(FL Like)\":true,\"技能名称渐变(FL Like)\":true}",
     "elder_list": "",
     "theme": "light",
-    "game_path":"",
-    "debug":false,
+    "game_path": "",
+    "debug": false,
     "auto_check_update": true,
     "delete_updating": true,
     "update_use_proxy": true,
@@ -99,18 +105,18 @@
             "use_proxy": true,
             "download_source": "github"
         },
-        "ourplay":{
+        "ourplay": {
             "font_option": "simplify",
             "use_api": true
         },
-        "work":{
+        "work": {
             "update": "LM-G",
             "mod": false,
             "bubble": false,
             "fancy": false
         },
         "last_install": {
-            "llc" : "0",
+            "llc": "0",
             "ourplay": "0",
             "machine": "0"
         }

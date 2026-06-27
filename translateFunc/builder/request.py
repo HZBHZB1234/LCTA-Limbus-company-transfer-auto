@@ -6,7 +6,10 @@ from __future__ import annotations
 from contextlib import suppress
 from copy import deepcopy
 import json
+import logging
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from translateFunc.enums import FileType
 from translateFunc.matcher.engine import MatcherEngine
@@ -44,8 +47,12 @@ class RequestBuilder:
 
     # ========== 构建 ==========
 
-    def build(self) -> dict:
-        """构建统一请求结构。返回完整请求字典。"""
+    def build(self, prompt_format: str = "xml_json") -> dict:
+        """构建统一请求结构。prompt_format 用于长度估算。
+
+        Args:
+            prompt_format: "xml_json" | "xml_xml" | "json_json"
+        """
         text_items: list[dict] = []
         all_proper_terms: dict[str, dict] = {}
         all_affects: dict[str, dict] = {}
@@ -142,24 +149,33 @@ class RequestBuilder:
             "text_blocks": text_items,
         }
 
-        self._split_by_length()
+        self._split_by_length(prompt_format)
         return self.unified_request
 
     # ========== 分割 ==========
 
-    def _split_by_length(self) -> None:
-        """将请求按 max_length 分割为多个部分。"""
+    def _split_by_length(self, prompt_format: str = "xml_json") -> None:
+        """将请求按 max_length 分割，使用格式感知长度估算。
+
+        对三种格式均取 max 估算，确保无论后续回退到何种格式都不超限。
+        """
         if self.unified_request is None:
             return
 
-        request_text = json.dumps(self.unified_request, indent=2, ensure_ascii=False)
-        if len(request_text) <= self.max_length:
+        all_formats = ["xml_json", "xml_xml", "json_json"]
+
+        def estimate(request_dict, fmt: str) -> int:
+            return len(self._get_request_text(request_dict, fmt))
+
+        # 不分割检查：对三种格式均验证不超限，确保后续格式回退安全
+        if all(estimate(self.unified_request, fmt) <= self.max_length for fmt in all_formats):
             self.split_requests = [self.unified_request]
             return
 
         text_blocks = self.unified_request.get("text_blocks", [])
         total_blocks = len(text_blocks)
 
+        # 尝试 2..min(10, total_blocks) 份分割
         for num_parts in range(2, min(10, total_blocks) + 1):
             part_size = total_blocks // num_parts
             remainder = total_blocks % num_parts
@@ -168,28 +184,46 @@ class RequestBuilder:
             for i in range(num_parts):
                 end_idx = start_idx + part_size + (1 if i < remainder else 0)
                 part = {
-                    "metadata": {**self.unified_request["metadata"], "total_text_blocks": end_idx - start_idx},
+                    "metadata": {**self.unified_request["metadata"],
+                                 "total_text_blocks": end_idx - start_idx},
                     "reference": self.unified_request["reference"],
                     "text_blocks": text_blocks[start_idx:end_idx],
                 }
                 parts.append(part)
                 start_idx = end_idx
 
-            if all(len(json.dumps(p, indent=2, ensure_ascii=False)) <= self.max_length for p in parts):
+            # 每个 part 对三种格式均不超限
+            if all(estimate(p, fmt) <= self.max_length
+                   for p in parts for fmt in all_formats):
                 self.split_requests = parts
                 return
 
-        # 回退：固定 5 份分割
+        # 回退：固定按 5 份分割
         parts = []
         part_size = max(1, total_blocks // 5)
         for i in range(0, total_blocks, part_size):
             end_idx = min(i + part_size, total_blocks)
             parts.append({
-                "metadata": {**self.unified_request["metadata"], "total_text_blocks": end_idx - i},
+                "metadata": {**self.unified_request["metadata"],
+                             "total_text_blocks": end_idx - i},
                 "reference": self.unified_request["reference"],
                 "text_blocks": text_blocks[i:end_idx],
             })
         self.split_requests = parts
+
+        # 回退后校验：检查各 part 是否仍超限，记录警告
+        over_limit_parts = []
+        for idx, p in enumerate(self.split_requests):
+            max_est = max(estimate(p, fmt) for fmt in all_formats)
+            if max_est > self.max_length:
+                over_limit_parts.append((idx, max_est))
+        if over_limit_parts:
+            details = "; ".join(f"part[{i}]={v}" for i, v in over_limit_parts)
+            logger.warning(
+                "回退分割后仍有 %d/%d 个 part 超限 (limit=%d): %s",
+                len(over_limit_parts), len(self.split_requests),
+                self.max_length, details,
+            )
 
     # ========== 输出 ==========
 

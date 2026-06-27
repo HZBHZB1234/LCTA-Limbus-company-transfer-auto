@@ -165,7 +165,7 @@ class FileProcessor:
         )
 
         if self._config.is_llm:
-            builder.build()
+            builder.build(prompt_format=self._config.prompt_format)
             stage_strategy = StageStrategy(self._config)
 
             # 确定格式回退链

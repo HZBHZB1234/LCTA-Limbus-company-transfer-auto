@@ -92,6 +92,9 @@ def extract_contexts_batch(
     if not terms:
         return {}
 
+    # 0. 去重，避免同一术语多次 add_pattern 导致重复匹配
+    terms = list(dict.fromkeys(terms))
+
     # 1. 构建包含所有术语的 AC 自动机
     ac = AcAutomaton()
     for term in terms:
@@ -138,6 +141,9 @@ def extract_contexts_batch(
                 hits = ac.search(kr_text)
                 for hit in hits:
                     term = hit.pattern
+                    # 过滤：文本值恰好等于术语时不应收录（无上下文意义）
+                    if len(kr_text) <= len(term):
+                        continue
                     if term_counts.get(term, 0) >= max_examples:
                         continue
 

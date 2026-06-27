@@ -30,7 +30,7 @@ from translateFunc.processor import FileProcessor
 from translateFunc.workers import WorkerPool
 from translateFunc.get_proper import fetch as fetch_proper
 from translateFunc.translate_request import TRANSLATOR_TRANS
-from translateFunc.translate_doc import JSON_SYSTEM_PROMPT, TEXT_SYSTEM_PROMPT
+# system_prompt 由调用方通过 _build_translator(system_prompt=...) 注入
 from translatekit import TranslationConfig as TKitConfig, TranslatorBase
 
 # 延迟导入 LogManager 以避免模块级别的循环导入
@@ -238,14 +238,20 @@ class TranslationPipeline:
         except Exception as e:
             self._on_log(f"加载状态效果失败: {e}")
 
-    def _build_translator(self) -> TranslatorBase:
-        """根据配置创建翻译器实例。"""
+    def _build_translator(self, system_prompt: str = "") -> TranslatorBase:
+        """根据配置创建翻译器实例。
+
+        Args:
+            system_prompt: 动态 system prompt。LLM 翻译时由 PromptFactory 生成后注入。
+                          为空时仅设置 response_format，不设置 system_prompt。
+        """
         translator_cls = TRANSLATOR_TRANS[self._config.translator_name]
         api_settings = dict(self._config.translator_api)
 
         if self._config.is_llm:
-            api_settings["system_prompt"] = TEXT_SYSTEM_PROMPT if self._config.is_text_format else JSON_SYSTEM_PROMPT
-            api_settings["response_format"] = "text" if self._config.is_text_format else "json_object"
+            if system_prompt:
+                api_settings["system_prompt"] = system_prompt
+            api_settings["response_format"] = "json_object"
 
         tkit_config = TKitConfig(
             api_setting=api_settings,

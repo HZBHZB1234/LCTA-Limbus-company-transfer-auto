@@ -42,6 +42,9 @@ class TranslateConfig:
     # --- 保存 ---
     save_result: bool = True
 
+    # --- LLM 思考模式 ---
+    enable_thinking: bool = False
+
     # --- 调试 ---
     debug_mode: bool = False
     dump: bool = False
@@ -92,7 +95,42 @@ class TranslateConfig:
             disambiguation_mode=configs.get("disambiguation_mode", "hybrid"),
             min_confidence=configs.get("min_confidence", "medium"),
             prompt_format=configs.get("prompt_format", "xml_json"),
+            enable_thinking=configs.get("enable_thinking", False),
         )
+
+
+def inject_thinking_mode(api_settings: dict, enable_thinking: bool) -> dict:
+    """根据 enable_thinking 配置向 api_settings 注入思考模式参数。
+
+    仅当 enable_thinking=True 时注入。
+    - DeepSeek: {"thinking": {"type": "enabled"}}（自定义格式）
+    - 其他提供商: {"reasoning_effort": "medium"}（OpenAI 通用格式）
+
+    Args:
+        api_settings: 翻译器 API 配置字典（会被浅拷贝，不会修改原字典）
+        enable_thinking: 是否启用思考模式
+
+    Returns:
+        修改后的 api_settings 浅拷贝
+    """
+    if not enable_thinking:
+        return api_settings
+
+    settings = dict(api_settings)  # 浅拷贝
+    base_url = settings.get("base_url", "")
+
+    # 确保 extra_body 存在
+    extra_body = dict(settings.get("extra_body", {}))
+
+    if "api.deepseek.com" in base_url:
+        # DeepSeek 思考模式：thinking.type = "enabled"
+        extra_body["thinking"] = {"type": "enabled"}
+    else:
+        # 其他提供商使用 OpenAI 通用格式：reasoning_effort
+        extra_body["reasoning_effort"] = "medium"
+
+    settings["extra_body"] = extra_body
+    return settings
 
 
 @dataclass

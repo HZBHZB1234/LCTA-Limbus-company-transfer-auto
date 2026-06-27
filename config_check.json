@@ -22,7 +22,8 @@
             "translation_mode": "str",
             "enable_self_check": "bool",
             "disambiguation_mode": "str",
-            "min_confidence": "str"
+            "min_confidence": "str",
+            "enable_thinking": "bool"
         },
         "install": {
             "package_directory": "str"

@@ -22,7 +22,8 @@
             "jp_path": "",
             "llc_path": "",
             "has_prefix": true,
-            "dump": false
+            "dump": false,
+            "enable_thinking": false
         },
         "install": {
             "package_directory": ""

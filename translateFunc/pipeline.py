@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 from translateFunc.config import (
     TranslateConfig, ProcessOutcome, PipelineSummary,
-    PathConfig, FilePathConfig,
+    PathConfig, FilePathConfig, inject_thinking_mode,
 )
 from translateFunc.enums import ProcessResult, FileType
 from translateFunc.matcher.engine import MatcherEngine
@@ -247,6 +247,7 @@ class TranslationPipeline:
         """
         translator_cls = TRANSLATOR_TRANS[self._config.translator_name]
         api_settings = dict(self._config.translator_api)
+        api_settings = inject_thinking_mode(api_settings, self._config.enable_thinking)
 
         if self._config.is_llm:
             if system_prompt:

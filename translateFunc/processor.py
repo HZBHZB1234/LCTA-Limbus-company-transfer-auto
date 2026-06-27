@@ -335,8 +335,11 @@ class FileProcessor:
         from translateFunc.translate_request import TRANSLATOR_TRANS
         from translatekit import TranslationConfig as TKitConfig
 
+        from translateFunc.config import inject_thinking_mode
+
         translator_cls = TRANSLATOR_TRANS[self._config.translator_name]
         api_settings = dict(self._config.translator_api)
+        api_settings = inject_thinking_mode(api_settings, self._config.enable_thinking)
         api_settings["system_prompt"] = system_prompt
         if prompt_format in ("xml_json", "json_json"):
             api_settings["response_format"] = "json_object"

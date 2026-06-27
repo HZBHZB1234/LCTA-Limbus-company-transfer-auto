@@ -227,6 +227,7 @@ class ConfigManager {
             "enable-concurrent": "ui_default.translator.enable_concurrent",
             "translation-mode": "ui_default.translator.translation_mode",
             "enable-self-check": "ui_default.translator.enable_self_check",
+            "enable-thinking": "ui_default.translator.enable_thinking",
             "disambiguation-mode": "ui_default.translator.disambiguation_mode",
             "min-confidence": "ui_default.translator.min_confidence",
             

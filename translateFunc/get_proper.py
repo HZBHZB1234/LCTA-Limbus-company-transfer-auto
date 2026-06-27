@@ -1,5 +1,4 @@
 import requests
-import sys
 
 def fetch(min_len:int = 0):
     data = []
@@ -11,8 +10,9 @@ def fetch(min_len:int = 0):
             break
         data.extend(r['results'])
     else:
-        print('可能有更多数据，请增加页数', file=sys.stderr)
-        exit(1)
+        raise RuntimeError(
+            "专有名词数据超过 10 页限制（8000 条），请增加 get_proper.py 中的页数"
+        )
         
     result =[
         {

@@ -59,34 +59,29 @@ class StageStrategy:
         self,
         candidate_terms: list[dict],
         text_blocks: list[dict],
+        prompt_format: str = "xml_json",
     ) -> str:
         """构建阶段 0 的 LLM 消歧提示词。"""
-        return self._prompt_factory.build_disambiguation_prompt(candidate_terms, text_blocks)
+        return self._prompt_factory.build_disambiguation_prompt(candidate_terms, text_blocks, prompt_format)
 
-    def parse_stage_0_result(self, result_text: str) -> list[dict]:
+    def parse_stage_0_result(self, result_text: str, prompt_format: str = "xml_json") -> list[dict]:
         """将 LLM 消歧结果解析为结构化数据。"""
-        try:
-            data = json.loads(result_text)
-            return data.get("disambiguations", [])
-        except json.JSONDecodeError:
-            return []
+        return self._prompt_factory.parse_response(result_text, stage=0, prompt_format=prompt_format)
 
     # ========== 阶段 1：主翻译 ==========
 
     def build_stage_1_prompt(
         self,
         file_type: FileType,
+        prompt_format: str = "xml_json",
         *,
-        skill_doc: str = "",
-        role_styles: list[dict] | None = None,
         examples: list[dict] | None = None,
     ) -> str:
         """构建主翻译系统提示词。"""
         return self._prompt_factory.build_system_prompt(
             file_type=file_type,
             stage=1,
-            skill_doc=skill_doc,
-            role_styles=role_styles,
+            prompt_format=prompt_format,
             examples=examples,
         )
 
@@ -102,18 +97,20 @@ class StageStrategy:
         parts.append(self._prompt_factory.render_text_blocks(text_blocks))
         return "\n".join(parts)
 
-    def parse_stage_1_result(self, result_text: str) -> list[dict]:
-        """解析阶段 1 翻译结果，同时支持 JSON 和纯文本格式。"""
+    def parse_stage_1_result(self, result_text: str, prompt_format: str = "xml_json") -> list[dict]:
+        """解析阶段 1 翻译结果，按格式分发。"""
+        if prompt_format in ("xml_json", "json_json", "xml_xml"):
+            return self._prompt_factory.parse_response(result_text, stage=1, prompt_format=prompt_format)
+        # 未知格式回退：纯文本解析
         try:
-            data = json.loads(result_text)
+            import json as _json
+            data = _json.loads(result_text)
             return data.get("translations", [])
-        except json.JSONDecodeError:
-            # 回退：纯文本格式解析
+        except _json.JSONDecodeError:
             lines = result_text.strip().split("\n\n")
             translations = []
             for line in lines:
                 line = line.strip()
-                # 去除转义标记
                 line = line.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
                 translations.append({"id": len(translations) + 1, "translation": line})
             return translations
@@ -130,11 +127,17 @@ class StageStrategy:
     def build_stage_2_prompt(
         self,
         file_type: FileType,
-        original_blocks: list[dict],
-        translations: list[dict],
+        prompt_format: str = "xml_json",
+        original_blocks: list[dict] | None = None,
+        translations: list[dict] | None = None,
     ) -> str:
         """构建自校验提示词，将原文与译文并列对比。"""
-        system = self._prompt_factory.build_system_prompt(file_type=file_type, stage=2)
+        system = self._prompt_factory.build_system_prompt(
+            file_type=file_type, stage=2, prompt_format=prompt_format,
+        )
+
+        if not original_blocks or not translations:
+            return system
 
         # 用户部分：原文与译文并列
         lines = [
@@ -155,10 +158,6 @@ class StageStrategy:
 
         return system + "\n" + "\n".join(lines)
 
-    def parse_stage_2_result(self, result_text: str) -> list[dict]:
+    def parse_stage_2_result(self, result_text: str, prompt_format: str = "xml_json") -> list[dict]:
         """解析自校验结果。"""
-        try:
-            data = json.loads(result_text)
-            return data.get("checked_translations", [])
-        except json.JSONDecodeError:
-            return []
+        return self._prompt_factory.parse_response(result_text, stage=2, prompt_format=prompt_format)

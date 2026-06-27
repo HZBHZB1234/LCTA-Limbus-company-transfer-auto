@@ -298,7 +298,7 @@ class RequestBuilder:
     def _get_skill_doc(self) -> str:
         """获取技能翻译指南。"""
         if self.is_skill:
-            return translate_doc.SKILLL_DOC
+            return translate_doc.SKILL_DOC
         return ""
 
     def _escape_text(self, text: str) -> str:

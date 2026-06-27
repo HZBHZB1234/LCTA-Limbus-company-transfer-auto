@@ -43,18 +43,6 @@ class StageStrategy:
             return confidence in (MatchConfidence.LOW, MatchConfidence.UNKNOWN)
         return False
 
-    def filter_by_confidence(self, matches: list[dict], min_conf: MatchConfidence) -> list[dict]:
-        """按最低置信度阈值过滤匹配。"""
-        conf_order = {
-            MatchConfidence.HIGH: 0,
-            MatchConfidence.MEDIUM: 1,
-            MatchConfidence.LOW: 2,
-            MatchConfidence.UNKNOWN: 3,
-            MatchConfidence.FALSE_MATCH: 4,
-        }
-        threshold = conf_order.get(min_conf, 1)
-        return [m for m in matches if conf_order.get(m.get("confidence"), 4) <= threshold]
-
     def build_stage_0_prompt(
         self,
         candidate_terms: list[dict],

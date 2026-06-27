@@ -326,3 +326,133 @@ class TestFallbackChain:
                 chain.append(f)
         assert chain == ["xml_json", "json_json", "xml_xml"]
         assert len(chain) == 3
+
+
+class TestPerBlockRefs:
+    """Per-block 引用字段在三种格式的 prompt 中正确渲染。"""
+
+    def setup_method(self):
+        self.pf = PromptFactory()
+
+    def test_xml_text_blocks_includes_refs(self):
+        """XML: 有 proper_refs/affect_refs/model 的 block 输出对应元素。"""
+        block = {
+            "kr": "테스트", "jp": "テスト", "en": "Test",
+            "proper_refs": ["용어1", "용어2"],
+            "affect_refs": ["[1001]"],
+            "model": "char_01",
+        }
+        xml = self.pf.render_text_blocks([block])
+        assert "<proper_refs>용어1, 용어2</proper_refs>" in xml
+        assert "<affect_refs>[1001]</affect_refs>" in xml
+        assert "<model>char_01</model>" in xml
+
+    def test_xml_text_blocks_omits_missing_refs(self):
+        """XML: 无引用的 block 不输出 refs 元素。"""
+        block = {"kr": "테스트", "jp": "テスト"}
+        xml = self.pf.render_text_blocks([block])
+        assert "proper_refs" not in xml
+        assert "affect_refs" not in xml
+        assert "model" not in xml
+
+    def test_json_text_blocks_includes_refs(self):
+        """JSON: 有引用字段的 block 输出对应 key。"""
+        import json
+        block = {
+            "kr": "테스트", "jp": "テスト",
+            "proper_refs": ["용어1"],
+            "affect_refs": ["[1001]"],
+            "model": "char_01",
+        }
+        json_str = self.pf.render_text_blocks_json([block])
+        data = json.loads(json_str)
+        tb = data["text_blocks"][0]
+        assert tb["proper_refs"] == ["용어1"]
+        assert tb["affect_refs"] == ["[1001]"]
+        assert tb["model"] == "char_01"
+
+    def test_json_text_blocks_omits_missing_refs(self):
+        """JSON: 无引用的 block 不输出 refs key。"""
+        import json
+        block = {"kr": "테스트"}
+        json_str = self.pf.render_text_blocks_json([block])
+        data = json.loads(json_str)
+        tb = data["text_blocks"][0]
+        assert "proper_refs" not in tb
+        assert "model" not in tb
+
+
+class TestFormatAwareSplit:
+    """_split_by_length 使用格式感知长度估算。"""
+
+    def test_xml_format_triggers_split_earlier(self):
+        """XML 格式比 JSON dump 估算更长，更早触发分割。"""
+        from translateFunc.builder.request import RequestBuilder
+        from unittest.mock import MagicMock
+
+        # 构造足够多的 text_blocks 使 xml_xml 超出 max_length
+        blocks = [{"kr": f"테스트_{i}", "jp": f"テスト_{i}", "en": f"Test_{i}"}
+                   for i in range(2000)]
+
+        engine = MagicMock()
+        engine.match_all.return_value = MagicMock(
+            proper_matches=[], role_matches=[],
+            affect_id_matches=[], affect_name_matches=[],
+        )
+        engine.role_data = []
+        engine.affect_data = []
+
+        builder = RequestBuilder(
+            request_text={"kr": {0: {("text",): blocks[0]["kr"]}}},
+            matcher_engine=engine,
+            max_length=10000,
+        )
+        # 手动设置 unified_request 以绕过复杂的 build 流程
+        builder.unified_request = {
+            "metadata": {"total_text_blocks": len(blocks),
+                         "proper_terms_count": 0, "affects_count": 0,
+                         "models_count": 0, "file_type": "STORY"},
+            "reference": {"proper_terms": [], "affects": [],
+                          "models": [], "model_docs": [], "skill_doc": ""},
+            "text_blocks": blocks,
+        }
+
+        builder._split_by_length(prompt_format="xml_xml")
+        assert len(builder.split_requests) > 1, (
+            f"xml_xml 应触发分割，但 split_requests 只有 {len(builder.split_requests)} 部分"
+        )
+
+    def test_json_format_triggers_split_later(self):
+        """json_json 比 xml_xml 更紧凑，需要更多 block 才触发分割。"""
+        from translateFunc.builder.request import RequestBuilder
+        from unittest.mock import MagicMock
+
+        blocks = [{"kr": "짧은", "jp": "短い", "en": "Short"} for _ in range(200)]
+
+        engine = MagicMock()
+        engine.match_all.return_value = MagicMock(
+            proper_matches=[], role_matches=[],
+            affect_id_matches=[], affect_name_matches=[],
+        )
+        engine.role_data = []
+        engine.affect_data = []
+
+        builder = RequestBuilder(
+            request_text={"kr": {0: {("text",): blocks[0]["kr"]}}},
+            matcher_engine=engine,
+            max_length=50000,
+        )
+        builder.unified_request = {
+            "metadata": {"total_text_blocks": len(blocks),
+                         "proper_terms_count": 0, "affects_count": 0,
+                         "models_count": 0, "file_type": "STORY"},
+            "reference": {"proper_terms": [], "affects": [],
+                          "models": [], "model_docs": [], "skill_doc": ""},
+            "text_blocks": blocks,
+        }
+
+        builder._split_by_length(prompt_format="json_json")
+        # 200 个短 block 在 50000 上限下不应分割
+        assert len(builder.split_requests) == 1, (
+            f"json_json 200 短 block 不应分割，但 split_requests={len(builder.split_requests)}"
+        )

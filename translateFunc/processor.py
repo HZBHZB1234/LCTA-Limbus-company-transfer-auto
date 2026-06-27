@@ -6,6 +6,7 @@ FileProcessor —— 对单个文件执行完整的翻译管线处理。
 from __future__ import annotations
 from copy import deepcopy
 import json
+import logging
 import shutil
 
 from translateFunc.enums import ProcessResult, FileType
@@ -168,6 +169,34 @@ class FileProcessor:
             builder.build(prompt_format=self._config.prompt_format)
             stage_strategy = StageStrategy(self._config)
 
+            # ====== 阶段 0：消歧（仅主格式） ======
+            user_format = self._config.prompt_format
+            if stage_strategy.needs_disambiguation():
+                ambiguous_terms = self._collect_ambiguous_terms(builder)
+                if ambiguous_terms:
+                    try:
+                        s0_system = stage_strategy.build_stage_0_prompt(
+                            ambiguous_terms,
+                            builder.unified_request.get("text_blocks", []),
+                            prompt_format=user_format,
+                        )
+                        s0_translator = self._build_translator_for_format(s0_system, user_format)
+                        # user prompt 用主格式渲染
+                        s0_user_prompts = builder.get_request_text(prompt_format=user_format)
+                        s0_user = s0_user_prompts[0] if s0_user_prompts else ""
+
+                        raw_response = s0_translator.translate(s0_user, timeout=60)
+                        disambiguated = stage_strategy.parse_stage_0_result(raw_response, prompt_format=user_format)
+
+                        if disambiguated:
+                            if self._dump:
+                                self._log(f"阶段 0 消歧：{len(disambiguated)} 个术语被评估")
+                            self._apply_disambiguation(builder, disambiguated)
+                        elif self._dump:
+                            self._log("阶段 0 消歧：解析结果为空，使用原始术语表")
+                    except Exception as e:
+                        logging.warning(f"[{self.file_name}] 阶段 0 消歧失败 ({e})，使用原始术语表继续")
+
             # 确定格式回退链
             formats_chain = self._build_format_chain()
 
@@ -258,7 +287,6 @@ class FileProcessor:
         """为指定格式创建独立的 translator 实例。"""
         from translateFunc.translate_request import TRANSLATOR_TRANS
         from translatekit import TranslationConfig as TKitConfig
-        import logging
 
         translator_cls = TRANSLATOR_TRANS[self._config.translator_name]
         api_settings = dict(self._config.translator_api)
@@ -286,6 +314,100 @@ class FileProcessor:
             logging.getLogger("translatekit").setLevel(logging.DEBUG)
 
         return translator
+
+    # ========== 阶段 0：消歧 ==========
+
+    def _collect_ambiguous_terms(
+        self, builder: "RequestBuilder"
+    ) -> list[dict]:
+        """收集需要 LLM 消歧的术语-文本块关联。
+
+        遍历 unified_request["text_blocks"]，收集其中 proper_refs 引用的术语。
+        disambiguation_mode="llm" 时全部匹配参与消歧；
+        disambiguation_mode="hybrid" 时也收集全部（confidence 过滤依赖 ProperAnalyzer 集成）。
+
+        Returns:
+            [{term, cn, note, text_block_indices: [int, ...]}, ...]
+        """
+        text_blocks = builder.unified_request.get("text_blocks", [])
+        proper_terms = {
+            t.get("term", ""): t
+            for t in builder.unified_request.get("reference", {}).get("proper_terms", [])
+        }
+
+        # term_key → 出现它的 text_block 索引列表
+        term_block_map: dict[str, list[int]] = {}
+        for i, block in enumerate(text_blocks):
+            refs = block.get("proper_refs", [])
+            for ref in refs:
+                if ref not in term_block_map:
+                    term_block_map[ref] = []
+                term_block_map[ref].append(i)
+
+        if not term_block_map:
+            return []
+
+        # disambiguation_mode 判断
+        mode = self._config.disambiguation_mode
+        if mode == "similarity":
+            return []  # 不需要 LLM 消歧
+
+        # llm / hybrid 模式：收集所有匹配术语
+        # 注：hybrid 模式理想行为是仅收集 LOW/UNKNOWN 置信度术语，
+        # 但 confidence 数据需要 ProperAnalyzer 集成，当前暂全部收集
+        if mode == "hybrid" and self._dump:
+            self._log("hybrid 消歧模式：confidence 过滤需要 ProperAnalyzer 集成，当前收集全部匹配术语")
+
+        result = []
+        for term_key, block_indices in term_block_map.items():
+            term_data = proper_terms.get(term_key, {"term": term_key, "translation": ""})
+            result.append({
+                "kr": term_data.get("term", term_key),
+                "cn": term_data.get("translation", ""),
+                "note": term_data.get("note", ""),
+                "text_block_indices": block_indices,
+            })
+        return result
+
+    def _apply_disambiguation(
+        self, builder: "RequestBuilder", disambiguated: list[dict]
+    ) -> None:
+        """将消歧结果应用到 builder 的术语表。
+
+        对 applies=false 的术语，从 unified_request["reference"]["proper_terms"] 中移除，
+        并通过 unified_request["text_blocks"] 中对应的 proper_refs 清除引用。
+        """
+        if not disambiguated:
+            return
+
+        excluded_terms: set[str] = set()
+        for item in disambiguated:
+            if not item.get("applies", True):
+                excluded_terms.add(item.get("term", ""))
+
+        if not excluded_terms:
+            return
+
+        # 从 reference 中移除不适用的术语
+        proper_terms = builder.unified_request.get("reference", {}).get("proper_terms", [])
+        builder.unified_request["reference"]["proper_terms"] = [
+            t for t in proper_terms
+            if t.get("term", "") not in excluded_terms
+        ]
+
+        # 从 text_blocks 中清除对应引用
+        text_blocks = builder.unified_request.get("text_blocks", [])
+        for block in text_blocks:
+            refs = block.get("proper_refs", [])
+            if refs:
+                block["proper_refs"] = [r for r in refs if r not in excluded_terms]
+                if not block["proper_refs"]:
+                    del block["proper_refs"]
+
+        logging.info(
+            f"[{self.file_name}] 阶段 0 消歧：排除了 {len(excluded_terms)} 个不适用的术语: "
+            f"{', '.join(sorted(excluded_terms))}"
+        )
 
     # ========== 加载与检查 ==========
 

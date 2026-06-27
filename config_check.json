@@ -17,7 +17,7 @@
             "llc_path": "str",
             "has_prefix": "bool",
             "dump": "bool",
-            "max_workers": "int",
+            "max_workers": "str",
             "enable_concurrent": "bool",
             "translation_mode": "str",
             "enable_self_check": "bool",

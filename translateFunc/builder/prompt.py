@@ -510,6 +510,10 @@ class PromptFactory:
                 return data.get("checked_translations", [])
             return []
         elif prompt_format == "xml_xml":
+            start = text.find('<')
+            end = text.rfind('>')
+            text = text[start :end + 1]
+
             return self._parse_xml_response(text, stage)
         return []
 

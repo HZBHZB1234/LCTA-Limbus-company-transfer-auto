@@ -190,12 +190,12 @@ class FileProcessor:
                             builder.unified_request.get("text_blocks", []),
                             prompt_format=user_format,
                         )
-                        s0_translator = self._build_translator_for_format(s0_system, user_format)
+                        self._update_translator_prompt(s0_system, self._format_to_response_format(user_format))
                         # user prompt 用主格式渲染
                         s0_user_prompts = builder.get_request_text(prompt_format=user_format)
                         s0_user = s0_user_prompts[0] if s0_user_prompts else ""
 
-                        raw_response = s0_translator.translate(s0_user, timeout=60)
+                        raw_response = self._translator.translate(s0_user, timeout=60)
                         disambiguated = stage_strategy.parse_stage_0_result(raw_response, prompt_format=user_format)
 
                         if disambiguated:
@@ -245,13 +245,13 @@ class FileProcessor:
                     # 自适应超时：基于实际请求长度
                     timeout = max(len(json.dumps(request_part, ensure_ascii=False)) // 200 + 1, 40)
 
-                    # 每种格式都创建新 translator（注入当前 system_prompt）
-                    # 放在 try 外：translator 构建失败不应被当作解析失败
-                    translator = self._build_translator_for_format(system_prompt, fmt)
+                    # 更新线程本地 translator 的 system_prompt 和 response_format
+                    # 放在 try 外：配置更新失败不应被当作解析失败
+                    self._update_translator_prompt(system_prompt, self._format_to_response_format(fmt))
 
                     try:
                         # 调用 LLM
-                        raw_response = translator.translate(user_text, timeout=timeout)
+                        raw_response = self._translator.translate(user_text, timeout=timeout)
                         if self._dump:
                             self._log(f"[{fmt}] 第 {i + 1} 部分: {str(raw_response)[:200]}...")
 
@@ -302,9 +302,9 @@ class FileProcessor:
                         original_blocks=original_blocks,
                         translations=translations_for_check,
                     )
-                    s2_translator = self._build_translator_for_format(s2_prompt, user_format)
+                    self._update_translator_prompt(s2_prompt, self._format_to_response_format(user_format))
                     # 阶段 2 的 user prompt 为空字符串（全部在 system prompt 中）
-                    raw_response = s2_translator.translate("", timeout=120)
+                    raw_response = self._translator.translate("", timeout=120)
                     checked = stage_strategy.parse_stage_2_result(raw_response, prompt_format=user_format)
 
                     if checked:
@@ -340,35 +340,18 @@ class FileProcessor:
                     chain.append(f)
         return chain
 
-    def _build_translator_for_format(self, system_prompt: str, prompt_format: str = "xml_json"):
-        """为指定格式创建独立的 translator 实例。"""
-        from translateFunc.translate_request import TRANSLATOR_TRANS
-        from translatekit import TranslationConfig as TKitConfig
+    @staticmethod
+    def _format_to_response_format(prompt_format: str) -> str:
+        """prompt_format → response_format 映射。"""
+        return "text" if prompt_format == "xml_xml" else "json_object"
 
-        from translateFunc.config import inject_thinking_mode
-
-        translator_cls = TRANSLATOR_TRANS[self._config.translator_name]
-        api_settings = dict(self._config.translator_api)
-        api_settings = inject_thinking_mode(api_settings, self._config.enable_thinking)
-        api_settings["system_prompt"] = system_prompt
-        if prompt_format in ("xml_json", "json_json"):
-            api_settings["response_format"] = "json_object"
-        elif prompt_format == "xml_xml":
-            api_settings["response_format"] = "text"
-
-        tkit_config = TKitConfig(
-            api_setting=api_settings,
-            debug_mode=self._config.debug_mode,
-            enable_cache=True,
-            enable_metrics=True,
-        )
-        tkit_config.text_max_length = 20000
-        tkit_config.max_workers = 1
-
+    def _update_translator_prompt(self, system_prompt: str, response_format: str):
+        """更新线程本地 translator 的 system_prompt 和 response_format，抑制日志。"""
         with _suppress_translatekit_log(self._config.debug_mode):
-            translator = translator_cls(tkit_config)
-
-        return translator
+            self._translator.update_config(
+                system_prompt=system_prompt,
+                response_format=response_format,
+            )
 
     # ========== 阶段 0：消歧 ==========
 
@@ -542,7 +525,7 @@ class FileProcessor:
             self.jp_index = _align(self.jp_index, self.kr_index)
             self.llc_index = _align(self.llc_index, self.kr_index)
 
-        if list(self.kr_index) == list(self.llc_index):
+        if list(self.kr_index.keys()) == list(self.llc_index.keys()):
             self._save_llc()
             return ProcessOutcome(ProcessResult.ALREADY_TRANSLATED, self.file_name)
         return None

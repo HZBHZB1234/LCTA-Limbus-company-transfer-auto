@@ -32,7 +32,7 @@ from translateFunc.processor import FileProcessor
 from translateFunc.workers import WorkerPool
 from translateFunc.get_proper import fetch as fetch_proper
 from translateFunc.translate_request import TRANSLATOR_TRANS
-# system_prompt 由调用方通过 _build_translator(system_prompt=...) 注入
+# system_prompt 由 processor 通过 translator.update_config() 动态更新
 from translateFunc.profiler import TimingProfiler
 from translatekit import TranslationConfig as TKitConfig, TranslatorBase
 
@@ -111,16 +111,20 @@ class TranslationPipeline:
             if self._config.enable_proper:
                 self._on_status("正在获取专有名词...")
                 self._analyzer = ProperAnalyzer(kr_path, jp_path, en_path)
-                raw_terms = self._analyzer.fetch_terms(
-                    auto_fetch=self._config.auto_fetch_proper,
-                    proper_path=self._config.proper_path,
-                )
-                proper_terms = self._analyzer.analyze(raw_terms)
-                proper_dicts = [
-                    {"term": t.kr, "translation": t.cn, "note": t.note}
-                    for t in proper_terms
-                ]
-                self._engine.build_proper(proper_dicts)
+
+                with profiler.phase("专有名词抓取"):
+                    raw_terms = self._analyzer.fetch_terms(
+                        auto_fetch=self._config.auto_fetch_proper,
+                        proper_path=self._config.proper_path,
+                    )
+
+                with profiler.phase("专有名词分析"):
+                    proper_terms = self._analyzer.analyze(raw_terms)
+                    proper_dicts = [
+                        {"term": t.kr, "translation": t.cn, "note": t.note}
+                        for t in proper_terms
+                    ]
+                    self._engine.build_proper(proper_dicts)
                 self._on_log(f"已加载 {len(proper_terms)} 个专有名词")
             else:
                 self._on_log("专有名词分析已跳过（enable_proper=False）")
@@ -285,20 +289,17 @@ class TranslationPipeline:
         except Exception as e:
             self._on_log(f"加载状态效果失败: {e}")
 
-    def _build_translator(self, system_prompt: str = "") -> TranslatorBase:
+    def _build_translator(self) -> TranslatorBase:
         """根据配置创建翻译器实例。
 
-        Args:
-            system_prompt: 动态 system prompt。LLM 翻译时由 PromptFactory 生成后注入。
-                          为空时仅设置 response_format，不设置 system_prompt。
+        system_prompt 和 response_format 在 processor 中按需通过
+        translator.update_config() 动态更新，不在构造时设置。
         """
         translator_cls = TRANSLATOR_TRANS[self._config.translator_name]
         api_settings = dict(self._config.translator_api)
         api_settings = inject_thinking_mode(api_settings, self._config.enable_thinking)
 
         if self._config.is_llm:
-            if system_prompt:
-                api_settings["system_prompt"] = system_prompt
             api_settings["response_format"] = "json_object"
 
         tkit_config = TKitConfig(

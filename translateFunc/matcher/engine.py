@@ -36,6 +36,12 @@ class MatcherEngine:
         self._role_data: list[dict] = []
         self._affect_data: list[dict] = []
 
+        # 确保所有 AC 自动机在翻译优先文件前已处于已构建状态，
+        # 后续通过 _update_roles / _update_affects 用实际数据重建。
+        self._role_ac.build()
+        self._affect_id_ac.build()
+        self._affect_name_ac.build()
+
     # ----- 构建 -----
 
     def build_proper(self, proper_terms: list[dict]) -> None:

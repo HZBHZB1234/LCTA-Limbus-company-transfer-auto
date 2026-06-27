@@ -219,9 +219,7 @@ class FilePathConfig:
 
     @property
     def LLC_path(self) -> Path:
-        if self.has_prefix:
-            return self._PathConfig.llc_base_path / self.rel_path.parent / f"LLC_{self.real_name}"
-        return self._PathConfig.llc_base_path / self.rel_path
+        return self._PathConfig.llc_base_path / self.rel_dir / self.real_name
 
 
 from contextlib import contextmanager

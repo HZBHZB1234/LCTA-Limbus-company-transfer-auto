@@ -11,7 +11,7 @@
             "enable_role": true,
             "enable_skill": true,
             "enable_dev_settings": false,
-            "max_workers": 4,
+            "max_workers": "4",
             "enable_concurrent": true,
             "translation_mode": "multi_stage",
             "enable_self_check": false,

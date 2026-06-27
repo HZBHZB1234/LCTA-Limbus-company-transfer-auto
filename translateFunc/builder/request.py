@@ -116,13 +116,8 @@ class RequestBuilder:
                                 model = rm.pattern
                                 break
                         if model:
-                            model_idx = None
-                            for i, rd in enumerate(self._engine.role_data):
-                                if rd.get("id") == model:
-                                    model_idx = i
-                                    break
-                            if model_idx is not None:
-                                model_info = self._engine.role_data[model_idx]
+                            model_info = self._engine.role_by_id.get(model)
+                            if model_info is not None:
                                 all_models[model] = model_info
                                 text_block["model"] = model
 

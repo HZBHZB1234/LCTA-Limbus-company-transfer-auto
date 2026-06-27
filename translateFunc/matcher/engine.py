@@ -51,6 +51,7 @@ class MatcherEngine:
         """从 [{id, kr, cn, nickName}, ...] 构建角色 AC 自动机。
         角色通过 `id` 字段精确匹配，非子串匹配。"""
         self._role_data = role_items
+        self._role_by_id_cache = None  # 清除缓存
         self._role_ac = AcAutomaton()
         for item in role_items:
             role_id = item.get("id", "")
@@ -97,3 +98,10 @@ class MatcherEngine:
     @property
     def affect_data(self) -> list[dict]:
         return self._affect_data
+
+    @property
+    def role_by_id(self) -> dict[str, dict]:
+        """以角色 ID 为键的 O(1) 查找表。"""
+        if not hasattr(self, "_role_by_id_cache") or self._role_by_id_cache is None:
+            self._role_by_id_cache = {r.get("id", ""): r for r in self._role_data}
+        return self._role_by_id_cache

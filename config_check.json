@@ -3,7 +3,7 @@
         "translator": {
             "translator": "str",
             "fallback": "bool",
-            "is_text": "bool",
+            "prompt_format": "str",
             "from_lang": "str",
             "enable_proper": "bool",
             "auto_fetch_proper": "bool",

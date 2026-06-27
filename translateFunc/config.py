@@ -37,6 +37,7 @@ class TranslateConfig:
     enable_self_check: bool = False
     disambiguation_mode: str = "hybrid"       # "similarity" | "llm" | "hybrid"
     min_confidence: str = "medium"            # "high" | "medium" | "low"
+    prompt_format: str = "xml_json"           # "xml_json" | "xml_xml" | "json_json"
 
     # --- 保存 ---
     save_result: bool = True
@@ -46,7 +47,6 @@ class TranslateConfig:
     dump: bool = False
 
     # --- 兼容旧配置项 ---
-    is_text_format: bool = False
     is_llm: bool = True
     from_lang: str = "EN"
     auto_fetch_proper: bool = True
@@ -73,7 +73,6 @@ class TranslateConfig:
             enable_role=configs.get("enable_role", True),
             enable_skill=configs.get("enable_skill", True),
             enable_dev_settings=configs.get("enable_dev_settings", False),
-            is_text_format=configs.get("is_text", False),
             from_lang=configs.get("from_lang", "EN"),
             auto_fetch_proper=configs.get("auto_fetch_proper", True),
             proper_path=configs.get("proper_path", ""),
@@ -92,6 +91,7 @@ class TranslateConfig:
             enable_self_check=configs.get("enable_self_check", False),
             disambiguation_mode=configs.get("disambiguation_mode", "hybrid"),
             min_confidence=configs.get("min_confidence", "medium"),
+            prompt_format=configs.get("prompt_format", "xml_json"),
         )
 
 

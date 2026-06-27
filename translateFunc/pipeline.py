@@ -33,6 +33,7 @@ from translateFunc.workers import WorkerPool
 from translateFunc.get_proper import fetch as fetch_proper
 from translateFunc.translate_request import TRANSLATOR_TRANS
 # system_prompt 由调用方通过 _build_translator(system_prompt=...) 注入
+from translateFunc.profiler import TimingProfiler
 from translatekit import TranslationConfig as TKitConfig, TranslatorBase
 
 # 延迟导入 LogManager 以避免模块级别的循环导入
@@ -77,7 +78,11 @@ class TranslationPipeline:
 
     def run(self) -> PipelineSummary:
         """执行完整的翻译管道。返回聚合的 PipelineSummary。"""
+        profiler = TimingProfiler.get()
+        profiler.reset()
+
         self._on_status("正在初始化...")
+        logging.info("=== 阶段 1/5: 解析路径配置 ===")
 
         # 1. 解析路径
         game_path = self._config.game_path
@@ -101,23 +106,29 @@ class TranslationPipeline:
         )
 
         # 2. 获取专有名词
-        if self._config.enable_proper:
-            self._on_status("正在获取专有名词...")
-            self._analyzer = ProperAnalyzer(kr_path, jp_path, en_path)
-            raw_terms = self._analyzer.fetch_terms(
-                auto_fetch=self._config.auto_fetch_proper,
-                proper_path=self._config.proper_path,
-            )
-            proper_terms = self._analyzer.analyze(raw_terms)
-            proper_dicts = [
-                {"term": t.kr, "translation": t.cn, "note": t.note}
-                for t in proper_terms
-            ]
-            self._engine.build_proper(proper_dicts)
-            self._on_log(f"已加载 {len(proper_terms)} 个专有名词")
+        logging.info("=== 阶段 2/5: 获取专有名词 ===")
+        with profiler.phase("获取专有名词"):
+            if self._config.enable_proper:
+                self._on_status("正在获取专有名词...")
+                self._analyzer = ProperAnalyzer(kr_path, jp_path, en_path)
+                raw_terms = self._analyzer.fetch_terms(
+                    auto_fetch=self._config.auto_fetch_proper,
+                    proper_path=self._config.proper_path,
+                )
+                proper_terms = self._analyzer.analyze(raw_terms)
+                proper_dicts = [
+                    {"term": t.kr, "translation": t.cn, "note": t.note}
+                    for t in proper_terms
+                ]
+                self._engine.build_proper(proper_dicts)
+                self._on_log(f"已加载 {len(proper_terms)} 个专有名词")
+            else:
+                self._on_log("专有名词分析已跳过（enable_proper=False）")
 
         # 3. 构建翻译器
-        translator = self._build_translator()
+        logging.info("=== 阶段 3/5: 构建匹配引擎与翻译器 ===")
+        with profiler.phase("构建匹配引擎"):
+            translator = self._build_translator()
 
         # 4. 收集目标文件
         target_files = list(kr_path.rglob("*.json"))
@@ -141,48 +152,57 @@ class TranslationPipeline:
             priority_files = []
 
         # 6. 串行处理优先文件
+        logging.info("=== 阶段 4/5: 处理优先文件 ===")
         summary = PipelineSummary()
-        for pf in priority_files:
-            outcome = self._process_one(pf, base_path_config, has_prefix, translator)
-            self._record_outcome(outcome, summary)
+        with profiler.phase("处理优先文件"):
+            for pf in priority_files:
+                outcome = self._process_one(pf, base_path_config, has_prefix, translator)
+                self._record_outcome(outcome, summary)
 
-            # 处理完优先文件后更新引擎
-            if pf == priority_files[1] and self._config.enable_role:  # model 文件（第2个）
-                self._update_roles(pf, base_path_config, has_prefix)
-            elif pf == priority_files[0] and self._config.enable_skill:  # keyword 文件（第1个）
-                self._update_affects(pf, base_path_config, has_prefix)
+                # 处理完优先文件后更新引擎
+                if pf == priority_files[1] and self._config.enable_role:  # model 文件（第2个）
+                    self._update_roles(pf, base_path_config, has_prefix)
+                elif pf == priority_files[0] and self._config.enable_skill:  # keyword 文件（第1个）
+                    self._update_affects(pf, base_path_config, has_prefix)
 
         # 7. 并发处理剩余文件
+        logging.info(f"=== 阶段 5/5: 并发翻译 ({len(target_files)} 个文件) ===")
         self._on_status("正在执行翻译...")
         self._on_progress(10, "正在执行翻译...")
 
-        if self._config.enable_concurrent and len(target_files) > 1:
-            worker_pool = WorkerPool(
-                translator_factory=lambda: self._build_translator(),
-                max_workers=self._config.max_workers,
-            )
+        with profiler.phase("并发翻译"):
+            if self._config.enable_concurrent and len(target_files) > 1:
+                worker_pool = WorkerPool(
+                    translator_factory=lambda: self._build_translator(),
+                    max_workers=self._config.max_workers,
+                )
 
-            def process_fn(file_path, translator):
-                return self._process_one(file_path, base_path_config, has_prefix, translator)
+                def process_fn(file_path, translator):
+                    return self._process_one(file_path, base_path_config, has_prefix, translator)
 
-            def progress_cb(done, total, fname):
-                pct = 10 + int((done / total) * 80)
-                self._on_progress(pct, f"处理 {fname} ({done}/{total})")
-                self._on_check_running()
+                def progress_cb(done, total, fname):
+                    pct = 10 + int((done / total) * 80)
+                    self._on_progress(pct, f"处理 {fname} ({done}/{total})")
+                    self._on_check_running()
 
-            outcomes = worker_pool.map(target_files, process_fn, on_progress=progress_cb)
-        else:
-            outcomes = []
-            for i, file_path in enumerate(target_files):
-                outcome = self._process_one(file_path, base_path_config, has_prefix, translator)
-                outcomes.append(outcome)
-                pct = 10 + int(((i + 1) / len(target_files)) * 80)
-                self._on_progress(pct, f"处理 {outcome.file_name} ({i + 1}/{len(target_files)})")
+                outcomes = worker_pool.map(target_files, process_fn, on_progress=progress_cb)
+            else:
+                outcomes = []
+                for i, file_path in enumerate(target_files):
+                    outcome = self._process_one(file_path, base_path_config, has_prefix, translator)
+                    outcomes.append(outcome)
+                    pct = 10 + int(((i + 1) / len(target_files)) * 80)
+                    self._on_progress(pct, f"处理 {outcome.file_name} ({i + 1}/{len(target_files)})")
 
         for o in outcomes:
             self._record_outcome(o, summary)
 
+        # 8. 输出剖析报告
         self._on_progress(90, "已完成汉化")
+        report = profiler.report()
+        self._on_log(report)
+        logging.info(report)
+
         return summary
 
     # ========== 内部方法 ==========

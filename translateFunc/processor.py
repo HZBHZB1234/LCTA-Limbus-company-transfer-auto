@@ -181,6 +181,7 @@ class FileProcessor:
             # ====== 阶段 0：消歧（仅主格式） ======
             user_format = self._config.prompt_format
             if stage_strategy.needs_disambiguation():
+                logging.debug(f"[{self.file_name}] 阶段 0: 术语消歧 (mode={self._config.disambiguation_mode})")
                 ambiguous_terms = self._collect_ambiguous_terms(builder)
                 if ambiguous_terms:
                     try:
@@ -208,6 +209,13 @@ class FileProcessor:
 
             # 确定格式回退链
             formats_chain = self._build_format_chain()
+            if len(formats_chain) > 1:
+                logging.info(
+                    f"[{self.file_name}] 阶段 1: 主翻译 "
+                    f"(格式链: {' → '.join(formats_chain)})"
+                )
+            else:
+                logging.debug(f"[{self.file_name}] 阶段 1: 主翻译 ({formats_chain[0]})")
 
             result: list[str] = []
             had_fallback = False
@@ -278,6 +286,7 @@ class FileProcessor:
 
             # ====== 阶段 2：自校验（仅主格式，阶段 1 全部成功时执行） ======
             if stage_strategy.needs_self_check() and not had_fallback:
+                logging.debug(f"[{self.file_name}] 阶段 2: 自校验")
                 try:
                     # 收集原文块（从 builder.unified_request 中）
                     original_blocks = builder.unified_request.get("text_blocks", [])
@@ -317,7 +326,11 @@ class FileProcessor:
             return simple_builder.deBuild(result), False
 
     def _build_format_chain(self) -> list[str]:
-        """构建格式回退链：[用户选择] + fallback? [xml_json, json_json, xml_xml] : []"""
+        """构建格式回退链：[用户选择] + fallback? [xml_json, json_json, xml_xml] : [].
+
+        用户选择的格式排在最前，回退格式按 xml_json → json_json → xml_xml
+        顺序追加（跳过重复）。当 fallback=False 时仅返回用户格式。
+        """
         user_format = self._config.prompt_format
         chain = [user_format]
         if self._config.fallback:

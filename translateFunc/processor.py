@@ -201,6 +201,7 @@ class FileProcessor:
             formats_chain = self._build_format_chain()
 
             result: list[str] = []
+            had_fallback = False
             for i, request_part in enumerate(builder.split_requests if builder.split_requests else [builder.unified_request]):
                 if builder.split_requests:
                     part_data = request_part
@@ -256,12 +257,44 @@ class FileProcessor:
 
                 if part_result is None:
                     # 全部格式失败，回退为原文
+                    had_fallback = True
                     if self._dump:
                         self._log(f"全部格式 ({', '.join(tried_formats)}) 失败，回退为原文")
                     text_blocks = part_data.get("text_blocks", [])
                     part_result = [b.get("kr", "") for b in text_blocks]
 
                 result.extend(part_result)
+
+            # ====== 阶段 2：自校验（仅主格式，阶段 1 全部成功时执行） ======
+            if stage_strategy.needs_self_check() and not had_fallback:
+                try:
+                    # 收集原文块（从 builder.unified_request 中）
+                    original_blocks = builder.unified_request.get("text_blocks", [])
+                    # 构建译文 dict 列表（格式与 parse_stage_1_result 输出一致）
+                    translations_for_check = [
+                        {"id": i + 1, "translation": t}
+                        for i, t in enumerate(result)
+                    ]
+
+                    s2_prompt = stage_strategy.build_stage_2_prompt(
+                        self.file_type,
+                        prompt_format=user_format,
+                        original_blocks=original_blocks,
+                        translations=translations_for_check,
+                    )
+                    s2_translator = self._build_translator_for_format(s2_prompt, user_format)
+                    # 阶段 2 的 user prompt 为空字符串（全部在 system prompt 中）
+                    raw_response = s2_translator.translate("", timeout=120)
+                    checked = stage_strategy.parse_stage_2_result(raw_response, prompt_format=user_format)
+
+                    if checked:
+                        result = self._apply_corrections(result, checked)
+                    elif self._dump:
+                        self._log("阶段 2 自校验：解析结果为空，保留阶段 1 翻译")
+                except Exception as e:
+                    logging.warning(
+                        f"[{self.file_name}] 阶段 2 自校验失败 ({e})，使用未校验的翻译结果"
+                    )
 
             return builder.deBuild(result)
         else:
@@ -408,6 +441,38 @@ class FileProcessor:
             f"[{self.file_name}] 阶段 0 消歧：排除了 {len(excluded_terms)} 个不适用的术语: "
             f"{', '.join(sorted(excluded_terms))}"
         )
+
+    # ========== 阶段 2：自校验 ==========
+
+    def _apply_corrections(
+        self, translations: list[str], checked: list[dict]
+    ) -> list[str]:
+        """应用阶段 2 自校验修正。
+
+        仅对 checked 中 changed=true 的条目替换对应索引的翻译文本。
+        checked 中的 id 字段为 1-based 序号，对应 translations 的索引。
+
+        Args:
+            translations: 阶段 1 的翻译文本列表
+            checked: 阶段 2 的校验结果 [{id, translation, changed, change_reason}, ...]
+
+        Returns:
+            修正后的翻译文本列表
+        """
+        result = list(translations)  # 浅拷贝
+        corrections = 0
+        for item in checked:
+            if item.get("changed", False):
+                idx = int(item.get("id", 0)) - 1  # 1-based → 0-based
+                if 0 <= idx < len(result):
+                    result[idx] = item.get("translation", result[idx])
+                    corrections += 1
+
+        if corrections > 0:
+            logging.info(
+                f"[{self.file_name}] 阶段 2 自校验：修正了 {corrections}/{len(checked)} 条翻译"
+            )
+        return result
 
     # ========== 加载与检查 ==========
 

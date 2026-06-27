@@ -366,11 +366,15 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="is-text">
-                            <span class="checkmark"></span>
-                            使用文本格式进行请求 (LLM翻译专用)
-                        </label>
+                        <label for="prompt-format">请求 / 响应格式:</label>
+                        <div class="select-wrapper">
+                            <select id="prompt-format">
+                                <option value="xml_json">XML 请求 → JSON 响应（推荐）</option>
+                                <option value="json_json">JSON 请求 → JSON 响应</option>
+                                <option value="xml_xml">XML 请求 → XML 响应</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
                     </div>
 
                     <div class="form-group">

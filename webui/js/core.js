@@ -209,7 +209,7 @@ class ConfigManager {
             // 翻译设置
             "translator-service-select": "ui_default.translator.translator",
             "fallback": 'ui_default.translator.fallback',
-            "is-text": 'ui_default.translator.is_text',
+            "prompt-format": 'ui_default.translator.prompt_format',
             'from-lang': 'ui_default.translator.from_lang',
             'enable-proper': 'ui_default.translator.enable_proper',
             'auto-fetch-proper': 'ui_default.translator.auto_fetch_proper',

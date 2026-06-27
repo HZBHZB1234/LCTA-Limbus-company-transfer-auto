@@ -6,7 +6,6 @@ FileProcessor —— 对单个文件执行完整的翻译管线处理。
 from __future__ import annotations
 from copy import deepcopy
 import json
-import re
 import shutil
 
 from translateFunc.enums import ProcessResult, FileType
@@ -153,76 +152,140 @@ class FileProcessor:
     # ========== 翻译执行 ==========
 
     def _translate(self, request_text: dict) -> dict:
-        """通过配置的管线阶段执行翻译。"""
+        """通过配置的管线阶段执行翻译，支持格式回退。"""
         # 构建请求
         builder = RequestBuilder(
             request_text,
             self._engine,
             is_story=self.is_story,
             is_skill=self.is_skill,
-            is_text_format=self._config.is_text_format,
+            is_text_format=False,  # 废弃，由 prompt_format 控制
             max_length=20000,
             file_type=self.file_type,
         )
 
         if self._config.is_llm:
-            # LLM 路径：构建结构化请求，可选多阶段
             builder.build()
-            request_texts = builder.get_request_text()
-            result: list[str] = []
-
             stage_strategy = StageStrategy(self._config)
 
-            for i, request_part in enumerate(request_texts):
-                timeout = max(len(request_part) // 200 + 1, 40)
+            # 确定格式回退链
+            formats_chain = self._build_format_chain()
 
-                # 阶段 0：消歧（可选）
-                if stage_strategy.needs_disambiguation():
-                    # 当前跳过内联消歧 —— 由 MatcherEngine 置信度处理
-                    pass
-
-                # 阶段 1：主翻译
-                result_part = self._translator.translate(request_part, timeout=timeout)
-                self._log(f"第 {i + 1} 部分: {str(result_part)[:200]}...")
-
-                # 解析结果
-                if self._config.is_text_format:
-                    result_list = result_part.split("\n\n")
-                    result_list = [
-                        re.sub(
-                            r"^\s?【文本块\s?\d+】[\s\n]?",
-                            "",
-                            item.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r"),
-                        )
-                        for item in result_list
-                    ]
+            result: list[str] = []
+            for i, request_part in enumerate(builder.split_requests if builder.split_requests else [builder.unified_request]):
+                if builder.split_requests:
+                    part_data = request_part
                 else:
+                    part_data = builder.unified_request
+                if part_data is None:
+                    continue
+
+                part_result = None
+                tried_formats: list[str] = []
+
+                for fmt in formats_chain:
+                    tried_formats.append(fmt)
+                    # 按当前格式构建 system prompt
+                    system_prompt = stage_strategy.build_stage_1_prompt(
+                        self.file_type,
+                        prompt_format=fmt,
+                    )
+
+                    # 按当前格式构建 user prompt
+                    user_prompt = builder.get_request_text(prompt_format=fmt)
+                    user_text = user_prompt[i] if i < len(user_prompt) else user_prompt[0]
+
+                    # 自适应超时：基于实际请求长度
+                    timeout = max(len(json.dumps(request_part, ensure_ascii=False)) // 200 + 1, 40)
+
+                    # 每种格式都创建新 translator（注入当前 system_prompt）
+                    # 放在 try 外：translator 构建失败不应被当作解析失败
+                    translator = self._build_translator_for_format(system_prompt, fmt)
+
                     try:
-                        parsed = json.loads(result_part)
-                        translations = parsed.get("translations", [])
-                        # 从结构化输出中提取翻译文本
-                        result_list = [
+                        # 调用 LLM
+                        raw_response = translator.translate(user_text, timeout=timeout)
+                        if self._dump:
+                            self._log(f"[{fmt}] 第 {i + 1} 部分: {str(raw_response)[:200]}...")
+
+                        # 解析
+                        parsed = stage_strategy.parse_stage_1_result(raw_response, prompt_format=fmt)
+                        if not parsed:
+                            raise ValueError(f"{fmt}: 解析结果为空")
+
+                        # 提取翻译文本
+                        part_result = [
                             t.get("translation", "") if isinstance(t, dict) else str(t)
-                            for t in translations
+                            for t in parsed
                         ]
-                    except json.JSONDecodeError:
-                        result_list = result_part.split("\n\n")
+                        break  # 成功，退出格式回退循环
 
-                result.extend(result_list)
+                    except (json.JSONDecodeError, ValueError) as e:
+                        if self._dump:
+                            self._log(f"[{fmt}] 解析失败 ({e})，回退到下一格式")
+                        continue
 
-                # 阶段 2：自校验（可选，当前跳过）
-                if stage_strategy.needs_self_check():
-                    # 本阶段尚未实现 —— 预留接口
-                    pass
+                if part_result is None:
+                    # 全部格式失败，回退为原文
+                    if self._dump:
+                        self._log(f"全部格式 ({', '.join(tried_formats)}) 失败，回退为原文")
+                    text_blocks = part_data.get("text_blocks", [])
+                    part_result = [b.get("kr", "") for b in text_blocks]
+
+                result.extend(part_result)
 
             return builder.deBuild(result)
         else:
-            # 非 LLM 路径：简单文本列表
+            # 非 LLM 路径：保持不变
             simple_builder = _SimpleRequestBuilder(request_text)
             simple_builder.build()
             request_texts = simple_builder.get_request_text(from_lang=self._config.from_lang)
             result = self._translator.translate(request_texts)
             return simple_builder.deBuild(result)
+
+    def _build_format_chain(self) -> list[str]:
+        """构建格式回退链：[用户选择] + fallback? [xml_json, json_json, xml_xml] : []"""
+        user_format = self._config.prompt_format
+        chain = [user_format]
+        if self._config.fallback:
+            fallback_order = ["xml_json", "json_json", "xml_xml"]
+            for f in fallback_order:
+                if f not in chain:
+                    chain.append(f)
+        return chain
+
+    def _build_translator_for_format(self, system_prompt: str, prompt_format: str = "xml_json"):
+        """为指定格式创建独立的 translator 实例。"""
+        from translateFunc.translate_request import TRANSLATOR_TRANS
+        from translatekit import TranslationConfig as TKitConfig
+        import logging
+
+        translator_cls = TRANSLATOR_TRANS[self._config.translator_name]
+        api_settings = dict(self._config.translator_api)
+        api_settings["system_prompt"] = system_prompt
+        if prompt_format in ("xml_json", "json_json"):
+            api_settings["response_format"] = "json_object"
+        elif prompt_format == "xml_xml":
+            api_settings["response_format"] = "text"
+
+        tkit_config = TKitConfig(
+            api_setting=api_settings,
+            debug_mode=self._config.debug_mode,
+            enable_cache=True,
+            enable_metrics=True,
+        )
+        tkit_config.text_max_length = 20000
+        tkit_config.max_workers = 1
+
+        if not self._config.debug_mode:
+            logging.getLogger("translatekit").setLevel(logging.INFO)
+
+        translator = translator_cls(tkit_config)
+
+        if not self._config.debug_mode:
+            logging.getLogger("translatekit").setLevel(logging.DEBUG)
+
+        return translator
 
     # ========== 加载与检查 ==========
 

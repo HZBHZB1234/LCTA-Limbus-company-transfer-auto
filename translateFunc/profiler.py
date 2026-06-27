@@ -17,7 +17,6 @@ class TimingProfiler:
 
     def __init__(self):
         self._records: Dict[str, float] = {}
-        self._stack: list[tuple[str, float]] = []
 
     @classmethod
     def get(cls) -> "TimingProfiler":
@@ -28,7 +27,6 @@ class TimingProfiler:
     def reset(self) -> None:
         """清除所有记录。"""
         self._records.clear()
-        self._stack.clear()
 
     @contextmanager
     def phase(self, name: str):
@@ -39,13 +37,11 @@ class TimingProfiler:
                 do_work()
         """
         start = time.perf_counter()
-        self._stack.append((name, start))
         try:
             yield
         finally:
             end = time.perf_counter()
             elapsed = end - start
-            self._stack.pop()
             # 累计耗时（支持同一阶段多次调用）
             prev = self._records.get(name, 0.0)
             self._records[name] = prev + elapsed

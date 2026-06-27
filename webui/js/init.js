@@ -94,9 +94,6 @@ window.addEventListener('pywebviewready', function() {
                                 .then(function(config) {
                                     return pywebview.api.run_func('fix_config', config);
                                 })
-                                .then(function(fixed_config) {
-                                    return pywebview.api.set_attr("config", fixed_config);
-                                })
                                 .then(function() {
                                     return pywebview.api.use_inner();
                                 })

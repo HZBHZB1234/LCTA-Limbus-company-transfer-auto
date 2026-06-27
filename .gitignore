@@ -3,6 +3,7 @@ dev_cache/
 webui/nexus/*.js
 !webui/nexus/simulation.js
 tmp
+*\example/
 .rmv
 *.pyc
 *.pyo

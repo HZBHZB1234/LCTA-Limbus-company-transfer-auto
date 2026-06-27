@@ -188,6 +188,11 @@ class LCTA_API():
 
     def set_attr(self, attr_name, value):
         if hasattr(self, attr_name):
+            # 防止对只读 @property 属性写入导致 AttributeError
+            attr = getattr(type(self), attr_name, None)
+            if isinstance(attr, property) and attr.fset is None:
+                self.log(f"警告: 试图设置只读属性 '{attr_name}'，已忽略", "WARNING")
+                return
             setattr(self, attr_name, value)
 
     def browse_file(self, input_id):

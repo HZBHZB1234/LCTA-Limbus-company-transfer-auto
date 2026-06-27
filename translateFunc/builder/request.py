@@ -152,7 +152,7 @@ class RequestBuilder:
         if self.unified_request is None:
             return
 
-        request_text = self._get_request_text(self.unified_request)
+        request_text = json.dumps(self.unified_request, indent=2, ensure_ascii=False)
         if len(request_text) <= self.max_length:
             self.split_requests = [self.unified_request]
             return
@@ -175,7 +175,7 @@ class RequestBuilder:
                 parts.append(part)
                 start_idx = end_idx
 
-            if all(len(self._get_request_text(p)) <= self.max_length for p in parts):
+            if all(len(json.dumps(p, indent=2, ensure_ascii=False)) <= self.max_length for p in parts):
                 self.split_requests = parts
                 return
 
@@ -193,27 +193,34 @@ class RequestBuilder:
 
     # ========== 输出 ==========
 
-    def get_request_text(self, is_text_format: Optional[bool] = None) -> list[str]:
-        """获取所有分割后的请求文本（JSON 或纯文本格式）。"""
+    def get_request_text(self, prompt_format: str = "xml_json") -> list[str]:
+        """获取所有分割后的请求文本（按格式渲染）。
+
+        Args:
+            prompt_format: "xml_json" | "xml_xml" | "json_json"
+        """
         if self.unified_request is None:
             self.build()
 
-        if is_text_format is None:
-            is_text_format = self.is_text_format
-
         result = []
         for request in self.split_requests:
-            if is_text_format:
-                result.append(self._make_text(request))
+            if prompt_format in ("xml_json", "xml_xml"):
+                result.append(self._make_xml_user_prompt(request))
+            elif prompt_format == "json_json":
+                result.append(self._make_json_user_prompt(request))
             else:
+                # 未知格式回退到 JSON
                 result.append(json.dumps(request, indent=2, ensure_ascii=False))
         return result
 
-    def _get_request_text(self, request_data: dict) -> str:
+    def _get_request_text(self, request_data: dict, prompt_format: str = "xml_json") -> str:
         """获取请求文本用于长度检查。"""
-        if self.is_text_format:
-            return self._make_text(request_data)
-        return json.dumps(request_data, indent=2, ensure_ascii=False)
+        if prompt_format in ("xml_json", "xml_xml"):
+            return self._make_xml_user_prompt(request_data)
+        elif prompt_format == "json_json":
+            return self._make_json_user_prompt(request_data)
+        import json as _json
+        return _json.dumps(request_data, indent=2, ensure_ascii=False)
 
     # ========== 还原 ==========
 
@@ -329,3 +336,93 @@ class RequestBuilder:
             result_lines.append(f"日文: {self._escape_text(block.get('jp', ''))}")
 
         return "\n".join(result_lines)
+
+    def _make_xml_user_prompt(self, request_data: dict) -> str:
+        """将统一请求字典转换为 XML 格式的 user prompt。"""
+        from translateFunc.builder.prompt import PromptFactory
+        pf = PromptFactory()
+
+        reference = request_data.get("reference", {})
+        text_blocks = request_data.get("text_blocks", [])
+
+        parts: list[str] = []
+
+        # Glossary（专有名词）
+        if reference.get("proper_terms"):
+            parts.append(pf.render_glossary(reference["proper_terms"]))
+
+        # Affects（状态效果）
+        if reference.get("affects"):
+            parts.append(self._render_affects_xml(reference["affects"]))
+
+        # 角色风格参考
+        if self.is_story and reference.get("model_docs"):
+            for doc in reference["model_docs"]:
+                parts.append(pf._render_role_styles([doc]))
+
+        # 技能指南
+        if self.is_skill and reference.get("skill_doc"):
+            parts.append(f"<skill_guide>\n{reference['skill_doc']}\n</skill_guide>\n")
+
+        # 文本块
+        parts.append(pf.render_text_blocks(text_blocks))
+
+        return "\n".join(parts)
+
+    def _render_affects_xml(self, affects: list[dict]) -> str:
+        """渲染 affects 为 XML。"""
+        if not affects:
+            return ""
+        lines = ["<affects>"]
+        for a in affects:
+            lines.append(f"  <affect id=\"{a.get('id', '')}\" kr=\"{a.get('kr', '')}\" cn=\"{a.get('cn', '')}\" />")
+        lines.append("</affects>")
+        return "\n".join(lines) + "\n"
+
+    def _make_json_user_prompt(self, request_data: dict) -> str:
+        """将统一请求字典转换为 JSON 格式的 user prompt。"""
+        import json as _json
+
+        reference = request_data.get("reference", {})
+        text_blocks = request_data.get("text_blocks", [])
+
+        output: dict = {}
+
+        # Glossary
+        proper_terms = reference.get("proper_terms", [])
+        if proper_terms:
+            glossary = []
+            for t in proper_terms:
+                kr = t.get("kr", t.get("term", ""))
+                cn = t.get("cn", t.get("translation", ""))
+                note = t.get("note", "")
+                entry = {"kr": kr, "cn": cn}
+                if note:
+                    entry["note"] = note
+                glossary.append(entry)
+            output["glossary"] = glossary
+
+        # Affects
+        if reference.get("affects"):
+            output["affects"] = reference["affects"]
+
+        # 角色风格
+        if self.is_story and reference.get("model_docs"):
+            output["role_styles"] = reference["model_docs"]
+
+        # 技能指南
+        if self.is_skill and reference.get("skill_doc"):
+            output["skill_doc"] = reference["skill_doc"]
+
+        # 文本块
+        items = []
+        for i, block in enumerate(text_blocks):
+            item: dict = {"id": i + 1, "kr": block.get("kr", "")}
+            if block.get("jp"):
+                item["jp"] = block["jp"]
+            if block.get("en"):
+                item["en"] = block["en"]
+            items.append(item)
+        output["text_blocks"] = items
+
+        return _json.dumps(output, ensure_ascii=False, indent=2)

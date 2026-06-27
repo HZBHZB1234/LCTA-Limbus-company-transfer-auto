@@ -456,6 +456,13 @@ class RequestBuilder:
                 item["jp"] = block["jp"]
             if block.get("en"):
                 item["en"] = block["en"]
+            # Per-block 引用字段
+            if block.get("proper_refs"):
+                item["proper_refs"] = block["proper_refs"]
+            if block.get("affect_refs"):
+                item["affect_refs"] = block["affect_refs"]
+            if block.get("model"):
+                item["model"] = block["model"]
             items.append(item)
         output["text_blocks"] = items
 

@@ -48,7 +48,7 @@ class PromptFactory:
 
     _STAGE1_RULES = (
         "<rules>\n"
-        "<rule>先查看reference中的术语表和指南，确保术语一致性</rule>\n"
+        "<rule>先查看reference中的术语表及每条文本块的proper_refs/affect_refs/model引用，确保术语一致性</rule>\n"
         "<rule>在翻译剧情文本时使用全角符号，否则使用半角符号</rule>\n"
         "<rule>波浪号使用半角波浪号~</rule>\n"
         "<rule>保留原文的代码格式，如富文本和f-string</rule>\n"
@@ -129,7 +129,7 @@ class PromptFactory:
     _JSON_STAGE1_RULES = (
         '{\n'
         '  "rules": [\n'
-        '    "先查看reference中的术语表和指南，确保术语一致性",\n'
+        '    "先查看reference中的术语表及每条文本块的proper_refs/affect_refs/model引用，确保术语一致性",\n'
         '    "在翻译剧情文本时使用全角符号，否则使用半角符号",\n'
         '    "波浪号使用半角波浪号~",\n'
         '    "保留原文的代码格式，如富文本和f-string",\n'
@@ -393,7 +393,7 @@ class PromptFactory:
         return "\n".join(lines) + "\n"
 
     def render_text_blocks(self, text_blocks: list[dict]) -> str:
-        """渲染 <text> 节，包含 kr/jp/en 文本块。"""
+        """渲染 <text> 节，包含 kr/jp/en 文本块及 per-block 引用。"""
         lines = ["<text>"]
         for i, block in enumerate(text_blocks):
             lines.append(f'  <block id="{i + 1}">')
@@ -402,6 +402,15 @@ class PromptFactory:
                 lines.append(f"    <jp>{block.get('jp', '')}</jp>")
             if block.get('en'):
                 lines.append(f"    <en>{block.get('en', '')}</en>")
+            # Per-block 引用字段
+            if block.get('proper_refs'):
+                refs = ", ".join(block['proper_refs'])
+                lines.append(f"    <proper_refs>{refs}</proper_refs>")
+            if block.get('affect_refs'):
+                refs = ", ".join(block['affect_refs'])
+                lines.append(f"    <affect_refs>{refs}</affect_refs>")
+            if block.get('model'):
+                lines.append(f"    <model>{block['model']}</model>")
             lines.append(f"  </block>")
         lines.append("</text>")
         return "\n".join(lines) + "\n"
@@ -423,7 +432,7 @@ class PromptFactory:
         return "\n".join(lines) + "\n"
 
     def render_text_blocks_json(self, text_blocks: list[dict]) -> str:
-        """渲染 text_blocks 为 JSON 字符串。"""
+        """渲染 text_blocks 为 JSON 字符串，包含 per-block 引用。"""
         import json as _json
         items = []
         for i, block in enumerate(text_blocks):
@@ -432,6 +441,13 @@ class PromptFactory:
                 item["jp"] = block["jp"]
             if block.get("en"):
                 item["en"] = block["en"]
+            # Per-block 引用字段
+            if block.get("proper_refs"):
+                item["proper_refs"] = block["proper_refs"]
+            if block.get("affect_refs"):
+                item["affect_refs"] = block["affect_refs"]
+            if block.get("model"):
+                item["model"] = block["model"]
             items.append(item)
         return _json.dumps({"text_blocks": items}, ensure_ascii=False, indent=2) + "\n"
 

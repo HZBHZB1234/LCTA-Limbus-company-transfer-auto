@@ -63,21 +63,36 @@ class ProperAnalyzer:
     # ----- 分析 -----
 
     def analyze(self, raw_terms: list[dict]) -> list[ProperTerm]:
-        """从游戏文件中提取 JP/EN 上下文句子，增强原始术语。"""
-        terms: list[ProperTerm] = []
+        """从游戏文件中提取 JP/EN 上下文句子，增强原始术语。
+
+        使用批量 AC 自动机扫描：一次文件遍历处理全部术语，
+        对比逐术语扫描快约 N 倍（N = 术语数量）。
+        """
+        # 收集所有有效的 KR 术语文本
+        raw_term_list: list[dict] = []
+        kr_texts: list[str] = []
         for item in raw_terms:
+            kr = item.get("term", "")
+            if not kr:
+                continue
+            raw_term_list.append(item)
+            kr_texts.append(kr)
+
+        # 批量提取上下文
+        contexts_map: dict[str, list[dict]] = {}
+        if self._kr_path and self._jp_path and self._en_path and kr_texts:
+            from translateFunc.proper.analyze import extract_contexts_batch
+            contexts_map = extract_contexts_batch(
+                kr_texts, self._kr_path, self._jp_path, self._en_path, max_examples=20
+            )
+
+        # 构建 ProperTerm 列表
+        terms: list[ProperTerm] = []
+        for item in raw_term_list:
             kr = item.get("term", "")
             cn = item.get("translation", "")
             note = item.get("note", "")
-            if not kr:
-                continue
-
-            positive_contexts: list[dict] = []
-            if self._kr_path and self._jp_path and self._en_path:
-                positive_contexts = extract_contexts(
-                    kr, self._kr_path, self._jp_path, self._en_path, max_examples=20
-                )
-
+            positive_contexts = contexts_map.get(kr, [])
             term = ProperTerm(
                 kr=kr,
                 cn=cn,

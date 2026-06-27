@@ -119,7 +119,7 @@ class FileProcessor:
 
         # 8. 构建并翻译
         try:
-            translated_data = self._translate(request_text)
+            translated_data, had_fallback = self._translate(request_text)
         except StopIteration:
             self._save_except()
             return ProcessOutcome(
@@ -148,12 +148,24 @@ class FileProcessor:
                 {"reason": str(e)},
             )
 
+        if had_fallback:
+            return ProcessOutcome(
+                ProcessResult.FALLBACK_TO_ORIGINAL,
+                self.file_name,
+                {"fallback_parts": "部分文本块回退为 KR 原文"},
+            )
+
         return ProcessOutcome(ProcessResult.SUCCESS_SAVED, self.file_name)
 
     # ========== 翻译执行 ==========
 
-    def _translate(self, request_text: dict) -> dict:
-        """通过配置的管线阶段执行翻译，支持格式回退。"""
+    def _translate(self, request_text: dict) -> tuple[dict, bool]:
+        """通过配置的管线阶段执行翻译，支持格式回退。
+
+        Returns:
+            (翻译结果字典, had_fallback) — had_fallback=True 表示至少一个
+            part 的全部格式失败，已回退为 KR 原文。
+        """
         # 构建请求
         builder = RequestBuilder(
             request_text,
@@ -256,10 +268,12 @@ class FileProcessor:
                         continue
 
                 if part_result is None:
-                    # 全部格式失败，回退为原文
+                    # 全部格式失败 → 无条件 warning + 标记降级
+                    logging.warning(
+                        f"[{self.file_name}] 全部格式 ({', '.join(tried_formats)}) "
+                        f"解析失败，第 {i + 1}/{len(builder.split_requests)} 部分回退为 KR 原文"
+                    )
                     had_fallback = True
-                    if self._dump:
-                        self._log(f"全部格式 ({', '.join(tried_formats)}) 失败，回退为原文")
                     text_blocks = part_data.get("text_blocks", [])
                     part_result = [b.get("kr", "") for b in text_blocks]
 
@@ -296,14 +310,14 @@ class FileProcessor:
                         f"[{self.file_name}] 阶段 2 自校验失败 ({e})，使用未校验的翻译结果"
                     )
 
-            return builder.deBuild(result)
+            return builder.deBuild(result), had_fallback
         else:
-            # 非 LLM 路径：保持不变
+            # 非 LLM 路径：不存在格式回退
             simple_builder = _SimpleRequestBuilder(request_text)
             simple_builder.build()
             request_texts = simple_builder.get_request_text(from_lang=self._config.from_lang)
             result = self._translator.translate(request_texts)
-            return simple_builder.deBuild(result)
+            return simple_builder.deBuild(result), False
 
     def _build_format_chain(self) -> list[str]:
         """构建格式回退链：[用户选择] + fallback? [xml_json, json_json, xml_xml] : []"""

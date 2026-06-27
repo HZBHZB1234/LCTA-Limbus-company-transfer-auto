@@ -14,6 +14,7 @@ class ProcessResult(Enum):
     JSON_DECODE_ERROR    = auto()   # JSON 解析失败
     SAVE_ERROR           = auto()   # 保存失败
     TRANSLATION_MISMATCH = auto()   # 翻译结果数量与输入数量不匹配
+    FALLBACK_TO_ORIGINAL = auto()   # 全部格式解析失败，回退保存为 KR 原文
 
 
 class FileType(Enum):

@@ -10,7 +10,7 @@ import logging
 import shutil
 
 from translateFunc.enums import ProcessResult, FileType
-from translateFunc.config import ProcessOutcome, TranslateConfig, FilePathConfig
+from translateFunc.config import ProcessOutcome, TranslateConfig, FilePathConfig, _suppress_translatekit_log
 from translateFunc.matcher.engine import MatcherEngine
 from translateFunc.builder.request import RequestBuilder, EMPTY_TEXT, AVOID_PATH
 from translateFunc.builder.stages import StageStrategy
@@ -56,8 +56,6 @@ class FileProcessor:
         self.is_story: bool = False
         self.is_skill: bool = False
         self.translating_list: list = []
-        self.formal_flatten_item: dict = {}
-        self._removed_keys: list = []
         self._base_index: dict = {}
 
     @property
@@ -120,7 +118,7 @@ class FileProcessor:
         # 8. 构建并翻译
         try:
             translated_data, had_fallback = self._translate(request_text)
-        except StopIteration:
+        except ValueError:
             self._save_except()
             return ProcessOutcome(
                 ProcessResult.TRANSLATION_MISMATCH,
@@ -172,7 +170,6 @@ class FileProcessor:
             self._engine,
             is_story=self.is_story,
             is_skill=self.is_skill,
-            is_text_format=False,  # 废弃，由 prompt_format 控制
             max_length=20000,
             file_type=self.file_type,
         )
@@ -355,13 +352,8 @@ class FileProcessor:
         tkit_config.text_max_length = 20000
         tkit_config.max_workers = 1
 
-        if not self._config.debug_mode:
-            logging.getLogger("translatekit").setLevel(logging.INFO)
-
-        translator = translator_cls(tkit_config)
-
-        if not self._config.debug_mode:
-            logging.getLogger("translatekit").setLevel(logging.DEBUG)
+        with _suppress_translatekit_log(self._config.debug_mode):
+            translator = translator_cls(tkit_config)
 
         return translator
 
@@ -574,9 +566,7 @@ class FileProcessor:
         translating_text = {}
         for i in self.translating_list:
             flat = flatten_dict_enhanced(lang_index[i], ignore_types=[None, int, float])
-            self.formal_flatten_item = deepcopy(flat)
             to_delete = [k for k in flat if k[-1] in AVOID_PATH]
-            self._removed_keys = to_delete
             for k in to_delete:
                 del flat[k]
             translating_text[i] = flat
@@ -645,6 +635,12 @@ class _SimpleRequestBuilder:
             for text in self.en_texts.get(idx, {}).values():
                 EN_result.append(text)
 
+        if not (len(KR_result) == len(EN_result) == len(JP_result)):
+            raise ValueError(
+                f"语言文本长度不一致: KR={len(KR_result)}, "
+                f"EN={len(EN_result)}, JP={len(JP_result)}"
+            )
+
         empty_idxs = {
             i for i, (kr, en, jp) in enumerate(zip(KR_result, EN_result, JP_result))
             if kr in EMPTY_TEXT and en in EMPTY_TEXT and jp in EMPTY_TEXT
@@ -674,5 +670,5 @@ class _SimpleRequestBuilder:
         except StopIteration:
             pass  # 正常 —— 没有多余的翻译结果
         else:
-            raise StopIteration("译文数量多于预期")
+            raise ValueError("译文数量多于预期")
         return original

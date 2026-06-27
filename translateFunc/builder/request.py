@@ -28,7 +28,6 @@ class RequestBuilder:
         matcher_engine: MatcherEngine,
         is_story: bool = False,
         is_skill: bool = False,
-        is_text_format: bool = False,
         max_length: int = 20000,
         file_type: FileType = FileType.OTHER,
     ):
@@ -38,7 +37,6 @@ class RequestBuilder:
         self._engine = matcher_engine
         self.is_story = is_story
         self.is_skill = is_skill
-        self.is_text_format = is_text_format
         self.max_length = max_length
         self.file_type = file_type
         # 构建状态

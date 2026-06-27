@@ -222,3 +222,25 @@ class FilePathConfig:
         if self.has_prefix:
             return self._PathConfig.llc_base_path / self.rel_path.parent / f"LLC_{self.real_name}"
         return self._PathConfig.llc_base_path / self.rel_path
+
+
+from contextlib import contextmanager
+import logging as _logging
+
+
+@contextmanager
+def _suppress_translatekit_log(debug_mode: bool):
+    """在 translator 构造期间临时抑制 translatekit 的 debug 日志。
+
+    使用 try/finally 确保即使构造失败也恢复日志级别。
+    修复 B3：translator 构造异常时 logger 级别永久泄漏。
+
+    定义在 config.py 而非 pipeline.py，避免 pipeline ↔ processor 循环导入。
+    """
+    if not debug_mode:
+        _logging.getLogger("translatekit").setLevel(_logging.INFO)
+    try:
+        yield
+    finally:
+        if not debug_mode:
+            _logging.getLogger("translatekit").setLevel(_logging.DEBUG)

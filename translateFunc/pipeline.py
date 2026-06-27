@@ -17,11 +17,13 @@ import logging
 import os
 import sys
 import tempfile
+from itertools import zip_longest
 from typing import Any, Callable
 
 from translateFunc.config import (
     TranslateConfig, ProcessOutcome, PipelineSummary,
     PathConfig, FilePathConfig, inject_thinking_mode,
+    _suppress_translatekit_log,
 )
 from translateFunc.enums import ProcessResult, FileType
 from translateFunc.matcher.engine import MatcherEngine
@@ -123,16 +125,19 @@ class TranslationPipeline:
 
         # 5. 重排序：优先文件放在前面
         has_prefix = self._config.has_prefix
-        try:
-            model_name = "KR_ScenarioModelCodes-AutoCreated.json" if has_prefix else "ScenarioModelCodes-AutoCreated.json"
-            keyword_name = "KR_BattleKeywords.json" if has_prefix else "BattleKeywords.json"
-            model_file = kr_path / model_name
-            keyword_file = kr_path / keyword_name
+        model_name = "KR_ScenarioModelCodes-AutoCreated.json" if has_prefix else "ScenarioModelCodes-AutoCreated.json"
+        keyword_name = "KR_BattleKeywords.json" if has_prefix else "BattleKeywords.json"
+        model_file = kr_path / model_name
+        keyword_file = kr_path / keyword_name
+        if model_file.exists() and keyword_file.exists():
             target_files.remove(model_file)
             target_files.remove(keyword_file)
             priority_files = [keyword_file, model_file]
-        except Exception:
-            self._on_log("警告: 无法找到特殊文件，按原始顺序处理")
+        else:
+            if not model_file.exists():
+                self._on_log(f"警告: 未找到模型文件 {model_name}，跳过优先处理")
+            if not keyword_file.exists():
+                self._on_log(f"警告: 未找到关键字文件 {keyword_name}，跳过优先处理")
             priority_files = []
 
         # 6. 串行处理优先文件
@@ -212,10 +217,21 @@ class TranslationPipeline:
             cn_data = json.loads(target.read_text(encoding="utf-8-sig")) if target.exists() else kr_data
             kr_list = kr_data.get("dataList", kr_data if isinstance(kr_data, list) else [])
             cn_list = cn_data.get("dataList", cn_data if isinstance(cn_data, list) else [])
-            roles = [
-                {"id": k["id"], "kr": k["name"], "cn": c["name"], "nickName": c.get("nickName", "")}
-                for k, c in zip(kr_list, cn_list)
-            ]
+
+            if len(kr_list) != len(cn_list):
+                logging.warning(
+                    f"角色数据 KR/CN 列表长度不匹配: KR={len(kr_list)}, CN={len(cn_list)}，"
+                    f"将按较短列表配对"
+                )
+
+            roles = []
+            for k, c in zip_longest(kr_list, cn_list):
+                if k is None or c is None:
+                    continue
+                roles.append({
+                    "id": k["id"], "kr": k["name"], "cn": c["name"],
+                    "nickName": c.get("nickName", ""),
+                })
             self._engine.build_roles(roles)
             self._on_log(f"已加载 {len(roles)} 个角色信息")
         except Exception as e:
@@ -229,10 +245,21 @@ class TranslationPipeline:
             cn_data = json.loads(target.read_text(encoding="utf-8-sig")) if target.exists() else kr_data
             kr_list = kr_data.get("dataList", kr_data if isinstance(kr_data, list) else [])
             cn_list = cn_data.get("dataList", cn_data if isinstance(cn_data, list) else [])
-            affects = [
-                {"id": k["id"], "kr": k["name"], "cn": c["name"], "desc": c.get("desc", "")}
-                for k, c in zip(kr_list, cn_list)
-            ]
+
+            if len(kr_list) != len(cn_list):
+                logging.warning(
+                    f"状态效果数据 KR/CN 列表长度不匹配: KR={len(kr_list)}, CN={len(cn_list)}，"
+                    f"将按较短列表配对"
+                )
+
+            affects = []
+            for k, c in zip_longest(kr_list, cn_list):
+                if k is None or c is None:
+                    continue
+                affects.append({
+                    "id": k["id"], "kr": k["name"], "cn": c["name"],
+                    "desc": c.get("desc", ""),
+                })
             self._engine.build_affects(affects)
             self._on_log(f"已加载 {len(affects)} 个状态效果")
         except Exception as e:
@@ -265,13 +292,7 @@ class TranslationPipeline:
             tkit_config.text_max_length = 20000
             tkit_config.max_workers = 1
 
-        # 非调试模式下抑制 translatekit 的 debug 日志
-        if not self._config.debug_mode:
-            logging.getLogger("translatekit").setLevel(logging.INFO)
-
-        translator = translator_cls(tkit_config)
-
-        if not self._config.debug_mode:
-            logging.getLogger("translatekit").setLevel(logging.DEBUG)
+        with _suppress_translatekit_log(self._config.debug_mode):
+            translator = translator_cls(tkit_config)
 
         return translator

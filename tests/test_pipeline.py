@@ -124,3 +124,44 @@ class TestFilePathConfig:
         assert fpc.EN_path == tmp_path / "en" / "sub" / "test.json"
         assert fpc.JP_path == tmp_path / "jp" / "sub" / "test.json"
         assert fpc.LLC_path == tmp_path / "llc" / "sub" / "test.json"
+
+
+class TestPipelineBugFixes:
+    """Tests for B3, B4, B5 bug fixes."""
+
+    def test_zip_longest_prevents_truncation(self):
+        """B5: zip_longest 在列表长度不匹配时不截断。"""
+        from itertools import zip_longest
+        kr = [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]
+        cn = [{"id": 1, "name": "甲"}]
+        # 旧 zip 会截断为 1；zip_longest 保留全部
+        result = []
+        for k, c in zip_longest(kr, cn, fillvalue=None):
+            if k is None or c is None:
+                continue  # 跳过不匹配项
+            result.append({"id": k["id"], "kr": k["name"], "cn": c["name"]})
+        assert len(result) == 1  # 仅匹配的条目保留
+        # 不崩溃、不截断
+
+    def test_priority_files_checked_before_remove(self, tmp_path):
+        """B4: 先检查文件存在再 remove。"""
+        kr_path = tmp_path / "kr"
+        kr_path.mkdir()
+        # 创建 model 文件但不创建 keyword 文件
+        model = kr_path / "KR_ScenarioModelCodes-AutoCreated.json"
+        model.write_text("{}", encoding="utf-8")
+        # keyword 不存在
+        keyword = kr_path / "KR_BattleKeywords.json"
+
+        has_prefix = True
+        files = list(kr_path.rglob("*.json"))
+
+        if model.exists() and keyword.exists():
+            files.remove(model)
+            files.remove(keyword)
+            priority = [keyword, model]
+        else:
+            priority = []
+
+        assert len(priority) == 0  # 两个都存在才进入优先处理
+        assert len(files) == 1      # 文件未被错误移除

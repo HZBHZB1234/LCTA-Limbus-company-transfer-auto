@@ -49,7 +49,7 @@ class WorkerPool:
         indexed: list[tuple[int, Any]] = list(enumerate(files))
         results: list[ProcessOutcome | None] = [None] * total
 
-        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=int(self._max_workers)) as executor:
             import threading
             thread_local = threading.local()
 

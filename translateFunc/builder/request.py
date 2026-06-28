@@ -400,9 +400,15 @@ class RequestBuilder:
         """渲染 affects 为 XML。"""
         if not affects:
             return ""
+        from translateFunc.builder.prompt import PromptFactory
+        _xml_escape = PromptFactory._xml_escape
         lines = ["<affects>"]
         for a in affects:
-            lines.append(f"  <affect id=\"{a.get('id', '')}\" kr=\"{a.get('kr', '')}\" cn=\"{a.get('cn', '')}\" />")
+            lines.append("  <affect>")
+            lines.append(f"    <id>{_xml_escape(a.get('id', ''))}</id>")
+            lines.append(f"    <kr>{_xml_escape(a.get('kr', ''))}</kr>")
+            lines.append(f"    <cn>{_xml_escape(a.get('cn', ''))}</cn>")
+            lines.append("  </affect>")
         lines.append("</affects>")
         return "\n".join(lines) + "\n"
 

@@ -185,15 +185,17 @@ class FileProcessor:
                 ambiguous_terms = self._collect_ambiguous_terms(builder)
                 if ambiguous_terms:
                     try:
-                        s0_system = stage_strategy.build_stage_0_prompt(
+                        s0_system = stage_strategy.build_stage_0_prompt(prompt_format=user_format)
+                        self._update_translator_prompt(s0_system, self._format_to_response_format(user_format))
+                        # user message = 消歧上下文数据 + 完整请求数据
+                        s0_data = stage_strategy.build_stage_0_user_prompt(
                             ambiguous_terms,
                             builder.unified_request.get("text_blocks", []),
                             prompt_format=user_format,
                         )
-                        self._update_translator_prompt(s0_system, self._format_to_response_format(user_format))
-                        # user prompt 用主格式渲染
                         s0_user_prompts = builder.get_request_text(prompt_format=user_format)
-                        s0_user = s0_user_prompts[0] if s0_user_prompts else ""
+                        s0_full = s0_user_prompts[0] if s0_user_prompts else ""
+                        s0_user = s0_data + "\n" + s0_full
 
                         raw_response = self._translator.translate(s0_user, timeout=60)
                         disambiguated = stage_strategy.parse_stage_0_result(raw_response, prompt_format=user_format)
@@ -249,6 +251,11 @@ class FileProcessor:
                     # 放在 try 外：配置更新失败不应被当作解析失败
                     self._update_translator_prompt(system_prompt, self._format_to_response_format(fmt))
 
+                    # 清除缓存，防止跨格式缓存污染
+                    # （xml_json 和 xml_xml 共用 _make_xml_user_prompt 产生相同 user_text，
+                    #  缓存键仅含 user_text hash，不区分 system_prompt/response_format）
+                    self._translator.clear_cache()
+
                     try:
                         # 调用 LLM
                         raw_response = self._translator.translate(user_text, timeout=timeout)
@@ -296,15 +303,18 @@ class FileProcessor:
                         for i, t in enumerate(result)
                     ]
 
-                    s2_prompt = stage_strategy.build_stage_2_prompt(
+                    s2_system = stage_strategy.build_stage_2_prompt(
                         self.file_type,
                         prompt_format=user_format,
-                        original_blocks=original_blocks,
-                        translations=translations_for_check,
                     )
-                    self._update_translator_prompt(s2_prompt, self._format_to_response_format(user_format))
-                    # 阶段 2 的 user prompt 为空字符串（全部在 system prompt 中）
-                    raw_response = self._translator.translate("", timeout=120)
+                    self._update_translator_prompt(s2_system, self._format_to_response_format(user_format))
+                    # 阶段 2 的 user message 包含原文/译文对
+                    s2_user = stage_strategy.build_stage_2_user_prompt(
+                        original_blocks,
+                        translations_for_check,
+                        prompt_format=user_format,
+                    )
+                    raw_response = self._translator.translate(s2_user, timeout=120)
                     checked = stage_strategy.parse_stage_2_result(raw_response, prompt_format=user_format)
 
                     if checked:

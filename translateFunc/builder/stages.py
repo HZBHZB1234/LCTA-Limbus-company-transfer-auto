@@ -45,12 +45,21 @@ class StageStrategy:
 
     def build_stage_0_prompt(
         self,
+        prompt_format: str = "xml_json",
+    ) -> str:
+        """构建阶段 0 的 system prompt（仅 role + rules + format，不含数据）。"""
+        return self._prompt_factory.build_stage_0_system_prompt(prompt_format)
+
+    def build_stage_0_user_prompt(
+        self,
         candidate_terms: list[dict],
         text_blocks: list[dict],
         prompt_format: str = "xml_json",
     ) -> str:
-        """构建阶段 0 的 LLM 消歧提示词。"""
-        return self._prompt_factory.build_disambiguation_prompt(candidate_terms, text_blocks, prompt_format)
+        """构建阶段 0 的 user message（候选术语 + 文本块上下文数据）。"""
+        return self._prompt_factory.build_stage_0_user_message(
+            candidate_terms, text_blocks, prompt_format,
+        )
 
     def parse_stage_0_result(self, result_text: str, prompt_format: str = "xml_json") -> list[dict]:
         """将 LLM 消歧结果解析为结构化数据。"""
@@ -116,18 +125,20 @@ class StageStrategy:
         self,
         file_type: FileType,
         prompt_format: str = "xml_json",
-        original_blocks: list[dict] | None = None,
-        translations: list[dict] | None = None,
     ) -> str:
-        """构建自校验提示词，将原文与译文并列对比。"""
-        system = self._prompt_factory.build_system_prompt(
+        """构建阶段 2 的 system prompt（仅 role + rules + format，不含数据）。"""
+        return self._prompt_factory.build_system_prompt(
             file_type=file_type, stage=2, prompt_format=prompt_format,
         )
 
-        if not original_blocks or not translations:
-            return system
-
-        # 用户部分：原文与译文并列
+    def build_stage_2_user_prompt(
+        self,
+        original_blocks: list[dict],
+        translations: list[dict],
+        prompt_format: str = "xml_json",
+    ) -> str:
+        """构建阶段 2 的 user message（原文/译文对）。"""
+        _xml_escape = self._prompt_factory._xml_escape
         lines = [
             "<context>",
             "请校验以下翻译的术语一致性和格式正确性：",
@@ -135,16 +146,15 @@ class StageStrategy:
         for i, (orig, trans) in enumerate(zip(original_blocks, translations)):
             lines.append(f'  <pair id="{i + 1}">')
             lines.append(f"    <original>")
-            lines.append(f"      <kr>{orig.get('kr', '')}</kr>")
-            lines.append(f"      <jp>{orig.get('jp', '')}</jp>")
-            lines.append(f"      <en>{orig.get('en', '')}</en>")
+            lines.append(f"      <kr>{_xml_escape(orig.get('kr', ''))}</kr>")
+            lines.append(f"      <jp>{_xml_escape(orig.get('jp', ''))}</jp>")
+            lines.append(f"      <en>{_xml_escape(orig.get('en', ''))}</en>")
             lines.append(f"    </original>")
             trans_text = trans.get("translation", "") if isinstance(trans, dict) else str(trans)
-            lines.append(f"    <translation>{trans_text}</translation>")
+            lines.append(f"    <translation>{_xml_escape(trans_text)}</translation>")
             lines.append(f"  </pair>")
         lines.append("</context>")
-
-        return system + "\n" + "\n".join(lines)
+        return "\n".join(lines)
 
     def parse_stage_2_result(self, result_text: str, prompt_format: str = "xml_json") -> list[dict]:
         """解析自校验结果。"""

@@ -54,6 +54,8 @@ class PromptFactory:
         "<rule>保留原文的代码格式，如富文本和f-string</rule>\n"
         "<rule>术语内容可能存在错误引用，如果术语内容与原文意思偏差过大，忽略该术语</rule>\n"
         "<rule>原文的控制字符会被转义，输出时也使用转义后的字符（如\\n）</rule>\n"
+        "<rule>在XML输出中，文本内的双引号必须转义为 &amp;quot;，&amp; 写为 &amp;amp;，&lt; 写为 &amp;lt;</rule>\n"
+        "<rule>在JSON输出中，文本内的双引号必须转义为 \\\"，换行符写为 \\n，反斜杠写为 \\\\</rule>\n"
         "</rules>\n"
     )
 
@@ -134,7 +136,9 @@ class PromptFactory:
         '    "波浪号使用半角波浪号~",\n'
         '    "保留原文的代码格式，如富文本和f-string",\n'
         '    "术语内容可能存在错误引用，如果术语内容与原文意思偏差过大，忽略该术语",\n'
-        '    "原文的控制字符会被转义，输出时也使用转义后的字符（如\\\\n）"\n'
+        '    "原文的控制字符会被转义，输出时也使用转义后的字符（如\\\\n）",\n'
+        '    "在JSON输出中，文本内的双引号必须转义为 \\\\"，换行符写为 \\\\n，反斜杠写为 \\\\\\\\",\n'
+        '    "在XML输出中，文本内的双引号必须转义为 &amp;quot;，&amp; 写为 &amp;amp;，&lt; 写为 &amp;lt;"\n'
         '  ]\n'
         '}\n'
     )
@@ -168,7 +172,8 @@ class PromptFactory:
         '      "disambiguations": [\n'
         '        {"term": "术语KR", "applies": true, "actual_meaning": "在此上下文中的实际含义", "reason": "判断理由"}\n'
         '      ]\n'
-        '    }\n'
+        '    },\n'
+        '    "escaping": "字符串值中的换行符必须写为 \\\\n，双引号必须写为 \\\\"，反斜杠必须写为 \\\\\\\\；确保输出是合法JSON"\n'
         '  }\n'
         '}\n'
     )
@@ -183,7 +188,8 @@ class PromptFactory:
         '        {"id": 1, "translation": "翻译结果", "reasoning": "关键决策说明", "confidence": "high|medium|low"}\n'
         '      ]\n'
         '    },\n'
-        '    "note": "confidence为low的条目说明翻译不确定，需要回退到原文"\n'
+        '    "note": "confidence为low的条目说明翻译不确定，需要回退到原文",\n'
+        '    "escaping": "字符串值中的换行符必须写为 \\\\n，双引号必须写为 \\\\"，反斜杠必须写为 \\\\\\\\；确保输出是合法JSON"\n'
         '  }\n'
         '}\n'
     )
@@ -197,7 +203,8 @@ class PromptFactory:
         '      "checked_translations": [\n'
         '        {"id": 1, "translation": "修正后的翻译", "changed": false, "change_reason": ""}\n'
         '      ]\n'
-        '    }\n'
+        '    },\n'
+        '    "escaping": "字符串值中的换行符必须写为 \\\\n，双引号必须写为 \\\\"，反斜杠必须写为 \\\\\\\\；确保输出是合法JSON"\n'
         '  }\n'
         '}\n'
     )
@@ -210,7 +217,12 @@ class PromptFactory:
         "<format>\n"
         "返回XML，包含<disambiguations>根元素：\n"
         "<disambiguations>\n"
-        '  <item term="术语KR" applies="true" actual_meaning="在此上下文中的实际含义" reason="判断理由" />\n'
+        "  <item>\n"
+        "    <term>术语KR</term>\n"
+        "    <applies>true</applies>\n"
+        "    <actual_meaning>在此上下文中的实际含义</actual_meaning>\n"
+        "    <reason>判断理由</reason>\n"
+        "  </item>\n"
         "</disambiguations>\n"
         "</format>\n"
     )
@@ -246,7 +258,96 @@ class PromptFactory:
         "</format>\n"
     )
 
+    # ========== 工具方法 ==========
+
+    @staticmethod
+    def _xml_escape(text: str) -> str:
+        """转义 XML 特殊字符（&, <, >, "）。"""
+        if not isinstance(text, str):
+            return str(text)
+        text = text.replace("&", "&amp;")
+        text = text.replace("<", "&lt;")
+        text = text.replace(">", "&gt;")
+        text = text.replace("\"", "&quot;")
+        return text
+
     # ========== 公开 API ==========
+
+    # ---- 阶段 0 system prompt（仅指令，不含数据） ----
+
+    def build_stage_0_system_prompt(self, prompt_format: str = "xml_json") -> str:
+        """构建阶段 0（消歧）的 system prompt —— 仅含 role + rules + format。
+
+        与 build_system_prompt(stage=0) 的区别：stage 0 有专用的 role
+        （"你是边狱公司的术语专家"），且不含 candidate_terms / text_blocks 数据。
+        """
+        is_json = (prompt_format == "json_json")
+        is_xml_response = (prompt_format == "xml_xml")
+
+        if is_json:
+            parts: list[str] = [
+                '{\n  "role": "你是边狱公司的术语专家。"\n}\n',
+                self._JSON_STAGE0_RULES,
+                self._JSON_STAGE0_FORMAT,
+            ]
+        else:
+            parts: list[str] = [
+                "<role>你是边狱公司的术语专家。</role>\n",
+                self._STAGE0_RULES,
+                self._XML_STAGE0_FORMAT_XML if is_xml_response else self._XML_STAGE0_FORMAT,
+            ]
+
+        return "\n".join(parts)
+
+    def build_stage_0_user_message(
+        self,
+        candidate_terms: list[dict],
+        text_blocks: list[dict],
+        prompt_format: str = "xml_json",
+    ) -> str:
+        """构建阶段 0（消歧）的 user message —— 仅含候选术语和文本块上下文数据。
+
+        不含 role / rules / format spec —— 这些已在 system prompt 中。
+        """
+        is_json = (prompt_format == "json_json")
+
+        if is_json:
+            import json as _json
+            return _json.dumps({
+                "task": "判断以下候选术语在当前文本上下文中是否适用",
+                "candidate_terms": [
+                    {"kr": t["kr"], "cn": t["cn"], "note": t.get("note", "")}
+                    for t in candidate_terms
+                ],
+                "text_blocks": [
+                    {"id": i + 1, "kr": b.get("kr", ""), "jp": b.get("jp", ""), "en": b.get("en", "")}
+                    for i, b in enumerate(text_blocks[:3])
+                ],
+            }, ensure_ascii=False, indent=2)
+
+        term_list = "\n".join(
+            f"  - {self._xml_escape(t['kr'])} → {self._xml_escape(t['cn'])}" + (f" ({self._xml_escape(t.get('note', ''))})" if t.get('note') else "")
+            for t in candidate_terms
+        )
+        block_text = ""
+        for i, block in enumerate(text_blocks[:3]):
+            block_text += (
+                f"<block id=\"{i+1}\">\n"
+                f"  <kr>{self._xml_escape(block.get('kr', ''))}</kr>\n"
+                f"  <jp>{self._xml_escape(block.get('jp', ''))}</jp>\n"
+                f"  <en>{self._xml_escape(block.get('en', ''))}</en>\n"
+                f"</block>\n"
+            )
+
+        return (
+            f"<task>判断以下候选术语在当前文本上下文中是否适用</task>\n"
+            f"<context>\n"
+            f"候选术语：\n{term_list}\n"
+            f"当前文本：\n{block_text}"
+            f"</context>\n"
+        )
+
+    # ---- 通用 system prompt（stage 1/2 使用） ----
 
     def build_system_prompt(
         self,
@@ -304,64 +405,6 @@ class PromptFactory:
 
         return "\n".join(parts)
 
-    def build_disambiguation_prompt(
-        self,
-        candidate_terms: list[dict],
-        text_blocks: list[dict],
-        prompt_format: str = "xml_json",
-    ) -> str:
-        """构建轻量 LLM 消歧提示词（约 300 tokens）。"""
-        is_json = (prompt_format == "json_json")
-        is_xml_response = (prompt_format == "xml_xml")
-
-        if is_json:
-            import json as _json
-            return _json.dumps({
-                "role": "你是边狱公司的术语专家。",
-                "context": {
-                    "candidate_terms": [
-                        {"kr": t["kr"], "cn": t["cn"], "note": t.get("note", "")}
-                        for t in candidate_terms
-                    ],
-                    "text_blocks": [
-                        {"id": i + 1, "kr": b.get("kr", ""), "jp": b.get("jp", ""), "en": b.get("en", "")}
-                        for i, b in enumerate(text_blocks[:3])
-                    ],
-                },
-                "format": {
-                    "response_type": "json_object",
-                    "schema": {
-                        "disambiguations": [
-                            {"term": "...", "applies": True, "actual_meaning": "...", "reason": "..."}
-                        ]
-                    }
-                }
-            }, ensure_ascii=False, indent=2)
-
-        term_list = "\n".join(
-            f"  - {t['kr']} → {t['cn']}" + (f" ({t.get('note', '')})" if t.get('note') else "")
-            for t in candidate_terms
-        )
-        block_text = ""
-        for i, block in enumerate(text_blocks[:3]):
-            block_text += (
-                f"<block id=\"{i+1}\">\n"
-                f"  <kr>{block.get('kr', '')}</kr>\n"
-                f"  <jp>{block.get('jp', '')}</jp>\n"
-                f"  <en>{block.get('en', '')}</en>\n"
-                f"</block>\n"
-            )
-
-        format_part = self._XML_STAGE0_FORMAT_XML if is_xml_response else self._XML_STAGE0_FORMAT
-        return (
-            f"<role>你是边狱公司的术语专家。</role>\n"
-            f"<context>\n"
-            f"候选术语：\n{term_list}\n"
-            f"当前文本：\n{block_text}"
-            f"</context>\n"
-            f"{format_part}"
-        )
-
     # ========== 内部渲染器 ==========
 
     def _render_role_styles(self, styles: list[dict]) -> str:
@@ -370,7 +413,7 @@ class PromptFactory:
         for s in styles:
             lines.append(f"  <style>")
             for k, v in s.items():
-                lines.append(f"    <{k}>{v}</{k}>")
+                lines.append(f"    <{self._xml_escape(k)}>{self._xml_escape(v)}</{self._xml_escape(k)}>")
             lines.append(f"  </style>")
         lines.append("</role_styles>")
         return "\n".join(lines) + "\n"
@@ -380,13 +423,13 @@ class PromptFactory:
         lines = ["<examples>"]
         for ex in examples:
             lines.append("  <example>")
-            lines.append(f"    <in>{ex.get('in', '')}</in>")
+            lines.append(f"    <in>{self._xml_escape(ex.get('in', ''))}</in>")
             lines.append(f"    <out>")
-            lines.append(f"      <translation>{ex.get('translation', '')}</translation>")
+            lines.append(f"      <translation>{self._xml_escape(ex.get('translation', ''))}</translation>")
             if ex.get('reasoning'):
-                lines.append(f"      <reasoning>{ex['reasoning']}</reasoning>")
+                lines.append(f"      <reasoning>{self._xml_escape(ex['reasoning'])}</reasoning>")
             if ex.get('confidence'):
-                lines.append(f"      <confidence>{ex['confidence']}</confidence>")
+                lines.append(f"      <confidence>{self._xml_escape(ex['confidence'])}</confidence>")
             lines.append(f"    </out>")
             lines.append("  </example>")
         lines.append("</examples>")
@@ -397,20 +440,20 @@ class PromptFactory:
         lines = ["<text>"]
         for i, block in enumerate(text_blocks):
             lines.append(f'  <block id="{i + 1}">')
-            lines.append(f"    <kr>{block.get('kr', '')}</kr>")
+            lines.append(f"    <kr>{self._xml_escape(block.get('kr', ''))}</kr>")
             if block.get('jp'):
-                lines.append(f"    <jp>{block.get('jp', '')}</jp>")
+                lines.append(f"    <jp>{self._xml_escape(block.get('jp', ''))}</jp>")
             if block.get('en'):
-                lines.append(f"    <en>{block.get('en', '')}</en>")
+                lines.append(f"    <en>{self._xml_escape(block.get('en', ''))}</en>")
             # Per-block 引用字段
             if block.get('proper_refs'):
                 refs = ", ".join(block['proper_refs'])
-                lines.append(f"    <proper_refs>{refs}</proper_refs>")
+                lines.append(f"    <proper_refs>{self._xml_escape(refs)}</proper_refs>")
             if block.get('affect_refs'):
                 refs = ", ".join(block['affect_refs'])
-                lines.append(f"    <affect_refs>{refs}</affect_refs>")
+                lines.append(f"    <affect_refs>{self._xml_escape(refs)}</affect_refs>")
             if block.get('model'):
-                lines.append(f"    <model>{block['model']}</model>")
+                lines.append(f"    <model>{self._xml_escape(block['model'])}</model>")
             lines.append(f"  </block>")
         lines.append("</text>")
         return "\n".join(lines) + "\n"
@@ -421,13 +464,15 @@ class PromptFactory:
             return ""
         lines = ["<glossary>"]
         for t in terms:
-            kr = t.get('kr', t.get('term', ''))
-            cn = t.get('cn', t.get('translation', ''))
-            note = t.get('note', '')
-            attr = f' kr="{kr}" cn="{cn}"'
-            if note:
-                attr += f' note="{note}"'
-            lines.append(f"  <term{attr} />")
+            kr = self._xml_escape(t.get('kr', t.get('term', '')))
+            cn = self._xml_escape(t.get('cn', t.get('translation', '')))
+            note = self._xml_escape(t.get('note', ''))
+            lines.append("  <term>")
+            lines.append(f"    <kr>{kr}</kr>")
+            lines.append(f"    <cn>{cn}</cn>")
+            if t.get('note'):
+                lines.append(f"    <note>{note}</note>")
+            lines.append("  </term>")
         lines.append("</glossary>")
         return "\n".join(lines) + "\n"
 
@@ -488,19 +533,22 @@ class PromptFactory:
     def parse_response(self, text: str, stage: int, prompt_format: str) -> list[dict]:
         """按格式解析 LLM 响应，返回结构化数据列表。
 
+        解析失败时先尝试修复（剥离 markdown 围栏、提取内容、修复常见格式错误），
+        修复仍失败才返回空列表。
+
         Args:
             text: LLM 原始响应文本
             stage: 0（消歧）、1（翻译）、2（自校验）
             prompt_format: "xml_json" | "xml_xml" | "json_json"
 
         Returns:
-            解析后的 dict 列表；解析失败返回空列表
+            解析后的 dict 列表；所有尝试失败返回空列表
         """
         if prompt_format in ("xml_json", "json_json"):
-            import json as _json
-            try:
-                data = _json.loads(text)
-            except _json.JSONDecodeError:
+            data = self._try_parse_json(text)
+            if data is None:
+                data = self._repair_json_response(text)
+            if data is None:
                 return []
             if stage == 0:
                 return data.get("disambiguations", [])
@@ -510,34 +558,186 @@ class PromptFactory:
                 return data.get("checked_translations", [])
             return []
         elif prompt_format == "xml_xml":
-            start = text.find('<')
-            end = text.rfind('>')
-            text = text[start :end + 1]
-
-            return self._parse_xml_response(text, stage)
+            results = self._try_parse_xml(text, stage)
+            if results is None:
+                results = self._repair_xml_response(text, stage)
+            return results if results is not None else []
         return []
 
-    def _parse_xml_response(self, text: str, stage: int) -> list[dict]:
-        """解析 XML 格式的 LLM 响应。"""
-        import xml.etree.ElementTree as ET
-        try:
-            root = ET.fromstring(text)
-        except ET.ParseError:
-            return []
+    # ========== 解析辅助：直接尝试 ==========
 
+    @staticmethod
+    def _try_parse_json(text: str) -> dict | None:
+        """尝试直接 JSON 解析，失败返回 None。"""
+        import json as _json
+        try:
+            return _json.loads(text)
+        except _json.JSONDecodeError:
+            return None
+
+    def _try_parse_xml(self, text: str, stage: int) -> list[dict] | None:
+        """尝试直接 XML 解析，失败返回 None。"""
+        start = text.find('<')
+        end = text.rfind('>')
+        if start == -1 or end == -1 or end <= start:
+            return None
+        text = text[start:end + 1]
+        result = self._parse_xml_response(text, stage)
+        return result if result else None
+
+    # ========== 解析修复 ==========
+
+    @staticmethod
+    def _repair_json_response(text: str) -> dict | None:
+        """修复常见 JSON 格式问题后尝试解析。
+
+        处理：markdown 代码围栏、周围文本、尾部逗号、控制字符。
+        """
+        import json as _json
+        import re
+
+        if not text or not text.strip():
+            return None
+
+        cleaned = text.strip()
+
+        # 1. 剥离 BOM
+        if cleaned.startswith('﻿'):
+            cleaned = cleaned[1:]
+
+        # 2. 剥离 markdown 代码围栏
+        fence_patterns = [
+            (r'^```(?:json)?\s*\n', r'\n?```\s*$'),
+        ]
+        for start_pat, end_pat in fence_patterns:
+            if re.match(start_pat, cleaned):
+                cleaned = re.sub(start_pat, '', cleaned, count=1)
+                cleaned = re.sub(end_pat, '', cleaned, count=1)
+                cleaned = cleaned.strip()
+                break
+
+        # 3. 提取第一个 { 到最后一个 } 之间的内容
+        first_brace = cleaned.find('{')
+        last_brace = cleaned.rfind('}')
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            cleaned = cleaned[first_brace:last_brace + 1]
+
+        if not cleaned:
+            return None
+
+        # 4. 尝试严格解析
+        try:
+            return _json.loads(cleaned)
+        except _json.JSONDecodeError:
+            pass
+
+        # 5. 修复尾部逗号（对象和数组）
+        try:
+            fixed = re.sub(r',(\s*[}\]])', r'\1', cleaned)
+            return _json.loads(fixed)
+        except _json.JSONDecodeError:
+            pass
+
+        # 6. 放宽控制字符限制
+        try:
+            decoder = _json.JSONDecoder(strict=False)
+            return decoder.decode(cleaned)
+        except _json.JSONDecodeError:
+            pass
+
+        return None
+
+    @staticmethod
+    def _repair_xml_response(text: str, stage: int) -> list[dict] | None:
+        """修复常见 XML 格式问题后尝试解析。
+
+        处理：markdown 代码围栏、未转义 & 符号、多余文本。
+        """
+        import re
+        import xml.etree.ElementTree as ET
+
+        if not text or not text.strip():
+            return None
+
+        cleaned = text.strip()
+
+        # 1. 剥离 markdown 代码围栏
+        if cleaned.startswith('```'):
+            cleaned = re.sub(r'^```(?:xml)?\s*\n', '', cleaned, count=1)
+            cleaned = re.sub(r'\n?```\s*$', '', cleaned, count=1)
+            cleaned = cleaned.strip()
+
+        # 2. 提取第一个 < 到最后一个 > 之间的内容
+        first_lt = cleaned.find('<')
+        last_gt = cleaned.rfind('>')
+        if first_lt == -1 or last_gt == -1 or last_gt <= first_lt:
+            return None
+        cleaned = cleaned[first_lt:last_gt + 1]
+
+        if not cleaned:
+            return None
+
+        # 3. 尝试直接解析
+        try:
+            root = ET.fromstring(cleaned)
+            return PromptFactory._parse_xml_response_static(root, stage)
+        except ET.ParseError:
+            pass
+
+        # 4. 修复裸 & 符号（不破坏已有的合法实体）
+        known_entities = {'&amp;', '&lt;', '&gt;', '&quot;', '&apos;', '&#39;'}
+        # 找到所有 &...; 模式，保护已知实体，转义其余 &
+        def _fix_ampersands(xml_text: str) -> str:
+            # 匹配 & 后跟非空白字符，可能构成实体或裸 &
+            result = []
+            i = 0
+            while i < len(xml_text):
+                if xml_text[i] == '&':
+                    # 检查是否已是合法实体
+                    semicolon = xml_text.find(';', i)
+                    if semicolon != -1 and semicolon - i <= 10:
+                        entity = xml_text[i:semicolon + 1]
+                        if entity in known_entities or re.match(r'^&#\d+;$', entity) or re.match(r'^&#x[0-9a-fA-F]+;$', entity):
+                            result.append(entity)
+                            i = semicolon + 1
+                            continue
+                    # 裸 &，转义
+                    result.append('&amp;')
+                    i += 1
+                else:
+                    result.append(xml_text[i])
+                    i += 1
+            return ''.join(result)
+
+        try:
+            fixed = _fix_ampersands(cleaned)
+            if fixed != cleaned:
+                root = ET.fromstring(fixed)
+                return PromptFactory._parse_xml_response_static(root, stage)
+        except ET.ParseError:
+            pass
+
+        return None
+
+    @staticmethod
+    def _parse_xml_response_static(root, stage: int) -> list[dict]:
+        """_parse_xml_response 的静态版本，供 _repair_xml_response 调用。"""
         results: list[dict] = []
 
         if stage == 0:
-            # <disambiguations><item term="..." applies="true" ... /></disambiguations>
             for item in root.findall("item"):
+                term_el = item.find("term")
+                applies_el = item.find("applies")
+                meaning_el = item.find("actual_meaning")
+                reason_el = item.find("reason")
+                applies_text = applies_el.text if applies_el is not None and applies_el.text else ""
                 results.append({
-                    "term": item.get("term", ""),
-                    "applies": item.get("applies", "").lower() in ("true", "1"),
-                    "actual_meaning": item.get("actual_meaning", ""),
-                    "reason": item.get("reason", ""),
+                    "term": term_el.text if term_el is not None and term_el.text else "",
+                    "applies": applies_text.lower() in ("true", "1"),
+                    "actual_meaning": meaning_el.text if meaning_el is not None and meaning_el.text else "",
+                    "reason": reason_el.text if reason_el is not None and reason_el.text else "",
                 })
         elif stage == 1:
-            # <translations><item id="1"><translation>...</translation>...</item></translations>
             for item in root.findall("item"):
                 entry: dict = {"id": int(item.get("id", len(results) + 1))}
                 trans_el = item.find("translation")
@@ -548,7 +748,6 @@ class PromptFactory:
                 entry["confidence"] = conf_el.text if conf_el is not None and conf_el.text else "medium"
                 results.append(entry)
         elif stage == 2:
-            # <checked_translations><item id="1"><translation>...</translation>...</item></checked_translations>
             for item in root.findall("item"):
                 entry: dict = {"id": int(item.get("id", len(results) + 1))}
                 trans_el = item.find("translation")
@@ -560,3 +759,12 @@ class PromptFactory:
                 results.append(entry)
 
         return results
+
+    def _parse_xml_response(self, text: str, stage: int) -> list[dict]:
+        """解析 XML 格式的 LLM 响应。委托给静态实现。"""
+        import xml.etree.ElementTree as ET
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            return []
+        return self._parse_xml_response_static(root, stage)

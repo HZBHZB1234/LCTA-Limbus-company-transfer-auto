@@ -196,9 +196,13 @@ LLM_TRANSLATOR: Dict[str, dict] = {
         "base_url": "https://hunyuan.cloud.tencent.com/v1",
         "model": "hunyuan-pro"
     },
-    "DeepSeek（深度求索）": {
+    "DeepSeek v4-pro": {
         "base_url": "https://api.deepseek.com/v1",
-        "model": "deepseek-chat"
+        "model": "deepseek-v4-pro"
+    },
+    "DeepSeek v4-flash": {
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-flash"
     },
     # 国外其他知名平台
     "Anthropic（Claude）": {

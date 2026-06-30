@@ -38,16 +38,19 @@ class TestTimingProfiler:
         assert "phase_b" in report
 
     def test_nested_phases(self):
-        """嵌套 phase：内层耗时计入外层。"""
+        """嵌套 phase：外层耗时不含内层，总时长为外层真实用时。"""
         profiler = TimingProfiler.get()
         profiler.reset()
         with profiler.phase("outer"):
             time.sleep(0.01)
             with profiler.phase("inner"):
                 time.sleep(0.01)
-        # 内层和外层都应该有记录
         assert profiler._records["inner"] >= 0.01
-        assert profiler._records["outer"] >= 0.02  # 包含 inner 时间
+        # 外层只包含自己的 sleep(0.01)，不包含 inner
+        assert profiler._records["outer"] >= 0.01
+        # 总和应为 ~0.02，而非旧行为的 ~0.03（验证无重复计算）
+        total = sum(profiler._records.values())
+        assert total < 0.03
 
     def test_report_format(self):
         """report() 输出包含表头和关键列。"""

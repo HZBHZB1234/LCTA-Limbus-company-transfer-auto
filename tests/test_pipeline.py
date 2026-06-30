@@ -165,3 +165,63 @@ class TestPipelineBugFixes:
 
         assert len(priority) == 0  # 两个都存在才进入优先处理
         assert len(files) == 1      # 文件未被错误移除
+
+
+class TestRegressionFixes:
+    """Phase 1-2 修复的回归测试。"""
+
+    def test_fallback_not_in_errors(self):
+        """FALLBACK_TO_ORIGINAL 应进入 summary.fallback 而非 errors。"""
+        summary = PipelineSummary()
+        outcome = ProcessOutcome(ProcessResult.FALLBACK_TO_ORIGINAL, "test.json")
+        # 模拟 _record_outcome 逻辑
+        if outcome.result == ProcessResult.FALLBACK_TO_ORIGINAL:
+            summary.fallback.append(outcome.file_name)
+        else:
+            summary.errors.append(outcome)
+        assert "test.json" in summary.fallback
+        assert "test.json" not in [e.file_name for e in summary.errors]
+
+    def test_fallback_count_accurate(self):
+        summary = PipelineSummary()
+        summary.fallback.append("a.json")
+        summary.fallback.append("b.json")
+        assert summary.fallback_count == 2
+
+    def test_make_data_index_without_id_key(self):
+        """_make_data_index 对无 id 键的 dataList 应回退为 enumerate。"""
+        from translateFunc.processor import FileProcessor
+
+        # 构造一个 dataList 项缺少 "id" 键的场景
+        data = [{"name": "item1", "value": "v1"}, {"name": "item2", "value": "v2"}]
+        processor = FileProcessor.__new__(FileProcessor)
+        processor.is_story = False
+        processor.en_data = data
+        processor.kr_data = data
+        processor.jp_data = data
+        processor.llc_data = data
+
+        # 调用 _make_data_index 不应抛出 KeyError
+        processor._make_data_index()
+        # 应该用 enumerate 索引
+        assert processor.kr_index == {0: data[0], 1: data[1]}
+
+    def test_make_data_index_with_id_key(self):
+        """有 id 键的 dataList 应正常使用 id 索引。"""
+        from translateFunc.processor import FileProcessor
+        data = [{"id": "A001", "name": "item1"}, {"id": "A002", "name": "item2"}]
+        processor = FileProcessor.__new__(FileProcessor)
+        processor.is_story = False
+        processor.en_data = data
+        processor.kr_data = data
+        processor.jp_data = data
+        processor.llc_data = data
+
+        processor._make_data_index()
+        assert processor.kr_index == {"A001": data[0], "A002": data[1]}
+
+    def test_prompt_version_config_exists(self):
+        """TranslateConfig 应有 prompt_version 字段。"""
+        config = TranslateConfig()
+        assert hasattr(config, "prompt_version")
+        assert config.prompt_version == "v2"

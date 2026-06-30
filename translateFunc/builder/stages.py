@@ -74,12 +74,21 @@ class StageStrategy:
         *,
         examples: list[dict] | None = None,
     ) -> str:
-        """构建主翻译系统提示词。"""
+        """构建主翻译系统提示词。v2 模式下自动加载 few-shot 示例。"""
+        prompt_version = getattr(self._config, "prompt_version", "v2")
+        # v2 模式下自动加载 FileType 对应的 few-shot 示例
+        if prompt_version != "v1" and examples is None:
+            try:
+                from translateFunc.builder.examples import get_examples
+                examples = get_examples(file_type.name)
+            except ImportError:
+                pass
         return self._prompt_factory.build_system_prompt(
             file_type=file_type,
             stage=1,
             prompt_format=prompt_format,
             examples=examples,
+            prompt_version=prompt_version,
         )
 
     def build_stage_1_user_prompt(
@@ -129,6 +138,7 @@ class StageStrategy:
         """构建阶段 2 的 system prompt（仅 role + rules + format，不含数据）。"""
         return self._prompt_factory.build_system_prompt(
             file_type=file_type, stage=2, prompt_format=prompt_format,
+            prompt_version=getattr(self._config, "prompt_version", "v2"),
         )
 
     def build_stage_2_user_prompt(

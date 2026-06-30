@@ -38,6 +38,7 @@ class TranslateConfig:
     disambiguation_mode: str = "hybrid"       # "similarity" | "llm" | "hybrid"
     min_confidence: str = "medium"            # "high" | "medium" | "low"
     prompt_format: str = "xml_json"           # "xml_json" | "xml_xml" | "json_json"
+    prompt_version: str = "v2"                # "v1" = 旧版提示词, "v2" = 新版（reasoning 前置 + 规则优先级）
 
     # --- 保存 ---
     save_result: bool = True
@@ -144,15 +145,20 @@ class PipelineSummary:
     """一次翻译运行的汇总结果。"""
     saved: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    fallback: list[str] = field(default_factory=list)
     errors: list[ProcessOutcome] = field(default_factory=list)
 
     @property
     def total(self) -> int:
-        return len(self.saved) + len(self.skipped) + len(self.errors)
+        return len(self.saved) + len(self.skipped) + len(self.fallback) + len(self.errors)
 
     @property
     def success_count(self) -> int:
         return len(self.saved)
+
+    @property
+    def fallback_count(self) -> int:
+        return len(self.fallback)
 
     @property
     def error_count(self) -> int:

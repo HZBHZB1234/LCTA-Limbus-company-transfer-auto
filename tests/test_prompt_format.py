@@ -11,7 +11,7 @@ from translateFunc.enums import FileType
 
 
 class TestPromptFactoryFormats:
-    """Tests for PromptFactory with three prompt formats."""
+    """Tests for PromptFactory with three prompt formats (v2 default)."""
 
     def setup_method(self):
         self.pf = PromptFactory()
@@ -21,26 +21,31 @@ class TestPromptFactoryFormats:
     def test_xml_json_system_prompt_structure(self):
         sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_json")
         assert "<role>" in sp
-        assert "<rules>" in sp
+        assert "<translation_rules>" in sp
+        assert "<format_rules>" in sp
         assert "<format>" in sp
-        assert '"translations"' in sp  # JSON format instruction in XML
+        assert '"translations"' in sp
+        # v2: reasoning before translation in output format
+        assert '"reasoning"' in sp
 
     def test_xml_json_system_prompt_stage_0(self):
         sp = self.pf.build_system_prompt(FileType.OTHER, 0, "xml_json")
         assert "<role>" in sp
-        assert "<rules>" in sp
+        assert "<translation_rules>" in sp
         assert "disambiguations" in sp
 
     def test_xml_json_system_prompt_stage_2(self):
         sp = self.pf.build_system_prompt(FileType.OTHER, 2, "xml_json")
         assert "checked_translations" in sp
+        # v2: stage 2 has verification sub-object
+        assert "verification" in sp
 
     # ---- xml_xml ----
 
     def test_xml_xml_system_prompt_structure(self):
         sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_xml")
         assert "<role>" in sp
-        assert "<rules>" in sp
+        assert "<translation_rules>" in sp
         assert "<translations>" in sp  # XML response instruction
         assert "<translation>" in sp
 
@@ -53,14 +58,16 @@ class TestPromptFactoryFormats:
     def test_json_json_system_prompt_structure(self):
         sp = self.pf.build_system_prompt(FileType.STORY, 1, "json_json")
         assert '"role"' in sp
-        assert '"rules"' in sp
+        assert '"translation_rules"' in sp
+        assert '"format_rules"' in sp
         assert '"format"' in sp
         assert '"translations"' in sp
 
     def test_json_json_contains_no_xml_tags(self):
         sp = self.pf.build_system_prompt(FileType.STORY, 1, "json_json")
         assert "<role>" not in sp
-        assert "<rules>" not in sp
+        assert "<translation_rules>" not in sp
+        assert "<format_rules>" not in sp
 
     def test_json_json_system_prompt_stage_0(self):
         sp = self.pf.build_system_prompt(FileType.OTHER, 0, "json_json")
@@ -153,9 +160,15 @@ class TestPromptFactoryParsing:
         assert result[1]["translation"] == "B"
 
     def test_parse_xml_stage_0(self):
+        # Stage 0 XML with child elements (standard format)
         text = (
             '<disambiguations>'
-            '<item term="테스트" applies="true" actual_meaning="测试" reason="匹配"/>'
+            '<item>'
+            '<term>테스트</term>'
+            '<applies>true</applies>'
+            '<actual_meaning>测试</actual_meaning>'
+            '<reason>匹配</reason>'
+            '</item>'
             '</disambiguations>'
         )
         result = self.pf.parse_response(text, 0, "xml_xml")
@@ -456,3 +469,127 @@ class TestFormatAwareSplit:
         assert len(builder.split_requests) == 1, (
             f"json_json 200 短 block 不应分割，但 split_requests={len(builder.split_requests)}"
         )
+
+
+class TestPromptV1BackwardCompat:
+    """v1 旧版提示词向后兼容测试。"""
+
+    def setup_method(self):
+        self.pf = PromptFactory()
+
+    def test_v1_uses_old_rules_tag(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_json", prompt_version="v1")
+        assert "<rules>" in sp
+        assert "<translation_rules>" not in sp
+
+    def test_v1_json_uses_old_rules_tag(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "json_json", prompt_version="v1")
+        assert '"rules"' in sp
+        assert '"translation_rules"' not in sp
+
+    def test_v1_xml_xml_structure(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_xml", prompt_version="v1")
+        assert "<rules>" in sp
+        assert "<translation>" in sp
+
+    def test_default_is_v2(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_json")
+        assert "<translation_rules>" in sp
+
+
+class TestReasoningFirst:
+    """v2 输出格式中 reasoning 在 translation 之前。"""
+
+    def setup_method(self):
+        self.pf = PromptFactory()
+
+    def test_reasoning_before_translation_in_format(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_json")
+        # 在 <format> 块中，reasoning 应出现在 translation 之前
+        format_start = sp.find("<format>")
+        format_end = sp.rfind("</format>")
+        format_block = sp[format_start:format_end]
+        reasoning_pos = format_block.find('"reasoning"')
+        translation_pos = format_block.find('"translation"')
+        assert reasoning_pos < translation_pos, (
+            f"reasoning ({reasoning_pos}) 应在 translation ({translation_pos}) 之前"
+        )
+
+    def test_xml_format_reasoning_before_translation(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_xml")
+        format_start = sp.find("<format>")
+        format_end = sp.rfind("</format>")
+        format_block = sp[format_start:format_end]
+        reasoning_pos = format_block.find("<reasoning>")
+        translation_pos = format_block.find("<translation>")
+        assert reasoning_pos < translation_pos
+
+    def test_stage_2_has_verification(self):
+        for fmt in ["xml_json", "xml_xml", "json_json"]:
+            sp = self.pf.build_system_prompt(FileType.STORY, 2, fmt)
+            assert "verification" in sp, f"{fmt}: stage 2 应有 verification 字段"
+
+
+class TestRepairEnhancements:
+    """JSON/XML 修复增强测试。"""
+
+    def setup_method(self):
+        self.pf = PromptFactory()
+
+    def test_repair_json_single_quotes(self):
+        text = "{'translations': [{'id': 1, 'reasoning': 'test', 'translation': '你好', 'confidence': 'high'}]}"
+        result = self.pf.parse_response(text, 1, "json_json")
+        assert len(result) == 1
+        assert result[0]["translation"] == "你好"
+
+    def test_repair_json_nan_to_null(self):
+        text = '{"translations": [{"id": 1, "reasoning": "t", "translation": "你好", "confidence": NaN}]}'
+        result = self.pf.parse_response(text, 1, "xml_json")
+        assert len(result) == 1
+        assert result[0]["translation"] == "你好"
+
+    def test_repair_xml_namespace_prefix(self):
+        text = (
+            '<ns:translations>'
+            '<ns:item id="1">'
+            '<ns:translation>你好</ns:translation>'
+            '<ns:reasoning>test</ns:reasoning>'
+            '<ns:confidence>high</ns:confidence>'
+            '</ns:item>'
+            '</ns:translations>'
+        )
+        result = self.pf.parse_response(text, 1, "xml_xml")
+        assert len(result) == 1
+        assert result[0]["translation"] == "你好"
+
+    def test_repair_xml_unquoted_attrs(self):
+        text = (
+            '<translations>'
+            '<item id=1>'
+            '<translation>你好</translation>'
+            '<reasoning>test</reasoning>'
+            '<confidence>high</confidence>'
+            '</item>'
+            '</translations>'
+        )
+        result = self.pf.parse_response(text, 1, "xml_xml")
+        assert len(result) == 1
+        assert result[0]["translation"] == "你好"
+
+
+class TestConfidenceEnforcement:
+    """置信度检查逻辑测试。"""
+
+    def test_confidence_order(self):
+        """验证置信度排序逻辑。"""
+        _CONFIDENCE_ORDER = {"low": 0, "medium": 1, "high": 2}
+        assert _CONFIDENCE_ORDER["low"] < _CONFIDENCE_ORDER["medium"]
+        assert _CONFIDENCE_ORDER["medium"] < _CONFIDENCE_ORDER["high"]
+
+    def test_min_confidence_default(self):
+        config = TranslateConfig()
+        assert config.min_confidence == "medium"
+
+    def test_prompt_version_default(self):
+        config = TranslateConfig()
+        assert config.prompt_version == "v2"

@@ -20,6 +20,8 @@ import tempfile
 from itertools import zip_longest
 from typing import Any, Callable
 
+_logger = logging.getLogger("LCTA")  # 与 LogManager 一致，确保日志正确路由
+
 from translateFunc.config import (
     TranslateConfig, ProcessOutcome, PipelineSummary,
     PathConfig, FilePathConfig, inject_thinking_mode,
@@ -56,6 +58,10 @@ class TranslationPipeline:
         self._on_progress: Callable[[int, str], None] = lambda pct, msg: None
         self._on_check_running: Callable[[], None] = lambda: None
 
+        # LogBridge：同时在 logging 和 UI 输出
+        from translateFunc.log_bridge import LogBridge
+        self._log_bridge = LogBridge()
+
     def set_callbacks(
         self,
         *,
@@ -67,6 +73,7 @@ class TranslationPipeline:
         """注册 UI 回调函数以报告进度。"""
         if on_log:
             self._on_log = on_log
+            self._log_bridge.set_ui_callback(on_log)
         if on_status:
             self._on_status = on_status
         if on_progress:
@@ -82,7 +89,7 @@ class TranslationPipeline:
         profiler.reset()
 
         self._on_status("正在初始化...")
-        logging.info("=== 阶段 1/5: 解析路径配置 ===")
+        _logger.info("=== 阶段 1/5: 解析路径配置 ===")
 
         # 1. 解析路径
         game_path = self._config.game_path
@@ -106,7 +113,7 @@ class TranslationPipeline:
         )
 
         # 2. 获取专有名词
-        logging.info("=== 阶段 2/5: 获取专有名词 ===")
+        _logger.info("=== 阶段 2/5: 获取专有名词 ===")
         with profiler.phase("获取专有名词"):
             if self._config.enable_proper:
                 self._on_status("正在获取专有名词...")
@@ -125,18 +132,18 @@ class TranslationPipeline:
                         for t in proper_terms
                     ]
                     self._engine.build_proper(proper_dicts)
-                self._on_log(f"已加载 {len(proper_terms)} 个专有名词")
+                self._log_bridge.info(f"已加载 {len(proper_terms)} 个专有名词")
             else:
-                self._on_log("专有名词分析已跳过（enable_proper=False）")
+                self._log_bridge.info("专有名词分析已跳过（enable_proper=False）")
 
         # 3. 构建翻译器
-        logging.info("=== 阶段 3/5: 构建匹配引擎与翻译器 ===")
+        _logger.info("=== 阶段 3/5: 构建匹配引擎与翻译器 ===")
         with profiler.phase("构建匹配引擎"):
             translator = self._build_translator()
 
         # 4. 收集目标文件
         target_files = list(kr_path.rglob("*.json"))
-        self._on_log(f"找到 {len(target_files)} 个文件")
+        self._log_bridge.info(f"找到 {len(target_files)} 个文件")
 
         # 5. 重排序：优先文件放在前面
         has_prefix = self._config.has_prefix
@@ -150,13 +157,13 @@ class TranslationPipeline:
             priority_files = [keyword_file, model_file]
         else:
             if not model_file.exists():
-                self._on_log(f"警告: 未找到模型文件 {model_name}，跳过优先处理")
+                self._log_bridge.warning(f"未找到模型文件 {model_name}，跳过优先处理")
             if not keyword_file.exists():
-                self._on_log(f"警告: 未找到关键字文件 {keyword_name}，跳过优先处理")
+                self._log_bridge.warning(f"未找到关键字文件 {keyword_name}，跳过优先处理")
             priority_files = []
 
         # 6. 串行处理优先文件
-        logging.info("=== 阶段 4/5: 处理优先文件 ===")
+        _logger.info("=== 阶段 4/5: 处理优先文件 ===")
         summary = PipelineSummary()
         with profiler.phase("处理优先文件"):
             for pf in priority_files:
@@ -170,7 +177,7 @@ class TranslationPipeline:
                     self._update_affects(pf, base_path_config, has_prefix)
 
         # 7. 并发处理剩余文件
-        logging.info(f"=== 阶段 5/5: 并发翻译 ({len(target_files)} 个文件) ===")
+        _logger.info(f"=== 阶段 5/5: 并发翻译 ({len(target_files)} 个文件) ===")
         self._on_status("正在执行翻译...")
         self._on_progress(10, "正在执行翻译...")
 
@@ -204,8 +211,7 @@ class TranslationPipeline:
         # 8. 输出剖析报告
         self._on_progress(90, "已完成汉化")
         report = profiler.report()
-        self._on_log(report)
-        logging.info(report)
+        self._log_bridge.info(report)
 
         return summary
 
@@ -228,6 +234,8 @@ class TranslationPipeline:
         """将 ProcessOutcome 记录到 PipelineSummary 中。"""
         if outcome.result == ProcessResult.SUCCESS_SAVED:
             summary.saved.append(outcome.file_name)
+        elif outcome.result == ProcessResult.FALLBACK_TO_ORIGINAL:
+            summary.fallback.append(outcome.file_name)
         elif outcome.result in (ProcessResult.ALREADY_TRANSLATED, ProcessResult.EMPTY_WITH_LLC, ProcessResult.EMPTY_SKIPPED):
             summary.skipped.append(outcome.file_name)
         else:
@@ -243,7 +251,7 @@ class TranslationPipeline:
             cn_list = cn_data.get("dataList", cn_data if isinstance(cn_data, list) else [])
 
             if len(kr_list) != len(cn_list):
-                logging.warning(
+                _logger.warning(
                     f"角色数据 KR/CN 列表长度不匹配: KR={len(kr_list)}, CN={len(cn_list)}，"
                     f"将按较短列表配对"
                 )
@@ -259,6 +267,7 @@ class TranslationPipeline:
             self._engine.build_roles(roles)
             self._on_log(f"已加载 {len(roles)} 个角色信息")
         except Exception as e:
+            _logger.exception(f"加载角色信息失败: {e}")
             self._on_log(f"加载角色信息失败: {e}")
 
     def _update_affects(self, keyword_file: Path, base_pc: PathConfig, has_prefix: bool) -> None:
@@ -271,7 +280,7 @@ class TranslationPipeline:
             cn_list = cn_data.get("dataList", cn_data if isinstance(cn_data, list) else [])
 
             if len(kr_list) != len(cn_list):
-                logging.warning(
+                _logger.warning(
                     f"状态效果数据 KR/CN 列表长度不匹配: KR={len(kr_list)}, CN={len(cn_list)}，"
                     f"将按较短列表配对"
                 )
@@ -287,6 +296,7 @@ class TranslationPipeline:
             self._engine.build_affects(affects)
             self._on_log(f"已加载 {len(affects)} 个状态效果")
         except Exception as e:
+            _logger.exception(f"加载状态效果失败: {e}")
             self._on_log(f"加载状态效果失败: {e}")
 
     def _build_translator(self) -> TranslatorBase:

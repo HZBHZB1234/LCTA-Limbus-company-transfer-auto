@@ -8,6 +8,11 @@ from copy import deepcopy
 import json
 import logging
 import shutil
+import threading
+import time
+import traceback
+
+_logger = logging.getLogger("LCTA")  # 与 LogManager 一致的 logger，确保日志正确路由
 
 from translateFunc.enums import ProcessResult, FileType
 from translateFunc.config import ProcessOutcome, TranslateConfig, FilePathConfig, _suppress_translatekit_log
@@ -18,6 +23,9 @@ from translateFunc.proper import flatten_dict_enhanced, update_dict_with_flatten
 
 EMPTY_DATA = [{"dataList": []}, {}, []]
 EMPTY_DATA_LIST = [[], [{}]]
+
+# 保护 processing_log.jsonl 的并发写入
+_processing_log_lock = threading.Lock()
 
 
 class FileProcessor:
@@ -82,14 +90,22 @@ class FileProcessor:
 
     def process(self) -> ProcessOutcome:
         """执行完整的翻译处理。返回 ProcessOutcome。"""
+        start_time = time.perf_counter()
+        llm_calls = 0
+        text_blocks_count = 0
+        format_used = None
+        formats_tried: list[str] = []
+
         # 1. 加载 JSON 文件
         outcome = self._load_jsons()
         if outcome:
+            self._write_processing_log(outcome, start_time)
             return outcome
 
         # 2. 检查空文件
         outcome = self._check_empty()
         if outcome:
+            self._write_processing_log(outcome, start_time)
             return outcome
 
         # 3. 初始化基础数据
@@ -101,12 +117,15 @@ class FileProcessor:
         # 5. 检查是否已翻译
         outcome = self._check_translated()
         if outcome:
+            self._write_processing_log(outcome, start_time)
             return outcome
 
         # 6. 获取待翻译列表
         self._get_translating()
         if not self.translating_list:
-            return ProcessOutcome(ProcessResult.ALREADY_TRANSLATED, self.file_name)
+            outcome = ProcessOutcome(ProcessResult.ALREADY_TRANSLATED, self.file_name)
+            self._write_processing_log(outcome, start_time)
+            return outcome
 
         # 7. 构建请求文本
         request_text = {
@@ -119,19 +138,25 @@ class FileProcessor:
         try:
             translated_data, had_fallback = self._translate(request_text)
         except ValueError:
+            _logger.exception(f"[{self.file_name}] 翻译数量不匹配异常")
             self._save_except()
-            return ProcessOutcome(
+            outcome = ProcessOutcome(
                 ProcessResult.TRANSLATION_MISMATCH,
                 self.file_name,
-                {"reason": "译文数量与原文不匹配"},
+                {"reason": "译文数量与原文不匹配", "traceback": traceback.format_exc()},
             )
+            self._write_processing_log(outcome, start_time)
+            return outcome
         except Exception as e:
+            _logger.exception(f"[{self.file_name}] 翻译处理异常: {e}")
             self._save_except()
-            return ProcessOutcome(
+            outcome = ProcessOutcome(
                 ProcessResult.SAVE_ERROR,
                 self.file_name,
-                {"reason": str(e)},
+                {"reason": str(e), "exception_type": type(e).__name__, "traceback": traceback.format_exc()},
             )
+            self._write_processing_log(outcome, start_time)
+            return outcome
 
         # 9. 重建并保存
         self._de_get_translating_text(translated_data)
@@ -140,20 +165,50 @@ class FileProcessor:
         try:
             self._save_result(result)
         except Exception as e:
-            return ProcessOutcome(
+            _logger.exception(f"[{self.file_name}] 保存结果异常: {e}")
+            outcome = ProcessOutcome(
                 ProcessResult.SAVE_ERROR,
                 self.file_name,
-                {"reason": str(e)},
+                {"reason": str(e), "exception_type": type(e).__name__, "traceback": traceback.format_exc()},
             )
+            self._write_processing_log(outcome, start_time)
+            return outcome
 
         if had_fallback:
-            return ProcessOutcome(
+            outcome = ProcessOutcome(
                 ProcessResult.FALLBACK_TO_ORIGINAL,
                 self.file_name,
                 {"fallback_parts": "部分文本块回退为 KR 原文"},
             )
+        else:
+            outcome = ProcessOutcome(ProcessResult.SUCCESS_SAVED, self.file_name)
 
-        return ProcessOutcome(ProcessResult.SUCCESS_SAVED, self.file_name)
+        self._write_processing_log(outcome, start_time)
+        return outcome
+
+    def _write_processing_log(self, outcome: ProcessOutcome, start_time: float) -> None:
+        """将单文件处理结果追加写入 JSONL 日志文件。"""
+        try:
+            elapsed = time.perf_counter() - start_time
+            extra = outcome.extra or {}
+            extra["elapsed_seconds"] = round(elapsed, 3)
+            outcome.extra = extra
+
+            log_entry = {
+                "file_name": outcome.file_name,
+                "result": outcome.result.name,
+                "elapsed_seconds": extra["elapsed_seconds"],
+                "extra": {k: v for k, v in extra.items() if k != "traceback"},  # traceback 不写入 JSONL
+            }
+            log_dir = self.path_config._PathConfig.target_path
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / "processing_log.jsonl"
+            line = json.dumps(log_entry, ensure_ascii=False) + "\n"
+            with _processing_log_lock:
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(line)
+        except Exception:
+            _logger.warning(f"处理日志写入失败 ({outcome.file_name})，但不影响主流程")
 
     # ========== 翻译执行 ==========
 
@@ -181,7 +236,7 @@ class FileProcessor:
             # ====== 阶段 0：消歧（仅主格式） ======
             user_format = self._config.prompt_format
             if stage_strategy.needs_disambiguation():
-                logging.debug(f"[{self.file_name}] 阶段 0: 术语消歧 (mode={self._config.disambiguation_mode})")
+                _logger.debug(f"[{self.file_name}] 阶段 0: 术语消歧 (mode={self._config.disambiguation_mode})")
                 ambiguous_terms = self._collect_ambiguous_terms(builder)
                 if ambiguous_terms:
                     try:
@@ -207,17 +262,17 @@ class FileProcessor:
                         elif self._dump:
                             self._log("阶段 0 消歧：解析结果为空，使用原始术语表")
                     except Exception as e:
-                        logging.warning(f"[{self.file_name}] 阶段 0 消歧失败 ({e})，使用原始术语表继续")
+                        _logger.exception(f"[{self.file_name}] 阶段 0 消歧异常 ({e})，使用原始术语表继续")
 
             # 确定格式回退链
             formats_chain = self._build_format_chain()
             if len(formats_chain) > 1:
-                logging.info(
+                _logger.info(
                     f"[{self.file_name}] 阶段 1: 主翻译 "
                     f"(格式链: {' → '.join(formats_chain)})"
                 )
             else:
-                logging.debug(f"[{self.file_name}] 阶段 1: 主翻译 ({formats_chain[0]})")
+                _logger.debug(f"[{self.file_name}] 阶段 1: 主翻译 ({formats_chain[0]})")
 
             result: list[str] = []
             had_fallback = False
@@ -272,16 +327,44 @@ class FileProcessor:
                             t.get("translation", "") if isinstance(t, dict) else str(t)
                             for t in parsed
                         ]
+
+                        # 置信度检查：低于 min_confidence 的条目回退为 KR 原文
+                        _CONFIDENCE_ORDER = {"low": 0, "medium": 1, "high": 2}
+                        threshold = _CONFIDENCE_ORDER.get(self._config.min_confidence, 1)
+                        low_conf_count = 0
+                        for idx, t in enumerate(parsed):
+                            conf = t.get("confidence", "medium") if isinstance(t, dict) else "medium"
+                            if _CONFIDENCE_ORDER.get(str(conf).lower(), 1) < threshold:
+                                reasoning = t.get("reasoning", "") if isinstance(t, dict) else ""
+                                _logger.warning(
+                                    f"[{self.file_name}] [{fmt}] 低置信度条目 #{t.get('id', idx + 1)}: "
+                                    f"confidence={conf}, reasoning={reasoning[:200]}"
+                                )
+                                low_conf_count += 1
+                                # 回退为 KR 原文
+                                text_blocks = part_data.get("text_blocks", [])
+                                if idx < len(text_blocks):
+                                    part_result[idx] = text_blocks[idx].get("kr", "")
+                        if low_conf_count > 0:
+                            _logger.info(
+                                f"[{self.file_name}] [{fmt}] {low_conf_count} 条翻译因低置信度"
+                                f" (min={self._config.min_confidence}) 回退为 KR 原文"
+                            )
+
                         break  # 成功，退出格式回退循环
 
                     except (json.JSONDecodeError, ValueError) as e:
+                        _logger.warning(
+                            f"[{self.file_name}] [{fmt}] 解析失败 ({e})，"
+                            f"原始响应 (前500字符): {str(raw_response)[:500]}"
+                        )
                         if self._dump:
-                            self._log(f"[{fmt}] 解析失败 ({e})，回退到下一格式")
+                            self._log(f"[{fmt}] 解析失败 ({e})，回退到下一格式\n原始响应: {raw_response}")
                         continue
 
                 if part_result is None:
                     # 全部格式失败 → 无条件 warning + 标记降级
-                    logging.warning(
+                    _logger.warning(
                         f"[{self.file_name}] 全部格式 ({', '.join(tried_formats)}) "
                         f"解析失败，第 {i + 1}/{len(builder.split_requests)} 部分回退为 KR 原文"
                     )
@@ -293,7 +376,7 @@ class FileProcessor:
 
             # ====== 阶段 2：自校验（仅主格式，阶段 1 全部成功时执行） ======
             if stage_strategy.needs_self_check() and not had_fallback:
-                logging.debug(f"[{self.file_name}] 阶段 2: 自校验")
+                _logger.debug(f"[{self.file_name}] 阶段 2: 自校验")
                 try:
                     # 收集原文块（从 builder.unified_request 中）
                     original_blocks = builder.unified_request.get("text_blocks", [])
@@ -322,8 +405,8 @@ class FileProcessor:
                     elif self._dump:
                         self._log("阶段 2 自校验：解析结果为空，保留阶段 1 翻译")
                 except Exception as e:
-                    logging.warning(
-                        f"[{self.file_name}] 阶段 2 自校验失败 ({e})，使用未校验的翻译结果"
+                    _logger.exception(
+                        f"[{self.file_name}] 阶段 2 自校验异常 ({e})，使用未校验的翻译结果"
                     )
 
             return builder.deBuild(result), had_fallback
@@ -452,7 +535,7 @@ class FileProcessor:
                 if not block["proper_refs"]:
                     del block["proper_refs"]
 
-        logging.info(
+        _logger.info(
             f"[{self.file_name}] 阶段 0 消歧：排除了 {len(excluded_terms)} 个不适用的术语: "
             f"{', '.join(sorted(excluded_terms))}"
         )
@@ -484,7 +567,7 @@ class FileProcessor:
                     corrections += 1
 
         if corrections > 0:
-            logging.info(
+            _logger.info(
                 f"[{self.file_name}] 阶段 2 自校验：修正了 {corrections}/{len(checked)} 条翻译"
             )
         return result
@@ -500,20 +583,28 @@ class FileProcessor:
                 with open(self.path_config.EN_path, "r", encoding="utf-8-sig") as f:
                     self.en_json = json.load(f)
             except FileNotFoundError:
+                _logger.debug(f"[{self.file_name}] EN 参考文件缺失: {self.path_config.EN_path}")
                 self.en_json = deepcopy(self.kr_json)
             try:
                 with open(self.path_config.JP_path, "r", encoding="utf-8-sig") as f:
                     self.jp_json = json.load(f)
             except FileNotFoundError:
+                _logger.debug(f"[{self.file_name}] JP 参考文件缺失: {self.path_config.JP_path}")
                 self.jp_json = deepcopy(self.kr_json)
             try:
                 with open(self.path_config.LLC_path, "r", encoding="utf-8-sig") as f:
                     self.llc_json = json.load(f)
             except FileNotFoundError:
+                _logger.debug(f"[{self.file_name}] LLC 参考文件缺失: {self.path_config.LLC_path}")
                 self.llc_json = {}
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            _logger.exception(f"[{self.file_name}] JSON 解析失败: {self.path_config.KR_path} (line {e.lineno}, col {e.colno})")
             self._save_except()
-            return ProcessOutcome(ProcessResult.JSON_DECODE_ERROR, self.file_name)
+            return ProcessOutcome(
+                ProcessResult.JSON_DECODE_ERROR,
+                self.file_name,
+                {"file_path": str(self.path_config.KR_path), "reason": f"line {e.lineno}, col {e.colno}: {e.msg}"},
+            )
         return None
 
     def _check_empty(self) -> ProcessOutcome | None:
@@ -557,10 +648,16 @@ class FileProcessor:
             self.jp_index = {i: d for i, d in enumerate(self.jp_data)}
             self.llc_index = {i: d for i, d in enumerate(self.llc_data)}
         else:
-            self.en_index = {i["id"]: i for i in self.en_data}
-            self.kr_index = {i["id"]: i for i in self.kr_data}
-            self.jp_index = {i["id"]: i for i in self.jp_data}
-            self.llc_index = {i["id"]: i for i in self.llc_data}
+            # 防御：部分 JSON 的 dataList 元素缺少 "id" 键，回退为 enumerate 索引
+            def _make_non_story_index(data: list) -> dict:
+                if data and isinstance(data[0], dict) and "id" in data[0]:
+                    return {i["id"]: i for i in data}
+                return {idx: item for idx, item in enumerate(data)}
+
+            self.en_index = _make_non_story_index(self.en_data)
+            self.kr_index = _make_non_story_index(self.kr_data)
+            self.jp_index = _make_non_story_index(self.jp_data)
+            self.llc_index = _make_non_story_index(self.llc_data)
 
     def _get_translating(self) -> None:
         self.translating_list = [i for i in self.kr_index if i not in self.llc_index]
@@ -659,8 +756,15 @@ class _SimpleRequestBuilder:
         return getattr(self, f"{from_lang}_build")
 
     def deBuild(self, translated_texts: list[str], from_lang: str = "kr") -> dict:
+        """将扁平翻译文本列表还原为嵌套字典结构。
+
+        Raises:
+            ValueError: 翻译数量与预期不符（多余或不足）。
+        """
         original = deepcopy(getattr(self, f"{from_lang}_texts"))
-        it = iter(translated_texts)
+
+        # 先计算预期数量，用于清晰的错误信息
+        expected_count = 0
         for idx in original:
             kr_item = self.kr_texts.get(idx, {})
             jp_item = self.jp_texts.get(idx, {})
@@ -670,11 +774,33 @@ class _SimpleRequestBuilder:
                 en_val = en_item.get(path_tuple, "")
                 kr_val = kr_item[path_tuple]
                 if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
-                    original[idx][path_tuple] = next(it)
+                    expected_count += 1
+
+        it = iter(translated_texts)
+        consumed = 0
+        for idx in original:
+            kr_item = self.kr_texts.get(idx, {})
+            jp_item = self.jp_texts.get(idx, {})
+            en_item = self.en_texts.get(idx, {})
+            for path_tuple in kr_item:
+                jp_val = jp_item.get(path_tuple, "")
+                en_val = en_item.get(path_tuple, "")
+                kr_val = kr_item[path_tuple]
+                if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
+                    try:
+                        original[idx][path_tuple] = next(it)
+                        consumed += 1
+                    except StopIteration:
+                        raise ValueError(
+                            f"译文数量不足: 预期 {expected_count}, 实际 {len(translated_texts)}"
+                            f"（第 {consumed + 1}/{expected_count} 个文本块时迭代器耗尽）"
+                        )
         try:
             next(it)
         except StopIteration:
             pass  # 正常 —— 没有多余的翻译结果
         else:
-            raise ValueError("译文数量多于预期")
+            raise ValueError(
+                f"译文数量多于预期: 预期 {expected_count}, 实际 >={consumed + 1}"
+            )
         return original

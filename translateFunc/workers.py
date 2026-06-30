@@ -5,9 +5,13 @@ WorkerPool —— 基于 ThreadPoolExecutor 的并发文件处理。
 """
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+import traceback
 from typing import Any, Callable
 
-from translateFunc.config import ProcessOutcome
+_logger = logging.getLogger("LCTA")
+
+from translateFunc.config import ProcessOutcome, ProcessResult
 
 
 class WorkerPool:
@@ -73,13 +77,13 @@ class WorkerPool:
                     outcome = future.result()
                     results[idx] = outcome
                 except Exception as e:
-                    # 将未预期异常转换为错误结果
+                    # 将未预期异常转换为错误结果，同时写入完整日志
                     file_name = str(files[idx]) if idx < len(files) else f"index_{idx}"
-                    from translateFunc.enums import ProcessResult
+                    _logger.exception(f"Worker thread 异常 (file: {file_name}): {e}")
                     results[idx] = ProcessOutcome(
                         ProcessResult.SAVE_ERROR,
                         file_name,
-                        {"reason": f"未处理的异常: {e}"},
+                        {"reason": f"未处理的异常: {e}", "traceback": traceback.format_exc()},
                     )
 
                 if on_progress:

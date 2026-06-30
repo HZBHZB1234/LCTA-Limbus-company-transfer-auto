@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Any, Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("LCTA")  # 与 LogManager 一致，确保日志正确路由到 app.log
 
 from translateFunc.enums import FileType
 from translateFunc.matcher.engine import MatcherEngine
@@ -252,10 +252,28 @@ class RequestBuilder:
     # ========== 还原 ==========
 
     def deBuild(self, translated_texts: list[str]) -> dict:
-        """将扁平翻译文本列表还原为嵌套字典结构。"""
+        """将扁平翻译文本列表还原为嵌套字典结构。
+
+        Raises:
+            ValueError: 翻译数量与预期不符（多余或不足）。
+        """
         translated_iter = iter(translated_texts)
         result_dict = deepcopy(self.kr_text)
 
+        # 先计算预期数量，用于清晰的错误信息
+        expected_count = 0
+        for idx in result_dict:
+            kr_item = self.kr_text.get(idx, {})
+            jp_item = self.jp_text.get(idx, {})
+            en_item = self.en_text.get(idx, {})
+            for path_tuple in kr_item.keys():
+                jp_val = jp_item.get(path_tuple, "")
+                en_val = en_item.get(path_tuple, "")
+                kr_val = kr_item.get(path_tuple, "")
+                if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
+                    expected_count += 1
+
+        consumed = 0
         for idx in result_dict:
             kr_item = self.kr_text.get(idx, {})
             jp_item = self.jp_text.get(idx, {})
@@ -267,17 +285,24 @@ class RequestBuilder:
                 en_val = en_item.get(path_tuple, "")
                 kr_val = kr_item.get(path_tuple, "")
                 if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
-                    result_dict[idx][path_tuple] = next(translated_iter)
+                    try:
+                        result_dict[idx][path_tuple] = next(translated_iter)
+                        consumed += 1
+                    except StopIteration:
+                        raise ValueError(
+                            f"翻译文本数量不足: 预期 {expected_count}, 实际 {len(translated_texts)}"
+                            f"（第 {consumed + 1}/{expected_count} 个文本块时迭代器耗尽）"
+                        )
 
         # 验证没有多余的翻译结果
-        has_extra = False
         try:
             next(translated_iter)
-            has_extra = True
         except StopIteration:
             pass
-        if has_extra:
-            raise ValueError("翻译文本数量多于预期")
+        else:
+            raise ValueError(
+                f"翻译文本数量多于预期: 预期 {expected_count}, 实际 >={consumed + 1}"
+            )
 
         return result_dict
 
@@ -389,7 +414,7 @@ class RequestBuilder:
 
         # 技能指南
         if self.is_skill and reference.get("skill_doc"):
-            parts.append(f"<skill_guide>\n{reference['skill_doc']}\n</skill_guide>\n")
+            parts.append(f"<skill_reference>\n{reference['skill_doc']}\n</skill_reference>\n")
 
         # 文本块
         parts.append(pf.render_text_blocks(text_blocks))

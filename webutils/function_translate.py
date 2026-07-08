@@ -71,17 +71,31 @@ def translate_main(
         # 6. 运行翻译
         summary = pipeline.run()
 
-        # 7. 上报结果
+        # 7a. 持久化处理日志（在临时目录被清理前）
+        VERSION = _generate_version()
+        try:
+            import shutil as _shutil
+            log_src = config.output_dir / "LLc-CN-LCTA" / "processing_log.jsonl"
+            work_dir = Path(os.getcwd())
+            log_dst = work_dir / "logs" / f"processing_log_{VERSION}.jsonl"
+            log_dst.parent.mkdir(parents=True, exist_ok=True)
+            if log_src.exists():
+                _shutil.copy2(log_src, log_dst)
+                _log_manager.log_modal_process(f"处理日志已保存: {log_dst.name}", modal_id)
+        except Exception:
+            pass  # 日志持久化失败不应中断主流程
+
+        # 7b. 上报结果
         _log_manager.log_modal_process(
             f"翻译完成: {summary.success_count} 成功, "
-            f"{len(summary.skipped)} 跳过, {summary.error_count} 错误",
+            f"{len(summary.skipped)} 跳过, {summary.fallback_count} 降级, "
+            f"{summary.error_count} 错误",
             modal_id,
         )
         _log_manager.log_modal_status("正在打包汉化包", modal_id)
 
         # 8. 打包产物
         target_dir = config.output_dir / "LLc-CN-LCTA"
-        VERSION = _generate_version()
         _copy_assets(target_dir, config.game_path, VERSION)
 
         work_dir = Path(os.getcwd())

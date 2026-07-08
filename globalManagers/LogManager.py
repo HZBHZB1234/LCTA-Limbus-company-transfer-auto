@@ -25,8 +25,9 @@ class LogManager:
         self,
         log_dir: str = "logs",
         log_file: str = "app.log",
-        max_bytes: int = 1024 * 500,
-        backup_count: int = 5,
+        when: str = "midnight",
+        interval: int = 1,
+        backup_count: int = 10,
         log_level: int = logging.DEBUG,
     ):
         if LogManager._initialized:
@@ -40,10 +41,11 @@ class LogManager:
 
         os.makedirs(log_dir, exist_ok=True)
 
-        # 文件处理器（按大小轮转）
-        fh = logging.handlers.RotatingFileHandler(
+        # 文件处理器（按时间轮转）
+        fh = logging.handlers.TimedRotatingFileHandler(
             os.path.join(log_dir, log_file),
-            maxBytes=max_bytes,
+            when=when,
+            interval=interval,
             backupCount=backup_count,
             encoding="utf-8",
         )

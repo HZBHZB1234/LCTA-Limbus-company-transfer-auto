@@ -90,4 +90,24 @@ class WorkerPool:
                     fname = results[idx].file_name if results[idx] else str(files[idx])
                     on_progress(completed, total, fname)
 
+        # 汇总统计
+        error_count = sum(
+            1 for r in results
+            if r and r.result not in (
+                ProcessResult.SUCCESS_SAVED, ProcessResult.ALREADY_TRANSLATED,
+                ProcessResult.EMPTY_WITH_LLC, ProcessResult.EMPTY_SKIPPED,
+                ProcessResult.FALLBACK_TO_ORIGINAL,
+            )
+        )
+        fallback_count = sum(
+            1 for r in results
+            if r and r.result == ProcessResult.FALLBACK_TO_ORIGINAL
+        )
+        if error_count > 0 or fallback_count > 0:
+            _logger.warning(
+                "Worker pool 汇总: %d/%d 成功, %d 降级, %d 错误",
+                total - error_count - fallback_count, total,
+                fallback_count, error_count,
+            )
+
         return [r for r in results if r is not None]

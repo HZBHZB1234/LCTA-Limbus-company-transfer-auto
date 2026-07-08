@@ -239,6 +239,12 @@ class TranslationPipeline:
         elif outcome.result in (ProcessResult.ALREADY_TRANSLATED, ProcessResult.EMPTY_WITH_LLC, ProcessResult.EMPTY_SKIPPED):
             summary.skipped.append(outcome.file_name)
         else:
+            # 记录每个错误的详细信息，方便事后溯源
+            extra_info = outcome.extra or {}
+            reason = extra_info.get("reason", "未知原因")
+            _logger.warning(
+                f"[{outcome.file_name}] 处理失败 ({outcome.result.name}): {reason}"
+            )
             summary.errors.append(outcome)
 
     def _update_roles(self, model_file: Path, base_pc: PathConfig, has_prefix: bool) -> None:

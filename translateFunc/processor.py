@@ -115,8 +115,19 @@ class FileProcessor:
         self._make_data_index()
 
         # 5. 检查是否已翻译
-        outcome = self._check_translated()
-        if outcome:
+        try:
+            outcome = self._check_translated()
+            if outcome:
+                self._write_processing_log(outcome, start_time)
+                return outcome
+        except Exception as e:
+            _logger.exception(f"[{self.file_name}] _check_translated 异常: {e}")
+            self._save_except()
+            outcome = ProcessOutcome(
+                ProcessResult.SAVE_ERROR,
+                self.file_name,
+                {"reason": f"_check_translated 失败: {e}", "exception_type": type(e).__name__, "traceback": traceback.format_exc()},
+            )
             self._write_processing_log(outcome, start_time)
             return outcome
 
@@ -624,11 +635,15 @@ class FileProcessor:
                 return {k: d.get(k, ref[k]) for k in ref}
             self.en_index = _align(self.en_index, self.kr_index)
             self.jp_index = _align(self.jp_index, self.kr_index)
-            self.llc_index = _align(self.llc_index, self.kr_index)
+            # 仅当 llc_index 非空时才对齐；空 LLC 意味着没有已翻译数据，不应生成虚假键
+            if self.llc_index:
+                self.llc_index = _align(self.llc_index, self.kr_index)
 
-        if list(self.kr_index.keys()) == list(self.llc_index.keys()):
-            self._save_llc()
-            return ProcessOutcome(ProcessResult.ALREADY_TRANSLATED, self.file_name)
+        # 验证 LLC 源文件确实存在，且索引键匹配
+        if self.llc_index and list(self.kr_index.keys()) == list(self.llc_index.keys()):
+            if self.path_config.LLC_path.exists():
+                self._save_llc()
+                return ProcessOutcome(ProcessResult.ALREADY_TRANSLATED, self.file_name)
         return None
 
     # ========== 初始化 ==========
@@ -702,6 +717,7 @@ class FileProcessor:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
     def _save_llc(self) -> None:
+        self.path_config.target_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(self.path_config.LLC_path, self.path_config.target_file)
 
     def _save_except(self) -> None:
@@ -758,13 +774,15 @@ class _SimpleRequestBuilder:
     def deBuild(self, translated_texts: list[str], from_lang: str = "kr") -> dict:
         """将扁平翻译文本列表还原为嵌套字典结构。
 
-        Raises:
-            ValueError: 翻译数量与预期不符（多余或不足）。
+        当翻译数量与预期不符时，不再抛出异常：
+        - 不足时用 KR 原文填充缺失条目
+        - 多余时截断并警告
         """
         original = deepcopy(getattr(self, f"{from_lang}_texts"))
 
-        # 先计算预期数量，用于清晰的错误信息
+        # 先计算预期数量，同时收集 KR 原文用于可能的回退填充
         expected_count = 0
+        kr_fallbacks: list[str] = []
         for idx in original:
             kr_item = self.kr_texts.get(idx, {})
             jp_item = self.jp_texts.get(idx, {})
@@ -775,6 +793,24 @@ class _SimpleRequestBuilder:
                 kr_val = kr_item[path_tuple]
                 if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
                     expected_count += 1
+                    kr_fallbacks.append(kr_val)
+
+        # 韧性处理：数量不匹配时用 KR 原文补齐或截断
+        actual_count = len(translated_texts)
+        if actual_count < expected_count:
+            shortfall = expected_count - actual_count
+            _logger.warning(
+                f"译文数量不足: 预期 {expected_count}, 实际 {actual_count}"
+                f"（{shortfall} 个文本块回退为 KR 原文）"
+            )
+            translated_texts = list(translated_texts) + kr_fallbacks[-shortfall:]
+        elif actual_count > expected_count:
+            excess = actual_count - expected_count
+            _logger.warning(
+                f"译文数量多于预期: 预期 {expected_count}, 实际 {actual_count}"
+                f"（截断多余 {excess} 个）"
+            )
+            translated_texts = translated_texts[:expected_count]
 
         it = iter(translated_texts)
         consumed = 0
@@ -787,20 +823,6 @@ class _SimpleRequestBuilder:
                 en_val = en_item.get(path_tuple, "")
                 kr_val = kr_item[path_tuple]
                 if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
-                    try:
-                        original[idx][path_tuple] = next(it)
-                        consumed += 1
-                    except StopIteration:
-                        raise ValueError(
-                            f"译文数量不足: 预期 {expected_count}, 实际 {len(translated_texts)}"
-                            f"（第 {consumed + 1}/{expected_count} 个文本块时迭代器耗尽）"
-                        )
-        try:
-            next(it)
-        except StopIteration:
-            pass  # 正常 —— 没有多余的翻译结果
-        else:
-            raise ValueError(
-                f"译文数量多于预期: 预期 {expected_count}, 实际 >={consumed + 1}"
-            )
+                    original[idx][path_tuple] = next(it)
+                    consumed += 1
         return original

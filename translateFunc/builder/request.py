@@ -254,14 +254,15 @@ class RequestBuilder:
     def deBuild(self, translated_texts: list[str]) -> dict:
         """将扁平翻译文本列表还原为嵌套字典结构。
 
-        Raises:
-            ValueError: 翻译数量与预期不符（多余或不足）。
+        当翻译数量与预期不符时，不再抛出异常：
+        - 不足时用 KR 原文填充缺失条目
+        - 多余时截断并警告
         """
-        translated_iter = iter(translated_texts)
         result_dict = deepcopy(self.kr_text)
 
-        # 先计算预期数量，用于清晰的错误信息
+        # 先计算预期数量，同时收集 KR 原文用于可能的回退填充
         expected_count = 0
+        kr_fallbacks: list[str] = []
         for idx in result_dict:
             kr_item = self.kr_text.get(idx, {})
             jp_item = self.jp_text.get(idx, {})
@@ -272,7 +273,27 @@ class RequestBuilder:
                 kr_val = kr_item.get(path_tuple, "")
                 if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
                     expected_count += 1
+                    kr_fallbacks.append(kr_val)
 
+        # 韧性处理：数量不匹配时用 KR 原文补齐或截断
+        actual_count = len(translated_texts)
+        if actual_count < expected_count:
+            shortfall = expected_count - actual_count
+            logger.warning(
+                f"翻译文本数量不足: 预期 {expected_count}, 实际 {actual_count}"
+                f"（{shortfall} 个文本块回退为 KR 原文）"
+            )
+            # 用最后 shortfall 个位置的 KR 原文填充
+            translated_texts = list(translated_texts) + kr_fallbacks[-shortfall:]
+        elif actual_count > expected_count:
+            excess = actual_count - expected_count
+            logger.warning(
+                f"翻译文本数量多于预期: 预期 {expected_count}, 实际 {actual_count}"
+                f"（截断多余 {excess} 个）"
+            )
+            translated_texts = translated_texts[:expected_count]
+
+        translated_iter = iter(translated_texts)
         consumed = 0
         for idx in result_dict:
             kr_item = self.kr_text.get(idx, {})
@@ -285,24 +306,8 @@ class RequestBuilder:
                 en_val = en_item.get(path_tuple, "")
                 kr_val = kr_item.get(path_tuple, "")
                 if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
-                    try:
-                        result_dict[idx][path_tuple] = next(translated_iter)
-                        consumed += 1
-                    except StopIteration:
-                        raise ValueError(
-                            f"翻译文本数量不足: 预期 {expected_count}, 实际 {len(translated_texts)}"
-                            f"（第 {consumed + 1}/{expected_count} 个文本块时迭代器耗尽）"
-                        )
-
-        # 验证没有多余的翻译结果
-        try:
-            next(translated_iter)
-        except StopIteration:
-            pass
-        else:
-            raise ValueError(
-                f"翻译文本数量多于预期: 预期 {expected_count}, 实际 >={consumed + 1}"
-            )
+                    result_dict[idx][path_tuple] = next(translated_iter)
+                    consumed += 1
 
         return result_dict
 

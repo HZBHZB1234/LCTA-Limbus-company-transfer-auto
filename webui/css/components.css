@@ -1674,3 +1674,206 @@ select.elder-select:focus {
     color: var(--color-text-secondary);
     margin-top: 2px;
 }
+
+/* ============================
+   CDN 状态指示器
+   ============================ */
+
+/* 状态区块容器 */
+.cdn-status-section {
+    margin-bottom: 10px;
+}
+
+/* 区块小标题 */
+.cdn-section-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-secondary);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.cdn-section-label i {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+/* ===== 当前生效 IP 状态徽章 ===== */
+
+.cdn-status-badge {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid var(--color-border-light);
+    background: var(--color-bg-secondary, #f8f9fa);
+    gap: 8px;
+    transition: border-color 0.3s, background 0.3s;
+}
+
+/* 有 IP 生效时 */
+.cdn-status-badge.active {
+    border-color: #22c55e;
+    background: #f0fdf4;
+}
+
+.cdn-status-badge.active::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+}
+
+/* 未设置 / 检测中 */
+.cdn-status-badge.inactive {
+    border-color: #d1d5db;
+    background: #f9fafb;
+}
+
+.cdn-status-badge.inactive::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #9ca3af;
+    flex-shrink: 0;
+}
+
+.cdn-status-badge.loading {
+    border-color: #f59e0b;
+    background: #fffbeb;
+}
+
+.cdn-status-badge.loading::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f59e0b;
+    flex-shrink: 0;
+    animation: cdn-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes cdn-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* IP 值文本 */
+.cdn-ip-value {
+    font-size: 14px;
+    font-weight: 600;
+    font-family: "Consolas", "Monaco", monospace;
+    color: var(--color-text-primary);
+    word-break: break-all;
+}
+
+/* 单域名的 IP 行 */
+.cdn-ip-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+}
+
+.cdn-ip-row + .cdn-ip-row {
+    border-top: 1px solid var(--color-border-light);
+    padding-top: 8px;
+}
+
+.cdn-ip-domain {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+    margin-right: 10px;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ===== 最近测速结果卡片 ===== */
+
+.cdn-result-section {
+    margin-bottom: 10px;
+}
+
+.cdn-result-card {
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md, 8px);
+    overflow: hidden;
+}
+
+/* 结果数据行 */
+.cdn-result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+}
+
+.cdn-result-row + .cdn-result-row {
+    border-top: 1px solid var(--color-border-light);
+}
+
+.cdn-result-label {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.cdn-result-value {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: "Consolas", "Monaco", monospace;
+    color: var(--color-text-primary);
+}
+
+/* 结果中的域名标题行 */
+.cdn-result-domain {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--color-bg-secondary, #f8f9fa);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-primary);
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.cdn-result-domain i {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+/* 旧类名 — 保留样式兼容，JS 内部 HTML 仍使用 */
+.result-table {
+    /* Old class kept for backward compatibility */
+}
+.result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+}
+.result-row + .result-row {
+    border-top: 1px solid var(--color-border-light);
+}
+.result-label {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+.result-value {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: "Consolas", "Monaco", monospace;
+    color: var(--color-text-primary);
+}

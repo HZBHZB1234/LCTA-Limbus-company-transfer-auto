@@ -1657,12 +1657,26 @@
                     <p class="setting-desc">
                         对游戏下载CDN进行测速优选
                     </p>
-                    <div id="cdn-cf-status" class="cdn-status" style="margin-bottom: 8px;">
-                        <span class="status-label">当前优选IP：</span>
-                        <span id="cdn-cf-current-ip" class="status-value">检测中...</span>
+
+                    <!-- 当前生效 IP 状态 -->
+                    <div class="cdn-status-section">
+                        <div class="cdn-section-label">
+                            <i class="fas fa-link"></i> 当前生效 IP
+                        </div>
+                        <div id="cdn-cf-status" class="cdn-status-badge">
+                            <span id="cdn-cf-current-ip" class="cdn-ip-value">检测中...</span>
+                        </div>
                     </div>
-                    <div id="cdn-cf-result" style="display:none;" class="cdn-result-box"></div>
-                    <div class="action-grid" style="margin-top: 10px;">
+
+                    <!-- 最近测速结果 -->
+                    <div id="cdn-cf-result" class="cdn-result-section" style="display:none;">
+                        <div class="cdn-section-label">
+                            <i class="fas fa-chart-line"></i> 最近测速结果
+                        </div>
+                        <div class="cdn-result-card"></div>
+                    </div>
+
+                    <div class="action-grid" style="margin-top: 12px;">
                         <button class="action-btn" onclick="cdnManager.runCloudflare()">
                             <i class="fas fa-play"></i> Cloudflare优选
                         </button>
@@ -1678,12 +1692,25 @@
                     <p class="setting-desc">
                         对游戏API服务器进行测速优选
                     </p>
-                    <div id="cdn-cfa-status" class="cdn-status" style="margin-bottom: 8px;">
-                        <span class="status-label">当前优选IP：</span>
-                        <span class="status-value">未设置</span>
+
+                    <!-- 当前生效 IP 状态 -->
+                    <div class="cdn-status-section">
+                        <div class="cdn-section-label">
+                            <i class="fas fa-link"></i> 当前生效 IP
+                        </div>
+                        <div id="cdn-cfa-status" class="cdn-status-badge">
+                        </div>
                     </div>
-                    <div id="cdn-cfa-result" style="display:none;" class="cdn-result-box"></div>
-                    <div class="action-grid" style="margin-top: 10px;">
+
+                    <!-- 最近测速结果 -->
+                    <div id="cdn-cfa-result" class="cdn-result-section" style="display:none;">
+                        <div class="cdn-section-label">
+                            <i class="fas fa-chart-line"></i> 最近测速结果
+                        </div>
+                        <div class="cdn-result-card"></div>
+                    </div>
+
+                    <div class="action-grid" style="margin-top: 12px;">
                         <button class="action-btn" onclick="cdnManager.runCloudFront()">
                             <i class="fas fa-play"></i> CloudFront优选
                         </button>

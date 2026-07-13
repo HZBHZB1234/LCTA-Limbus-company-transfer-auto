@@ -18,23 +18,32 @@ class CdnManager {
             const result = await pywebview.api.cdn_get_status();
             if (result.success) {
                 const data = result.data;
-                // 更新 Cloudflare 状态
-                const cfEl = document.getElementById('cdn-cf-current-ip');
-                if (cfEl) {
-                    cfEl.textContent = data.cf_ip || '未设置';
+                // 更新 Cloudflare 状态徽章
+                const cfBadge = document.getElementById('cdn-cf-status');
+                const cfIpEl = document.getElementById('cdn-cf-current-ip');
+                if (cfBadge && cfIpEl) {
+                    if (data.cf_ip) {
+                        cfIpEl.textContent = data.cf_ip;
+                        cfBadge.className = 'cdn-status-badge active';
+                    } else {
+                        cfIpEl.textContent = '未设置';
+                        cfBadge.className = 'cdn-status-badge inactive';
+                    }
                 }
 
-                // 更新 CloudFront 状态
-                const cfaEl = document.getElementById('cdn-cfa-status');
-                if (cfaEl) {
+                // 更新 CloudFront 状态徽章（支持多域名）
+                const cfaBadge = document.getElementById('cdn-cfa-status');
+                if (cfaBadge) {
                     if (Object.keys(data.cloudfront).length > 0) {
+                        cfaBadge.className = 'cdn-status-badge active';
                         let html = '';
                         for (const [domain, ip] of Object.entries(data.cloudfront)) {
-                            html += `<div class="cdn-status"><span class="status-label">${domain}：</span><span class="status-value">${ip}</span></div>`;
+                            html += `<div class="cdn-ip-row"><span class="cdn-ip-domain">${domain}</span><span class="cdn-ip-value">${ip}</span></div>`;
                         }
-                        cfaEl.innerHTML = html;
+                        cfaBadge.innerHTML = html;
                     } else {
-                        cfaEl.innerHTML = '<div class="cdn-status"><span class="status-label">当前优选IP：</span><span class="status-value">未设置</span></div>';
+                        cfaBadge.className = 'cdn-status-badge inactive';
+                        cfaBadge.innerHTML = '<span class="cdn-ip-value">未设置</span>';
                     }
                 }
 
@@ -53,39 +62,39 @@ class CdnManager {
 
     updateResultDisplay() {
         // Cloudflare 结果
-        const cfResultBox = document.getElementById('cdn-cf-result');
-        if (cfResultBox) {
+        const cfResultSection = document.getElementById('cdn-cf-result');
+        const cfCard = cfResultSection ? cfResultSection.querySelector('.cdn-result-card') : null;
+        if (cfResultSection && cfCard) {
             if (this.cloudflareResult) {
-                cfResultBox.style.display = 'block';
-                cfResultBox.innerHTML = `
-                    <div class="result-table">
-                        <div class="result-row"><span class="result-label">IP地址</span><span class="result-value">${this.cloudflareResult.ip}</span></div>
-                        <div class="result-row"><span class="result-label">平均延迟</span><span class="result-value">${this.cloudflareResult.avg_latency_ms.toFixed(1)} ms</span></div>
-                        <div class="result-row"><span class="result-label">下载速度</span><span class="result-value">${this.cloudflareResult.download_mbps.toFixed(1)} MB/s</span></div>
-                        <div class="result-row"><span class="result-label">丢包率</span><span class="result-value">${(this.cloudflareResult.loss_rate * 100).toFixed(1)}%</span></div>
-                    </div>`;
+                cfResultSection.style.display = 'block';
+                cfCard.innerHTML = `
+                    <div class="result-row"><span class="result-label">IP地址</span><span class="result-value">${this.cloudflareResult.ip}</span></div>
+                    <div class="result-row"><span class="result-label">平均延迟</span><span class="result-value">${this.cloudflareResult.avg_latency_ms.toFixed(1)} ms</span></div>
+                    <div class="result-row"><span class="result-label">下载速度</span><span class="result-value">${this.cloudflareResult.download_mbps.toFixed(1)} MB/s</span></div>
+                    <div class="result-row"><span class="result-label">丢包率</span><span class="result-value">${(this.cloudflareResult.loss_rate * 100).toFixed(1)}%</span></div>`;
             } else {
-                cfResultBox.style.display = 'none';
+                cfResultSection.style.display = 'none';
+                cfCard.innerHTML = '';
             }
         }
 
         // CloudFront 结果
-        const cfaResultBox = document.getElementById('cdn-cfa-result');
-        if (cfaResultBox) {
+        const cfaResultSection = document.getElementById('cdn-cfa-result');
+        const cfaCard = cfaResultSection ? cfaResultSection.querySelector('.cdn-result-card') : null;
+        if (cfaResultSection && cfaCard) {
             if (Object.keys(this.cloudfrontResults).length > 0) {
-                cfaResultBox.style.display = 'block';
+                cfaResultSection.style.display = 'block';
                 let html = '';
                 for (const [domain, info] of Object.entries(this.cloudfrontResults)) {
                     html += `
-                        <div class="result-table" style="margin-bottom: 8px;">
-                            <div class="result-row"><span class="result-label">域名</span><span class="result-value">${domain}</span></div>
-                            <div class="result-row"><span class="result-label">IP地址</span><span class="result-value">${info.ip}</span></div>
-                            <div class="result-row"><span class="result-label">中位延迟</span><span class="result-value">${info.median_latency_ms.toFixed(1)} ms</span></div>
-                        </div>`;
+                        <div class="cdn-result-domain"><i class="fas fa-globe"></i>${domain}</div>
+                        <div class="cdn-result-row"><span class="cdn-result-label">IP地址</span><span class="cdn-result-value">${info.ip}</span></div>
+                        <div class="cdn-result-row"><span class="cdn-result-label">中位延迟</span><span class="cdn-result-value">${info.median_latency_ms.toFixed(1)} ms</span></div>`;
                 }
-                cfaResultBox.innerHTML = html;
+                cfaCard.innerHTML = html;
             } else {
-                cfaResultBox.style.display = 'none';
+                cfaResultSection.style.display = 'none';
+                cfaCard.innerHTML = '';
             }
         }
 
@@ -197,7 +206,6 @@ class CdnManager {
                 () => resolve(true),
                 () => resolve(false)
             );
-            confirmModal.show();
         });
 
         if (!confirmed) return;

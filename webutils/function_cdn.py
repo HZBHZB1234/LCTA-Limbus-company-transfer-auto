@@ -1169,6 +1169,162 @@ def restore_hosts_backup(
         return False
 
 
+def remove_hosts_block(
+    marker_start: str,
+    marker_end: str,
+    hosts_path: str,
+    log_cb: Optional[Callable[[str], None]] = None
+) -> bool:
+    """
+    移除 hosts 文件中的单个受管标记块（CF 或 CFA）。
+    """
+    # 读取现有 hosts
+    if os.path.isfile(hosts_path):
+        lines, encoding_name, bom = _read_hosts_lines(hosts_path)
+    else:
+        return True  # 没有 hosts 文件，无需移除
+
+    backup_path = hosts_path + ".llcbabel.bak"
+
+    # 用空映射重写目标块（即移除）
+    _rewrite_block(lines, marker_start, marker_end, [], log_cb)
+
+    # 写入临时文件
+    temp_path = hosts_path + f".{uuid.uuid4().hex[:8]}.tmp"
+    try:
+        newline = _detect_newline(lines)
+
+        with open(temp_path, "w", encoding=encoding_name, newline="", errors="replace") as f:
+            if bom and encoding_name not in ("utf-8-sig",):
+                f.buffer.write(bom)
+
+            for content, terminator in lines:
+                f.write(content)
+                f.write(terminator)
+
+        # 原子替换
+        if os.path.isfile(hosts_path):
+            if os.path.isfile(backup_path):
+                os.remove(backup_path)
+            os.replace(hosts_path, backup_path)
+
+        os.replace(temp_path, hosts_path)
+
+        if log_cb:
+            log_cb(f"已移除 hosts 受管标记块 {marker_start}")
+
+        return True
+
+    except Exception as e:
+        if log_cb:
+            log_cb(f"移除 hosts 块失败：{e}")
+        return False
+    finally:
+        if os.path.isfile(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+
+
+def elevate_remove_hosts(
+    block_type: str,
+    log_cb: Optional[Callable[[str], None]] = None,
+    hosts_path: Optional[str] = None
+) -> bool:
+    """
+    在必要时提权移除单个 hosts 受管块。
+    block_type: "cf" 或 "cfa"
+    """
+    if hosts_path is None:
+        hosts_path = _get_hosts_path()
+
+    if block_type == "cf":
+        marker_start, marker_end = CF_START_MARKER, CF_END_MARKER
+        label = "Cloudflare"
+    elif block_type == "cfa":
+        marker_start, marker_end = CFA_START_MARKER, CFA_END_MARKER
+        label = "CloudFront"
+    else:
+        if log_cb:
+            log_cb(f"未知的移除类型：{block_type}")
+        return False
+
+    os.makedirs(os.path.dirname(hosts_path), exist_ok=True)
+
+    # 检查是否已经以管理员身份运行
+    if _is_admin():
+        return remove_hosts_block(marker_start, marker_end, hosts_path, log_cb)
+
+    # 检查是否可以写入
+    can_write = False
+    try:
+        test_path = hosts_path + f".{uuid.uuid4().hex[:8]}.test"
+        with open(test_path, "w") as f:
+            f.write("test")
+        os.remove(test_path)
+        can_write = True
+    except (PermissionError, OSError):
+        pass
+
+    if can_write:
+        return remove_hosts_block(marker_start, marker_end, hosts_path, log_cb)
+
+    # 需要提权
+    request_json = {
+        "action": "remove_hosts",
+        "block_type": block_type,
+        "hosts_path": hosts_path,
+    }
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".json",
+        prefix="lcta_cdn_",
+        delete=False,
+        encoding="utf-8"
+    ) as f:
+        json.dump(request_json, f)
+        request_path = f.name
+
+    try:
+        if log_cb:
+            log_cb(f"请求管理员权限以移除 {label} hosts 条目...")
+
+        helper_script = __file__
+        args = ["--cdn-write-hosts", request_path]
+        _run_as_admin(helper_script, args)
+
+        # 轮询等待结果文件（最久等 30 秒）
+        result_path = request_path + ".result"
+        waited = 0
+        while not os.path.isfile(result_path) and waited < 30:
+            time.sleep(1)
+            waited += 1
+
+        if os.path.isfile(result_path):
+            with open(result_path, "r", encoding="utf-8") as f:
+                result_data = json.load(f)
+            try:
+                os.remove(result_path)
+            except Exception:
+                pass
+            try:
+                os.remove(request_path)
+            except Exception:
+                pass
+            return result_data.get("success", False)
+
+        if log_cb:
+            log_cb(f"移除 {label} hosts 超时")
+        return False
+
+    except Exception as e:
+        if log_cb:
+            log_cb(f"移除 {label} hosts 失败：{e}")
+        return False
+
+
 def read_current_hosts_mappings(
     hosts_path: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -1372,6 +1528,22 @@ def _handle_helper_invocation():
                     result = {
                         "success": success,
                         "message": "hosts 写入成功" if success else "hosts 写入失败",
+                    }
+
+                elif action == "remove_hosts":
+                    block_type = req.get("block_type", "")
+                    if block_type == "cf":
+                        marker_s, marker_e = CF_START_MARKER, CF_END_MARKER
+                    else:
+                        marker_s, marker_e = CFA_START_MARKER, CFA_END_MARKER
+
+                    success = remove_hosts_block(
+                        marker_s, marker_e,
+                        hosts_path=req.get("hosts_path", _get_hosts_path()),
+                    )
+                    result = {
+                        "success": success,
+                        "message": f"{block_type} hosts 移除成功" if success else f"{block_type} hosts 移除失败",
                     }
 
                     result_path = request_path + ".result"

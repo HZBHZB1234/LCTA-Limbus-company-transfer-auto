@@ -1877,3 +1877,39 @@ select.elder-select:focus {
     font-family: "Consolas", "Monaco", monospace;
     color: var(--color-text-primary);
 }
+
+/* ===== CDN 写入提醒 ===== */
+
+.cdn-write-reminder {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    margin-top: 8px;
+    border-radius: 6px;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    font-size: 12px;
+    color: #92400e;
+    line-height: 1.4;
+}
+
+.cdn-write-reminder i {
+    color: #f59e0b;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+/* ===== CDN 移除按钮 ===== */
+
+.action-btn.cdn-remove {
+    background: transparent;
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+.action-btn.cdn-remove:hover {
+    background: #fef2f2;
+    border-color: #dc2626;
+    color: #dc2626;
+}

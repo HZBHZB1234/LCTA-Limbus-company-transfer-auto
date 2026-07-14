@@ -1282,6 +1282,34 @@ class LCTA_API():
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
+    def cdn_remove_cloudflare(self):
+        """移除 Cloudflare hosts 条目"""
+        try:
+            success = function_cdn.elevate_remove_hosts("cf", log_cb=self.log_ui)
+            if success:
+                self.log_ui("Cloudflare hosts 条目已移除")
+                return {"success": True, "message": "Cloudflare hosts 条目已移除"}
+            else:
+                self.log_ui("Cloudflare hosts 条目移除失败或无条目")
+                return {"success": False, "message": "移除失败或无条目"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def cdn_remove_cloudfront(self):
+        """移除 CloudFront hosts 条目"""
+        try:
+            success = function_cdn.elevate_remove_hosts("cfa", log_cb=self.log_ui)
+            if success:
+                self.log_ui("CloudFront hosts 条目已移除")
+                return {"success": True, "message": "CloudFront hosts 条目已移除"}
+            else:
+                self.log_ui("CloudFront hosts 条目移除失败或无条目")
+                return {"success": False, "message": "移除失败或无条目"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
 def main():
     # 获取HTML文件的绝对路径
     html_path = os.path.join(os.getenv('path_'), "webui\\index.html")

@@ -36,10 +36,11 @@ class CdnManager {
                 if (cfaBadge) {
                     if (Object.keys(data.cloudfront).length > 0) {
                         cfaBadge.className = 'cdn-status-badge active';
-                        let html = '';
+                        let html = '<div style="display:flex;flex-direction:column;width:100%;">';
                         for (const [domain, ip] of Object.entries(data.cloudfront)) {
                             html += `<div class="cdn-ip-row"><span class="cdn-ip-domain">${domain}</span><span class="cdn-ip-value">${ip}</span></div>`;
                         }
+                        html += '</div>';
                         cfaBadge.innerHTML = html;
                     } else {
                         cfaBadge.className = 'cdn-status-badge inactive';
@@ -52,6 +53,19 @@ class CdnManager {
                 if (restoreBtn) {
                     restoreBtn.disabled = !data.backup_exists;
                 }
+
+                // 更新单项移除按钮状态
+                const cfRemoveBtn = document.getElementById('cdn-cf-remove-btn');
+                if (cfRemoveBtn) {
+                    cfRemoveBtn.style.display = data.cf_ip ? '' : 'none';
+                }
+                const cfaRemoveBtn = document.getElementById('cdn-cfa-remove-btn');
+                if (cfaRemoveBtn) {
+                    cfaRemoveBtn.style.display = Object.keys(data.cloudfront).length > 0 ? '' : 'none';
+                }
+
+                // 更新写入提醒
+                this._updateWriteReminder();
 
                 this.statusLoaded = true;
             }
@@ -103,6 +117,9 @@ class CdnManager {
         if (writeBtn) {
             writeBtn.disabled = !(this.cloudflareResult || Object.keys(this.cloudfrontResults).length > 0);
         }
+
+        // 更新写入提醒
+        this._updateWriteReminder();
     }
 
     async _runTask(taskName, apiMethod, onSuccess) {
@@ -259,6 +276,110 @@ class CdnManager {
         } catch (error) {
             addLogMessage('hosts还原发生错误: ' + error, 'error');
             showMessage('错误', '还原过程发生错误: ' + error);
+        }
+    }
+
+    async removeCloudflare() {
+        const confirmed = await new Promise((resolve) => {
+            const confirmModal = new ConfirmModal(
+                '确认移除 Cloudflare IP',
+                '将从 hosts 文件中移除 Cloudflare CDN 优选条目。\n\n此操作仅移除受管标记块内的条目，不影响其他 hosts 记录。',
+                () => resolve(true),
+                () => resolve(false)
+            );
+        });
+        if (!confirmed) return;
+
+        addLogMessage('正在移除 Cloudflare hosts 条目...', 'info');
+        try {
+            const result = await pywebview.api.cdn_remove_cloudflare();
+            if (result.success) {
+                addLogMessage('Cloudflare hosts 条目已移除', 'success');
+                showMessage('成功', 'Cloudflare hosts 条目已移除');
+            } else {
+                addLogMessage('移除失败: ' + result.message, 'error');
+                showMessage('失败', result.message);
+            }
+        } catch (error) {
+            addLogMessage('移除 Cloudflare 条目发生错误: ' + error, 'error');
+            showMessage('错误', '移除过程发生错误: ' + error);
+        }
+        await this.loadStatus();
+    }
+
+    async removeCloudFront() {
+        const confirmed = await new Promise((resolve) => {
+            const confirmModal = new ConfirmModal(
+                '确认移除 CloudFront IP',
+                '将从 hosts 文件中移除 CloudFront API 优选条目。\n\n此操作仅移除受管标记块内的条目，不影响其他 hosts 记录。',
+                () => resolve(true),
+                () => resolve(false)
+            );
+        });
+        if (!confirmed) return;
+
+        addLogMessage('正在移除 CloudFront hosts 条目...', 'info');
+        try {
+            const result = await pywebview.api.cdn_remove_cloudfront();
+            if (result.success) {
+                addLogMessage('CloudFront hosts 条目已移除', 'success');
+                showMessage('成功', 'CloudFront hosts 条目已移除');
+            } else {
+                addLogMessage('移除失败: ' + result.message, 'error');
+                showMessage('失败', result.message);
+            }
+        } catch (error) {
+            addLogMessage('移除 CloudFront 条目发生错误: ' + error, 'error');
+            showMessage('错误', '移除过程发生错误: ' + error);
+        }
+        await this.loadStatus();
+    }
+
+    _updateWriteReminder() {
+        // Cloudflare 提醒：对比测速结果 vs 当前 hosts
+        const cfReminder = document.getElementById('cdn-cf-reminder');
+        if (cfReminder) {
+            if (this.cloudflareResult) {
+                const cfCurrentEl = document.getElementById('cdn-cf-current-ip');
+                const currentIp = cfCurrentEl ? cfCurrentEl.textContent : '';
+                if (this.cloudflareResult.ip !== currentIp) {
+                    cfReminder.style.display = 'flex';
+                } else {
+                    cfReminder.style.display = 'none';
+                }
+            } else {
+                cfReminder.style.display = 'none';
+            }
+        }
+
+        // CloudFront 提醒：逐域名对比
+        const cfaReminder = document.getElementById('cdn-cfa-reminder');
+        if (cfaReminder) {
+            if (Object.keys(this.cloudfrontResults).length > 0) {
+                let needsWrite = false;
+                const cfaStatus = document.getElementById('cdn-cfa-status');
+                if (cfaStatus) {
+                    for (const [domain, info] of Object.entries(this.cloudfrontResults)) {
+                        const ipEls = cfaStatus.querySelectorAll('.cdn-ip-value');
+                        let found = false;
+                        for (const el of ipEls) {
+                            if (el.textContent.trim() === info.ip) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            needsWrite = true;
+                            break;
+                        }
+                    }
+                } else {
+                    needsWrite = true;
+                }
+                cfaReminder.style.display = needsWrite ? 'flex' : 'none';
+            } else {
+                cfaReminder.style.display = 'none';
+            }
         }
     }
 }

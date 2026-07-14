@@ -1676,9 +1676,18 @@
                         <div class="cdn-result-card"></div>
                     </div>
 
+                    <!-- 写入提醒 -->
+                    <div id="cdn-cf-reminder" class="cdn-write-reminder" style="display:none;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        测速结果尚未写入 hosts
+                    </div>
+
                     <div class="action-grid" style="margin-top: 12px;">
                         <button class="action-btn" onclick="cdnManager.runCloudflare()">
                             <i class="fas fa-play"></i> Cloudflare优选
+                        </button>
+                        <button class="action-btn cdn-remove" onclick="cdnManager.removeCloudflare()" id="cdn-cf-remove-btn" style="display:none;">
+                            <i class="fas fa-trash"></i> 移除当前IP
                         </button>
                     </div>
                 </div>
@@ -1710,9 +1719,18 @@
                         <div class="cdn-result-card"></div>
                     </div>
 
+                    <!-- 写入提醒 -->
+                    <div id="cdn-cfa-reminder" class="cdn-write-reminder" style="display:none;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        测速结果尚未写入 hosts
+                    </div>
+
                     <div class="action-grid" style="margin-top: 12px;">
                         <button class="action-btn" onclick="cdnManager.runCloudFront()">
                             <i class="fas fa-play"></i> CloudFront优选
+                        </button>
+                        <button class="action-btn cdn-remove" onclick="cdnManager.removeCloudFront()" id="cdn-cfa-remove-btn" style="display:none;">
+                            <i class="fas fa-trash"></i> 移除当前IP
                         </button>
                     </div>
                 </div>

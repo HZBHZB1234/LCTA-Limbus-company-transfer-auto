@@ -1,34 +1,57 @@
-import zipfile
-import requests
-import requests
+"""文件操作、下载、哈希计算与 Windows Shell API 工具函数。"""
+
+# ============================================================
+# 标准库
+# ============================================================
+import ctypes
+import hashlib
 import json
 import os
-import time
-import zipfile
-import hashlib
-import ctypes
-from ctypes import wintypes
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Set
 import shutil
 import subprocess
 import tempfile
+import time
+import zipfile
+from ctypes import wintypes
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional, Set
+
+# ============================================================
+# 第三方库
+# ============================================================
+import requests
+
+# ============================================================
+# 本地模块
+# ============================================================
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
-_log_manager = LogManager()
+
 if TYPE_CHECKING:
     from webFunc.GithubDownload import ReleaseAsset
 
+# ============================================================
+# 模块级初始化
+# ============================================================
+_log_manager = LogManager()
+_7Z_DOWNLOAD_URL = "https://www.7-zip.org/"
+
+
+# ============================================================
+# 压缩 / 解压
+# ============================================================
+
 def zip_folder(folder_path, output_path):
+    """将文件夹压缩为 ZIP 文件。"""
     try:
         with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(folder_path):
-                # 添加空文件夹到zip
+                # 添加空文件夹到 zip
                 for dir in dirs:
                     dir_path = os.path.join(root, dir)
                     arc_path = os.path.relpath(dir_path, os.path.dirname(folder_path))
                     zipf.write(dir_path, arc_path)
-                # 添加文件到zip
+                # 添加文件到 zip
                 for file in files:
                     file_path = os.path.join(root, file)
                     arc_path = os.path.relpath(file_path, os.path.dirname(folder_path))
@@ -38,64 +61,70 @@ def zip_folder(folder_path, output_path):
         _log_manager.log(f"压缩文件夹失败: {e}")
         _log_manager.log_error(e)
         return False
-    
+
+
 def extract_zip_smartly(zip_path: str, target_dir: str) -> Optional[str]:
-    """
-    智能解压ZIP文件
-    
+    """智能解压 ZIP 文件。
+
     如果压缩包根目录只有一个文件夹，则直接解压该文件夹内容到目标目录；
-    如果压缩包根目录有多个文件或文件夹，则在目标目录下创建以压缩包名称命名的文件夹，
-    然后将内容解压到该文件夹中。
-    
-    Args:
-        zip_path (str): ZIP文件路径
-        target_dir (str): 目标解压目录
-    
-    Returns:
-        Optional[str]: 返回解压的根文件夹名称，如果直接解压到目标目录则返回None
+    如果根目录有多个条目，则在目标目录下创建以压缩包名称命名的文件夹。
     """
-    # 确保目标目录存在
     os.makedirs(target_dir, exist_ok=True)
-    
+
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            # 使用集合来存储根目录项，避免重复
             root_items: Set[str] = set()
-            
-            # 一次性获取所有必要信息
+
             for info in zip_ref.infolist():
-                # 获取根目录项
                 root_item = info.filename.split('/')[0] if '/' in info.filename else info.filename
-                # 只添加非空的根目录项
                 if root_item:
                     root_items.add(root_item)
-            
-            # 如果没有根目录项，直接返回
+
             if not root_items:
                 return None
-            
-            # 只有一个根目录项的情况
+
             if len(root_items) == 1:
                 zip_ref.extractall(target_dir)
             else:
-                zip_name = Path(zip_path).stem  # 使用Path获取无扩展名的文件名
+                zip_name = Path(zip_path).stem
                 extract_dir = os.path.join(target_dir, zip_name)
                 os.makedirs(extract_dir, exist_ok=True)
-                    
                 zip_ref.extractall(extract_dir)
                 return zip_name
-    
+
     except zipfile.BadZipFile:
-        raise ValueError(f"文件 '{zip_path}' 不是有效的ZIP文件或已损坏")
+        raise ValueError(f"文件 '{zip_path}' 不是有效的 ZIP 文件或已损坏")
     except PermissionError:
         raise PermissionError(f"没有权限解压文件到目录: {target_dir}")
     except Exception as e:
         raise RuntimeError(f"解压文件时发生错误: {str(e)}")
 
-_7Z_DOWNLOAD_URL = "https://www.7-zip.org/"
+
+def decompress_zip(file_path, output_dir='.'):
+    """解压 ZIP 文件到指定目录。"""
+    if not os.path.exists(file_path):
+        _log_manager.log(f"压缩文件不存在: {file_path}")
+        return False
+    if output_dir is None:
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        output_dir = os.path.join(os.getcwd(), base_name)
+
+    os.makedirs(output_dir, exist_ok=True)
+    try:
+        with zipfile.ZipFile(file_path, 'r') as zip_ref:
+            zip_ref.extractall(output_dir)
+    except Exception as e:
+        _log_manager.log(f"解压失败: {e}")
+        _log_manager.log_error(e)
+        return False
+
+
+# ----------------------------------------------------------
+# 7-Zip 相关
+# ----------------------------------------------------------
 
 def _find_7z_exe() -> str:
-    """查找 7z 可执行文件，找不到抛出 FileNotFoundError"""
+    """查找 7z 可执行文件，找不到抛出 FileNotFoundError。"""
     # 1. 项目自带（assets/7za.exe）
     bundled = Path(__file__).parent.parent / 'assets' / '7za.exe'
     if bundled.exists():
@@ -117,7 +146,7 @@ def _find_7z_exe() -> str:
 
 
 def _extract_7z(file_path, output_dir) -> bool:
-    """解压 .7z 文件到指定目录（通过 subprocess 调用 7z）"""
+    """通过 subprocess 调用 7z 解压 .7z 文件。"""
     try:
         exe = _find_7z_exe()
     except FileNotFoundError:
@@ -151,6 +180,7 @@ def _extract_7z(file_path, output_dir) -> bool:
 
 
 def decompress_7z(file_path, output_dir='.'):
+    """解压 .7z 文件到指定目录。"""
     if not os.path.exists(file_path):
         _log_manager.log(f"压缩文件不存在: {file_path}")
         return False
@@ -172,18 +202,33 @@ def decompress_7z(file_path, output_dir='.'):
         _log_manager.log_error(e)
         return False
 
-def download_with(url, save_path, size=0, chunk_size=1024*100,
-                  modal_id=None, progress_=[0,100], headers={}, validate = True):
+
+def decompress_by_extension(file_path, output_dir='.'):
+    """根据文件扩展名自动选择解压方式（.zip / .7z）。"""
+    if file_path.endswith('.zip'):
+        return decompress_zip(file_path, output_dir)
+    elif file_path.endswith('.7z'):
+        return decompress_7z(file_path, output_dir)
+    else:
+        return False
+
+
+# ============================================================
+# 下载
+# ============================================================
+
+def download_with(url, save_path, size=0, chunk_size=1024 * 100,
+                  modal_id=None, progress_=[0, 100], headers={}, validate=True):
+    """从指定 URL 下载文件，支持进度回调。"""
     try:
         with requests.get(url, stream=True, headers=headers, verify=validate) as r:
-            r.raise_for_status()  # 检查请求是否成功
+            r.raise_for_status()
 
-            # 获取文件总大小
             if size == 0:
                 total_size = int(r.headers.get('Content-Length', 0))
             else:
                 total_size = size
-            chunk_len = total_size//chunk_size +1
+            chunk_len = total_size // chunk_size + 1
             downloaded_chunk = 0
 
             _log_manager.log(f"开始下载文件，总大小: {total_size // 1024} KB")
@@ -196,7 +241,7 @@ def download_with(url, save_path, size=0, chunk_size=1024*100,
 
                     downloaded_chunk += 1
                     _log_manager.update_modal_progress(
-                        progress_[0] + (progress_[1]-progress_[0]) * downloaded_chunk / chunk_len,
+                        progress_[0] + (progress_[1] - progress_[0]) * downloaded_chunk / chunk_len,
                         f"已下载 {downloaded_chunk * chunk_size // 1024} KB / {total_size // 1024} KB",
                         modal_id, log=False
                     )
@@ -208,24 +253,13 @@ def download_with(url, save_path, size=0, chunk_size=1024*100,
         _log_manager.log_error(e)
         return False
 
-def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
-                        modal_id=None,
-                        progress_=[0,100], use_proxy=True):
-    """
-    下载ReleaseAsset中的文件，支持代理轮换重试
 
-    Args:
-        asset: ReleaseAsset对象，包含下载URL和代理管理器
-        save_path: 保存路径
-        chunk_size: 分块大小
-        modal_id: 模态窗口ID
-        progress_: 进度范围
-        use_proxy: 是否使用代理
-    Returns:
-        bool: 下载是否成功
-    """
+def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024 * 100,
+                         modal_id=None,
+                         progress_=[0, 100], use_proxy=True):
+    """下载 ReleaseAsset 中的文件，支持代理轮换重试。"""
     if not asset:
-        _log_manager.log("ReleaseAsset为空，无法下载")
+        _log_manager.log("ReleaseAsset 为空，无法下载")
         return False
 
     # 确保保存目录存在
@@ -234,7 +268,6 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
         os.makedirs(save_dir, exist_ok=True)
 
     if not use_proxy or not hasattr(asset, 'proxys') or not asset.proxys:
-        # 不使用代理，直接下载
         _log_manager.log(f"不使用代理，直接下载: {asset.name}")
         return download_with(
             asset.download_url, save_path,
@@ -243,23 +276,19 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
             progress_=progress_
         )
 
-    # 使用代理管理器
     proxy_manager = asset.proxys
 
     def _build_url(proxy_url: str):
-        proxy_url = proxy_url.rstrip('/') + '/' + asset.download_url.lstrip('/')
-        return proxy_url
+        return proxy_url.rstrip('/') + '/' + asset.download_url.lstrip('/')
 
     _log_manager.log(f"开始下载 {asset.name} (大小: {asset.size} bytes)")
 
-    # 尝试所有URL直到成功
     len_proxies = len(proxy_manager.proxies)
     for i, proxy in enumerate(proxy_manager.get_proxies()):
         try:
             url = _build_url(proxy)
-            _log_manager.log(f"尝试下载 (代理 {i+1}/{len_proxies}): {url}")
+            _log_manager.log(f"尝试下载 (代理 {i + 1}/{len_proxies}): {url}")
 
-            # 使用download_with函数下载
             success = download_with(
                 url, save_path,
                 size=asset.size, chunk_size=chunk_size,
@@ -272,12 +301,10 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
             )
 
             if success:
-                # 验证文件大小
                 if os.path.exists(save_path):
                     actual_size = os.path.getsize(save_path)
                     if asset.size > 0 and actual_size != asset.size:
                         _log_manager.log(f"警告: 文件大小不匹配。期望: {asset.size}, 实际: {actual_size}")
-                        # 文件大小不匹配，继续尝试下一个URL
                         continue
 
                     _log_manager.log(f"下载成功! 使用链接 {url}")
@@ -287,107 +314,72 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024*100,
                     _log_manager.log(f"文件未创建: {save_path}")
                     raise FileNotFoundError(f"文件未创建: {save_path}")
             else:
-                _log_manager.log(f"下载失败 (URL {i+1}/{len_proxies})")
+                _log_manager.log(f"下载失败 (URL {i + 1}/{len_proxies})")
 
         except Exception as e:
-            _log_manager.log(f"下载失败 (URL {i+1}/{len_proxies}): {e}")
+            _log_manager.log(f"下载失败 (URL {i + 1}/{len_proxies}): {e}")
             _log_manager.log_error(e)
-
-            # 短暂延迟后重试
             time.sleep(0.1)
 
     _log_manager.log(f"所有下载尝试都失败: {asset.name}")
     return False
 
-def calculate_sha256(file_path):
-    """
-    计算指定文件的SHA256哈希值
 
-    Args:
-        file_path (str): 文件路径
+# ============================================================
+# 哈希计算
+# ============================================================
 
-    Returns:
-        str: 文件的SHA256哈希值，如果出错则返回None
-    """
+def _hash_file(file_path, hash_obj):
+    """通用文件哈希计算。"""
     if not os.path.exists(file_path):
         _log_manager.log(f"文件不存在: {file_path}")
         return None
-
-    sha256_hash = hashlib.sha256()
     try:
         with open(file_path, "rb") as f:
-            # 逐块读取文件以节省内存
             for byte_block in iter(lambda: f.read(4096), b""):
-                sha256_hash.update(byte_block)
-        return sha256_hash.hexdigest()
+                hash_obj.update(byte_block)
+        return hash_obj.hexdigest()
     except Exception as e:
-        _log_manager.log(f"计算文件SHA256失败: {e}")
+        _log_manager.log(f"计算文件哈希失败: {e}")
         _log_manager.log_error(e)
         return None
+
+
+def calculate_sha256(file_path):
+    """计算指定文件的 SHA256 哈希值。"""
+    return _hash_file(file_path, hashlib.sha256())
+
 
 def calculate_md5(file_path):
-    """
-    计算指定文件的MD5哈希值
+    """计算指定文件的 MD5 哈希值。"""
+    return _hash_file(file_path, hashlib.md5())
 
-    Args:
-        file_path (str): 文件路径
 
-    Returns:
-        str: 文件的MD5哈希值，如果出错则返回None
-    """
-    if not os.path.exists(file_path):
-        _log_manager.log(f"文件不存在: {file_path}")
-        return None
-
-    md5_hash = hashlib.md5()
-    try:
-        with open(file_path, "rb") as f:
-            # 逐块读取文件以节省内存
-            for byte_block in iter(lambda: f.read(4096), b""):
-                md5_hash.update(byte_block)
-        return md5_hash.hexdigest()
-    except Exception as e:
-        _log_manager.log(f"计算文件MD5失败: {e}")
-        _log_manager.log_error(e)
-        return None
-
-def decompress_zip(file_path, output_dir='.'):
-    if not os.path.exists(file_path):
-        _log_manager.log(f"压缩文件不存在: {file_path}")
-        return False
-    if output_dir is None:
-        base_name = os.path.splitext(os.path.basename(file_path))[0]
-        output_dir = os.path.join(os.getcwd(), base_name)
-
-    os.makedirs(output_dir, exist_ok=True)
-    try:
-        with zipfile.ZipFile(file_path, 'r') as zip_ref:
-            zip_ref.extractall(output_dir)
-    except Exception as e:
-        _log_manager.log(f"解压失败: {e}")
-        _log_manager.log_error(e)
-        return False
+# ============================================================
+# 字体缓存
+# ============================================================
 
 def get_cache_font() -> str:
+    """获取缓存中的中文字体路径。"""
     game_path = ConfigManager().get('game_path', '')
     cache_normal = os.path.join(game_path, 'LimbusCompany_Data', 'lang', 'LLC_zh-CN', 'Font', 'Context', 'ChineseFont.ttf')
     if ConfigManager().get('enable_cache', False):
         cache_path = Path(ConfigManager().get('cache_path', '')) / 'ChineseFont.ttf'
         if cache_path.exists():
-            return cache_path
+            return str(cache_path)
         else:
             cache_path = Path(cache_normal)
             if cache_path.exists():
-                return cache_path
+                return str(cache_path)
             try:
                 with tempfile.TemporaryDirectory() as temp_dir:
                     from .function_llc import font_assets_seven
                     download_with_github(
-                    font_assets_seven, Path(temp_dir) / 'font.7z',
-                    chunk_size=1024 * 100
+                        font_assets_seven, Path(temp_dir) / 'font.7z',
+                        chunk_size=1024 * 100
                     )
                     r = decompress_7z(Path(temp_dir) / 'font.7z',
-                                  ConfigManager().get('cache_path', '.'))
+                                      ConfigManager().get('cache_path', '.'))
                     if r:
                         return get_cache_font()
             except Exception as e:
@@ -396,19 +388,17 @@ def get_cache_font() -> str:
 
     cache_path = Path(cache_normal)
     if cache_path.exists():
-        return cache_path
+        return str(cache_path)
     else:
         return ''
 
-def decompress_by_extension(file_path, output_dir='.'):
-    if file_path.endswith('.zip'):
-        return decompress_zip(file_path, output_dir)
-    elif file_path.endswith('.7z'):
-        return decompress_7z(file_path, output_dir)
-    else:
-        return False
-    
+
+# ============================================================
+# Steam 启动命令
+# ============================================================
+
 def get_steam_command():
+    """生成用于 Steam 启动选项的命令行字符串。"""
     froze = os.getenv('is_frozen', '')
     cwd = Path(os.getcwd())
     if froze == 'true':
@@ -417,88 +407,58 @@ def get_steam_command():
         if os.getenv('debug', '') == 'true':
             this_launcher = cwd / 'start_webui.py'
             if not this_launcher.exists():
-                raise
+                raise FileNotFoundError(f"启动脚本不存在: {this_launcher}")
             if (cwd / 'venv').exists():
                 cmd = f'"{cwd / "venv" / "Scripts" / "python.exe"}" "{this_launcher}" -launcher %command%'
                 return cmd
         else:
             this_launcher = cwd / 'launcher.exe'
             if not this_launcher.exists():
-                raise
+                raise FileNotFoundError(f"启动器不存在: {this_launcher}")
     else:
-        raise
+        raise RuntimeError(f"未知的 is_frozen 值: {froze}")
     cmd = f'"{this_launcher}" -launcher %command%'
     return cmd
 
+
+# ============================================================
+# 窗口图标（占位）
+# ============================================================
+
 def change_icon():
-    '''暂未实现'''
+    """更改窗口图标（暂未实现）。"""
     return
-    # 定义Windows API函数
-    user32 = ctypes.windll.user32
 
-    # 查找窗口
-    window_title = "LCTA - 边狱公司汉化工具箱"
-    hwnd = user32.FindWindowW(None, window_title)
 
-    if hwnd:
-        # 加载图标
-        GCL_HICON = -14
-        GCL_HICONSM = -34
-        
-        # 从文件加载图标
-        icon_big = ctypes.windll.user32.LoadImageW(
-            0,
-            "dev_assets\\r\\favicon.ico",
-            1,  # IMAGE_ICON
-            0, 0,
-            0x00000010  # LR_LOADFROMFILE
-        )
-        
-        icon_small = ctypes.windll.user32.LoadImageW(
-            0,
-            "dev_assets\\r\\favicon.ico",
-            1,
-            0, 0,  # 小图标尺寸
-            0x00000010
-        )
-        
-        # 设置图标
-        user32.SendMessageW(hwnd, 0x0080, 0, icon_big)  # WM_SETICON, ICON_BIG
-        user32.SendMessageW(hwnd, 0x0080, 1, icon_small)  # WM_SETICON, ICON_SMALL
-        
-    ctypes.windll.user32.SendMessageW(
-        0xFFFF,  # HWND_BROADCAST
-        0x001A,  # WM_SETTINGCHANGE
-        0, 
-        "TraySettings"
-    )
+# ============================================================
+# Windows Shell API 文件操作
+# ============================================================
 
 FO_MOVE = 0x0001
 FO_COPY = 0x0002
 FO_DELETE = 0x0003
 FO_RENAME = 0x0004
 
-FOF_ALLOWUNDO = 0x0040          # 支持撤销（放入回收站）
-FOF_NOCONFIRMATION = 0x0010     # 不显示确认对话框
-FOF_SILENT = 0x0004             # 不显示进度对话框
-FOF_SIMPLEPROGRESS = 0x0100     # 显示简单进度条
-FOF_NOCONFIRMMKDIR = 0x0200     # 自动创建目标目录（不询问）
-# 更多标志可参考 MSDN
+FOF_ALLOWUNDO = 0x0040
+FOF_NOCONFIRMATION = 0x0010
+FOF_SILENT = 0x0004
+FOF_SIMPLEPROGRESS = 0x0100
+FOF_NOCONFIRMMKDIR = 0x0200
 
-# ---------- SHFILEOPSTRUCTW 结构体 ----------
+
 class SHFILEOPSTRUCTW(ctypes.Structure):
     _fields_ = [
-        ('hwnd', wintypes.HWND),               # 父窗口句柄
-        ('wFunc', ctypes.c_uint),               # 操作类型（FO_MOVE 等）
-        ('pFrom', ctypes.c_void_p),             # 源文件列表（双 null 结尾）
-        ('pTo', ctypes.c_void_p),               # 目标列表（双 null 结尾）
-        ('fFlags', ctypes.c_uint),              # 标志位
-        ('fAnyOperationsAborted', wintypes.BOOL), # 操作是否被用户中止
-        ('hNameMappings', ctypes.c_void_p),      # 文件名映射（通常不用）
-        ('lpszProgressTitle', ctypes.c_wchar_p), # 进度对话框标题
+        ('hwnd', wintypes.HWND),
+        ('wFunc', ctypes.c_uint),
+        ('pFrom', ctypes.c_void_p),
+        ('pTo', ctypes.c_void_p),
+        ('fFlags', ctypes.c_uint),
+        ('fAnyOperationsAborted', wintypes.BOOL),
+        ('hNameMappings', ctypes.c_void_p),
+        ('lpszProgressTitle', ctypes.c_wchar_p),
     ]
 
-# 加载 shell32.dll 中的 SHFileOperationW
+
 _shell32 = ctypes.windll.shell32
 _SHFileOperationW = _shell32.SHFileOperationW
 _SHFileOperationW.argtypes = [ctypes.POINTER(SHFILEOPSTRUCTW)]
@@ -507,41 +467,23 @@ _SHFileOperationW.restype = ctypes.c_int
 
 def _move_folders(src_list, dst_dir, hwnd=None,
                   flags=FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR):
-    """
-    使用 Windows Shell API 移动多个文件夹（支持跨驱动器）。
-
-    Args:
-        src_list (list of str): 源文件夹路径列表，例如 ['C:\\folder1', 'D:\\data\\folder2']
-        dst_dir (str): 目标文件夹路径，例如 'E:\\backup'
-        hwnd (int or None): 父窗口句柄，用于显示对话框（可为 None）
-        flags (int): 附加标志，例如 FOF_ALLOWUNDO | FOF_NOCONFIRMATION
-
-    Returns:
-        (success, aborted, error_code)
-        success (bool): 操作是否成功完成（返回 0 且未被中止）
-        aborted (bool): 用户是否中止了操作
-        error_code (int): 如果失败，返回 Windows 错误码；否则为 0
-    """
-    # 构造源列表字符串：每个路径以 null 分隔，末尾加一个 null，由 create_unicode_buffer 补全第二个 null
+    """使用 Windows Shell API 移动多个文件夹（支持跨驱动器）。"""
     src_str = '\0'.join(src_list) + '\0'
     src_buffer = ctypes.create_unicode_buffer(src_str)
 
-    # 构造目标路径字符串：末尾加一个 null，create_unicode_buffer 补全第二个 null
     dst_str = dst_dir + '\0'
     dst_buffer = ctypes.create_unicode_buffer(dst_str)
 
-    # 初始化结构体
     op = SHFILEOPSTRUCTW()
     op.hwnd = hwnd if hwnd is not None else None
     op.wFunc = FO_MOVE
-    op.pFrom = ctypes.addressof(src_buffer)   # 传递缓冲区地址
+    op.pFrom = ctypes.addressof(src_buffer)
     op.pTo = ctypes.addressof(dst_buffer)
     op.fFlags = flags
     op.fAnyOperationsAborted = False
     op.hNameMappings = None
-    op.lpszProgressTitle = None                # 如需自定义标题可设置
+    op.lpszProgressTitle = None
 
-    # 调用 API
     ret = _SHFileOperationW(ctypes.byref(op))
 
     aborted = op.fAnyOperationsAborted != 0

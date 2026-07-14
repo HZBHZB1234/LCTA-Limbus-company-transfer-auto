@@ -114,7 +114,9 @@
             "update": "str",
             "mod": "bool",
             "bubble": "bool",
-            "fancy": "bool"
+            "fancy": "bool",
+            "cdn_optimize": "bool",
+            "cdn_auto_apply": "bool"
         },
         "last_install": {
             "llc": "str",

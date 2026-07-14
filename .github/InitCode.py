@@ -46,8 +46,8 @@ baseDir = projext_path.parent
 for outputPath, actions in createC:
     output = baseDir / outputPath
     outputContent = codeC
-    for _, __ in actions:
-        outputContent = outputContent.replace(_, __)
+    for old, new in actions:
+        outputContent = outputContent.replace(old, new)
     output.write_text(outputContent, encoding='utf-8')
 
 print('开始复制图标文件')
@@ -149,3 +149,33 @@ with open('marked/marked.min.js', 'r', encoding='utf-8') as f:
 
 with open('marked/marked.min.js', 'w', encoding='utf-8') as f:
     f.write(marked)
+
+# ---- 下载 CFST (CloudflareSpeedTest) ----
+import sys
+sys.path.insert(0, str(projext_path))
+from webutils.function_cdn import CFST_VERSION, CFST_DOWNLOAD_URL, IP_TXT_URL
+import zipfile
+
+cfst_dir = projext_path / "CFST"
+cfst_dir.mkdir(parents=True, exist_ok=True)
+
+# 下载 ip.txt
+print("下载 ip.txt...")
+with open(cfst_dir / "ip.txt", "wb") as f:
+    r = requests.get(IP_TXT_URL, timeout=10, verify=False)
+    r.raise_for_status()
+    f.write(r.content)
+print("ip.txt 下载完成")
+
+# 下载并解压 cfst.exe
+print("下载 cfst.exe...")
+cfst_zip_path = cfst_dir / "cfst_windows_amd64.zip"
+with open(cfst_zip_path, "wb") as f:
+    r = requests.get(CFST_DOWNLOAD_URL, timeout=60, verify=False)
+    r.raise_for_status()
+    f.write(r.content)
+
+with zipfile.ZipFile(cfst_zip_path, "r") as zf:
+    zf.extract("cfst.exe", cfst_dir)
+cfst_zip_path.unlink()  # 删除临时 zip
+print("CFST 下载完成")

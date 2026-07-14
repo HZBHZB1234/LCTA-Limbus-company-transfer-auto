@@ -25,6 +25,20 @@ from .builtinFancy import fancy as builtinFancyConfig
 from .function_fancy import fancy_main
 from .eiderConst import updateList, bindRefer, relyList
 from .function_drop import evalFile, makeMessage, evalFiles
+from .function_cdn import (
+    run_cfst,
+    resolve_cloudfront_dns,
+    probe_cloudfront_endpoint,
+    select_cloudfront_ip,
+    write_hosts,
+    elevate_write_hosts,
+    restore_hosts_backup,
+    read_current_hosts_mappings,
+    cdn_optimize_cloudflare,
+    cdn_optimize_cloudfront,
+    cdn_full_optimization,
+    cdn_full_optimization_simple,
+)
 
 __all__ = [
     'function_llc_main',
@@ -65,5 +79,17 @@ __all__ = [
     'relyList',
     'evalFile',
     'makeMessage',
-    'evalFiles'
+    'evalFiles',
+    'run_cfst',
+    'resolve_cloudfront_dns',
+    'probe_cloudfront_endpoint',
+    'select_cloudfront_ip',
+    'write_hosts',
+    'elevate_write_hosts',
+    'restore_hosts_backup',
+    'read_current_hosts_mappings',
+    'cdn_optimize_cloudflare',
+    'cdn_optimize_cloudfront',
+    'cdn_full_optimization',
+    'cdn_full_optimization_simple',
 ]

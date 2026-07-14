@@ -466,6 +466,20 @@ if (Test-Path $WebuiBuildCache) {
     Write-Host "  webui 已替换为 InitCode 修改版" -ForegroundColor Green
 }
 
+# ---- 复制 CFST/ 目录（CDN优选用） ----
+Write-Host "  复制 CFST/ 目录..."
+$cfstSource = "$ProjectRoot\CFST"
+if (Test-Path $cfstSource) {
+    foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+        $destCfst = "$dest\CFST"
+        if (Test-Path $destCfst) { Remove-Item $destCfst -Recurse -Force }
+        Copy-Item $cfstSource $destCfst -Recurse -Force
+    }
+    Write-Host "  CFST/ 复制完成" -ForegroundColor Green
+} else {
+    Write-Host "  WARNING: CFST/ 目录不存在，跳过（请先运行 InitCode）" -ForegroundColor Yellow
+}
+
 # ---- 复制 venv（嵌入式 Python + site-packages + Scripts） ----
 Write-Host "  复制嵌入式 Python venv..."
 

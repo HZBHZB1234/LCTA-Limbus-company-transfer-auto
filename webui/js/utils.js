@@ -82,6 +82,10 @@ function initNavigation() {
                         refreshSymlink();
                     }
 
+                    if (sectionId === 'cdn-section' && typeof cdnManager !== 'undefined') {
+                        cdnManager.init();
+                    }
+
                     if (sectionId !== 'test-section') {
                         goTestSection(false);
                     }
@@ -735,15 +739,13 @@ async function showMarkdownModal(link, title= '指导', pre='正在加载数据�
     removeWProgressIndicator();
     const activeNav = document.querySelector('.nav-btn.active');
     if (!activeNav) {
-      console.warn('俺寻思: 未找到活跃导航项');
       return;
     }
     const page = activeNav.id.replace('-btn', '');
-    console.log('俺寻思', page);
     try {
       await showGuide(page);
     } catch (e) {
-      console.error('俺寻思: 加载帮助失败', e);
+      // silently fail — guide is non-critical
     }
   }
 

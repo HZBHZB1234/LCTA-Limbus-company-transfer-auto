@@ -111,6 +111,17 @@ jobs:
         Copy-Item venv release\${{ env.APP_NAME }}-Compatible\code\venv -Recurse
         release\${{ env.APP_NAME }}-Compatible\code\venv\Bins\python.exe -m pip install PyQt5 qtpy PyQtWebEngine
 
+    - name: Copy CFST directory (CDN optimization)
+      run: |
+        if (Test-Path .\LCTA\CFST) {
+            Copy-Item .\LCTA\CFST release\${{ env.APP_NAME }}\code\CFST -Recurse -Force
+            Copy-Item .\LCTA\CFST release\${{ env.APP_NAME }}-Compatible\code\CFST -Recurse -Force
+            Copy-Item .\LCTA\CFST .\LCTA_update\CFST -Recurse -Force
+            Write-Host "CFST/ copied to release artifacts"
+        } else {
+            Write-Host "WARNING: CFST/ directory not found, skipping"
+        }
+
     - name: Upload Compatible portable application folder
       uses: actions/upload-artifact@v4
       with:

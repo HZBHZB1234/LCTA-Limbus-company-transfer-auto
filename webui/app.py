@@ -32,10 +32,13 @@ from webutils.const_apiConfig import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
 )
 from webutils.function_translate import translate_main
+import webutils.function_cdn as function_cdn
 from webutils import *
 
 class CancelRunning(Exception):
     pass
+
+_MODAL_WAIT_MAX_SECONDS = 300
 
 class LCTA_API():
     @property
@@ -49,6 +52,7 @@ class LCTA_API():
         self.log_manager = LogManager()
         ConfigManager()
         self.modal_list = []
+        self._modal_lock = threading.Lock()
         self.http_port = 0
 
         # 判断是否为打包环境
@@ -271,20 +275,24 @@ class LCTA_API():
 
     def add_modal_id(self, modal_id):
         self.log(f"添加模态窗口ID: {modal_id}")
-        self.modal_list.append({
-            "modal_id": modal_id,
-            "running": "running"})
+        with self._modal_lock:
+            self.modal_list.append({
+                "modal_id": modal_id,
+                "running": "running"})
         return True
 
     def _check_modal_running(self, modal_id):
-        return [i["running"] for i in self.modal_list if i["modal_id"] == modal_id][0]
+        with self._modal_lock:
+            matches = [i["running"] for i in self.modal_list if i["modal_id"] == modal_id]
+        if not matches:
+            return "running"  # modal 已被删除，当作正常状态
+        return matches[0]
 
     def _wait_continue(self, modal_id):
-        while True:
-            if self._check_modal_running(modal_id)=="pause":
-                time.sleep(1)
-            else:
-                break
+        for _ in range(_MODAL_WAIT_MAX_SECONDS):
+            if self._check_modal_running(modal_id) != "pause":
+                return
+            time.sleep(1)
 
     def check_modal_running(self, modal_id, log=True):
         if log:
@@ -296,17 +304,33 @@ class LCTA_API():
             raise CancelRunning
     def set_modal_running(self, modal_id, types="cancel"):
         self.log(f"设置模态窗口ID: {modal_id} 状态为 {types}")
-        for i in self.modal_list:
-            if i["modal_id"] == modal_id:
-                i["running"] = str(types)
-                break
+        with self._modal_lock:
+            for i in self.modal_list:
+                if i["modal_id"] == modal_id:
+                    i["running"] = str(types)
+                    break
 
     def del_modal_list(self, modal_id):
         self.log(f"删除模态窗口ID: {modal_id}")
-        for times, i in enumerate(self.modal_list):
-            if i["modal_id"] == modal_id:
-                del self.modal_list[times]
-                break
+        with self._modal_lock:
+            for times, i in enumerate(self.modal_list):
+                if i["modal_id"] == modal_id:
+                    del self.modal_list[times]
+                    break
+
+    def _make_cdn_callbacks(self, modal_id):
+        """创建 CDN 进度回调三元组 (log_cb, progress_cb, cancel_check)"""
+        def log_cb(msg):
+            self.add_modal_log(msg, modal_id)
+
+        def progress_cb(pct, msg):
+            self.update_modal_progress(int(pct), msg, modal_id, log=False)
+            self.check_modal_running(modal_id, log=False)
+
+        def cancel_check():
+            self.check_modal_running(modal_id, log=False)
+
+        return log_cb, progress_cb, cancel_check
 
     # 以下为新添加的API方法，用于支持模态窗口功能
     def start_translation(self, translator_config: dict, modal_id= "false"):
@@ -1107,6 +1131,157 @@ class LCTA_API():
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
+    # ---- CDN 优选 API ----
+
+    def cdn_get_status(self):
+        """获取当前 CDN/hosts 状态"""
+        try:
+            status = function_cdn.read_current_hosts_mappings()
+            return {"success": True, "data": status}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def cdn_optimize_cloudflare(self, modal_id="false"):
+        """Cloudflare CDN 优选"""
+        try:
+            self.add_modal_log("开始Cloudflare CDN优选...", modal_id)
+
+            log_cb, progress_cb, cancel_check = self._make_cdn_callbacks(modal_id)
+
+            result = function_cdn.cdn_optimize_cloudflare(
+                log_cb=log_cb,
+                progress_cb=progress_cb,
+                cancel_check=cancel_check
+            )
+
+            if result:
+                self.add_modal_log(
+                    f"Cloudflare优选完成 — IP: {result['ip']} "
+                    f"延迟: {result['avg_latency_ms']:.1f}ms "
+                    f"下载: {result['download_mbps']:.1f}MB/s",
+                    modal_id
+                )
+                return {"success": True, "data": result}
+            else:
+                self.add_modal_log("Cloudflare优选未获得有效结果", modal_id)
+                return {"success": False, "message": "Cloudflare优选未获得有效结果"}
+
+        except CancelRunning:
+            self.log("CDN优选任务已取消")
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
+        except Exception as e:
+            self.add_modal_log(f"出现错误{e}，优选失败", modal_id)
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def cdn_optimize_cloudfront(self, modal_id="false"):
+        """CloudFront API 优选"""
+        try:
+            self.add_modal_log("开始CloudFront API优选...", modal_id)
+
+            log_cb, progress_cb, cancel_check = self._make_cdn_callbacks(modal_id)
+
+            results = function_cdn.cdn_optimize_cloudfront(
+                log_cb=log_cb,
+                progress_cb=progress_cb,
+                cancel_check=cancel_check
+            )
+
+            if results:
+                summary = ", ".join(
+                    f"{domain}: {info['ip']} ({info['median_latency_ms']:.0f}ms)"
+                    for domain, info in results.items()
+                )
+                self.add_modal_log(f"CloudFront优选完成 — {summary}", modal_id)
+                return {"success": True, "data": results}
+            else:
+                self.add_modal_log("CloudFront优选未获得有效结果", modal_id)
+                return {"success": False, "message": "CloudFront优选未获得有效结果"}
+
+        except CancelRunning:
+            self.log("CDN优选任务已取消")
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
+        except Exception as e:
+            self.add_modal_log(f"出现错误{e}，优选失败", modal_id)
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def cdn_full_optimization(self, modal_id="false"):
+        """全流程CDN优选（Cloudflare + CloudFront）"""
+        try:
+            self.add_modal_log("开始全流程CDN优选...", modal_id)
+
+            log_cb, progress_cb, cancel_check = self._make_cdn_callbacks(modal_id)
+
+            result = function_cdn.cdn_full_optimization(
+                log_cb=log_cb,
+                progress_cb=progress_cb,
+                cancel_check=cancel_check
+            )
+
+            if result.get("success"):
+                self.add_modal_log("全流程CDN优选完成", modal_id)
+                return {"success": True, "data": result}
+            else:
+                self.add_modal_log("全流程CDN优选未获得有效结果", modal_id)
+                return {"success": False, "message": "未获得有效结果", "data": result}
+
+        except CancelRunning:
+            self.log("CDN优选任务已取消")
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
+        except Exception as e:
+            self.add_modal_log(f"出现错误{e}，优选失败", modal_id)
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def cdn_write_hosts(self, cf_ip=None, cloudfront_mappings=None, modal_id="false"):
+        """将优选结果写入系统 hosts 文件（需要管理员权限）"""
+        try:
+            self.add_modal_log("正在写入 hosts...", modal_id)
+
+            log_cb, _, _ = self._make_cdn_callbacks(modal_id)
+
+            success = function_cdn.elevate_write_hosts(
+                cf_ip=cf_ip,
+                cloudfront_mappings=cloudfront_mappings,
+                log_cb=log_cb
+            )
+
+            if success:
+                self.add_modal_log("hosts 写入成功", modal_id)
+                return {"success": True, "message": "hosts 写入成功"}
+            else:
+                self.add_modal_log("hosts 写入失败", modal_id)
+                return {"success": False, "message": "hosts 写入失败"}
+
+        except Exception as e:
+            self.add_modal_log(f"写入 hosts 失败：{e}", modal_id)
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def cdn_restore_backup(self):
+        """还原 hosts 备份"""
+        try:
+            def log_cb(msg):
+                self.log_ui(msg)
+
+            success = function_cdn.restore_hosts_backup(log_cb=log_cb)
+
+            if success:
+                self.log_ui("hosts 备份还原成功")
+                return {"success": True, "message": "hosts 备份还原成功"}
+            else:
+                self.log_ui("hosts 备份还原失败，可能没有备份文件")
+                return {"success": False, "message": "hosts 备份还原失败，可能没有备份文件"}
+
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
 def main():
     # 获取HTML文件的绝对路径
     html_path = os.path.join(os.getenv('path_'), "webui\\index.html")

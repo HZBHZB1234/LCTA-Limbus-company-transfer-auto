@@ -62,6 +62,10 @@
                     <i class="fas fa-paint-brush"></i>
                     <span>文本美化</span>
                 </button>
+                <button id="cdn-btn" class="nav-btn">
+                    <i class="fas fa-bolt"></i>
+                    <span>CDN优选</span>
+                </button>
             </div>
 
             <!-- 管理配置组 -->
@@ -1543,7 +1547,7 @@
 
                 <div class="setting-card">
                     <h3 class="setting-title">LCTA-AU汉化配置</h3>
-                    
+
                     <div class="form-group">
                         <label for="launcher-machine-download-source">文本下载来源:</label>
                         <div class="select-wrapper">
@@ -1557,7 +1561,7 @@
 
                     <div class="form-group">
                         <label class="checkbox-container">
-                            <input type="checkbox" id="launcher-zero-use-proxy" checked>
+                            <input type="checkbox" id="launcher-machine-use-proxy" checked>
                             <span class="checkmark"></span>
                             使用代理加速下载
                         </label>
@@ -1633,6 +1637,84 @@
             </div>
         </div>
 
+        <!-- CDN优选界面 -->
+        <div id="cdn-section" class="content-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-bolt"></i>
+                    CDN优选
+                </h2>
+                <p class="section-subtitle">测试并选择当前网络环境下最快的游戏CDN节点</p>
+            </div>
+
+            <div class="settings-grid">
+                <!-- Cloudflare 优选区域 -->
+                <div class="setting-card">
+                    <h3 class="setting-title">
+                        <i class="fas fa-cloud"></i>
+                        Cloudflare 下载CDN
+                    </h3>
+                    <p class="setting-desc">
+                        对游戏下载CDN进行测速优选
+                    </p>
+                    <div id="cdn-cf-status" class="cdn-status" style="margin-bottom: 8px;">
+                        <span class="status-label">当前优选IP：</span>
+                        <span id="cdn-cf-current-ip" class="status-value">检测中...</span>
+                    </div>
+                    <div id="cdn-cf-result" style="display:none;" class="cdn-result-box"></div>
+                    <div class="action-grid" style="margin-top: 10px;">
+                        <button class="action-btn" onclick="cdnManager.runCloudflare()">
+                            <i class="fas fa-play"></i> Cloudflare优选
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CloudFront 优选区域 -->
+                <div class="setting-card">
+                    <h3 class="setting-title">
+                        <i class="fas fa-server"></i>
+                        CloudFront API优选
+                    </h3>
+                    <p class="setting-desc">
+                        对游戏API服务器进行测速优选
+                    </p>
+                    <div id="cdn-cfa-status" class="cdn-status" style="margin-bottom: 8px;">
+                        <span class="status-label">当前优选IP：</span>
+                        <span class="status-value">未设置</span>
+                    </div>
+                    <div id="cdn-cfa-result" style="display:none;" class="cdn-result-box"></div>
+                    <div class="action-grid" style="margin-top: 10px;">
+                        <button class="action-btn" onclick="cdnManager.runCloudFront()">
+                            <i class="fas fa-play"></i> CloudFront优选
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 全优选 + 操作区域 -->
+            <div class="setting-card">
+                <h3 class="setting-title">
+                    <i class="fas fa-rocket"></i>
+                    操作
+                </h3>
+                <div class="action-grid">
+                    <button class="primary-btn" onclick="cdnManager.runFullOptimization()">
+                        <i class="fas fa-bolt"></i> 一键全优选
+                    </button>
+                    <button class="action-btn" onclick="cdnManager.writeToHosts()" id="cdn-write-btn" disabled>
+                        <i class="fas fa-save"></i> 写入Hosts
+                    </button>
+                    <button class="action-btn secondary" onclick="cdnManager.restoreBackup()" id="cdn-restore-btn" disabled>
+                        <i class="fas fa-undo"></i> 还原备份
+                    </button>
+                </div>
+                <p class="form-hint" style="margin-top: 10px;">
+                    <i class="fas fa-info-circle"></i>
+                    写入hosts需要管理员权限。仅修改CDN优选管理的标记块，不影响其他hosts条目。
+                </p>
+            </div>
+        </div>
+
         <!-- 测试界面 -->
         <div id="test-section" class="content-section">
             <div class="section-header">
@@ -1667,13 +1749,6 @@
                 <button class="primary-btn" onclick="goAndShow('welcome');">
                     <i class="fas fa-play"></i>
                     显示欢迎页面
-                </button>
-
-                <button class="primary-btn" onclick="const modal = new ProgressModal('测试窗口');
-                console.log(modal);modal.setStatus('测试阶段');modal.addLog('开始测试');
-                modal.updateProgress(50, '测试')">
-                    <i class="fas fa-play"></i>
-                    创建一个模态窗口
                 </button>
             </div>
         </div>
@@ -1728,5 +1803,6 @@
     <script src="js/list-managers.js"></script>
     <script src="js/features.js"></script>
     <script src="js/init.js"></script>
+    <script src="js/cdn.js"></script>
 </body>
 </html>

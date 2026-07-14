@@ -16,6 +16,7 @@
 - 🧹 **缓存清理工具**：清理游戏缓存，消除错误数据 (暂不保证可用性)
 - 📚 **零协会专有名词抓取**：自动提取翻译术语以支持翻译
 - 🧩 **模块化设计**：各功能独立，便于维护与扩展
+- 🌐 **CDN优选**：自动测速并选择最快的游戏CDN节点（Cloudflare + CloudFront），优化下载与API连接体验
 
 ## ✨ 特色功能
 作为LCTA_auto_update作者，添加 [LCTA_auto_update](https://github.com/HZBHZB1234/LCTA_auto_update) 自动翻译仓库，基于原文与零协会汉化，自动进行高质量LLM翻译，延时仅3-5小时。无需用户进行额外配置与操作，通过启动器自动获取更新。
@@ -121,6 +122,8 @@
   > 💡 注意：`launcher` 目录下的所有代码均遵循 GPL-3.0。LCTA 主程序与启动器之间仅为配置与调用关系，无代码依赖，因此主程序不受 GPL-3.0 约束。
 - `webFunc/LanzouFolder.py` 来自互联网 *吾爱破解* 论坛。经过修改。[原文链接](https://www.52pojie.cn/thread-2005690-1-1.html)
 - 部分前端依赖代码引用自互联网，遵循其原有使用条款。前端依赖详细信息请查看 [InitCode.py](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/blob/main/.github/InitCode.py)
+- `CFST/cfst.exe`（CloudflareSpeedTest v2.3.5）来自 [CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest)，遵循 **[GPL-3.0 许可证](https://github.com/XIU2/CloudflareSpeedTest/blob/master/LICENSE)**。该工具以独立进程方式被调用，CDN 优选模块的主程序代码不受 GPL-3.0 约束。同目录下的 `ip.txt` 候选地址文件也来源于 CloudflareSpeedTest 项目。
+- CDN 优选功能的设计参考了 [LLC_BABEL](https://github.com/LocalizeLimbusCompany/LLC_BABEL)（MIT License, Copyright (c) 2026 ZengXiaoPi）。本项目采用 Python 独立实现，不包含 LLC_BABEL 的 .NET 代码。
 
 ### 数据许可
 - **零协会汉化包**：遵循 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) 许可。

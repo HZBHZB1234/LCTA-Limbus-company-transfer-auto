@@ -151,10 +151,14 @@ with open('marked/marked.min.js', 'w', encoding='utf-8') as f:
     f.write(marked)
 
 # ---- 下载 CFST (CloudflareSpeedTest) ----
-import sys
-sys.path.insert(0, str(projext_path))
-from webutils.function_cdn import CFST_VERSION, CFST_DOWNLOAD_URL, IP_TXT_URL
 import zipfile
+
+CFST_VERSION = "v2.3.5"
+CFST_DOWNLOAD_URL = (
+    f"https://github.com/XIU2/CloudflareSpeedTest/releases/download/"
+    f"{CFST_VERSION}/cfst_windows_amd64.zip"
+)
+IP_TXT_URL = "https://raw.githubusercontent.com/XIU2/CloudflareSpeedTest/master/ip.txt"
 
 cfst_dir = projext_path / "CFST"
 cfst_dir.mkdir(parents=True, exist_ok=True)

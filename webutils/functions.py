@@ -2,7 +2,6 @@ import zipfile
 import requests
 import requests
 import json
-from pyunpack import Archive
 import os
 import time
 import zipfile
@@ -12,6 +11,7 @@ from ctypes import wintypes
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Set
 import shutil
+import subprocess
 import tempfile
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
@@ -92,6 +92,64 @@ def extract_zip_smartly(zip_path: str, target_dir: str) -> Optional[str]:
     except Exception as e:
         raise RuntimeError(f"解压文件时发生错误: {str(e)}")
 
+_7Z_DOWNLOAD_URL = "https://www.7-zip.org/"
+
+def _find_7z_exe() -> str:
+    """查找 7z 可执行文件，找不到抛出 FileNotFoundError"""
+    # 1. 项目自带（assets/7za.exe）
+    bundled = Path(__file__).parent.parent / 'assets' / '7za.exe'
+    if bundled.exists():
+        return str(bundled)
+
+    # 2. 系统 PATH
+    for name in ('7z', '7za', '7z.exe', '7za.exe'):
+        found = shutil.which(name)
+        if found:
+            return found
+
+    # 3. 常见安装路径
+    for p in (r'C:\Program Files\7-Zip\7z.exe',
+              r'C:\Program Files (x86)\7-Zip\7z.exe'):
+        if os.path.exists(p):
+            return p
+
+    raise FileNotFoundError("未找到 7z 可执行文件")
+
+
+def _extract_7z(file_path, output_dir) -> bool:
+    """解压 .7z 文件到指定目录（通过 subprocess 调用 7z）"""
+    try:
+        exe = _find_7z_exe()
+    except FileNotFoundError:
+        _log_manager.log(
+            "================================================================"
+        )
+        _log_manager.log("未找到 7-Zip，无法解压 .7z 文件。")
+        _log_manager.log(f"请安装 7-Zip：{_7Z_DOWNLOAD_URL}")
+        _log_manager.log("（或手动将 7z.exe 放置到程序 assets/ 目录下）")
+        _log_manager.log(
+            "================================================================"
+        )
+        return False
+
+    try:
+        result = subprocess.run(
+            [exe, 'x', str(file_path), f'-o{output_dir}', '-y'],
+            capture_output=True, text=True, timeout=300
+        )
+        if result.returncode != 0:
+            _log_manager.log(f"7z 解压失败 (返回码 {result.returncode}): {result.stderr.strip()}")
+            return False
+        return True
+    except subprocess.TimeoutExpired:
+        _log_manager.log("7z 解压超时（超过 300 秒）")
+        return False
+    except Exception as e:
+        _log_manager.log(f"7z 解压异常: {e}")
+        _log_manager.log_error(e)
+        return False
+
+
 def decompress_7z(file_path, output_dir='.'):
     if not os.path.exists(file_path):
         _log_manager.log(f"压缩文件不存在: {file_path}")
@@ -105,9 +163,10 @@ def decompress_7z(file_path, output_dir='.'):
 
     try:
         _log_manager.log(f"开始解压文件: {file_path}")
-        Archive(file_path).extractall(output_dir)
-        _log_manager.log(f"解压完成")
-        return True
+        if _extract_7z(file_path, output_dir):
+            _log_manager.log(f"解压完成")
+            return True
+        return False
     except Exception as e:
         _log_manager.log(f"解压失败: {e}")
         _log_manager.log_error(e)

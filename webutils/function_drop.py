@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-from pyunpack import Archive
+
 import shutil
 import tempfile
 import json
@@ -8,7 +8,7 @@ import zipfile
 
 from .function_install import install_translation_package
 from .function_manage import get_mod_path
-from .functions import extract_zip_smartly
+from .functions import extract_zip_smartly, decompress_7z
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
@@ -71,8 +71,9 @@ def evalFolder(folder_path):
 def eval7zip(file_path):
     with tempfile.TemporaryDirectory() as tmp:
         try:
-            Archive(file_path).extractall(tmp)
-            return evalFolder(tmp), tmp
+            if decompress_7z(file_path, tmp):
+                return evalFolder(tmp), tmp
+            return 'invalid', tmp
         except Exception as e:
             return 'invalid', tmp
     

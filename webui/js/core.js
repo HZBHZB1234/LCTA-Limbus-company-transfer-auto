@@ -239,6 +239,9 @@ class ConfigManager {
             'ourplay-font-option': 'ui_default.ourplay.font_option',
             'ourplay-check-hash': 'ui_default.ourplay.check_hash',
             'ourplay-use-api': 'ui_default.ourplay.use_api',
+            'ourplay-source': 'ui_default.ourplay.source',
+            'ourplay-official': 'ui_default.ourplay.official',
+            'ourplay-refer-package': 'ui_default.ourplay.refer_package',
             
             // 零协设置
             'llc-zip-type': 'ui_default.zero.zip_type',
@@ -287,6 +290,9 @@ class ConfigManager {
             'machine-zero-use-proxy': 'launcher.machine.use_proxy',
             'launcher-ourplay-font-option': 'launcher.ourplay.font_option',
             'launcher-ourplay-use-api': 'launcher.ourplay.use_api',
+            'launcher-ourplay-source': 'launcher.ourplay.source',
+            'launcher-ourplay-official': 'launcher.ourplay.official',
+            'launcher-ourplay-refer-package': 'launcher.ourplay.refer_package',
             'launcher-work-update': 'launcher.work.update',
             'launcher-work-mod': 'launcher.work.mod',
             'launcher-work-bubble': 'launcher.work.bubble',

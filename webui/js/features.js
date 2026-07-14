@@ -332,22 +332,53 @@ function fetchProperNouns() {
 
 
 // === 下载功能 ===
+function onOurplaySourceChange() {
+    const sourceEl = document.getElementById('ourplay-source');
+    const useApiGroup = document.getElementById('ourplay-use-api-group');
+    const androidOptions = document.getElementById('ourplay-android-options');
+    if (!sourceEl) return;
+    const isAndroid = sourceEl.value === 'android';
+    if (useApiGroup) useApiGroup.style.display = isAndroid ? 'none' : '';
+    if (androidOptions) androidOptions.style.display = isAndroid ? '' : 'none';
+}
+
+function onLauncherOurplaySourceChange() {
+    const sourceEl = document.getElementById('launcher-ourplay-source');
+    const useApiGroup = document.getElementById('launcher-ourplay-use-api-group');
+    const androidOptions = document.getElementById('launcher-ourplay-android-options');
+    if (!sourceEl) return;
+    const isAndroid = sourceEl.value === 'android';
+    if (useApiGroup) useApiGroup.style.display = isAndroid ? 'none' : '';
+    if (androidOptions) androidOptions.style.display = isAndroid ? '' : 'none';
+}
+
 function downloadOurplay() {
     const fontOption = document.getElementById('ourplay-font-option').value;
     const checkHash = document.getElementById('ourplay-check-hash').checked;
     const useApi = document.getElementById('ourplay-use-api').checked;
-    
+    const source = document.getElementById('ourplay-source').value;
+    const official = document.getElementById('ourplay-official').checked;
+    const referPackage = document.getElementById('ourplay-refer-package').value;
+
     const modal = new ProgressModal('下载OurPlay汉化包');
     modal.addLog('开始下载OurPlay汉化包...');
     modal.addLog(`字体选项: ${fontOption}`);
     modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
     modal.addLog(`使用API: ${useApi ? '启用' : '禁用'}`);
-    
+    modal.addLog(`API源: ${source}`);
+    if (source === 'android') {
+        modal.addLog(`权威汉化: ${official ? '是' : '否（修改版）'}`);
+        if (referPackage) modal.addLog(`基板包: ${referPackage}`);
+    }
+
     // 批量更新配置
     const updates = {
         'ourplay-font-option': fontOption,
         'ourplay-check-hash': checkHash,
-        'ourplay-use-api': useApi
+        'ourplay-use-api': useApi,
+        'ourplay-source': source,
+        'ourplay-official': official,
+        'ourplay-refer-package': referPackage
     };
     
     configManager.updateConfigValues(updates)

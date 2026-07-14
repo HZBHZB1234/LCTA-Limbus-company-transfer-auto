@@ -12,7 +12,7 @@ from collections import defaultdict, Counter
 from globalManagers.ConfigManager import ConfigManager
 from webFunc import Note
 
-def check_ver_ourplay(official: bool = True):
+def check_ver_ourplay_new(official: bool = True):
     headers = {
         'device-user': make_device(),
         'User-Agent': 'okhttp/3.12.13',
@@ -492,7 +492,7 @@ def _process_ourplay_package(temp_dir, modal_id, font_option, cache_path, hash_o
         _log_manager.log_modal_status("全部操作完成")
 
 
-def function_ourplay_main(modal_id, **kwargs):
+def function_ourplay_new_main(modal_id, **kwargs):
     """
     OurPlay 下载主函数
     """
@@ -503,7 +503,7 @@ def function_ourplay_main(modal_id, **kwargs):
         _log_manager.log_modal_status("正在初始化链接", modal_id)
 
         # 获取下载信息
-        download_info = download_ourplay()
+        download_info = download_ourplay(official=kwargs.get("official", True))
         if not download_info:
             _log_manager.log_modal_process("获取 OurPlay 下载信息失败", modal_id)
             raise

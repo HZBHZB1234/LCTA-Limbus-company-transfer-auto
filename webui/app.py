@@ -607,7 +607,19 @@ class LCTA_API():
             font_option = ConfigManager().get("ui_default.ourplay.font_option", "keep")
             check_hash = ConfigManager().get("ui_default.ourplay.check_hash", True)
             use_api = ConfigManager().get("ui_default.ourplay.use_api", False)
-            if use_api:
+            source = ConfigManager().get("ui_default.ourplay.source", "pc")
+
+            if source == "android":
+                official = ConfigManager().get("ui_default.ourplay.official", True)
+                refer_package = ConfigManager().get("ui_default.ourplay.refer_package", "")
+                function_ourplay_new_main(
+                    modal_id,
+                    font_option=font_option,
+                    check_hash=check_hash,
+                    official=official,
+                    refer_package=refer_package if refer_package else None
+                )
+            elif use_api:
                 function_ourplay_api(modal_id, font_option=font_option, check_hash=check_hash)
             else:
                 function_ourplay_main(modal_id, font_option=font_option, check_hash=check_hash)

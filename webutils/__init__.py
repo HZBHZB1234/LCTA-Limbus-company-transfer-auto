@@ -1,5 +1,6 @@
 from .function_llc import function_llc_main, check_ver_github
 from .function_ourplay import function_ourplay_main, check_ver_ourplay, function_ourplay_api
+from .function_ourplay_new import function_ourplay_new_main, check_ver_ourplay_new
 from .function_install import (
     find_translation_packages,
     delete_translation_package,
@@ -51,6 +52,8 @@ __all__ = [
     'check_ver_github',
     'check_ver_ourplay',
     'function_ourplay_api',
+    'function_ourplay_new_main',
+    'check_ver_ourplay_new',
     'function_fetch_main',
     'function_LCTA_auto_main',
     'check_ver_github_M',

@@ -575,6 +575,16 @@
                 <div class="setting-card">
                     <h3 class="setting-title">ourplay下载配置</h3>
                     <div class="form-group">
+                        <label for="ourplay-source">API源:</label>
+                        <div class="select-wrapper">
+                            <select id="ourplay-source" onchange="onOurplaySourceChange()">
+                                <option value="pc">PC API</option>
+                                <option value="android">Android API (支持神人汉化)</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label for="ourplay-font-option">字体处理选项:</label>
                         <div class="select-wrapper">
                             <select id="ourplay-font-option">
@@ -595,14 +605,37 @@
                         <small class="form-hint">确保下载文件的完整性</small>
                     </div>
                     
-                    <div class="form-group">
+                    <div class="form-group" id="ourplay-use-api-group">
                         <label class="checkbox-container">
                             <input type="checkbox" id="ourplay-use-api">
                             <span class="checkmark"></span>
                             使用API获取链接
                         </label>
                     </div>
-                    
+
+                    <div id="ourplay-android-options" style="display:none;">
+                        <div class="form-group">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="ourplay-official" checked>
+                                <span class="checkmark"></span>
+                                下载正经版本汉化（关闭则下载神人汉化）
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="ourplay-refer-package">基板包路径（可选）:</label>
+                            <div class="file-input-group">
+                                <input type="text" id="ourplay-refer-package" placeholder="留空则自动检测（需已安装足够新版的零协会汉化包）">
+                                <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_folder('ourplay-refer-package')">
+                                    <i class="fas fa-folder-open"></i> 浏览文件夹
+                                </button>
+                                <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_file('ourplay-refer-package')">
+                                    <i class="fas fa-file"></i> 浏览zip
+                                </button>
+                            </div>
+                            <small class="form-hint">基板包用于将手机版汉化包格式转化为通用格式。留空则自动从游戏安装目录检测。</small>
+                        </div>
+                    </div>
+
                     <div class="action-area">
                         <button class="primary-btn" onclick="downloadOurplay()">
                             <i class="fas fa-download"></i>
@@ -1525,6 +1558,16 @@
                 <div class="setting-card">
                     <h3 class="setting-title">OurPlay配置</h3>
                     <div class="form-group">
+                        <label for="launcher-ourplay-source">API源:</label>
+                        <div class="select-wrapper">
+                            <select id="launcher-ourplay-source" onchange="onLauncherOurplaySourceChange()">
+                                <option value="pc">PC API</option>
+                                <option value="android">Android API (支持神人汉化)</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label for="launcher-ourplay-font-option">字体处理选项:</label>
                         <div class="select-wrapper">
                             <select id="launcher-ourplay-font-option">
@@ -1535,13 +1578,36 @@
                             <i class="fas fa-chevron-down"></i>
                         </div>
                     </div>
-                    
-                    <div class="form-group">
+
+                    <div class="form-group" id="launcher-ourplay-use-api-group">
                         <label class="checkbox-container">
                             <input type="checkbox" id="launcher-ourplay-use-api" checked>
                             <span class="checkmark"></span>
                             使用API获取版本信息
                         </label>
+                    </div>
+
+                    <div id="launcher-ourplay-android-options" style="display:none;">
+                        <div class="form-group">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="launcher-ourplay-official" checked>
+                                <span class="checkmark"></span>
+                                下载正经版本汉化（关闭则下载神人汉化）
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="launcher-ourplay-refer-package">基板包路径（可选）:</label>
+                            <div class="file-input-group">
+                                <input type="text" id="launcher-ourplay-refer-package" placeholder="留空则自动检测（需已安装足够新版的零协会汉化包）">
+                                <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_folder('launcher-ourplay-refer-package')">
+                                    <i class="fas fa-folder-open"></i> 浏览文件夹
+                                </button>
+                                <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_file('launcher-ourplay-refer-package')">
+                                    <i class="fas fa-file"></i> 浏览zip
+                                </button>
+                            </div>
+                            <small class="form-hint">基板包用于将手机版汉化包格式转化为通用格式。留空则自动从游戏安装目录检测。</small>
+                        </div>
                     </div>
                 </div>
 
@@ -1687,7 +1753,7 @@
                             <i class="fas fa-play"></i> Cloudflare优选
                         </button>
                         <button class="action-btn cdn-remove" onclick="cdnManager.removeCloudflare()" id="cdn-cf-remove-btn" style="display:none;">
-                            <i class="fas fa-trash"></i> 移除当前IP
+                            <i class="fas fa-trash"></i> 移除当前CDN优选
                         </button>
                     </div>
                 </div>
@@ -1730,7 +1796,7 @@
                             <i class="fas fa-play"></i> CloudFront优选
                         </button>
                         <button class="action-btn cdn-remove" onclick="cdnManager.removeCloudFront()" id="cdn-cfa-remove-btn" style="display:none;">
-                            <i class="fas fa-trash"></i> 移除当前IP
+                            <i class="fas fa-trash"></i> 移除当前CDN优选
                         </button>
                     </div>
                 </div>

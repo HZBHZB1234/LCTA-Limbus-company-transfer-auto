@@ -132,6 +132,8 @@ window.addEventListener('pywebviewready', function() {
                     toggleCustomLangGui();
                     toggleAutoProper();
                     toggleSteamCommand();
+                    if (typeof onOurplaySourceChange === 'function') onOurplaySourceChange();
+                    if (typeof onLauncherOurplaySourceChange === 'function') onLauncherOurplaySourceChange();
                 });
 
                 pywebview.api.check_show().then(

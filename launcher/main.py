@@ -237,27 +237,39 @@ class OurPlayUpdate(UpdateBase):
     
     def __init__(self):
         super().__init__()
-        self.config: dict = ConfigManager().get("ourplay", {})
-    
+        self.config: dict = self.launcher_config.get("ourplay", {})
+
     def get_latest_version(self) -> str:
         """获取OurPlay最新版本号"""
-        if self.config.get("use_api", True):
+        source = self.config.get("source", "pc")
+        if source == "android":
+            return str(check_ver_ourplay_new(official=self.config.get("official", True)))
+        elif self.config.get("use_api", True):
             note_content = get_note_content()
             return str(note_content.get('ourplay_version', '0.0.0'))
         else:
             return str(check_ver_ourplay())
-        
+
     def check_update(self) -> bool:
         last_version = self.get_last_installed_version('ourplay')
         self.latest_version = self.get_latest_version()
         return last_version != self.latest_version
-        
+
     def update_config(self) -> bool:
         update_config_last('ourplay', self.latest_version)
-    
+
     def perform_update(self) -> Optional[str]:
         """执行OurPlay更新"""
-        if not self.config.get("use_api", True):
+        source = self.config.get("source", "pc")
+        if source == "android":
+            function_ourplay_new_main(
+                "ourplay_update",
+                check_hash=self.config.get("check_hash", True),
+                font_option=self.config.get("font_option", "simplify"),
+                official=self.config.get("official", True),
+                refer_package=self.config.get("refer_package", None)
+            )
+        elif not self.config.get("use_api", True):
             function_ourplay_main(
                 "ourplay_update",
                 check_hash=self.config.get("check_hash", True),

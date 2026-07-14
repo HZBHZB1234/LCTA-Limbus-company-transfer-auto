@@ -42,7 +42,10 @@
         "ourplay": {
             "font_option": "str",
             "check_hash": "bool",
-            "use_api": "bool"
+            "use_api": "bool",
+            "source": "str",
+            "official": "bool",
+            "refer_package": "str"
         },
         "clean": {
             "clean_progress": "bool",
@@ -108,7 +111,10 @@
         },
         "ourplay": {
             "font_option": "str",
-            "use_api": "bool"
+            "use_api": "bool",
+            "source": "str",
+            "official": "bool",
+            "refer_package": "str"
         },
         "work": {
             "update": "str",

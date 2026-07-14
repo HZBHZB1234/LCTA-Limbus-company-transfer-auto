@@ -42,7 +42,10 @@
         "ourplay": {
             "font_option": "simplify",
             "check_hash": true,
-            "use_api": false
+            "use_api": false,
+            "source": "pc",
+            "official": true,
+            "refer_package": ""
         },
         "bubble": {
             "color": false,
@@ -108,7 +111,10 @@
         },
         "ourplay": {
             "font_option": "simplify",
-            "use_api": true
+            "use_api": true,
+            "source": "pc",
+            "official": true,
+            "refer_package": ""
         },
         "work": {
             "update": "LM-G",

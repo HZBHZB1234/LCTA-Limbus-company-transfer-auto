@@ -48,12 +48,6 @@ class CdnManager {
                     }
                 }
 
-                // 更新还原按钮状态
-                const restoreBtn = document.getElementById('cdn-restore-btn');
-                if (restoreBtn) {
-                    restoreBtn.disabled = !data.backup_exists;
-                }
-
                 // 更新单项移除按钮状态
                 const cfRemoveBtn = document.getElementById('cdn-cf-remove-btn');
                 if (cfRemoveBtn) {
@@ -247,35 +241,6 @@ class CdnManager {
         } catch (error) {
             addLogMessage('hosts写入发生错误: ' + error, 'error');
             showMessage('错误', '写入过程发生错误: ' + error);
-        }
-    }
-
-    async restoreBackup() {
-        const confirmed = await new Promise((resolve) => {
-            const confirmModal = new ConfirmModal(
-                '确认还原Hosts',
-                '将从最近一次备份还原hosts文件。\n\n此操作将撤销最近一次CDN优选写入的内容。\n\n确定要继续吗？',
-                () => resolve(true),
-                () => resolve(false)
-            );
-        });
-
-        if (!confirmed) return;
-
-        addLogMessage('正在还原hosts备份...', 'info');
-        try {
-            const result = await pywebview.api.cdn_restore_backup();
-            if (result.success) {
-                addLogMessage('hosts已从备份还原', 'success');
-                showMessage('成功', 'hosts 已从备份还原');
-                await this.loadStatus();
-            } else {
-                addLogMessage('hosts还原失败: ' + result.message, 'error');
-                showMessage('失败', result.message);
-            }
-        } catch (error) {
-            addLogMessage('hosts还原发生错误: ' + error, 'error');
-            showMessage('错误', '还原过程发生错误: ' + error);
         }
     }
 

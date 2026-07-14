@@ -1263,25 +1263,6 @@ class LCTA_API():
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def cdn_restore_backup(self):
-        """还原 hosts 备份"""
-        try:
-            def log_cb(msg):
-                self.log_ui(msg)
-
-            success = function_cdn.restore_hosts_backup(log_cb=log_cb)
-
-            if success:
-                self.log_ui("hosts 备份还原成功")
-                return {"success": True, "message": "hosts 备份还原成功"}
-            else:
-                self.log_ui("hosts 备份还原失败，可能没有备份文件")
-                return {"success": False, "message": "hosts 备份还原失败，可能没有备份文件"}
-
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
     def cdn_remove_cloudflare(self):
         """移除 Cloudflare hosts 条目"""
         try:

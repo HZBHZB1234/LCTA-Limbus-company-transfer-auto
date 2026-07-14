@@ -1011,8 +1011,6 @@ def write_hosts(
     if hosts_path is None:
         hosts_path = _get_hosts_path()
 
-    backup_path = hosts_path + ".llcbabel.bak"
-
     # 读取现有 hosts
     if os.path.isfile(hosts_path):
         lines, encoding_name, bom = _read_hosts_lines(hosts_path)
@@ -1053,17 +1051,10 @@ def write_hosts(
                 f.write(terminator)
 
         # 原子替换
-        if os.path.isfile(hosts_path):
-            if os.path.isfile(backup_path):
-                os.remove(backup_path)
-            os.replace(hosts_path, backup_path)
-
         os.replace(temp_path, hosts_path)
 
         if log_cb:
             log_cb(f"hosts 已更新：{hosts_path}")
-            if os.path.isfile(backup_path):
-                log_cb(f"更新前内容已备份到：{backup_path}")
 
         return True
 
@@ -1139,36 +1130,6 @@ def _detect_newline(lines: List[Tuple[str, str]]) -> str:
     return "\r\n"
 
 
-def restore_hosts_backup(
-    log_cb: Optional[Callable[[str], None]] = None,
-    hosts_path: Optional[str] = None
-) -> bool:
-    """
-    从备份文件还原 hosts。
-    对应 LLC_BABEL HostsWriter.RestoreBackupAsync()。
-    """
-    if hosts_path is None:
-        hosts_path = _get_hosts_path()
-
-    backup_path = hosts_path + ".llcbabel.bak"
-
-    if not os.path.isfile(backup_path):
-        if log_cb:
-            log_cb(f"找不到 hosts 备份文件：{backup_path}")
-        return False
-
-    try:
-        import shutil
-        shutil.copy2(backup_path, hosts_path)
-        if log_cb:
-            log_cb(f"已从备份还原 hosts：{backup_path}")
-        return True
-    except Exception as e:
-        if log_cb:
-            log_cb(f"还原 hosts 失败：{e}")
-        return False
-
-
 def remove_hosts_block(
     marker_start: str,
     marker_end: str,
@@ -1183,8 +1144,6 @@ def remove_hosts_block(
         lines, encoding_name, bom = _read_hosts_lines(hosts_path)
     else:
         return True  # 没有 hosts 文件，无需移除
-
-    backup_path = hosts_path + ".llcbabel.bak"
 
     # 用空映射重写目标块（即移除）
     _rewrite_block(lines, marker_start, marker_end, [], log_cb)
@@ -1203,11 +1162,6 @@ def remove_hosts_block(
                 f.write(terminator)
 
         # 原子替换
-        if os.path.isfile(hosts_path):
-            if os.path.isfile(backup_path):
-                os.remove(backup_path)
-            os.replace(hosts_path, backup_path)
-
         os.replace(temp_path, hosts_path)
 
         if log_cb:
@@ -1330,7 +1284,7 @@ def read_current_hosts_mappings(
 ) -> Dict[str, Any]:
     """
     读取当前 hosts 文件中的受管映射。
-    返回: {"cf_ip": str|None, "cloudfront": {domain: ip}, "backup_exists": bool}
+    返回: {"cf_ip": str|None, "cloudfront": {domain: ip}}
     """
     if hosts_path is None:
         hosts_path = _get_hosts_path()
@@ -1338,7 +1292,6 @@ def read_current_hosts_mappings(
     result = {
         "cf_ip": None,
         "cloudfront": {},
-        "backup_exists": os.path.isfile(hosts_path + ".llcbabel.bak"),
     }
 
     if not os.path.isfile(hosts_path):

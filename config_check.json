@@ -122,12 +122,17 @@
             "bubble": "bool",
             "fancy": "bool",
             "cdn_optimize": "bool",
-            "cdn_auto_apply": "bool"
+            "cdn_auto_apply": "bool",
+            "speed": "bool",
+            "speed_factor": "str"
         },
         "last_install": {
             "llc": "str",
             "ourplay": "str",
             "machine": "str"
         }
+    },
+    "speed": {
+        "disclaimer_accepted": "bool"
     }
 }

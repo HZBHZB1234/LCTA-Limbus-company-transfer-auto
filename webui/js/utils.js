@@ -86,6 +86,12 @@ function initNavigation() {
                         cdnManager.init();
                     }
 
+                    if (sectionId === 'speed-section' && typeof speedPage !== 'undefined') {
+                        speedPage.init();
+                    } else if (typeof speedPage !== 'undefined') {
+                        speedPage.stop();
+                    }
+
                     if (sectionId !== 'test-section') {
                         goTestSection(false);
                     }

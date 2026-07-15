@@ -13,3 +13,5 @@ texture2ddecoder==1.0.4
 UnityPy==1.10.18
 xxhash==3.5.0
 translatekit
+openspeedy
+keyboard

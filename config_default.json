@@ -122,12 +122,17 @@
             "bubble": false,
             "fancy": false,
             "cdn_optimize": false,
-            "cdn_auto_apply": true
+            "cdn_auto_apply": true,
+            "speed": false,
+            "speed_factor": "2.0"
         },
         "last_install": {
             "llc": "0",
             "ourplay": "0",
             "machine": "0"
         }
+    },
+    "speed": {
+        "disclaimer_accepted": false
     }
 }

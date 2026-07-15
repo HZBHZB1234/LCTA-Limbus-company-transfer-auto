@@ -1913,3 +1913,222 @@ select.elder-select:focus {
     border-color: #dc2626;
     color: #dc2626;
 }
+
+/* ============================
+   游戏加速 - 免责声明覆盖层
+   ============================ */
+
+.disclaimer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.disclaimer-card {
+    background: var(--color-bg-primary);
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 560px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    text-align: center;
+}
+
+.disclaimer-icon {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+}
+
+.disclaimer-card h2 {
+    color: #dc2626;
+    margin-bottom: 1rem;
+    font-size: 1.3rem;
+}
+
+.disclaimer-body {
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--color-text-secondary);
+    margin-bottom: 1rem;
+}
+
+.disclaimer-body ul {
+    margin: 0.5rem 0 0 1.2rem;
+    padding: 0;
+}
+
+.disclaimer-body ul li {
+    margin-bottom: 0.25rem;
+}
+
+.disclaimer-agree {
+    margin-bottom: 1rem;
+}
+
+/* ============================
+   游戏加速 - 状态面板
+   ============================ */
+
+.speed-status-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.speed-status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.speed-status-item:last-child {
+    border-bottom: none;
+}
+
+.speed-status-label {
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+.speed-status-value {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--color-text-primary);
+}
+
+.speed-status-value.active {
+    color: #16a34a;
+}
+
+.speed-status-value.inactive {
+    color: #9ca3af;
+}
+
+/* ============================
+   游戏加速 - 滑块
+   ============================ */
+
+.speed-slider-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.speed-range {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--color-border);
+    outline: none;
+    cursor: pointer;
+}
+
+.speed-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.speed-range:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.speed-label {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+.speed-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.speed-input-group input {
+    width: 80px;
+    text-align: center;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
+.speed-input-group input:disabled {
+    opacity: 0.5;
+}
+
+.speed-presets {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.speed-presets-label {
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    margin-right: 0.25rem;
+}
+
+.speed-preset-btn {
+    min-width: 40px;
+    text-align: center;
+}
+
+/* ============================
+   游戏加速 - 操作按钮
+   ============================ */
+
+.speed-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.speed-hotkey-info {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: var(--color-bg-secondary);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.speed-hotkey-info ul {
+    margin: 0.25rem 0 0.25rem 1.2rem;
+    padding: 0;
+}
+
+.speed-hotkey-info kbd {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.8rem;
+    font-family: monospace;
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+}

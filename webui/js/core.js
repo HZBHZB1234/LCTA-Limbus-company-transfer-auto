@@ -296,7 +296,11 @@ class ConfigManager {
             'launcher-work-update': 'launcher.work.update',
             'launcher-work-mod': 'launcher.work.mod',
             'launcher-work-bubble': 'launcher.work.bubble',
-            'launcher-work-fancy': 'launcher.work.fancy'
+            'launcher-work-fancy': 'launcher.work.fancy',
+
+            // 游戏加速
+            'launcher-work-speed': 'launcher.work.speed',
+            'launcher-speed-factor': 'launcher.work.speed_factor'
         };
         
         this.configCache = {}; // 配置缓存

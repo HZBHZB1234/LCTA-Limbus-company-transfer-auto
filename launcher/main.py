@@ -7,6 +7,7 @@ import json
 from datetime import datetime, timedelta
 import socket
 from abc import ABC, abstractmethod
+import threading
 
 # Needed for embedded python
 import os
@@ -562,7 +563,16 @@ def main_after_mod():
         patch.shutil.rmtree(tmp_asset_root)
         sound.replace_sound(mod_zips_root_path,steam_argv)
         _log_manager.log("Starting game")
+
+        # 游戏加速热键
+        speed_exit = _run_speed_hotkey_if_enabled()
+
         subprocess.call(steam_argv)
+
+        # 清理加速热键
+        if speed_exit is not None:
+            speed_exit.set()
+
         cleanup_assets()
 
     except Exception as e:
@@ -570,7 +580,152 @@ def main_after_mod():
         sys.exit(1)
 
 def main_after_game():
+
+    # 游戏加速热键
+    speed_exit = _run_speed_hotkey_if_enabled()
+
     subprocess.call(steam_argv)
+
+    # 清理加速热键
+    if speed_exit is not None:
+        speed_exit.set()
+
+def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
+    """游戏加速热键线程入口。
+
+    注册全局热键并阻塞直到 exit_event 被设置：
+    - ctrl+s: 切换 1.0x / speed_factor
+    - ctrl+shift+s: 弹出 tkinter 速度选择窗口
+
+    DLL 延迟注入：首次触发热键时才注入。
+    """
+    import keyboard
+    from webutils.function_speed import SpeedManager
+
+    speed_enabled = [False]  # 用列表实现闭包可变引用
+
+    def toggle_speed():
+        try:
+            if not SpeedManager.is_injected():
+                SpeedManager.inject()
+            speed_enabled[0] = not speed_enabled[0]
+            SpeedManager.set_speed(speed_factor if speed_enabled[0] else 1.0)
+            _log_manager.log(
+                f"加速 {'开启' if speed_enabled[0] else '关闭'} "
+                f"({speed_factor if speed_enabled[0] else 1.0}x)"
+            )
+        except Exception as e:
+            _log_manager.log_error(e)
+
+    def open_selector():
+        try:
+            if not SpeedManager.is_injected():
+                SpeedManager.inject()
+            _show_speed_slider_window()
+        except Exception as e:
+            _log_manager.log_error(e)
+
+    keyboard.add_hotkey('ctrl+s', toggle_speed)
+    keyboard.add_hotkey('ctrl+shift+s', open_selector)
+    _log_manager.log(f"游戏加速热键已注册: ctrl+s / ctrl+shift+s (目标倍率: {speed_factor}x)")
+
+    exit_event.wait()
+
+    keyboard.remove_all_hotkeys()
+    try:
+        SpeedManager.close()
+    except Exception as e:
+        _log_manager.log_error(e)
+    _log_manager.log("游戏加速热键已注销")
+
+
+def _show_speed_slider_window():
+    """弹出 tkinter 倍率选择窗口（置顶、不抢夺焦点）。"""
+    import tkinter as tk
+    from webutils.function_speed import SpeedManager
+
+    root = tk.Tk()
+    root.title("游戏加速")
+    root.attributes('-topmost', True)
+    root.resizable(False, False)
+
+    # 居中窗口
+    root.geometry("320x150")
+    root.update_idletasks()
+    w = root.winfo_width()
+    h = root.winfo_height()
+    sw = root.winfo_screenwidth()
+    sh = root.winfo_screenheight()
+    root.geometry(f"+{(sw - w) // 2}+{(sh - h) // 2}")
+
+    # 尝试不抢夺焦点
+    try:
+        root.attributes('-alpha', 1.0)
+        root.lift()
+    except Exception:
+        pass
+
+    frame = tk.Frame(root, padx=16, pady=12)
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    tk.Label(frame, text="选择游戏速度倍率", font=("Microsoft YaHei", 11)).pack(anchor=tk.W)
+
+    slider_frame = tk.Frame(frame)
+    slider_frame.pack(fill=tk.X, pady=(8, 4))
+
+    speed_var = tk.DoubleVar(value=SpeedManager.get_speed() or 1.0)
+    scale = tk.Scale(
+        slider_frame,
+        from_=0.1, to=10.0,
+        resolution=0.1,
+        orient=tk.HORIZONTAL,
+        variable=speed_var,
+        length=260,
+    )
+    scale.pack()
+
+    value_label = tk.Label(frame, text=f"当前: {speed_var.get():.1f}x", font=("Microsoft YaHei", 10))
+    value_label.pack()
+
+    def update_label(*args):
+        value_label.config(text=f"当前: {speed_var.get():.1f}x")
+
+    speed_var.trace_add('write', update_label)
+
+    def apply_and_close():
+        try:
+            SpeedManager.set_speed(speed_var.get())
+        except Exception as e:
+            _log_manager.log_error(e)
+        root.destroy()
+
+    btn_frame = tk.Frame(frame)
+    btn_frame.pack(fill=tk.X, pady=(8, 0))
+
+    tk.Button(btn_frame, text="应用", command=apply_and_close, width=10).pack(side=tk.RIGHT)
+    tk.Button(btn_frame, text="取消", command=root.destroy, width=10).pack(side=tk.RIGHT, padx=(0, 8))
+
+    root.mainloop()
+
+
+def _run_speed_hotkey_if_enabled():
+    """如果配置允许，启动热键线程并返回 exit_event 或 None。"""
+    if not ConfigManager().get("launcher.work.speed", False):
+        return None
+    if not ConfigManager().get("speed.disclaimer_accepted", False):
+        _log_manager.log("游戏加速已配置但未同意免责声明，跳过热键注册")
+        return None
+
+    speed_factor = float(ConfigManager().get("launcher.work.speed_factor", "2.0"))
+    exit_event = threading.Event()
+    t = threading.Thread(
+        target=_start_speed_hotkeys,
+        args=(speed_factor, exit_event),
+        daemon=True,
+    )
+    t.start()
+    return exit_event
+
 
 def main():
     try:

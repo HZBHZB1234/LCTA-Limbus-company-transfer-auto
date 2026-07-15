@@ -39,6 +39,7 @@ from .function_cdn import (
     cdn_full_optimization,
     cdn_full_optimization_simple,
 )
+from .function_speed import SpeedManager
 
 __all__ = [
     'function_llc_main',
@@ -93,4 +94,5 @@ __all__ = [
     'cdn_optimize_cloudfront',
     'cdn_full_optimization',
     'cdn_full_optimization_simple',
+    'SpeedManager',
 ]

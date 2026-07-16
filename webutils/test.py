@@ -1,12 +1,8 @@
+import ctypes
 import webbrowser
 import webview
 import os
 import sys
-import tkinter as tk
-from tkinter import messagebox
-
-root = tk.Tk()
-root.withdraw()
 
 class customStdout:
     def __init__(self):
@@ -49,7 +45,7 @@ def evalRuntime():
 
 def evalHtml():
     out = customStdout()
-    messagebox.showinfo('环境测试', '即将打开一个测试窗口，如正常打开，请关闭窗口。')
+    ctypes.windll.user32.MessageBoxW(0, '即将打开一个测试窗口，如正常打开，请关闭窗口。', '环境测试', 0x40)
     window = webview.create_window('LCTA 运行环境测试',
                                     'https://bing.com',)
     try:
@@ -58,7 +54,7 @@ def evalHtml():
         print(f'webview启动失败: {e}')
         import traceback
         traceback.print_exc()
-        messagebox.showerror('环境测试错误', '未知原因')
+        ctypes.windll.user32.MessageBoxW(0, '未知原因', '环境测试错误', 0x10)
         return True
     out.reset()
     messages = ''.join(out.messages)

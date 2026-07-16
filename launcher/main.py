@@ -595,7 +595,7 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
 
     注册全局热键并阻塞直到 exit_event 被设置：
     - ctrl+s: 切换 1.0x / speed_factor
-    - ctrl+shift+s: 弹出 tkinter 速度选择窗口
+    - ctrl+shift+s: 弹出速度选择窗口
 
     DLL 延迟注入：首次触发热键时才注入。
     """
@@ -640,72 +640,104 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
 
 
 def _show_speed_slider_window():
-    """弹出 tkinter 倍率选择窗口（置顶、不抢夺焦点）。"""
-    import tkinter as tk
+    """弹出 WinForms 倍率选择窗口（置顶、不抢夺焦点）。"""
+    import threading
     from webutils.function_speed import SpeedManager
 
-    root = tk.Tk()
-    root.title("游戏加速")
-    root.attributes('-topmost', True)
-    root.resizable(False, False)
-
-    # 居中窗口
-    root.geometry("320x150")
-    root.update_idletasks()
-    w = root.winfo_width()
-    h = root.winfo_height()
-    sw = root.winfo_screenwidth()
-    sh = root.winfo_screenheight()
-    root.geometry(f"+{(sw - w) // 2}+{(sh - h) // 2}")
-
-    # 尝试不抢夺焦点
+    # 初始化 clr（参照 start_webui.py 的回退链）
     try:
-        root.attributes('-alpha', 1.0)
-        root.lift()
+        import clr
     except Exception:
-        pass
-
-    frame = tk.Frame(root, padx=16, pady=12)
-    frame.pack(fill=tk.BOTH, expand=True)
-
-    tk.Label(frame, text="选择游戏速度倍率", font=("Microsoft YaHei", 11)).pack(anchor=tk.W)
-
-    slider_frame = tk.Frame(frame)
-    slider_frame.pack(fill=tk.X, pady=(8, 4))
-
-    speed_var = tk.DoubleVar(value=SpeedManager.get_speed() or 1.0)
-    scale = tk.Scale(
-        slider_frame,
-        from_=0.1, to=10.0,
-        resolution=0.1,
-        orient=tk.HORIZONTAL,
-        variable=speed_var,
-        length=260,
-    )
-    scale.pack()
-
-    value_label = tk.Label(frame, text=f"当前: {speed_var.get():.1f}x", font=("Microsoft YaHei", 10))
-    value_label.pack()
-
-    def update_label(*args):
-        value_label.config(text=f"当前: {speed_var.get():.1f}x")
-
-    speed_var.trace_add('write', update_label)
-
-    def apply_and_close():
         try:
-            SpeedManager.set_speed(speed_var.get())
-        except Exception as e:
-            _log_manager.log_error(e)
-        root.destroy()
+            os.environ['PYTHONNET_RUNTIME'] = 'coreclr'
+            import clr
+        except Exception:
+            os.environ['PYTHONNET_RUNTIME'] = 'mono'
+            import clr
 
-    btn_frame = tk.Frame(frame)
-    btn_frame.pack(fill=tk.X, pady=(8, 0))
+    clr.AddReference('System.Windows.Forms')
+    clr.AddReference('System.Drawing')
+    import System.Windows.Forms as WinForms
+    from System.Drawing import Point, Size
 
-    tk.Button(btn_frame, text="应用", command=apply_and_close, width=10).pack(side=tk.RIGHT)
-    tk.Button(btn_frame, text="取消", command=root.destroy, width=10).pack(side=tk.RIGHT, padx=(0, 8))
+    current = SpeedManager.get_speed() or 1.0
+    slider_val = [int(max(1, min(100, current * 10)))]  # 0.1x-10.0x -> 1-100
 
-    root.mainloop()
+    def run_form():
+        WinForms.Application.EnableVisualStyles()
+
+        form = WinForms.Form()
+        form.Text = "游戏加速"
+        form.FormBorderStyle = WinForms.FormBorderStyle.FixedDialog
+        form.StartPosition = WinForms.FormStartPosition.CenterScreen
+        form.Size = Size(320, 170)
+        form.TopMost = True
+        form.MaximizeBox = False
+        form.MinimizeBox = False
+
+        # 标题标签
+        title = WinForms.Label()
+        title.Text = "选择游戏速度倍率"
+        title.Location = Point(16, 12)
+        title.AutoSize = True
+        form.Controls.Add(title)
+
+        # 滑块
+        trackbar = WinForms.TrackBar()
+        trackbar.Minimum = 1
+        trackbar.Maximum = 100
+        trackbar.Value = slider_val[0]
+        trackbar.TickFrequency = 10
+        trackbar.Size = Size(270, 45)
+        trackbar.Location = Point(16, 35)
+        form.Controls.Add(trackbar)
+
+        # 当前值标签
+        val_label = WinForms.Label()
+        val_label.Text = f"当前: {trackbar.Value / 10.0:.1f}x"
+        val_label.Location = Point(16, 80)
+        val_label.AutoSize = True
+        form.Controls.Add(val_label)
+
+        def on_scroll(sender, args):
+            val_label.Text = f"当前: {trackbar.Value / 10.0:.1f}x"
+
+        trackbar.Scroll += on_scroll
+
+        # 应用按钮
+        apply_btn = WinForms.Button()
+        apply_btn.Text = "应用"
+        apply_btn.Size = Size(75, 28)
+        apply_btn.Location = Point(210, 95)
+
+        def on_apply(sender, args):
+            try:
+                SpeedManager.set_speed(trackbar.Value / 10.0)
+            except Exception as e:
+                _log_manager.log_error(e)
+            form.Close()
+
+        apply_btn.Click += on_apply
+        form.Controls.Add(apply_btn)
+
+        # 取消按钮
+        cancel_btn = WinForms.Button()
+        cancel_btn.Text = "取消"
+        cancel_btn.Size = Size(75, 28)
+        cancel_btn.Location = Point(125, 95)
+
+        def on_cancel(sender, args):
+            form.Close()
+
+        cancel_btn.Click += on_cancel
+        form.Controls.Add(cancel_btn)
+
+        form.ShowDialog()
+
+    t = threading.Thread(target=run_form)
+    t.SetApartmentState(3)  # STA
+    t.Start()
+    t.Join()
 
 
 def _run_speed_hotkey_if_enabled():

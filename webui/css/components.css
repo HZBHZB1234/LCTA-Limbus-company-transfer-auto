@@ -1918,22 +1918,21 @@ select.elder-select:focus {
    游戏加速 - 免责声明覆盖层
    ============================ */
 
+/* 免责声明容器位于 #speed-section 内部。
+   不可使用 position:fixed —— .content-section 的入场动画带 transform，
+   会使 fixed 的包含块变为该 section 而非视口，导致卡片定位异常偏高。
+   显示时主内容已隐藏，故直接在文档流内居中即可。 */
 .disclaimer-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-    backdrop-filter: blur(4px);
+    min-height: 70vh;
+    padding: 1rem 0;
 }
 
 .disclaimer-card {
-    background: var(--color-bg-primary);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
     padding: 2rem;
     max-width: 560px;

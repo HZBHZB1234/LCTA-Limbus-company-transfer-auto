@@ -114,9 +114,17 @@ jobs:
     - name: Copy CFST directory (CDN optimization)
       run: |
         if (Test-Path .\LCTA\CFST) {
-            Copy-Item .\LCTA\CFST release\${{ env.APP_NAME }}\code\CFST -Recurse -Force
-            Copy-Item .\LCTA\CFST release\${{ env.APP_NAME }}-Compatible\code\CFST -Recurse -Force
-            Copy-Item .\LCTA\CFST .\LCTA_update\CFST -Recurse -Force
+            # 先删除目标再复制，避免 Copy-Item 在目标已存在时将源文件夹嵌套复制
+            # （copy files 步骤中 LCTA\* 可能已复制了 CFST，此处必须清理旧目标）
+            $targets = @(
+                "release\${{ env.APP_NAME }}\code\CFST",
+                "release\${{ env.APP_NAME }}-Compatible\code\CFST",
+                ".\LCTA_update\CFST"
+            )
+            foreach ($t in $targets) {
+                if (Test-Path $t) { Remove-Item $t -Recurse -Force }
+                Copy-Item .\LCTA\CFST $t -Recurse -Force
+            }
             Write-Host "CFST/ copied to release artifacts"
         } else {
             Write-Host "WARNING: CFST/ directory not found, skipping"

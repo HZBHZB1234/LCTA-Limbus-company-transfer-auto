@@ -472,7 +472,8 @@ $cfstSource = "$ProjectRoot\CFST"
 if (Test-Path $cfstSource) {
     foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
         $destCfst = "$dest\CFST"
-        if (Test-Path $destCfst) { Remove-Item $destCfst -Recurse -Force }
+        # 先删除旧目标再复制，避免 Copy-Item 在目标已存在时将源文件夹嵌套复制
+        if (Test-Path $destCfst) { Remove-Item $destCfst -Recurse -Force -ErrorAction Stop }
         Copy-Item $cfstSource $destCfst -Recurse -Force
     }
     Write-Host "  CFST/ 复制完成" -ForegroundColor Green

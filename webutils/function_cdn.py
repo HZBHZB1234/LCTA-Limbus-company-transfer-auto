@@ -932,6 +932,46 @@ def select_cloudfront_ip(
 
 # ---- 5. Hosts 文件管理 ----
 
+def _format_hosts_error(exc: Exception) -> str:
+    """
+    将 hosts 写入/移除时的异常转换为用户可读的错误描述。
+    包含错误原因与解决建议；无法识别时退回原始错误信息。
+    """
+    err_str = str(exc)
+
+    # 权限不足（[WinError 5] / PermissionError）
+    if isinstance(exc, PermissionError) or "WinError 5" in err_str or "拒绝访问" in err_str:
+        return (
+            f"权限不足，无法修改 hosts 文件。\n\n"
+            f"原因：hosts 位于系统保护目录 C:\\Windows\\System32\\drivers\\etc\\，"
+            f"修改需要管理员权限，当前程序未以管理员身份运行。\n\n"
+            f"解决方法：右键点击程序图标 → 以管理员身份运行，然后重试。"
+        )
+
+    # 文件被占用（[WinError 32]）
+    if isinstance(exc, OSError) and ("WinError 32" in err_str or "另一个程序正在使用此文件" in err_str):
+        return (
+            f"hosts 文件被其他程序锁定。\n\n"
+            f"原因：杀毒软件或安全软件（如 Windows Defender、火绒等）"
+            f"正在保护 hosts 文件，阻止了写入操作。\n\n"
+            f"解决方法：\n"
+            f"1. 暂时关闭杀毒软件的 hosts 保护 / 文件锁功能后重试；\n"
+            f"2. 或将本程序添加到杀毒软件的白名单 / 排除列表中。"
+        )
+
+    # 找不到文件
+    if isinstance(exc, FileNotFoundError) or "WinError 2" in err_str:
+        return (
+            f"未找到系统 hosts 文件。\n\n"
+            f"原因：C:\\Windows\\System32\\drivers\\etc\\hosts 文件不存在。\n\n"
+            f"解决方法：请确认该路径下 hosts 文件是否存在。如已丢失，"
+            f"可新建一个空文本文件并命名为 hosts（无扩展名）。"
+        )
+
+    # 无法识别的错误 — 退回原始信息
+    return f"hosts 操作失败。\n\n原始错误：{err_str}"
+
+
 def _detect_encoding(file_path: str) -> Tuple[str, bytes]:
     """检测文件编码（对应 LLC_BABEL HostsWriter.DetectEncoding）。"""
     with open(file_path, "rb") as f:
@@ -1000,13 +1040,15 @@ def write_hosts(
     cloudfront_mappings: Optional[Dict[str, str]] = None,
     log_cb: Optional[Callable[[str], None]] = None,
     hosts_path: Optional[str] = None
-) -> bool:
+):
     """
     将优选 IP 写入系统 hosts 文件的受管标记块。
     对应 LLC_BABEL HostsWriter.UpdateAsync()。
 
     cf_ip: Cloudflare 优选 IP（None 表示不清除旧映射）
     cloudfront_mappings: {domain: ip, ...}
+
+    返回: (success: bool, error_message: Optional[str])
     """
     if hosts_path is None:
         hosts_path = _get_hosts_path()
@@ -1056,12 +1098,13 @@ def write_hosts(
         if log_cb:
             log_cb(f"hosts 已更新：{hosts_path}")
 
-        return True
+        return True, None
 
     except Exception as e:
+        error_msg = f"写入 hosts 失败：{e}"
         if log_cb:
-            log_cb(f"写入 hosts 失败：{e}")
-        return False
+            log_cb(error_msg)
+        return False, _format_hosts_error(e)
     finally:
         if os.path.isfile(temp_path):
             try:
@@ -1135,15 +1178,17 @@ def remove_hosts_block(
     marker_end: str,
     hosts_path: str,
     log_cb: Optional[Callable[[str], None]] = None
-) -> bool:
+):
     """
     移除 hosts 文件中的单个受管标记块（CF 或 CFA）。
+
+    返回: (success: bool, error_message: Optional[str])
     """
     # 读取现有 hosts
     if os.path.isfile(hosts_path):
         lines, encoding_name, bom = _read_hosts_lines(hosts_path)
     else:
-        return True  # 没有 hosts 文件，无需移除
+        return True, None  # 没有 hosts 文件，无需移除
 
     # 用空映射重写目标块（即移除）
     _rewrite_block(lines, marker_start, marker_end, [], log_cb)
@@ -1167,12 +1212,13 @@ def remove_hosts_block(
         if log_cb:
             log_cb(f"已移除 hosts 受管标记块 {marker_start}")
 
-        return True
+        return True, None
 
     except Exception as e:
+        error_msg = f"移除 hosts 块失败：{e}"
         if log_cb:
-            log_cb(f"移除 hosts 块失败：{e}")
-        return False
+            log_cb(error_msg)
+        return False, _format_hosts_error(e)
     finally:
         if os.path.isfile(temp_path):
             try:
@@ -1185,10 +1231,12 @@ def elevate_remove_hosts(
     block_type: str,
     log_cb: Optional[Callable[[str], None]] = None,
     hosts_path: Optional[str] = None
-) -> bool:
+):
     """
     在必要时提权移除单个 hosts 受管块。
     block_type: "cf" 或 "cfa"
+
+    返回: (success: bool, error_message: Optional[str])
     """
     if hosts_path is None:
         hosts_path = _get_hosts_path()
@@ -1200,15 +1248,17 @@ def elevate_remove_hosts(
         marker_start, marker_end = CFA_START_MARKER, CFA_END_MARKER
         label = "CloudFront"
     else:
+        error_msg = f"未知的移除类型：{block_type}"
         if log_cb:
-            log_cb(f"未知的移除类型：{block_type}")
-        return False
+            log_cb(error_msg)
+        return False, error_msg
 
     os.makedirs(os.path.dirname(hosts_path), exist_ok=True)
 
     # 检查是否已经以管理员身份运行
     if _is_admin():
-        return remove_hosts_block(marker_start, marker_end, hosts_path, log_cb)
+        success, err = remove_hosts_block(marker_start, marker_end, hosts_path, log_cb)
+        return success, err
 
     # 检查是否可以写入
     can_write = False
@@ -1222,7 +1272,8 @@ def elevate_remove_hosts(
         pass
 
     if can_write:
-        return remove_hosts_block(marker_start, marker_end, hosts_path, log_cb)
+        success, err = remove_hosts_block(marker_start, marker_end, hosts_path, log_cb)
+        return success, err
 
     # 需要提权
     request_json = {
@@ -1259,24 +1310,35 @@ def elevate_remove_hosts(
         if os.path.isfile(result_path):
             with open(result_path, "r", encoding="utf-8") as f:
                 result_data = json.load(f)
-            try:
-                os.remove(result_path)
-            except Exception:
-                pass
-            try:
-                os.remove(request_path)
-            except Exception:
-                pass
-            return result_data.get("success", False)
-
-        if log_cb:
-            log_cb(f"移除 {label} hosts 超时")
-        return False
+            success = result_data.get("success", False)
+            msg = result_data.get("message", "")
+            if log_cb:
+                log_cb(msg)
+            return success, None if success else msg
+        else:
+            timeout_msg = f"移除 {label} hosts 超时"
+            if log_cb:
+                log_cb(timeout_msg)
+            return False, timeout_msg
 
     except Exception as e:
+        # ShellExecuteW 返回 1223 = 用户取消了 UAC 弹窗
+        err_str = str(e)
+        if "1223" in err_str or "取消" in err_str:
+            user_msg = (
+                f"移除 {label} hosts 条目需要管理员权限。\n\n"
+                f"原因：用户取消了管理员权限提升（UAC）弹窗。\n\n"
+                f"解决方法：请重新操作并在 UAC 弹窗中选择\"是\"以授予权限。"
+            )
+        else:
+            user_msg = (
+                f"请求管理员权限失败。\n\n"
+                f"原因：{e}\n\n"
+                f"解决方法：请尝试以管理员身份手动运行程序后重试。"
+            )
         if log_cb:
-            log_cb(f"移除 {label} hosts 失败：{e}")
-        return False
+            log_cb(user_msg)
+        return False, user_msg
 
 
 def read_current_hosts_mappings(
@@ -1361,10 +1423,12 @@ def elevate_write_hosts(
     cloudfront_mappings: Optional[Dict[str, str]] = None,
     log_cb: Optional[Callable[[str], None]] = None,
     hosts_path: Optional[str] = None
-) -> bool:
+):
     """
     在必要时提权写入 hosts。
     对应 LLC_BABEL HostsWriteElevator。
+
+    返回: (success: bool, error_message: Optional[str])
     """
     if hosts_path is None:
         hosts_path = _get_hosts_path()
@@ -1374,7 +1438,8 @@ def elevate_write_hosts(
     # 检查是否已经以管理员身份运行
     if _is_admin():
         # 已经是管理员，直接写入
-        return write_hosts(cf_ip, cloudfront_mappings, log_cb, hosts_path)
+        success, err = write_hosts(cf_ip, cloudfront_mappings, log_cb, hosts_path)
+        return success, err
 
     # 检查是否可以写入（普通用户权限下尝试创建一个临时文件）
     can_write = False
@@ -1389,7 +1454,8 @@ def elevate_write_hosts(
 
     if can_write:
         # 不需要提权即可写入
-        return write_hosts(cf_ip, cloudfront_mappings, log_cb, hosts_path)
+        success, err = write_hosts(cf_ip, cloudfront_mappings, log_cb, hosts_path)
+        return success, err
 
     # 需要提权：将请求写入临时 JSON 文件，然后以管理员身份重新运行
     request_json = {
@@ -1430,18 +1496,33 @@ def elevate_write_hosts(
             with open(result_path, "r", encoding="utf-8") as f:
                 result_data = json.load(f)
             success = result_data.get("success", False)
+            msg = result_data.get("message", "")
             if log_cb:
-                log_cb(result_data.get("message", ""))
-            return success
+                log_cb(msg)
+            return success, None if success else msg
         else:
+            timeout_msg = "未收到提权写入结果（等待超时）"
             if log_cb:
-                log_cb("未收到提权写入结果（等待超时）")
-            return False
+                log_cb(timeout_msg)
+            return False, timeout_msg
 
     except OSError as e:
+        # ShellExecuteW 返回 1223 = 用户取消了 UAC 弹窗
+        if "1223" in str(e) or "取消" in str(e):
+            user_msg = (
+                f"写入 hosts 需要管理员权限。\n\n"
+                f"原因：用户取消了管理员权限提升（UAC）弹窗。\n\n"
+                f"解决方法：请重新操作并在 UAC 弹窗中选择\"是\"以授予权限。"
+            )
+        else:
+            user_msg = (
+                f"请求管理员权限失败。\n\n"
+                f"原因：{e}\n\n"
+                f"解决方法：请尝试以管理员身份手动运行程序后重试。"
+            )
         if log_cb:
-            log_cb(f"提权失败：{e}")
-        return False
+            log_cb(user_msg)
+        return False, user_msg
     finally:
         # 清理临时请求文件
         try:
@@ -1472,7 +1553,7 @@ def _handle_helper_invocation():
 
                 action = req.get("action")
                 if action == "write_hosts":
-                    success = write_hosts(
+                    success, err = write_hosts(
                         cf_ip=req.get("cf_ip"),
                         cloudfront_mappings=req.get("cloudfront_mappings"),
                         hosts_path=req.get("hosts_path"),
@@ -1480,7 +1561,7 @@ def _handle_helper_invocation():
 
                     result = {
                         "success": success,
-                        "message": "hosts 写入成功" if success else "hosts 写入失败",
+                        "message": "hosts 写入成功" if success else (err or "hosts 写入失败"),
                     }
 
                 elif action == "remove_hosts":
@@ -1490,13 +1571,13 @@ def _handle_helper_invocation():
                     else:
                         marker_s, marker_e = CFA_START_MARKER, CFA_END_MARKER
 
-                    success = remove_hosts_block(
+                    success, err = remove_hosts_block(
                         marker_s, marker_e,
                         hosts_path=req.get("hosts_path", _get_hosts_path()),
                     )
                     result = {
                         "success": success,
-                        "message": f"{block_type} hosts 移除成功" if success else f"{block_type} hosts 移除失败",
+                        "message": f"{block_type} hosts 移除成功" if success else (err or f"{block_type} hosts 移除失败"),
                     }
 
                     result_path = request_path + ".result"

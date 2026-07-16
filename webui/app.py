@@ -1264,7 +1264,7 @@ class LCTA_API():
 
             log_cb, _, _ = self._make_cdn_callbacks(modal_id)
 
-            success = function_cdn.elevate_write_hosts(
+            success, err_msg = function_cdn.elevate_write_hosts(
                 cf_ip=cf_ip,
                 cloudfront_mappings=cloudfront_mappings,
                 log_cb=log_cb
@@ -1275,7 +1275,7 @@ class LCTA_API():
                 return {"success": True, "message": "hosts 写入成功"}
             else:
                 self.add_modal_log("hosts 写入失败", modal_id)
-                return {"success": False, "message": "hosts 写入失败"}
+                return {"success": False, "message": err_msg or "hosts 写入失败"}
 
         except Exception as e:
             self.add_modal_log(f"写入 hosts 失败：{e}", modal_id)
@@ -1285,13 +1285,13 @@ class LCTA_API():
     def cdn_remove_cloudflare(self):
         """移除 Cloudflare hosts 条目"""
         try:
-            success = function_cdn.elevate_remove_hosts("cf", log_cb=self.log_ui)
+            success, err_msg = function_cdn.elevate_remove_hosts("cf", log_cb=self.log_ui)
             if success:
                 self.log_ui("Cloudflare hosts 条目已移除")
                 return {"success": True, "message": "Cloudflare hosts 条目已移除"}
             else:
                 self.log_ui("Cloudflare hosts 条目移除失败或无条目")
-                return {"success": False, "message": "移除失败或无条目"}
+                return {"success": False, "message": err_msg or "移除失败或无条目"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
@@ -1299,13 +1299,13 @@ class LCTA_API():
     def cdn_remove_cloudfront(self):
         """移除 CloudFront hosts 条目"""
         try:
-            success = function_cdn.elevate_remove_hosts("cfa", log_cb=self.log_ui)
+            success, err_msg = function_cdn.elevate_remove_hosts("cfa", log_cb=self.log_ui)
             if success:
                 self.log_ui("CloudFront hosts 条目已移除")
                 return {"success": True, "message": "CloudFront hosts 条目已移除"}
             else:
                 self.log_ui("CloudFront hosts 条目移除失败或无条目")
-                return {"success": False, "message": "移除失败或无条目"}
+                return {"success": False, "message": err_msg or "移除失败或无条目"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}

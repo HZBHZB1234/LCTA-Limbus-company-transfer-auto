@@ -509,7 +509,7 @@ def main_pre():
             _log_manager.log("CDN优选完成（未自动写入hosts）")
             return
 
-        success = function_cdn.elevate_write_hosts(
+        success, err_msg = function_cdn.elevate_write_hosts(
             cf_ip=result.get('cf_ip'),
             cloudfront_mappings=result.get('cloudfront_mappings'),
             log_cb=launcher_log
@@ -517,7 +517,7 @@ def main_pre():
         if success:
             _log_manager.log("CDN优选完成，已写入hosts")
         else:
-            _log_manager.log("CDN优选完成，但hosts写入失败")
+            _log_manager.log(f"CDN优选完成，但hosts写入失败：{err_msg or '未知原因'}")
 
     except Exception as e:
         _log_manager.log_error(e)

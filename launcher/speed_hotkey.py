@@ -1,4 +1,5 @@
 """游戏加速热键与倍率选择窗口（从 launcher/main.py 拆分而来）"""
+import ctypes
 import os
 import threading
 
@@ -6,6 +7,61 @@ from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 
 _log_manager = LogManager()
+
+# -- 前台进程检测（与 webutils/function_speed.py 相同的 PID 缓存模式） --
+_kernel32 = ctypes.windll.kernel32
+_user32 = ctypes.windll.user32
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+_game_pid = None
+
+
+def _pid_alive(pid: int) -> bool:
+    """用 OpenProcess 快速检查 PID 是否仍然存在。"""
+    handle = _kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if handle:
+        _kernel32.CloseHandle(handle)
+        return True
+    return False
+
+
+def _find_game_pid():
+    """查找 LimbusCompany.exe 的 PID（带缓存，与 function_speed.py 相同模式）。"""
+    global _game_pid
+
+    # 快速路径：验证缓存的 PID
+    if _game_pid is not None and _pid_alive(_game_pid):
+        return _game_pid
+
+    # 慢速路径：通过 SpeedController 枚举进程
+    _game_pid = None
+    try:
+        from openspeedy import SpeedController
+        with SpeedController() as sc:
+            processes = sc.list_processes(fast=False)
+        for p in processes:
+            if p.name == "LimbusCompany.exe":
+                _game_pid = p.pid
+                return _game_pid
+    except Exception:
+        return None
+
+    return None
+
+
+def _is_game_foreground() -> bool:
+    """检查当前前台窗口是否属于 LimbusCompany.exe。"""
+    game_pid = _find_game_pid()
+    if game_pid is None:
+        return False
+
+    hwnd = _user32.GetForegroundWindow()
+    if hwnd == 0:
+        return False
+
+    fg_pid = ctypes.c_ulong()
+    _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(fg_pid))
+    return fg_pid.value == game_pid
 
 def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
     """游戏加速热键线程入口。
@@ -22,6 +78,8 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
     speed_enabled = [False]  # 用列表实现闭包可变引用
 
     def toggle_speed():
+        if not _is_game_foreground():
+            return
         try:
             if not SpeedManager.is_injected():
                 SpeedManager.inject()
@@ -35,6 +93,8 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
             _log_manager.log_error(e)
 
     def open_selector():
+        if not _is_game_foreground():
+            return
         try:
             if not SpeedManager.is_injected():
                 SpeedManager.inject()

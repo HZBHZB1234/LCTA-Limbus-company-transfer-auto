@@ -1,4 +1,5 @@
 import glob
+import io
 import xxhash
 import lzma
 import os.path
@@ -8,12 +9,22 @@ _log_manager = LogManager()
 from pathlib import Path
 from zipfile import ZipFile
 
+from UnityPy.enums import ClassIDType
 from UnityPy.files import SerializedFile, BundleFile, ObjectReader
-from UnityPy.streams import EndianBinaryReader
 
 from launcher.compress import compress_lunartique_mod
 
 import UnityPy
+
+
+def get_bundle_file(env: UnityPy.Environment) -> BundleFile:
+    bundle = getattr(env, "file", None)
+    if isinstance(bundle, BundleFile):
+        return bundle
+    for f in env.files.values():
+        if isinstance(f, BundleFile):
+            return f
+    raise ValueError("No BundleFile found in environment")
 
 
 def bundle_data_paths(appdata: str = os.getenv("APPDATA")):
@@ -73,8 +84,10 @@ def cleanup_assets(bundle_data=bundle_data_paths):
             continue
 
         try:
-            env = UnityPy.load(bundle_path)
-            if env.file.version_player != "limbus_modded":
+            with open(bundle_path, "rb") as fp:
+                env = UnityPy.load(io.BytesIO(fp.read()))
+            bundle = get_bundle_file(env)
+            if bundle.version_player != "limbus_modded":
                 os.remove(new_path)
                 continue
         except Exception as e:
@@ -85,7 +98,8 @@ def cleanup_assets(bundle_data=bundle_data_paths):
 
 
 def patch_bundle_asset(env: UnityPy.Environment, mod_path: str):
-    for f in env.file.files.values():
+    bundle = get_bundle_file(env)
+    for f in bundle.files.values():
         if not isinstance(f, SerializedFile):
             _log_manager.log("Expected serialized file but got a %s instead?? Skipped", type(f))
             return
@@ -114,14 +128,28 @@ def patch_bundle_asset(env: UnityPy.Environment, mod_path: str):
                     continue
                 with open(mod_part_path, "rb") as mf:
                     obj.set_raw_data(lzma.decompress(mf.read(), format=lzma.FORMAT_XZ))
-            elif type_id > 0:
+            elif type_id >= 0:
+                if type_id >= len(f.types):
+                    _log_manager.log("- Unknown type index %d for %s, skipped", type_id, mod_part_path)
+                    continue
+                serialized_type = f.types[type_id]
                 _log_manager.log("- Adding unused mod asset of type %d: %s", type_id, mod_part_path)
-                reader = EndianBinaryReader(bytes(bytearray(1024)))
-                obj = ObjectReader(assets_file=f, reader=reader)
-                obj.path_id = path_id
-                obj.type_id = type_id
                 with open(mod_part_path, "rb") as mf:
-                    obj.set_raw_data(lzma.decompress(mf.read(), format=lzma.FORMAT_XZ))
+                    data = lzma.decompress(mf.read(), format=lzma.FORMAT_XZ)
+                obj = ObjectReader(
+                    assets_file=f,
+                    reader=f.reader,
+                    path_id=path_id,
+                    type_id=type_id,
+                    serialized_type=serialized_type,
+                    class_id=serialized_type.class_id,
+                    type=ClassIDType(serialized_type.class_id),
+                    byte_start=0,
+                    byte_size=len(data),
+                    is_destroyed=None,
+                    is_stripped=None,
+                )
+                obj.set_raw_data(data)
                 objects[path_id] = obj
 
 
@@ -139,12 +167,21 @@ def patch_assets(mod_asset_root: str, bundle_data=bundle_data_paths):
         _log_manager.log("Backing up %s", bundle_path)
         os.replace(bundle_path, new_path)
 
-        _log_manager.log("Patching %s", bundle_path)
-        env = UnityPy.load(new_path)
-        patch_bundle_asset(env, mod_path)
+        try:
+            _log_manager.log("Patching %s", bundle_path)
+            env = UnityPy.load(new_path)
+            patch_bundle_asset(env, mod_path)
 
-        env.file.version_player = "limbus_modded"
-        with open(bundle_path, "wb") as f:
-            f.write(env.file.save(packer="none"))
-        _log_manager.log("* Patching complete %s (%d) -> %s (%d)", file_digest(new_path), os.path.getsize(new_path),
-                     file_digest(bundle_path), os.path.getsize(bundle_path))
+            bundle = get_bundle_file(env)
+            bundle.version_player = "limbus_modded"
+            with open(bundle_path, "wb") as out:
+                out.write(bundle.save(packer="original"))
+            _log_manager.log("* Patching complete %s (%d) -> %s (%d)", file_digest(new_path), os.path.getsize(new_path),
+                         file_digest(bundle_path), os.path.getsize(bundle_path))
+        except Exception:
+            _log_manager.log_error("Failed to patch %s", bundle_path)
+            if os.path.isfile(new_path):
+                if os.path.isfile(bundle_path):
+                    os.remove(bundle_path)
+                os.replace(new_path, bundle_path)
+            raise

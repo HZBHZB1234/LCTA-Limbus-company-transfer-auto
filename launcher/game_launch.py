@@ -1,8 +1,13 @@
 """游戏启动流程：mod 加载模式与普通模式（从 launcher/main.py 拆分而来）"""
+import atexit
 import os
+import signal
 import subprocess
 import sys
 import tempfile
+
+import UnityPy.config
+UnityPy.config.FALLBACK_UNITY_VERSION = "6000.3.12f1"
 
 from globalManagers.LogManager import LogManager
 from launcher.speed_hotkey import run_speed_hotkey_if_enabled
@@ -36,7 +41,9 @@ def main_after_mod(steam_argv: str) -> None:
     try:
         _log_manager.log("Limbus args: %s", sys.argv)
         cleanup_assets()
-        #atexit.register(cleanup_assets)
+        atexit.register(cleanup_assets)
+        signal.signal(signal.SIGINT, kill_handler)
+        signal.signal(signal.SIGTERM, kill_handler)
         _log_manager.log("Detecting lunartique mods")
         patch.detect_lunartique_mods(mod_zips_root_path)
         _log_manager.log("Patching text data")

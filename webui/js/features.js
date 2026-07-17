@@ -853,7 +853,7 @@ async function showUpdateInfo(update_info) {
     updateModalShown = true;
     
     let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-    htmlMessage += `<p><strong>当前版本:</strong> v4.1.5</p>`;
+    htmlMessage += `<p><strong>当前版本:</strong> v5.0.0</p>`;
     
     if (update_info.title) {
         htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
@@ -1288,14 +1288,46 @@ async function refreshDashboard() {
 // === 拖拽文件管理 ===
 
 // 拖拽文件管理器（毛玻璃遮罩版）
-// 事件统一由 Python DOMEventHandler 管理，本类仅提供 showMask/hideMask 工具方法
 class DragDropManager {
     constructor() {
         this.maskElement = null;
         this.onFileDropCallback = null;
         this.hideTimer = null;
+        this.dragCounter = 0;
+        this.init();
     }
-    
+
+    init() {
+        document.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.dragCounter++;
+            this.showMask();
+        });
+
+        document.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showMask();
+        });
+
+        document.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.dragCounter--;
+            if (this.dragCounter <= 0) {
+                this.dragCounter = 0;
+                this.hideMask();
+            }
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.dragCounter = 0;
+        });
+    }
+
     showMask() {
         if (this.hideTimer) {
             clearTimeout(this.hideTimer);

@@ -4,7 +4,7 @@
 
 ## Project Purpose
 
-LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive desktop toolkit for the game *Limbus Company*. Core feature: **Chinese localization/translation management** with automatic LLM-based translation updates. Also provides CDN optimization, an integrated game launcher with mod support, bubble language pack download, and various game optimization tools. Version 4.1.5, MIT-licensed (launcher/ is GPL-3.0).
+LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive desktop toolkit for the game *Limbus Company*. Core feature: **Chinese localization/translation management** with automatic LLM-based translation updates. Also provides CDN optimization, an integrated game launcher with mod support, bubble language pack download, and various game optimization tools. Version 5.0.0, MIT-licensed (launcher/ is GPL-3.0).
 
 ## Tech Stack
 

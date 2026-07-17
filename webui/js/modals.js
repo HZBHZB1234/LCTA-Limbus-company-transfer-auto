@@ -94,7 +94,7 @@ class ElderManager {
         this.updateList = await pywebview.api.get_attr('updateList');
         this.refer = await pywebview.api.get_attr('bindRefer');
         this.relyList = await pywebview.api.get_attr('relyList')
-        const version = '4.1.5'
+        const version = '5.0.0'
         this.version = version.replaceAll('.', '')
         let elderList = configManager.getCachedValue('elder_list');
         if (!elderList) {

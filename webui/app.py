@@ -1195,12 +1195,6 @@ class LCTA_API():
             self.log_error(e)
             return {"success": False, "message": f"分析拖入文件时出错: {str(e)}"}
     
-    def drag_in(self, e):
-        self._window.evaluate_js("dragDropManager.showMask()")
-
-    def drag_out(self, e):
-        self._window.evaluate_js("dragDropManager.hideMask()")
-
     def on_drop(self, e):
         files = e['dataTransfer']['files']
         file_paths = [file['pywebviewFullPath'] for file in files]
@@ -1500,9 +1494,6 @@ def main():
 
     def start_func():
         print('加载函数')
-        window.dom.document.events.dragenter += DOMEventHandler(api.drag_in, True, True)
-        window.dom.document.events.dragover += DOMEventHandler(api.drag_in, True, True, debounce=100)
-        window.dom.document.events.dragleave += DOMEventHandler(api.drag_out, True, True, debounce=100)
         window.dom.document.events.drop += DOMEventHandler(api.on_drop, True, True)
 
     if enable_storage:

@@ -1248,58 +1248,19 @@ async function refreshDashboard() {
 // === 拖拽文件管理 ===
 
 // 拖拽文件管理器（毛玻璃遮罩版）
+// 事件统一由 Python DOMEventHandler 管理，本类仅提供 showMask/hideMask 工具方法
 class DragDropManager {
     constructor() {
-        this.dropZoneElement = document.querySelector('.main-content');
         this.maskElement = null;
         this.onFileDropCallback = null;
-        this.leaveChecked = 0;
-        this.init();
-    }
-    
-    init() {
-        if (!this.dropZoneElement) return;
-        
-        // 阻止页面默认拖拽行为
-        document.body.addEventListener('dragenter', (e) => {
-            console.log('dragenter');
-            e.preventDefault();
-            e.stopPropagation();
-            this.showMask();
-        });
-        
-        document.body.addEventListener('dragover', (e) => {
-            console.log('dragover');
-            e.preventDefault();
-            e.stopPropagation();
-            this.showMask();
-        });
-        
-        document.body.addEventListener('dragleave', (e) => {
-            console.log('dragleave');
-            e.preventDefault();
-            e.stopPropagation();
-            this.hideMask();
-        });
-        
-        document.body.addEventListener('drop', (e) => {
-            console.log('drop');
-            this.maskLoad();
-        });
-    }
-
-    maskLoad() {
-        console.log('start maskLoad');
-        if (!this.maskElement) return;
-        const maskElement = document.getElementById('file-mask-char');
-        if (!maskElement) return;
-        maskElement.className = 'spinner';
-        console.log('end maskLoad');
-        return;
+        this.hideTimer = null;
     }
     
     showMask() {
-        this.leaveChecked = 0;
+        if (this.hideTimer) {
+            clearTimeout(this.hideTimer);
+            this.hideTimer = null;
+        }
         if (this.maskElement) return;
         
         this.maskElement = document.createElement('div');
@@ -1315,54 +1276,26 @@ class DragDropManager {
     }
     
     hideMask() {
-        this.leaveChecked = 1;
-        setTimeout(() => {
-            if (!this.leaveChecked) return;
-            this.leaveChecked += 1;
-            setTimeout(() => {
-                if (this.leaveChecked >= 2) {
-                    if (this.maskElement) {
-                        this.maskElement.remove();
-                        this.maskElement = null;
-                        this.leaveChecked = 0;
-                    }
-                }
-            }, 30);
-        }, 30);
+        if (this.hideTimer) {
+            clearTimeout(this.hideTimer);
+        }
+        this.hideTimer = setTimeout(() => {
+            this.hideTimer = null;
+            if (this.maskElement) {
+                this.maskElement.remove();
+                this.maskElement = null;
+            }
+        }, 100);
     }
     
-    handleDrop(event) {
-        const files = [];
-        
-        if (event.dataTransfer.items) {
-            for (let i = 0; i < event.dataTransfer.items.length; i++) {
-                const item = event.dataTransfer.items[i];
-                if (item.kind === 'file') {
-                    const file = item.getAsFile();
-                    if (file) {
-                        files.push(file);
-                    }
-                }
-            }
-        } else {
-            for (let i = 0; i < event.dataTransfer.files.length; i++) {
-                files.push(event.dataTransfer.files[i]);
-            }
+    hideMaskImmediate() {
+        if (this.hideTimer) {
+            clearTimeout(this.hideTimer);
+            this.hideTimer = null;
         }
-        
-        if (files.length === 0) {
-            addLogMessage('未检测到文件拖拽', 'warning');
-            return;
-        }
-        
-        addLogMessage(`检测到 ${files.length} 个文件被拖入`, 'info');
-        
-        for (const file of files) {
-            addLogMessage(`拖入文件: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`, 'info');
-        }
-        
-        if (this.onFileDropCallback && typeof this.onFileDropCallback === 'function') {
-            this.onFileDropCallback();
+        if (this.maskElement) {
+            this.maskElement.remove();
+            this.maskElement = null;
         }
     }
     
@@ -1375,9 +1308,9 @@ class DragDropManager {
 function setupDragDropCallback() {
     if (!dragDropManager) return;
     
-    dragDropManager.setOnFileDropCallback(async () => {
+    dragDropManager.setOnFileDropCallback(async (files) => {
         const modal = showConfirm('处理文件', '正在处理拖入的文件...');
-        const result = await pywebview.api.handle_dropped_files()
+        const result = await pywebview.api.handle_dropped_files(files)
 
         document.getElementById(`modal-status-${modal.id}`).innerHTML = result.message;
         if (result.success) {

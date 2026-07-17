@@ -74,7 +74,6 @@ class LCTA_API():
         self.updateList= updateList
         self.bindRefer = bindRefer
         self.relyList = relyList
-        self.current_files = []
         self.set_function()
         self.init_config()
 
@@ -1112,26 +1111,29 @@ class LCTA_API():
             self.log_error(e)
             return False
 
-    def handle_dropped_files(self):
+    def handle_dropped_files(self, files_data):
         """处理前端拖拽的文件数据"""
-        files_data = self.current_files
-        self.current_files = []
+        if not files_data:
+            return {"success": False, "message": "无文件"}
         file_info = {file: evalFile(file) for file in files_data}
         message = makeMessage(file_info)
         if message == 'invalid':
             return {"success": False, "message": "禁止同时进行更新与其他操作"}
         if message == 'none':
-            return {"success": False, "message": "无文件"}
+            return {"success": False, "message": "无有效文件"}
         return {"success": True, "message": message, "file_info": file_info}
     
     def drag_in(self, e):
-        print("drag in")
-        # self._window.evaluate_js("if (!dragDropManager.maskElement) {dragDropManager.showMask();}")
+        self._window.evaluate_js("dragDropManager.showMask()")
+
+    def drag_out(self, e):
+        self._window.evaluate_js("dragDropManager.hideMask()")
 
     def on_drop(self, e):
         files = e['dataTransfer']['files']
-        self.current_files = [file['pywebviewFullPath'] for file in files]
-        self._window.evaluate_js("dragDropManager.hideMask();dragDropManager.onFileDropCallback()")
+        file_paths = [file['pywebviewFullPath'] for file in files]
+        file_paths_json = json.dumps(file_paths)
+        self._window.evaluate_js(f"dragDropManager.hideMaskImmediate();dragDropManager.onFileDropCallback({file_paths_json})")
 
         print(f'Event: {e["type"]}. Dropped files:')
 
@@ -1427,8 +1429,8 @@ def main():
     def start_func():
         print('加载函数')
         window.dom.document.events.dragenter += DOMEventHandler(api.drag_in, True, True)
-        window.dom.document.events.dragstart += DOMEventHandler(api.drag_in, True, True)
-        window.dom.document.events.dragover += DOMEventHandler(api.drag_in, True, True, debounce=500)
+        window.dom.document.events.dragover += DOMEventHandler(api.drag_in, True, True, debounce=100)
+        window.dom.document.events.dragleave += DOMEventHandler(api.drag_out, True, True, debounce=100)
         window.dom.document.events.drop += DOMEventHandler(api.on_drop, True, True)
 
     if enable_storage:

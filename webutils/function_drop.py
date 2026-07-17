@@ -48,10 +48,10 @@ def evalZip(zip_path):
             return 'nofont'
         if any('mod_info.json' in name for name in namelist):
             return 'FLmod'
-        if notJsonAmount >= 3:
-            return 'jsononly'
         if any('requirements.txt' in name for name in notJson) and any('start_webui.py' in name for name in notJson):
             return 'update'
+        if notJsonAmount >= 3:
+            return 'jsononly'
         return 'invalid'
         
 def evalFolder(folder_path):
@@ -178,8 +178,24 @@ def evalFiles(files_data, modal_id="false"):
                 if not game_path:
                     raise ValueError("未设置游戏路径，无法安装汉化包")
 
-                install_translation_package(
-                    file_path, game_path, modal_id=modal_id)
+                if file_path.endswith('.7z'):
+                    tmp_dir = tempfile.mkdtemp()
+                    try:
+                        _log_manager.log_modal_process(f"正在解压7z文件: {file_name}", modal_id)
+                        if not decompress_7z(file_path, tmp_dir):
+                            raise RuntimeError(f"7z解压失败: {file_name}")
+                        items = os.listdir(tmp_dir)
+                        if not items:
+                            raise RuntimeError(f"7z文件为空: {file_name}")
+                        package_dir = os.path.join(tmp_dir, items[0])
+                        install_translation_package(
+                            package_dir, game_path, modal_id=modal_id)
+                    finally:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+                else:
+                    install_translation_package(
+                        file_path, game_path, modal_id=modal_id)
+
                 results["installed"] += 1
                 _log_manager.log_modal_process(f"汉化包安装完成: {file_name}", modal_id)
 

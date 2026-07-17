@@ -81,10 +81,13 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
         if not _is_game_foreground():
             _log_manager.log("热键 ctrl+s 按下但前台窗口不是 LimbusCompany.exe，跳过加速切换")
             return
+        _log_manager.log("热键 ctrl+s 按下，正在切换加速状态...")
         try:
             if not SpeedManager.is_injected():
+                _log_manager.log("正在注入加速 DLL...")
                 SpeedManager.inject()
             speed_enabled[0] = not speed_enabled[0]
+            _log_manager.log(f"设置游戏速度为 {speed_factor if speed_enabled[0] else 1.0}x")
             SpeedManager.set_speed(speed_factor if speed_enabled[0] else 1.0)
             _log_manager.log(
                 f"加速 {'开启' if speed_enabled[0] else '关闭'} "
@@ -97,8 +100,10 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
         if not _is_game_foreground():
             _log_manager.log("热键 ctrl+shift+s 按下但前台窗口不是 LimbusCompany.exe，跳过打开倍率选择窗口")
             return
+        _log_manager.log("热键 ctrl+shift+s 按下，正在打开倍率选择窗口...")
         try:
             if not SpeedManager.is_injected():
+                _log_manager.log("正在注入加速 DLL...")
                 SpeedManager.inject()
             _show_speed_slider_window()
         except Exception as e:
@@ -111,8 +116,10 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
     exit_event.wait()
 
     keyboard.remove_all_hotkeys()
+    _log_manager.log("正在卸载加速 DLL...")
     try:
         SpeedManager.close()
+        _log_manager.log("加速 DLL 已卸载")
     except Exception as e:
         _log_manager.log_error(e)
     _log_manager.log("游戏加速热键已注销")
@@ -190,6 +197,7 @@ def _show_speed_slider_window():
 
         def on_apply(sender, args):
             try:
+                _log_manager.log(f"设置游戏速度为 {trackbar.Value / 10.0:.1f}x")
                 SpeedManager.set_speed(trackbar.Value / 10.0)
             except Exception as e:
                 _log_manager.log_error(e)
@@ -213,7 +221,7 @@ def _show_speed_slider_window():
         form.ShowDialog()
 
     import System.Threading as NetThreading
-    t = NetThreading.Thread(run_form)
+    t = NetThreading.Thread(NetThreading.ThreadStart(run_form))
     t.SetApartmentState(NetThreading.ApartmentState.STA)
     t.Start()
     t.Join()
@@ -235,4 +243,5 @@ def run_speed_hotkey_if_enabled():
         daemon=True,
     )
     t.start()
+    _log_manager.log(f"启动游戏加速热键线程 (目标倍率: {speed_factor}x)")
     return exit_event

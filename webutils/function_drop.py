@@ -9,6 +9,7 @@ import zipfile
 from .function_install import install_translation_package
 from .function_manage import get_mod_path
 from .functions import extract_zip_smartly, decompress_7z
+from .update import Updater
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
@@ -42,7 +43,14 @@ def evalZip(zip_path):
         amount = len(namelist)
         notJsonAmount = len(notJson)
         hasFont = any('Font' in name for name in notJson)
-        if all(notJson.count(folder) > 0 for folder in FOLDERLIST) and amount > 1500:
+
+        top_names = set()
+        for name in namelist:
+            clean = name.replace('\\', '/').rstrip('/')
+            top = clean.split('/')[0]
+            if top:
+                top_names.add(top)
+        if all(any(folder in top for top in top_names) for folder in FOLDERLIST) and amount > 1500:
             if hasFont:
                 return 'full'
             return 'nofont'
@@ -137,7 +145,7 @@ def evalFiles(files_data, modal_id="false"):
 
     Returns:
         dict: {"success": bool, "message": str, "installed": int,
-               "modded": int, "skipped": int, "errors": int,
+               "modded": int, "updated": int, "skipped": int, "errors": int,
                "error_details": list}
     """
     if not files_data:
@@ -151,7 +159,7 @@ def evalFiles(files_data, modal_id="false"):
     os.makedirs(mod_path, exist_ok=True)
 
     total = len(files_data)
-    results = {"installed": 0, "modded": 0, "skipped": 0, "errors": 0}
+    results = {"installed": 0, "modded": 0, "skipped": 0, "updated": 0, "errors": 0}
     error_details = []
 
     for idx, (file_path, file_type) in enumerate(files_data.items()):
@@ -249,11 +257,21 @@ def evalFiles(files_data, modal_id="false"):
                     f"安装文本替换包 ({idx+1}/{total}): {file_name}",
                     modal_id)
 
-                target_name = Path(file_path).name
-                target_path = os.path.join(str(mod_path), target_name)
-                if os.path.exists(target_path) and os.path.isdir(target_path):
-                    shutil.rmtree(target_path)
-                shutil.copytree(file_path, target_path)
+                if file_path.endswith('.zip'):
+                    target_name = Path(file_path).stem
+                    target_path = os.path.join(str(mod_path), target_name)
+                    if os.path.exists(target_path):
+                        if os.path.isdir(target_path):
+                            shutil.rmtree(target_path)
+                        else:
+                            os.remove(target_path)
+                    extract_zip_smartly(file_path, str(mod_path))
+                else:
+                    target_name = Path(file_path).name
+                    target_path = os.path.join(str(mod_path), target_name)
+                    if os.path.exists(target_path) and os.path.isdir(target_path):
+                        shutil.rmtree(target_path)
+                    shutil.copytree(file_path, target_path)
 
                 results["modded"] += 1
                 _log_manager.log_modal_process(f"文本替换包安装完成: {file_name}", modal_id)
@@ -279,9 +297,46 @@ def evalFiles(files_data, modal_id="false"):
                 results["skipped"] += 1
 
             elif file_type == 'update':
+                _log_manager.log_modal_process(f"正在安装更新包: {file_name}", modal_id)
+                _log_manager.update_modal_progress(
+                    progress_pct,
+                    f"安装更新包 ({idx+1}/{total}): {file_name}",
+                    modal_id)
+
+                tmp_dir = tempfile.mkdtemp()
+                try:
+                    with zipfile.ZipFile(file_path, 'r') as zf:
+                        zf.extractall(tmp_dir)
+
+                    source_dir = tmp_dir
+                    for item in os.listdir(tmp_dir):
+                        item_path = os.path.join(tmp_dir, item)
+                        if os.path.isdir(item_path) and \
+                           os.path.exists(os.path.join(item_path, 'start_webui.py')) and \
+                           os.path.exists(os.path.join(item_path, 'requirements.txt')):
+                            source_dir = item_path
+                            break
+
+                    cfg = ConfigManager()
+                    updater = Updater(
+                        "HZBHZB1234", "LCTA-Limbus-company-transfer-auto",
+                        delete_old_files=cfg.get("delete_updating", True),
+                        use_proxy=cfg.get("update_use_proxy", True),
+                        only_stable=cfg.get("update_only_stable", False),
+                        modal_id=modal_id
+                    )
+
+                    source_path = Path(source_dir)
+                    updater.install_requirements(source_path)
+                    _log_manager.check_running(modal_id)
+                    if not updater.update_files(source_path):
+                        raise RuntimeError("更新文件失败")
+                finally:
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+                results["updated"] += 1
                 _log_manager.log_modal_process(
-                    f"跳过更新包 (请单独拖入以执行更新): {file_name}", modal_id)
-                results["skipped"] += 1
+                    f"更新包安装完成，请手动重启程序: {file_name}", modal_id)
 
             else:
                 _log_manager.log_modal_process(
@@ -301,6 +356,8 @@ def evalFiles(files_data, modal_id="false"):
         parts.append(f"{results['installed']}个汉化包")
     if results["modded"] > 0:
         parts.append(f"{results['modded']}个模组")
+    if results["updated"] > 0:
+        parts.append(f"{results['updated']}个更新")
     if results["skipped"] > 0:
         parts.append(f"跳过{results['skipped']}个")
     if results["errors"] > 0:
@@ -317,6 +374,7 @@ def evalFiles(files_data, modal_id="false"):
         "message": summary,
         "installed": results["installed"],
         "modded": results["modded"],
+        "updated": results["updated"],
         "skipped": results["skipped"],
         "errors": results["errors"],
         "error_details": error_details if error_details else []

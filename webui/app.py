@@ -1113,15 +1113,19 @@ class LCTA_API():
 
     def handle_dropped_files(self, files_data):
         """处理前端拖拽的文件数据"""
-        if not files_data:
-            return {"success": False, "message": "无文件"}
-        file_info = {file: evalFile(file) for file in files_data}
-        message = makeMessage(file_info)
-        if message == 'invalid':
-            return {"success": False, "message": "禁止同时进行更新与其他操作"}
-        if message == 'none':
-            return {"success": False, "message": "无有效文件"}
-        return {"success": True, "message": message, "file_info": file_info}
+        try:
+            if not files_data:
+                return {"success": False, "message": "无文件"}
+            file_info = {file: evalFile(file) for file in files_data}
+            message = makeMessage(file_info)
+            if message == 'invalid':
+                return {"success": False, "message": "禁止同时进行更新与其他操作"}
+            if message == 'none':
+                return {"success": False, "message": "无有效文件"}
+            return {"success": True, "message": message, "file_info": file_info}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": f"分析拖入文件时出错: {str(e)}"}
     
     def drag_in(self, e):
         self._window.evaluate_js("dragDropManager.showMask()")

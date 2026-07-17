@@ -1310,17 +1310,24 @@ function setupDragDropCallback() {
     
     dragDropManager.setOnFileDropCallback(async (files) => {
         const modal = showConfirm('处理文件', '正在处理拖入的文件...');
-        const result = await pywebview.api.handle_dropped_files(files)
-
-        document.getElementById(`modal-status-${modal.id}`).innerHTML = result.message;
-        if (result.success) {
-            modal.eval_dropped_files = function() {
-                modal.close();
-                const modal = new ProgressModal('处理文件');
-                modal.addLog('正在处理文件...');
-                pywebview.api.eval_dropped_files(result.file_info, modal.id);
+        try {
+            const result = await pywebview.api.handle_dropped_files(files);
+            if (!result) {
+                document.getElementById(`modal-status-${modal.id}`).innerHTML = '处理失败：未收到响应';
+                return;
             }
-            modal.onConfirmCallback = modal.eval_dropped_files;
+            document.getElementById(`modal-status-${modal.id}`).innerHTML = result.message;
+            if (result.success) {
+                modal.eval_dropped_files = function() {
+                    modal.close();
+                    const progressModal = new ProgressModal('处理文件');
+                    progressModal.addLog('正在处理文件...');
+                    pywebview.api.eval_dropped_files(result.file_info, progressModal.id);
+                }
+                modal.onConfirmCallback = modal.eval_dropped_files;
+            }
+        } catch (error) {
+            document.getElementById(`modal-status-${modal.id}`).innerHTML = '处理拖入文件时出错：' + error;
         }
     });
 }

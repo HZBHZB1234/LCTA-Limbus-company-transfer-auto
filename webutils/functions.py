@@ -243,7 +243,7 @@ def download_with(url, save_path, size=0, chunk_size=1024 * 100,
                     _log_manager.update_modal_progress(
                         progress_[0] + (progress_[1] - progress_[0]) * downloaded_chunk / chunk_len,
                         f"已下载 {downloaded_chunk * chunk_size // 1024} KB / {total_size // 1024} KB",
-                        modal_id, log=False
+                        modal_id, log=True
                     )
 
             _log_manager.log("\n下载完成")

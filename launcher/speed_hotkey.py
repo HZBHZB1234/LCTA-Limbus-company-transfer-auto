@@ -79,6 +79,7 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
 
     def toggle_speed():
         if not _is_game_foreground():
+            _log_manager.log("热键 ctrl+s 按下但前台窗口不是 LimbusCompany.exe，跳过加速切换")
             return
         try:
             if not SpeedManager.is_injected():
@@ -94,6 +95,7 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
 
     def open_selector():
         if not _is_game_foreground():
+            _log_manager.log("热键 ctrl+shift+s 按下但前台窗口不是 LimbusCompany.exe，跳过打开倍率选择窗口")
             return
         try:
             if not SpeedManager.is_injected():
@@ -118,7 +120,6 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
 
 def _show_speed_slider_window():
     """弹出 WinForms 倍率选择窗口（置顶、不抢夺焦点）。"""
-    import threading
     from webutils.function_speed import SpeedManager
 
     # 初始化 clr（参照 start_webui.py 的回退链）
@@ -211,8 +212,9 @@ def _show_speed_slider_window():
 
         form.ShowDialog()
 
-    t = threading.Thread(target=run_form)
-    t.SetApartmentState(3)  # STA
+    import System.Threading as NetThreading
+    t = NetThreading.Thread(run_form)
+    t.SetApartmentState(NetThreading.ApartmentState.STA)
     t.Start()
     t.Join()
 

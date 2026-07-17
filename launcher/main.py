@@ -36,7 +36,7 @@ def main_pre() -> str:
     steam_argv = resolve_steam_argv()
 
     try:
-        GithubDownload.init_request()
+        GithubDownload.init_request(quiet=True)
 
         # 使用工厂模式创建更新对象并执行更新
         update_obj = create_update()

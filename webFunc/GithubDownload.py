@@ -73,7 +73,8 @@ class ReleaseInfo:
 class ProxyManager:
     """简化的代理管理器"""
     
-    def __init__(self):
+    def __init__(self, quiet: bool = False):
+        self.quiet = quiet
         self.proxies: List[str] = []
         self.current_index: int = 0
         self.last_successful_proxy: Optional[str] = None  # 记录上一次成功的代理
@@ -89,7 +90,8 @@ class ProxyManager:
         try:
             self._fetch_proxies_from_api()
         except Exception as e:
-            print(f"从API获取代理列表失败，使用默认代理: {e}")
+            if not self.quiet:
+                print(f"从API获取代理列表失败，使用默认代理: {e}")
     
     def _fetch_proxies_from_api(self):
         """从API获取代理列表"""
@@ -114,7 +116,8 @@ class ProxyManager:
                     print(f"成功加载 {len(new_proxies)} 个代理")
                     
         except Exception as e:
-            print(f"获取代理列表失败: {e}")
+            if not self.quiet:
+                print(f"获取代理列表失败: {e}")
     
     def set_proxy_by_url(self, proxy_url: str):
         """根据代理URL设置当前代理，并记录为成功代理"""
@@ -137,22 +140,24 @@ class GitHubReleaseFetcher:
     """
     
     def __init__(self, use_proxy: bool = True, ignore_ssl: bool = False,
-                 max_workers: int = 4, timeout: int = 8):
+                 max_workers: int = 4, timeout: int = 8, quiet: bool = False):
         """
         初始化获取器
-        
+
         Args:
             use_proxy: 是否使用代理加速API请求
             ignore_ssl: 是否忽略SSL证书错误
+            quiet: 是否抑制调试输出（per-proxy 报错等）
         """
         self.use_proxy = use_proxy
         self.ignore_ssl = ignore_ssl
-        
+        self.quiet = quiet
+
         # GitHub API基础URL
         self.github_api_base = "https://api.github.com"
-        
+
         # 代理管理器
-        self.proxy_manager = ProxyManager() if use_proxy else None
+        self.proxy_manager = ProxyManager(quiet=quiet) if use_proxy else None
         
         # 配置requests会话
         self.session = requests.Session()
@@ -173,6 +178,17 @@ class GitHubReleaseFetcher:
     def update_config(self, use_proxy: bool = True, ignore_ssl: bool = False):
         self.use_proxy = use_proxy
         self.ignore_ssl = ignore_ssl
+
+    def _log(self, message: str, level: str = "info"):
+        """内部日志方法，根据 quiet 模式过滤输出
+
+        Args:
+            message: 日志消息
+            level: 'progress'（始终显示）, 'error'（始终显示）, 'debug'（quiet 模式下抑制）
+        """
+        if level == "debug" and self.quiet:
+            return
+        print(message)
     
     def _build_api_url(self, repo_owner: str, repo_name: str, endpoint: str, proxy_url: str = "") -> str:
         """构建API URL"""
@@ -197,11 +213,11 @@ class GitHubReleaseFetcher:
             if response.status_code == 200:
                 return response.json(), proxy_url
             else:
-                print(f"代理 {proxy_url} 返回状态码: {response.status_code}")
+                self._log(f"代理 {proxy_url} 返回状态码: {response.status_code}", "debug")
                 return None, proxy_url
-                
+
         except Exception as e:
-            print(f"代理 {proxy_url} 请求失败")
+            self._log(f"代理 {proxy_url} 请求失败", "debug")
             return None, proxy_url
     
     def _make_request(self, repo_owner: str, repo_name: str, endpoint: str, **kwargs) -> Optional[Dict[str, Any]]:
@@ -219,17 +235,17 @@ class GitHubReleaseFetcher:
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
-                print(f"直接请求失败: {e}")
+                self._log(f"直接请求失败: {e}", "error")
                 return None
         
         # 使用优先代理列表
         proxies = self.proxy_manager.get_proxies()
         
         if not proxies:
-            print("没有可用的代理")
+            self._log("没有可用的代理", "error")
             return None
-        
-        print(f"使用线程池（最大 {self.max_workers} 个线程）尝试 {len(proxies)} 个代理...")
+
+        self._log(f"使用线程池（最大 {self.max_workers} 个线程）尝试 {len(proxies)} 个代理...", "debug")
         
         executor = ThreadPoolExecutor(max_workers=self.max_workers)
         
@@ -265,17 +281,17 @@ class GitHubReleaseFetcher:
                         if data is not None:
                             # 找到可用的代理
                             self.proxy_manager.set_proxy_by_url(used_proxy)
-                            print(f"成功使用代理: {used_proxy}")
+                            self._log(f"成功使用代理: {used_proxy}", "progress")
                             return data
                             
                     except Exception as e:
                         proxy_url = future_to_proxy[future]
-                        print(f"代理 {proxy_url} 任务异常: {e}")
-                        
+                        self._log(f"代理 {proxy_url} 任务异常: {e}", "debug")
+
             except TimeoutError:
-                print(f"请求超时")
-        
-        print("所有代理尝试均失败")
+                self._log(f"请求超时", "debug")
+
+        self._log("所有代理尝试均失败", "error")
         return None    
     def get_latest_release(self, repo_owner: str, repo_name: str) -> Optional[ReleaseInfo]:
         """
@@ -289,17 +305,17 @@ class GitHubReleaseFetcher:
             ReleaseInfo对象，如果失败则返回None
         """
         try:
-            print(f"正在获取最新release: {repo_owner}/{repo_name}")
-            
+            self._log(f"正在获取最新release: {repo_owner}/{repo_name}", "progress")
+
             data = self._make_request(repo_owner, repo_name, "releases/latest")
             if data is None:
-                print("获取release信息失败")
+                self._log("获取release信息失败", "error")
                 return None
-                
+
             return self._parse_release_data(repo_owner, repo_name, data)
-            
+
         except Exception as e:
-            print(f"获取release信息失败: {e}")
+            self._log(f"获取release信息失败: {e}", "error")
             return None
     
     def get_latest_pre_release(self, repo_owner: str, repo_name: str) -> Optional[ReleaseInfo]:
@@ -312,27 +328,27 @@ class GitHubReleaseFetcher:
             repo_name: 仓库名称
         """
         try:
-            print(f"正在获取第 1 页release列表...")
+            self._log(f"正在获取第 1 页release列表...", "progress")
             params = {"per_page": 30, "page": 1}
-            
+
             data = self._make_request(repo_owner, repo_name, "releases", params=params)
             if data is None or not data:
-                print(f"未找到任何release或请求失败")
+                self._log(f"未找到任何release或请求失败", "error")
                 return None
-            
+
             # 在当前页中查找预发布版本
             for release in data:
                 # 检查是否为预发布
                 if release.get('prerelease', False) and not release.get('draft', False):
-                    print(f"在第 1 页找到预发布版本: {release.get('tag_name')}")
+                    self._log(f"在第 1 页找到预发布版本: {release.get('tag_name')}", "progress")
                     return self._parse_release_data(repo_owner, repo_name, release)
-            
+
             # 如果没有找到预发布版本，则返回最新版本（即第一页的第一个release）
-            print(f"第一页没有找到预发布版本，返回最新版本")
+            self._log(f"第一页没有找到预发布版本，返回最新版本", "progress")
             return self._parse_release_data(repo_owner, repo_name, data[0])
-                
+
         except Exception as e:
-            print(f"获取最新预发布版失败: {e}")
+            self._log(f"获取最新预发布版失败: {e}", "error")
             return None
     
     def get_release_by_tag(self, repo_owner: str, repo_name: str, tag_name: str) -> Optional[ReleaseInfo]:
@@ -345,17 +361,17 @@ class GitHubReleaseFetcher:
             tag_name: 标签名称
         """
         try:
-            print(f"正在获取release: {repo_owner}/{repo_name}@{tag_name}")
-            
+            self._log(f"正在获取release: {repo_owner}/{repo_name}@{tag_name}", "progress")
+
             data = self._make_request(repo_owner, repo_name, f"releases/tags/{tag_name}")
             if data is None:
-                print(f"获取标签 {tag_name} 失败")
+                self._log(f"获取标签 {tag_name} 失败", "error")
                 return None
-            
+
             return self._parse_release_data(repo_owner, repo_name, data)
-            
+
         except Exception as e:
-            print(f"获取release信息失败: {e}")
+            self._log(f"获取release信息失败: {e}", "error")
             return None
     
     def list_all_releases(self, repo_owner: str, repo_name: str, per_page: int = 30) -> List[ReleaseInfo]:
@@ -368,34 +384,34 @@ class GitHubReleaseFetcher:
             per_page: 每页数量
         """
         try:
-            print(f"正在列出所有release: {repo_owner}/{repo_name}")
-            
+            self._log(f"正在列出所有release: {repo_owner}/{repo_name}", "progress")
+
             releases = []
             page = 1
-            
+
             while True:
                 params = {"per_page": per_page, "page": page}
-                
+
                 data = self._make_request(repo_owner, repo_name, "releases", params=params)
                 if data is None:
                     break
-                    
+
                 if not data:
                     break
-                
+
                 for release in data:
                     releases.append(self._parse_release_data(repo_owner, repo_name, release))
-                
+
                 page += 1
-                
+
                 # 如果返回的数量小于per_page，说明已经到最后一页
                 if len(data) < per_page:
                     break
-            
+
             return releases
-            
+
         except Exception as e:
-            print(f"获取release列表失败: {e}")
+            self._log(f"获取release列表失败: {e}", "error")
             return []
     
     def _parse_release_data(self, repo_owner: str, repo_name: str, release_data: Dict[str, Any]) -> ReleaseInfo:
@@ -459,14 +475,15 @@ def print_release_summary(release_info: ReleaseInfo) -> None:
 # 全局请求器实例
 GithubRequester: GitHubReleaseFetcher = None
 
-def init_request(max_workers=4, timeout=8):
+def init_request(max_workers=4, timeout=8, quiet=False):
     """初始化全局请求器"""
     global GithubRequester
     GithubRequester = GitHubReleaseFetcher(
         use_proxy=True,
         ignore_ssl=True,
         max_workers=max_workers,
-        timeout=timeout
+        timeout=timeout,
+        quiet=quiet
         )
     print("GitHub请求器已初始化")
 

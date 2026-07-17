@@ -297,6 +297,9 @@ class ConfigManager {
             'launcher-work-mod': 'launcher.work.mod',
             'launcher-work-bubble': 'launcher.work.bubble',
             'launcher-work-fancy': 'launcher.work.fancy',
+            'launcher-work-cdn-optimize': 'launcher.work.cdn_optimize',
+            'launcher-work-cdn-auto-apply': 'launcher.work.cdn_auto_apply',
+            'launcher-work-cdn-cache-ttl': 'launcher.work.cdn_cache_ttl',
 
             // 游戏加速
             'launcher-work-speed': 'launcher.work.speed',

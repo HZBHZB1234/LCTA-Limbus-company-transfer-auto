@@ -123,6 +123,7 @@
             "fancy": "bool",
             "cdn_optimize": "bool",
             "cdn_auto_apply": "bool",
+            "cdn_cache_ttl": "str",
             "speed": "bool",
             "speed_factor": "str"
         },

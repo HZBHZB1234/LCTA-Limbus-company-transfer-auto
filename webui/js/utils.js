@@ -413,6 +413,9 @@ const TOOLTIP_DATA = {
     'launcher-work-mod': '启动游戏时自动加载 MOD 支持。启用后可使用各类游戏模组。',
     'launcher-work-fancy': '更新汉化包后自动进行文本美化处理。相关美化选项请在"文本美化"页面配置。',
     'launcher-work-bubble': '自动更新气泡文本模组，使游戏中的对话气泡显示特效。相关设置请在"汉化包下载"页面配置。',
+    'launcher-work-cdn-optimize': '启动游戏前自动测试Cloudflare和CloudFront CDN节点速度，选择最快的IP用于游戏下载和API连接。',
+    'launcher-work-cdn-auto-apply': 'CDN优选完成后自动将选出的最优IP写入系统hosts文件。需要管理员权限，如权限不足会尝试UAC提权。',
+    'launcher-work-cdn-cache-ttl': 'CDN优选结果的有效时间（小时）。缓存有效期内跳过测速直接使用已有hosts。设为0表示每次启动都重新测速。',
     'steam-command': '用于通过 Steam 启动游戏的命令行参数。复制后可粘贴到 Steam 游戏属性中的启动选项。',
 
     // ===== 抓取专有词汇 =====

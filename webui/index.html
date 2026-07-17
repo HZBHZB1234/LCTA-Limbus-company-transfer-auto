@@ -1686,6 +1686,33 @@
                         <small class="form-hint">相关设置请在安装汉化包页面配置</small>
                     </div>
 
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="launcher-work-cdn-optimize">
+                            <span class="checkmark"></span>
+                            启动时自动进行CDN优选
+                        </label>
+                        <small class="form-hint">启动游戏前自动测试并选择最快的CDN节点</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="launcher-work-cdn-auto-apply" checked>
+                            <span class="checkmark"></span>
+                            自动写入hosts
+                        </label>
+                        <small class="form-hint">CDN优选后自动将最优IP写入hosts文件（需要管理员权限）</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="launcher-work-cdn-cache-ttl">CDN缓存有效期</label>
+                        <div class="speed-input-group">
+                            <input type="number" id="launcher-work-cdn-cache-ttl" value="24" min="0" max="720" step="0.5">
+                            <span class="speed-label">小时</span>
+                        </div>
+                        <small class="form-hint">CDN优选结果的有效时间。设为0则每次启动都重新测试，推荐24-72小时</small>
+                    </div>
+
                     <div class="form-group" id="steam-command">
                         <label for="steam-command">steam命令</label>
                         <div class="steam-command-group" style="display: flex; align-items: center; gap: 8px;">

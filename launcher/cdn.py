@@ -1,5 +1,6 @@
 """CDN优选（从 launcher/main.py 拆分而来）"""
 import os
+from datetime import datetime
 from pathlib import Path
 
 from globalManagers.LogManager import LogManager
@@ -12,6 +13,19 @@ def run_cdn_optimization(project_root: Path) -> None:
     config = ConfigManager()
     if not config.get('launcher.work.cdn_optimize', False):
         return
+
+    cache_ttl = float(config.get('launcher.work.cdn_cache_ttl', '24.0'))
+    if cache_ttl > 0:
+        last_time_str = config.get('launcher.work.last_cdn_test_time', '')
+        if last_time_str:
+            try:
+                last_time = datetime.fromisoformat(last_time_str)
+                elapsed = (datetime.now() - last_time).total_seconds() / 3600.0
+                if elapsed < cache_ttl:
+                    _log_manager.log(f"CDN优选缓存有效（{elapsed:.1f}h前），跳过测速")
+                    return
+            except Exception:
+                pass
 
     _log_manager.log("开始CDN优选...")
     try:
@@ -37,6 +51,8 @@ def run_cdn_optimization(project_root: Path) -> None:
         if not (result.get('cf_ip') or result.get('cloudfront_mappings')):
             _log_manager.log("CDN优选未获得有效结果")
             return
+
+        config.set('launcher.work.last_cdn_test_time', datetime.now().isoformat())
 
         cdn_auto_apply = config.get('launcher.work.cdn_auto_apply', True)
         if not cdn_auto_apply:

@@ -730,6 +730,46 @@ function resetConfig() {
 }
 
 
+// === 从本地更新包手动更新 ===
+function manualUpdateFromLocalZip() {
+    pywebview.api.browse_file('').then(function(filePath) {
+        if (!filePath) return;
+        
+        const fileName = filePath.split(/[/\\]/).pop();
+        const modal = showConfirm(
+            '手动更新',
+            '确认要从本地更新包 <strong>' + fileName + '</strong> 执行更新吗？<br><small>更新完成后请手动重启程序。</small>',
+            function() {
+                modal.close();
+                const progressModal = new ProgressModal('从本地文件更新');
+                progressModal.addLog('正在验证更新包: ' + fileName);
+                
+                pywebview.api.perform_update_from_file(filePath, progressModal.id)
+                    .then(function(result) {
+                        if (result && result.success) {
+                            progressModal.addLog('更新完成，请手动重启程序。');
+                            progressModal.complete(true, '更新完成');
+                        } else {
+                            var msg = result && result.message ? result.message : '更新失败';
+                            progressModal.addLog(msg);
+                            progressModal.complete(false, msg);
+                        }
+                    })
+                    .catch(function(error) {
+                        progressModal.addLog('更新失败: ' + error);
+                        progressModal.complete(false, '更新失败');
+                    });
+            },
+            function() {
+                addLogMessage('用户取消了手动更新');
+            }
+        );
+    }).catch(function(error) {
+        addLogMessage('选择文件失败: ' + error, 'error');
+    });
+}
+
+
 // === 更新检测 ===
 function manualCheckUpdates() {
     const modal = new ProgressModal('检查更新');

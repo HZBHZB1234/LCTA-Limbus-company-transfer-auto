@@ -57,13 +57,18 @@
 ## 📅 开发计划 (TODO)
 
 - 添加专有名词分析功能
-- 统一配置与函数调用逻辑  
 - 添加 MOD 制作工具  
 - 集成letheLauncher功能
 - 使用vue重构webui
 <details>
   <summary>点击展开已完成功能</summary>
   <ul>
+    <li>统一配置与函数调用逻辑</li>
+    <li>翻译管线全面重构（AC自动机、三阶段策略、格式感知分片）</li>
+    <li>完成 CDN 优选功能</li>
+    <li>添加游戏加速功能</li>
+    <li>完成文件拖入功能及新格式模组支持</li>
+    <li>添加 OurPlay 神人汉化支持</li>
     <li>下载气泡自动Fallback</li>
     <li>修复已安装数据管理页面汉化包相关功能未预期工作问题</li>
     <li>添加 C 盘链接创建功能</li>

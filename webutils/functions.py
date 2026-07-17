@@ -279,6 +279,8 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024 * 100
     proxy_manager = asset.proxys
 
     def _build_url(proxy_url: str):
+        if not proxy_url:
+            return asset.download_url
         return proxy_url.rstrip('/') + '/' + asset.download_url.lstrip('/')
 
     _log_manager.log(f"开始下载 {asset.name} (大小: {asset.size} bytes)")

@@ -188,17 +188,18 @@ class SpeedManager:
     def is_injected() -> bool:
         """检查 LimbusCompany.exe 是否已注入。
 
+        以 Python 侧记录的注入状态为准，openspeedy 的内部检测仅作为辅助。
+        若 openspeedy 调用抛异常，信任自身记录以避免不必要的重复注入日志。
+
         Returns:
             bool: 是否已注入。
         """
-        if SpeedManager._instance is None:
-            return False
-        if SpeedManager._injected_pid is None:
+        if SpeedManager._instance is None or SpeedManager._injected_pid is None:
             return False
         try:
             return SpeedManager._instance.is_injected(SpeedManager._injected_pid)
         except Exception:
-            return False
+            return True  # 信任自身记录，避免误导性的 “正在注入” 日志
 
     @staticmethod
     def eject() -> bool:

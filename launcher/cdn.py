@@ -14,7 +14,10 @@ def run_cdn_optimization(project_root: Path) -> None:
     if not config.get('launcher.work.cdn_optimize', False):
         return
 
-    cache_ttl = float(config.get('launcher.work.cdn_cache_ttl', '24.0'))
+    try:
+        cache_ttl = float(config.get('launcher.work.cdn_cache_ttl', '24.0'))
+    except (ValueError, TypeError):
+        cache_ttl = 0
     if cache_ttl > 0:
         last_time_str = config.get('launcher.work.last_cdn_test_time', '')
         if last_time_str:

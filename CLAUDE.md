@@ -16,7 +16,7 @@ Before you grep or explore blindly, check these pre-built docs for rapid orienta
 - Need detailed setup or release instructions: read `docs/development.md`
 
 ## Maintenance
-After completing a task with significant code changes (new/renamed files, new features, new entry points, new dependencies), offer to update the relevant `.claude/docs/` file(s). Update the `<!-- Last updated: YYYY-MM-DD -->` comment at the top of any file you modify.
+After completing a task with significant code changes (new/renamed files, new features, new entry points, new dependencies), or when making structural changes to files, you MUST update the relevant `.claude/docs/` file(s) to reflect the changes. Update the `<!-- Last updated: YYYY-MM-DD -->` comment at the top of any file you modify.
 
 # Project Rules
 

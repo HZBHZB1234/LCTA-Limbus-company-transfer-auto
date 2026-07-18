@@ -64,7 +64,14 @@ function initNavigation() {
             const sectionId = button.id.replace('-btn', '-section');
             const section = document.getElementById(sectionId);
             if (section) {
-                setTimeout(() => {
+                setTimeout(async () => {
+                    const sectionName = button.id.replace('-btn', '');
+                    await loadSection(sectionName);
+
+                    if (sectionId === 'elder-section' && typeof elderManager !== 'undefined') {
+                        elderManager.initPage();
+                    }
+
                     section.classList.add('active');
                     AnimationManager.fadeIn(section, 150);
                     
@@ -522,9 +529,10 @@ function removeConnectionMask() {
     }
 }
 
-function goAndShow(name) {
+async function goAndShow(name) {
     const targetButton = document.getElementById(`${name}-btn`);
     if (!targetButton) return;
+    await loadSection(name);
     targetButton.style.display = 'block';
     targetButton.click();
     // 如果切换到首页，刷新仪表盘

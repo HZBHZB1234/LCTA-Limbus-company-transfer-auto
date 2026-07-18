@@ -165,7 +165,7 @@ class LCTA_API():
                     else:flag = True
                 r.append(i)
             r = '\n'.join(r)
-            r += '''\n<button class="primary-btn" onclick="goAndShow('elder');elderManager.initPage();">
+            r += '''\n<button class="primary-btn" onclick="goAndShow('elder');">
     <i class="fas fa-play"></i>
     进入设置向导来配置更新的内容
 </button>
@@ -195,11 +195,12 @@ class LCTA_API():
     def get_startup_data(self):
         """一次性返回启动所需的所有数据，减少多次 pywebview.api 桥接往返"""
         config = ConfigManager().raw
+        config_ok = getattr(self, 'config_ok', True)
         return {
-            'message_config': self.message_config,
-            'first_use': self.first_use,
-            'config_ok': self.config_ok,
-            'config_error': self.config_error if not self.config_ok else [],
+            'message_config': getattr(self, 'message_config', None),
+            'first_use': getattr(self, 'first_use', False),
+            'config_ok': config_ok,
+            'config_error': getattr(self, 'config_error', []) if not config_ok else [],
             'config': config,
         }
 

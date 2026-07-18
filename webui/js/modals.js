@@ -456,6 +456,7 @@ function toggleDevelopSettings() {
 
 async function toggleCustomLang() {
     const checkbox = document.getElementById('enable-lang');
+    if (!checkbox) return;
     const result = await pywebview.api.toggle_installed_package(checkbox.checked);
     toggleCustomLangGui();
     if (result.success && result.changed && checkbox.checked) {

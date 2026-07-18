@@ -150,6 +150,89 @@ with open('marked/marked.min.js', 'r', encoding='utf-8') as f:
 with open('marked/marked.min.js', 'w', encoding='utf-8') as f:
     f.write(marked)
 
+# ---- 打包并压缩 JS / CSS ----
+print("开始打包及压缩前端资源...")
+
+js_files = [
+    'marked/marked.min.js',
+    'sections/preload.js',
+    'js/core.js',
+    'js/utils.js',
+    'js/api-config.js',
+    'js/modals.js',
+    'js/list-managers.js',
+    'js/features.js',
+    'js/init.js',
+    'js/cdn.js',
+    'js/speed.js',
+]
+js_content = ''
+for f in js_files:
+    try:
+        with open(f, 'r', encoding='utf-8') as fh:
+            js_content += fh.read() + '\n'
+    except FileNotFoundError:
+        print(f"WARNING: JS file not found, skipping: {f}")
+
+try:
+    import rjsmin
+    js_minified = rjsmin.jsmin(js_content)
+    print("JS 已通过 rjsmin 压缩")
+except ImportError:
+    print("WARNING: rjsmin 未安装，使用未压缩的 JS bundle")
+    js_minified = js_content
+
+os.makedirs('js', exist_ok=True)
+with open('js/bundle.js', 'w', encoding='utf-8') as fh:
+    fh.write(js_minified)
+print("JS 打包完成 -> js/bundle.js")
+
+css_files = [
+    'css/base.css',
+    'css/components.css',
+    'css/layout-extras.css',
+    'css/all.min.css',
+    'css/github-markdown-light.min.css',
+]
+css_content = ''
+for f in css_files:
+    try:
+        with open(f, 'r', encoding='utf-8') as fh:
+            css_content += fh.read() + '\n'
+    except FileNotFoundError:
+        print(f"WARNING: CSS file not found, skipping: {f}")
+
+try:
+    import rcssmin
+    css_minified = rcssmin.cssmin(css_content)
+    print("CSS 已通过 rcssmin 压缩")
+except ImportError:
+    print("WARNING: rcssmin 未安装，使用未压缩的 CSS bundle")
+    css_minified = css_content
+
+os.makedirs('css', exist_ok=True)
+with open('css/bundle.css', 'w', encoding='utf-8') as fh:
+    fh.write(css_minified)
+print("CSS 打包完成 -> css/bundle.css")
+
+with open('index.html', 'r', encoding='utf-8') as f:
+    html_content = f.read()
+
+html_content = re.sub(r'\s*<link rel="stylesheet" href="[^"]*">\n?', '\n', html_content)
+html_content = html_content.replace(
+    '    <title>LCTA - 边狱公司汉化工具箱</title>',
+    '    <title>LCTA - 边狱公司汉化工具箱</title>\n    <link rel="stylesheet" href="css/bundle.css">'
+)
+html_content = re.sub(r'\s*<script src="[^"]*"></script>\n?', '\n', html_content)
+html_content = html_content.replace(
+    '</body>',
+    '    <script src="js/bundle.js"></script>\n</body>'
+)
+
+with open('index.html', 'w', encoding='utf-8') as f:
+    f.write(html_content)
+print("index.html 已更新为使用 bundle 引用")
+
 # ---- 下载 CFST (CloudflareSpeedTest) ----
 import zipfile
 

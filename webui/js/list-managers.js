@@ -715,6 +715,7 @@ function initModItemManager() {
 }
 
 async function refreshInstalledModList() {
+    if (!modItemManager.containerElement) return;
     modItemManager.waitList();
     const result = await pywebview.api.find_installed_mod();
     if (result.success) {
@@ -883,6 +884,7 @@ async function loadSymlinkStatus() {
 let symlinkManager;
 
 async function refreshSymlink() {
+    if (!document.getElementById('symlink-list')) return;
     await loadSymlinkStatus();
 
     symlinkManager = new ActionButtonItemListManager('symlink-list', {

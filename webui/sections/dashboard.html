@@ -1,0 +1,70 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-tachometer-alt"></i>
+        首页
+    </h2>
+    <p class="section-subtitle">LCTA 工具箱状态总览</p>
+</div>
+
+<div class="dashboard-grid">
+    <div class="dashboard-card status-card" id="dash-translation-status">
+        <div class="dash-card-icon">
+            <i class="fas fa-language"></i>
+        </div>
+        <div class="dash-card-content">
+            <div class="dash-card-label">汉化包状态</div>
+            <div class="dash-card-value" id="dash-package-value">检测中...</div>
+        </div>
+    </div>
+
+    <div class="dashboard-card status-card" id="dash-launcher-status">
+        <div class="dash-card-icon">
+            <i class="fas fa-rocket"></i>
+        </div>
+        <div class="dash-card-content">
+            <div class="dash-card-label">启动器配置</div>
+            <div class="dash-card-value" id="dash-launcher-value">检测中...</div>
+        </div>
+    </div>
+
+    <div class="dashboard-card status-card" id="dash-update-status">
+        <div class="dash-card-icon">
+            <i class="fas fa-sync-alt"></i>
+        </div>
+        <div class="dash-card-content">
+            <div class="dash-card-label">LCTA-AU 更新</div>
+            <div class="dash-card-value" id="dash-update-value">检测中...</div>
+        </div>
+    </div>
+
+    <div class="dashboard-card status-card" id="dash-api-status">
+        <div class="dash-card-icon">
+            <i class="fas fa-key"></i>
+        </div>
+        <div class="dash-card-content">
+            <div class="dash-card-label">API 配置</div>
+            <div class="dash-card-value" id="dash-api-value">检测中...</div>
+        </div>
+    </div>
+</div>
+
+<div class="settings-grid" style="margin-top: var(--spacing-lg);">
+    <div class="setting-card" style="padding:20px;">
+        <h3 class="setting-title"><i class="fas fa-bolt"></i> 快速操作</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <button class="action-btn" onclick="manualCheckUpdates()">
+                <i class="fas fa-sync-alt"></i> 检查更新
+            </button>
+            <button class="primary-btn" onclick="goAndShow('elder');elderManager.initPage();">
+                <i class="fas fa-play-circle"></i> 设置向导
+            </button>
+            <button class="action-btn secondary" onclick="helpDrawer.openIndex()">
+                <i class="fas fa-question-circle"></i> 帮助中心
+            </button>
+            <button class="action-btn" onclick="goAndShow('download')">
+                <i class="fas fa-download"></i> 下载汉化包
+            </button>
+        </div>
+    </div>
+
+</div>

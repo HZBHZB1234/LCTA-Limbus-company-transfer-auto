@@ -1,0 +1,34 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-cog"></i>
+        调试界面
+    </h2>
+    <p class="section-subtitle">测试使用</p>
+</div>
+
+<div class="action-area">
+    <button class="primary-btn" onclick="pywebview.api.startTest()">
+        <i class="fas fa-play"></i>
+        开始启动
+    </button>
+
+    <button class="primary-btn" onclick="pywebview.api.eval_skip()">
+        <i class="fas fa-play"></i>
+        注入js
+    </button>
+
+    <button class="primary-btn" onclick="pywebview.api.sign_eval_js()">
+        <i class="fas fa-play"></i>
+        为窗口订阅js
+    </button>
+
+    <button class="primary-btn" onclick="location.reload(true)">
+        <i class="fas fa-play"></i>
+        强制刷新缓存并重载
+    </button>
+
+    <button class="primary-btn" onclick="goAndShow('welcome');">
+        <i class="fas fa-play"></i>
+        显示欢迎页面
+    </button>
+</div>

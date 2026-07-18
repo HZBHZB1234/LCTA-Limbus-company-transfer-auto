@@ -915,7 +915,10 @@ async function showUpdateInfo(update_info) {
 // === 硬件/系统初始化 ===
 
 // 初始化函数
-function init() {
+async function init() {
+    // 预加载所有界面片段
+    await preloadAllSections();
+
     // 初始化配置管理器
     configManager = new ConfigManager();
     
@@ -925,6 +928,12 @@ function init() {
     // 初始化拖拽文件管理器
     dragDropManager = new DragDropManager();
     setupDragDropCallback();
+    
+    // 加载 Markdown 内容（依赖页面结构）
+    loadAndRenderMarkdown();
+
+    // 初始化列表管理器（依赖 DOM 结构）
+    initListManagers();
     
     // 初始化导航
     initNavigation();

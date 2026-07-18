@@ -1,0 +1,38 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-cog"></i>
+        配置汉化API
+    </h2>
+    <p class="section-subtitle">配置翻译服务API密钥</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">API配置</h3>
+        <div class="form-group">
+            <label for="api-service">选择翻译服务:</label>
+            <div class="api-select">
+            </div>
+        </div>
+        
+        <div class="api-settings"></div>
+        
+        <div class="action-area">
+            <button class="primary-btn" onclick="apiConfigManager.saveCurrentSettings()">
+                <i class="fas fa-save"></i>
+                保存配置
+            </button>
+
+            <button class="primary-btn" onclick="apiConfigManager.testAPIConfig()">
+                <i class="fas fa-save"></i>
+                测试api
+            </button>
+        </div>
+    </div>
+    
+    <div class="setting-card">
+        <h3 class="setting-title">服务状态</h3>
+        <div class="api-status-grid">
+        </div>
+    </div>
+</div>

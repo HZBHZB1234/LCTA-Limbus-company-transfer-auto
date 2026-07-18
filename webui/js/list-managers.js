@@ -146,14 +146,17 @@ class ItemListManager {
 }
 
 
-// 创建汉化包列表管理器实例
-let packageItemManager = new ItemListManager('install-package-list', {
-    emptyMessage: '未找到可用的汉化包',
-    itemIcon: 'fa-box',
-    onSelect: (item) => {
-        addLogMessage(`已选中汉化包: ${item}`, 'info');
-    }
-});
+let packageItemManager;
+
+function initPackageItemManager() {
+    packageItemManager = new ItemListManager('install-package-list', {
+        emptyMessage: '未找到可用的汉化包',
+        itemIcon: 'fa-box',
+        onSelect: (item) => {
+            addLogMessage(`已选中汉化包: ${item}`, 'info');
+        }
+    });
+}
 
 /**
  * 刷新汉化包列表
@@ -426,14 +429,17 @@ function getFontFromInstalled() {
         });
 }
 
-// 创建汉化包列表管理器实例
-let installedPackageItemManager = new ItemListManager('installed-package-list', {
-    emptyMessage: '未找到已安装汉化包',
-    itemIcon: 'fa-box',
-    onSelect: (item) => {
-        addLogMessage(`已选中汉化包: ${item}`, 'info');
-    }
-});
+let installedPackageItemManager;
+
+function initInstalledPackageItemManager() {
+    installedPackageItemManager = new ItemListManager('installed-package-list', {
+        emptyMessage: '未找到已安装汉化包',
+        itemIcon: 'fa-box',
+        onSelect: (item) => {
+            addLogMessage(`已选中汉化包: ${item}`, 'info');
+        }
+    });
+}
 
 /**
  * 刷新已安装汉化包列表
@@ -691,7 +697,10 @@ class ToggleItemListManager extends ItemListManager {
     }
 }
 
-let modItemManager = new ToggleItemListManager('install-mod-list', {
+let modItemManager;
+
+function initModItemManager() {
+    modItemManager = new ToggleItemListManager('install-mod-list', {
     emptyMessage: '未找到模组',
     itemIcon: 'fa-language',
     defaultEnabled: false, // 默认全部禁用
@@ -702,7 +711,8 @@ let modItemManager = new ToggleItemListManager('install-mod-list', {
         console.log(`模组 ${item} 状态变为: ${enabled ? '启用' : '禁用'}`);
         toggleMod(item, enabled)
     }
-});
+    });
+}
 
 async function refreshInstalledModList() {
     modItemManager.waitList();
@@ -1021,8 +1031,14 @@ async function removeSymlink() {
             showMessage('警告', '当前数据项不是软链接');
         };
     } catch (error) {
-        showMessage('错误', `删除软链接时发生错误
+            showMessage('错误', `删除软链接时发生错误
             ${error}`)
     };
+}
+
+function initListManagers() {
+    initPackageItemManager();
+    initInstalledPackageItemManager();
+    initModItemManager();
 }
 

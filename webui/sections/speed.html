@@ -1,0 +1,126 @@
+<div id="speed-disclaimer-overlay" class="disclaimer-overlay" style="display:none;">
+    <div class="disclaimer-card">
+        <div class="disclaimer-icon">⚠️</div>
+        <h2>风险警告</h2>
+        <div class="disclaimer-body">
+            <p>游戏加速功能通过 <strong>DLL 注入技术</strong>实现（OpenSpeedy）。此技术可能被反作弊系统（包括但不限于 EAC、BattlEye、Vanguard、Ricochet）检测并标记，<strong>可能导致游戏账号被封禁</strong>。</p>
+            <ul>
+                <li>本功能仅供学习 Windows API Hooking 技术使用</li>
+                <li>仅建议在单机/离线游戏中使用</li>
+                <li>在在线竞技游戏中使用违反大多数游戏的用户协议</li>
+                <li>使用者自行承担全部风险，开发者不承担任何责任</li>
+            </ul>
+        </div>
+        <div class="disclaimer-agree">
+            <label class="checkbox-container">
+                <input type="checkbox" id="speed-disclaimer-checkbox">
+                <span class="checkmark"></span>
+                我已了解上述风险
+            </label>
+        </div>
+        <button id="speed-disclaimer-confirm" class="primary-btn" onclick="speedPage.acceptDisclaimer()">
+            <i class="fas fa-check"></i> 确认
+        </button>
+    </div>
+</div>
+
+<div id="speed-main-content" style="display:none;">
+    <div class="section-header">
+        <h2 class="section-title">
+            <i class="fas fa-forward"></i>
+            游戏加速
+        </h2>
+        <p class="section-subtitle">基于 OpenSpeedy 的游戏速度控制 — 通过 DLL 注入实现变速</p>
+    </div>
+
+    <div class="settings-grid">
+        <div class="setting-card">
+            <h3 class="setting-title">
+                <i class="fas fa-info-circle"></i> 游戏状态
+            </h3>
+            <div class="speed-status-grid">
+                <div class="speed-status-item">
+                    <span class="speed-status-label">运行状态:</span>
+                    <span id="speed-status-running" class="speed-status-value inactive">○ 未运行</span>
+                </div>
+                <div class="speed-status-item">
+                    <span class="speed-status-label">PID:</span>
+                    <span id="speed-status-pid" class="speed-status-value">—</span>
+                </div>
+                <div class="speed-status-item">
+                    <span class="speed-status-label">注入状态:</span>
+                    <span id="speed-status-injected" class="speed-status-value inactive">○ 未注入</span>
+                </div>
+                <div class="speed-status-item">
+                    <span class="speed-status-label">当前速度:</span>
+                    <span id="speed-status-speed" class="speed-status-value">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="setting-card">
+            <h3 class="setting-title">
+                <i class="fas fa-tachometer-alt"></i> 速度控制
+            </h3>
+            <div class="form-group">
+                <label for="speed-slider">速度倍率</label>
+                <div class="speed-slider-group">
+                    <span class="speed-label">0.1x</span>
+                    <input type="range" id="speed-slider" min="0.1" max="10.0" step="0.1" value="1.0" class="speed-range" disabled>
+                    <span class="speed-label">10x</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="speed-input">当前倍率</label>
+                <div class="speed-input-group">
+                    <input type="number" id="speed-input" value="1.0" min="0.1" max="10.0" step="0.1" disabled>
+                    <button id="speed-btn-apply" class="action-btn primary">
+                        <i class="fas fa-check"></i> 应用
+                    </button>
+                </div>
+            </div>
+            <div class="speed-presets">
+                <span class="speed-presets-label">快速预设:</span>
+                <button class="speed-preset-btn action-btn secondary" data-speed="1">1x</button>
+                <button class="speed-preset-btn action-btn secondary" data-speed="2">2x</button>
+                <button class="speed-preset-btn action-btn secondary" data-speed="3">3x</button>
+                <button class="speed-preset-btn action-btn secondary" data-speed="5">5x</button>
+            </div>
+            <div style="margin-top: 1rem;">
+                <button id="speed-btn-toggle" class="primary-btn">
+                    <i class="fas fa-syringe"></i> 注入
+                </button>
+            </div>
+        </div>
+
+        <div id="speed-launcher-section" class="setting-card" style="display:none;">
+            <h3 class="setting-title">
+                <i class="fas fa-rocket"></i> Launcher 设置
+            </h3>
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="launcher-work-speed">
+                    <span class="checkmark"></span>
+                    在 Launcher 模式下启用游戏加速
+                </label>
+                <small class="form-hint">开启后，通过 Launcher 启动游戏将自动注册全局热键</small>
+            </div>
+            <div class="form-group">
+                <label for="launcher-speed-factor">热键加速倍率</label>
+                <div class="speed-input-group">
+                    <input type="number" id="launcher-speed-factor" value="2.0" min="0.1" max="10.0" step="0.1">
+                    <span class="speed-label">x</span>
+                </div>
+                <small class="form-hint">Ctrl+S 热键切换时的目标倍率（默认 2.0x）</small>
+            </div>
+            <div class="speed-hotkey-info">
+                <p><strong>Launcher 热键:</strong></p>
+                <ul>
+                    <li><kbd>Ctrl+S</kbd> — 切换加速开关（1x ↔ 设定倍率）</li>
+                    <li><kbd>Ctrl+Shift+S</kbd> — 打开倍率选择窗口</li>
+                </ul>
+                <p class="form-hint">热键仅在 Launcher 模式下生效，WebUI 页面不注册热键。</p>
+            </div>
+        </div>
+    </div>
+</div>

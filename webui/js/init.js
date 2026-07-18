@@ -6,7 +6,6 @@
 document.addEventListener('DOMContentLoaded', function() {
     init();
     setupGlobalErrorHandling();
-    loadAndRenderMarkdown();
 });
 
 // 与后端通信的初始化
@@ -140,9 +139,11 @@ window.addEventListener('pywebviewready', function() {
                     (result) => {
                         if (result.show && !first_use) {
                             const bodyHtml = simpleMarkdownToHtml(result.message);
-                            const targetDiv = document.querySelector(`.${className}`);
+                            const targetDiv = document.querySelector('.welcome-content');
 
-                            targetDiv.innerHTML = bodyHtml;
+                            if (targetDiv) {
+                                targetDiv.innerHTML = bodyHtml;
+                            }
                             goAndShow('welcome');
                         }
                 });

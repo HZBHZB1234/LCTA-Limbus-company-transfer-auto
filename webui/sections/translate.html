@@ -1,0 +1,247 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-language"></i>
+        翻译工具
+    </h2>
+    <p class="section-subtitle">使用多种翻译服务自动翻译游戏文本</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">翻译选项</h3>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-proper" onchange="toggleProper()">
+                <span class="checkmark"></span>
+                启用专有名词 (LLM翻译专用)
+            </label>
+        </div>
+
+        <div id="proper-settings">
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="auto-fetch-proper" onchange="toggleAutoProper()">
+                    <span class="checkmark"></span>
+                    在进行翻译时自动抓取专有词汇 (无法使用自定义设置)
+                </label>
+            </div>
+            
+            <div class="form-group" id="proper-path-text">
+                <label for="proper-path-text">专有名词json路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="proper-path" placeholder="选择专有名词json文件">
+                    <button class="action-btn secondary" 
+                    onclick="pywebview.api.browse_file('proper-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-role" onchange="toggleProper()">
+                <span class="checkmark"></span>
+                启用人物角色标识 (LLM翻译专用)
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-skill" onchange="toggleProper()">
+                <span class="checkmark"></span>
+                启用状态效果标识 (LLM翻译专用)
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-dev-settings" onchange="toggleDevelopSettings()">
+                <span class="checkmark"></span>
+                启用高级选项
+            </label>
+        </div>
+
+        <div id="dev-settings" style="display: none;">
+            <div class="form-group" id="kr-path-text">
+                <label for="kr-path-text">韩文文本路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="kr-path" placeholder="选择韩文文本文件夹">
+                    <button class="action-btn secondary" 
+                    onclick="pywebview.api.browse_folder('kr-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group" id="jp-path-text">
+                <label for="jp-path-text">日文文本路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="jp-path" placeholder="选择日文文本文件夹">
+                    <button class="action-btn secondary"
+                     onclick="pywebview.api.browse_folder('jp-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group" id="en-path-text">
+                <label for="en-path-text">英文文本路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="en-path" placeholder="选择英文文本文件夹">
+                    <button class="action-btn secondary"
+                     onclick="pywebview.api.browse_folder('en-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group" id="llc-path-text">
+                <label for="llc-path-text">中文文本路径</label>
+                <div class="file-input-group">
+                    <input type="text" id="llc-path" placeholder="选择中文文本文件夹">
+                    <button class="action-btn secondary"
+                     onclick="pywebview.api.browse_folder('llc-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="has-prefix" checked>
+                    <span class="checkmark"></span>
+                    文件名存在前缀
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="dump-translation">
+                <span class="checkmark"></span>
+                转储过程内容以供分析
+            </label>
+        </div>
+    </div>
+    
+    <div class="setting-card">
+        <h3 class="setting-title">翻译服务配置</h3>
+        <div class="form-group">
+            <label for="translation-service">翻译服务:</label>
+            <div class="translator-services">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="fallback" checked>
+                <span class="checkmark"></span>
+                失败时进行相反重试 (LLM翻译专用)
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label for="prompt-format">请求 / 响应格式:</label>
+            <div class="select-wrapper">
+                <select id="prompt-format">
+                    <option value="xml_json">XML 请求 → JSON 响应（推荐）</option>
+                    <option value="json_json">JSON 请求 → JSON 响应</option>
+                    <option value="xml_xml">XML 请求 → XML 响应</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="from-lang">使用源语言 (除LLM翻译外使用):</label>
+            <div class="select-wrapper">
+                <select id="from-lang">
+                    <option value="EN">英文</option>
+                    <option value="JP">日文</option>
+                    <option value="KR">韩文</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">高级管线配置</h3>
+
+        <div class="form-group">
+            <label for="max-workers">并发线程数:</label>
+            <div class="input-with-icon">
+                <i class="fas fa-hashtag"></i>
+                <input type="number" id="max-workers" placeholder="4" min="1" max="16">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-concurrent" checked>
+                <span class="checkmark"></span>
+                启用并发处理
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label for="translation-mode">翻译模式:</label>
+            <div class="select-wrapper">
+                <select id="translation-mode">
+                    <option value="multi_stage">多阶段翻译</option>
+                    <option value="single_stage">单阶段翻译</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-self-check">
+                <span class="checkmark"></span>
+                启用翻译自检
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-thinking">
+                <span class="checkmark"></span>
+                启用LLM思考模式
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label for="disambiguation-mode">消歧模式:</label>
+            <div class="select-wrapper">
+                <select id="disambiguation-mode">
+                    <option value="hybrid">混合模式（推荐）</option>
+                    <option value="similarity">相似度匹配</option>
+                    <option value="llm">LLM消歧</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="min-confidence">最低匹配置信度:</label>
+            <div class="select-wrapper">
+                <select id="min-confidence">
+                    <option value="medium">中（推荐）</option>
+                    <option value="high">高</option>
+                    <option value="low">低</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="action-area">
+    <button class="primary-btn" onclick="startTranslation()">
+        <i class="fas fa-play"></i>
+        开始翻译
+    </button>
+</div>

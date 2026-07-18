@@ -1,0 +1,224 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-rocket"></i>
+        Launcher配置
+    </h2>
+    <p class="section-subtitle">配置游戏启动器相关选项</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">零协汉化配置</h3>
+        <div class="form-group">
+            <label for="launcher-zero-zip-type">压缩格式:</label>
+            <div class="select-wrapper">
+                <select id="launcher-zero-zip-type">
+                    <option value="zip">ZIP格式</option>
+                    <option value="seven">7Z格式</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="launcher-zero-download-source">文本下载来源:</label>
+            <div class="select-wrapper">
+                <select id="launcher-zero-download-source">
+                    <option value="github">从github下载</option>
+                    <option value="mirror">从公益镜像下载 beta</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-zero-use-proxy" checked>
+                <span class="checkmark"></span>
+                使用代理加速下载
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-zero-use-cache" checked>
+                <span class="checkmark"></span>
+                使用本地字体缓存
+            </label>
+            <small class="form-hint">使用本地已有的字体文件，加快下载速度</small>
+        </div>
+    </div>
+    
+    <div class="setting-card">
+        <h3 class="setting-title">OurPlay配置</h3>
+        <div class="form-group">
+            <label for="launcher-ourplay-source">API源:</label>
+            <div class="select-wrapper">
+                <select id="launcher-ourplay-source" onchange="onLauncherOurplaySourceChange()">
+                    <option value="pc">PC API</option>
+                    <option value="android">Android API (支持神人汉化)</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="launcher-ourplay-font-option">字体处理选项:</label>
+            <div class="select-wrapper">
+                <select id="launcher-ourplay-font-option">
+                    <option value="keep">保留原字体</option>
+                    <option value="simplify">精简字体</option>
+                    <option value="llc">使用本地字体缓存</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+
+        <div class="form-group" id="launcher-ourplay-use-api-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-ourplay-use-api" checked>
+                <span class="checkmark"></span>
+                使用API获取版本信息
+            </label>
+        </div>
+
+        <div id="launcher-ourplay-android-options" style="display:none;">
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="launcher-ourplay-official" checked>
+                    <span class="checkmark"></span>
+                    下载正经版本汉化（关闭则下载神人汉化）
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="launcher-ourplay-refer-package">基板包路径（可选）:</label>
+                <div class="file-input-group">
+                    <input type="text" id="launcher-ourplay-refer-package" placeholder="留空则自动检测（需已安装足够新版的零协会汉化包）">
+                    <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_folder('launcher-ourplay-refer-package')">
+                        <i class="fas fa-folder-open"></i> 浏览文件夹
+                    </button>
+                    <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_file('launcher-ourplay-refer-package')">
+                        <i class="fas fa-file"></i> 浏览zip
+                    </button>
+                </div>
+                <small class="form-hint">基板包用于将手机版汉化包格式转化为通用格式。留空则自动从游戏安装目录检测。</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">LCTA-AU汉化配置</h3>
+
+        <div class="form-group">
+            <label for="launcher-machine-download-source">文本下载来源:</label>
+            <div class="select-wrapper">
+                <select id="launcher-machine-download-source">
+                    <option value="github">从github下载</option>
+                    <option value="mirror">从公益镜像下载 beta</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-machine-use-proxy" checked>
+                <span class="checkmark"></span>
+                使用代理加速下载
+            </label>
+        </div>
+        
+    </div>
+    
+    <div class="setting-card">
+        <h3 class="setting-title">工作模式配置</h3>
+        <div class="form-group">
+            <label for="launcher-work-update">更新模式:</label>
+            <div class="select-wrapper">
+                <select id="launcher-work-update">
+                    <option value="no">不自动更新</option>
+                    <option value="llc">仅零协更新</option>
+                    <option value="ourplay">仅ourplay更新</option>
+                    <option value="LCTA-AU">仅LCTA-AU更新</option>
+                    <option value="LO">更新llc+ourplay</option>
+                    <option value="LM-G">更新llc+LCTA-AU (github)</option>
+                    <option value="LM-A">更新llc+LCTA-AU (API Beta)</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-mod" checked>
+                <span class="checkmark"></span>
+                启用MOD支持
+            </label>
+            <small class="form-hint">启用后将加载MOD并启动游戏</small>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-fancy" checked>
+                <span class="checkmark"></span>
+                启用文本美化
+            </label>
+            <small class="form-hint">更新汉化包后将自动进行文本美化</small>
+            <small class="form-hint">相关设置请在文本美化页面配置</small>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-bubble" checked>
+                <span class="checkmark"></span>
+                启用气泡文本
+            </label>
+            <small class="form-hint">启用后将自动更新气泡文本模组</small>
+            <small class="form-hint">相关设置请在安装汉化包页面配置</small>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-cdn-optimize">
+                <span class="checkmark"></span>
+                启动时自动进行CDN优选
+            </label>
+            <small class="form-hint">启动游戏前自动测试并选择最快的CDN节点</small>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-cdn-auto-apply" checked>
+                <span class="checkmark"></span>
+                自动写入hosts
+            </label>
+            <small class="form-hint">CDN优选后自动将最优IP写入hosts文件（需要管理员权限）</small>
+        </div>
+
+        <div class="form-group">
+            <label for="launcher-work-cdn-cache-ttl">CDN缓存有效期</label>
+            <div class="speed-input-group">
+                <input type="number" id="launcher-work-cdn-cache-ttl" value="24" min="0" max="720" step="0.5">
+                <span class="speed-label">小时</span>
+            </div>
+            <small class="form-hint">CDN优选结果的有效时间。设为0则每次启动都重新测试，推荐24-72小时</small>
+        </div>
+
+        <div class="form-group" id="steam-command">
+            <label for="steam-command">steam命令</label>
+            <div class="steam-command-group" style="display: flex; align-items: center; gap: 8px;">
+                <input type="text" id="steam-cmd" placeholder="复制steam命令" readonly 
+                    style="flex: 1; min-width: 0;">
+                <button class="action-btn secondary" onclick="copySteamPath()">
+                    <i class="fas fa-folder-open"></i> 复制
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="action-area">
+    <button class="primary-btn" onclick="saveSettings()">
+        <i class="fas fa-save"></i>
+        保存配置
+    </button>
+</div>

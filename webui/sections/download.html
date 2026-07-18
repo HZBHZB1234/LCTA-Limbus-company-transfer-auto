@@ -1,0 +1,204 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fab fa-google-play"></i>
+        从各个平台下载汉化
+    </h2>
+    <p class="section-subtitle">下载各个来源的汉化包</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">ourplay下载配置</h3>
+        <div class="form-group">
+            <label for="ourplay-source">API源:</label>
+            <div class="select-wrapper">
+                <select id="ourplay-source" onchange="onOurplaySourceChange()">
+                    <option value="pc">PC API</option>
+                    <option value="android">Android API (支持神人汉化)</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="ourplay-font-option">字体处理选项:</label>
+            <div class="select-wrapper">
+                <select id="ourplay-font-option">
+                    <option value="keep">保留原字体</option>
+                    <option value="simplify">精简字体</option>
+                    <option value="llc">使用本地字体缓存</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="ourplay-check-hash" checked>
+                <span class="checkmark"></span>
+                启用哈希校验
+            </label>
+            <small class="form-hint">确保下载文件的完整性</small>
+        </div>
+        
+        <div class="form-group" id="ourplay-use-api-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="ourplay-use-api">
+                <span class="checkmark"></span>
+                使用API获取链接
+            </label>
+        </div>
+
+        <div id="ourplay-android-options" style="display:none;">
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="ourplay-official" checked>
+                    <span class="checkmark"></span>
+                    下载正经版本汉化（关闭则下载神人汉化）
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="ourplay-refer-package">基板包路径（可选）:</label>
+                <div class="file-input-group">
+                    <input type="text" id="ourplay-refer-package" placeholder="留空则自动检测（需已安装足够新版的零协会汉化包）">
+                    <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_folder('ourplay-refer-package')">
+                        <i class="fas fa-folder-open"></i> 浏览文件夹
+                    </button>
+                    <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_file('ourplay-refer-package')">
+                        <i class="fas fa-file"></i> 浏览zip
+                    </button>
+                </div>
+                <small class="form-hint">基板包用于将手机版汉化包格式转化为通用格式。留空则自动从游戏安装目录检测。</small>
+            </div>
+        </div>
+
+        <div class="action-area">
+            <button class="primary-btn" onclick="downloadOurplay()">
+                <i class="fas fa-download"></i>
+                下载OurPlay汉化包
+            </button>
+        </div>
+    </div>
+    
+    <div class="setting-card">
+        <h3 class="setting-title">零协会下载配置</h3>
+        <div class="form-group">
+            <label for="llc-zip-type">压缩格式:</label>
+            <div class="select-wrapper">
+                <select id="llc-zip-type">
+                    <option value="zip">ZIP格式</option>
+                    <option value="seven">7Z格式</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="llc-download-source">文本下载来源:</label>
+            <div class="select-wrapper">
+                <select id="llc-download-source">
+                    <option value="github">从github下载</option>
+                    <option value="mirror">从公益镜像下载 beta</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="llc-use-proxy" checked>
+                <span class="checkmark"></span>
+                使用代理加速下载
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="llc-use-cache">
+                <span class="checkmark"></span>
+                使用本地字体缓存
+            </label>
+            <small class="form-hint">使用本地已有的字体文件，加快下载速度</small>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="llc-dump-default">
+                <span class="checkmark"></span>
+                保存原始文件而不打包
+            </label>
+            <small class="form-hint">保存解压后的原始文件而非打包格式</small>
+        </div>
+        
+        <div class="action-area">
+            <button class="primary-btn" onclick="downloadLLC()">
+                <i class="fas fa-download"></i>
+                下载零协汉化包
+            </button>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">LCTA-AU下载配置</h3>
+        
+        <div class="form-group">
+            <label for="machine-download-source">文本下载来源:</label>
+            <div class="select-wrapper">
+                <select id="machine-download-source">
+                    <option value="github">从github下载</option>
+                    <option value="mirror">从公益镜像下载 beta</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="machine-use-proxy" checked>
+                <span class="checkmark"></span>
+                使用代理加速下载
+            </label>
+        </div>
+        
+        <div class="action-area">
+            <button class="primary-btn" onclick="downloadMachine()">
+                <i class="fas fa-download"></i>
+                下载LCTA-AU汉化包
+            </button>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">气泡文本下载配置</h3>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="bubble-color">
+                <span class="checkmark"></span>
+                下载有颜色的气泡文本
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="bubble-llc">
+                <span class="checkmark"></span>
+                下载随机加载文本
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="bubble-install" checked>
+                <span class="checkmark"></span>
+                立即安装
+            </label>
+        </div>
+
+        <div class="action-area">
+            <button class="primary-btn" onclick="downloadBubble()">
+                <i class="fas fa-download"></i>
+                下载(安装)气泡文本
+            </button>
+        </div>
+    </div>
+</div>

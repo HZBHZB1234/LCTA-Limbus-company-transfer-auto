@@ -1,0 +1,107 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-bolt"></i>
+        CDN优选
+    </h2>
+    <p class="section-subtitle">测试并选择当前网络环境下最快的游戏CDN节点</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <i class="fas fa-cloud"></i>
+            Cloudflare 下载CDN
+        </h3>
+        <p class="setting-desc">
+            对游戏下载CDN进行测速优选
+        </p>
+
+        <div class="cdn-status-section">
+            <div class="cdn-section-label">
+                <i class="fas fa-link"></i> 当前生效 IP
+            </div>
+            <div id="cdn-cf-status" class="cdn-status-badge">
+                <span id="cdn-cf-current-ip" class="cdn-ip-value">检测中...</span>
+            </div>
+        </div>
+
+        <div id="cdn-cf-result" class="cdn-result-section" style="display:none;">
+            <div class="cdn-section-label">
+                <i class="fas fa-chart-line"></i> 最近测速结果
+            </div>
+            <div class="cdn-result-card"></div>
+        </div>
+
+        <div id="cdn-cf-reminder" class="cdn-write-reminder" style="display:none;">
+            <i class="fas fa-exclamation-triangle"></i>
+            测速结果尚未写入 hosts
+        </div>
+
+        <div class="action-grid" style="margin-top: 12px;">
+            <button class="action-btn" onclick="cdnManager.runCloudflare()">
+                <i class="fas fa-play"></i> Cloudflare优选
+            </button>
+            <button class="action-btn cdn-remove" onclick="cdnManager.removeCloudflare()" id="cdn-cf-remove-btn" style="display:none;">
+                <i class="fas fa-trash"></i> 移除当前CDN优选
+            </button>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <i class="fas fa-server"></i>
+            CloudFront API优选
+        </h3>
+        <p class="setting-desc">
+            对游戏API服务器进行测速优选
+        </p>
+
+        <div class="cdn-status-section">
+            <div class="cdn-section-label">
+                <i class="fas fa-link"></i> 当前生效 IP
+            </div>
+            <div id="cdn-cfa-status" class="cdn-status-badge">
+            </div>
+        </div>
+
+        <div id="cdn-cfa-result" class="cdn-result-section" style="display:none;">
+            <div class="cdn-section-label">
+                <i class="fas fa-chart-line"></i> 最近测速结果
+            </div>
+            <div class="cdn-result-card"></div>
+        </div>
+
+        <div id="cdn-cfa-reminder" class="cdn-write-reminder" style="display:none;">
+            <i class="fas fa-exclamation-triangle"></i>
+            测速结果尚未写入 hosts
+        </div>
+
+        <div class="action-grid" style="margin-top: 12px;">
+            <button class="action-btn" onclick="cdnManager.runCloudFront()">
+                <i class="fas fa-play"></i> CloudFront优选
+            </button>
+            <button class="action-btn cdn-remove" onclick="cdnManager.removeCloudFront()" id="cdn-cfa-remove-btn" style="display:none;">
+                <i class="fas fa-trash"></i> 移除当前CDN优选
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="setting-card">
+    <h3 class="setting-title">
+        <i class="fas fa-rocket"></i>
+        操作
+    </h3>
+    <div class="action-grid">
+        <button class="primary-btn" onclick="cdnManager.runFullOptimization()">
+            <i class="fas fa-bolt"></i> 一键全优选
+        </button>
+        <button class="action-btn" onclick="cdnManager.writeToHosts()" id="cdn-write-btn" disabled>
+            <i class="fas fa-save"></i> 写入Hosts
+        </button>
+    </div>
+    <p class="form-hint" style="margin-top: 10px;">
+        <i class="fas fa-info-circle"></i>
+        写入hosts需要管理员权限。仅修改CDN优选管理的标记块，不影响其他hosts条目。
+    </p>
+</div>

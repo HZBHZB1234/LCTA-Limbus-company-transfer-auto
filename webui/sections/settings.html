@@ -1,0 +1,181 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-sliders-h"></i>
+        设置
+    </h2>
+    <p class="section-subtitle">程序配置与选项</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">程序设置</h3>
+        <div class="form-group">
+            <label for="game-path">游戏路径:</label>
+            <div class="file-input-group">
+                <input type="text" id="game-path" placeholder="选择游戏安装路径">
+                <button class="action-btn secondary" onclick="browseFolder('game-path')">
+                    <i class="fas fa-folder-open"></i> 浏览
+                </button>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="debug-mode">
+                <span class="checkmark"></span>
+                启用调试模式
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <button class="action-btn secondary" onclick="manualUpdateFromLocalZip()">
+                <i class="fas fa-file-archive"></i> 从本地更新包手动更新
+            </button>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="auto-check-update" checked>
+                <span class="checkmark"></span>
+                启动时自动检查更新
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="delete-updating">
+                <span class="checkmark"></span>
+                更新时删除废弃的包
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="update-use-proxy" checked>
+                <span class="checkmark"></span>
+                更新通过镜像加速
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="update-only-stable" checked>
+                <span class="checkmark"></span>
+                仅更新稳定版本
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="api-crypto" checked>
+                <span class="checkmark"></span>
+                加密api配置
+            </label>
+            <small class="form-hint">修改后请在api配置界面进行保存后关闭</small>
+        </div>
+
+        <div class="form-group">
+            <label for="github-max-workers">Github代理重试线程数:</label>
+            <div class="input-with-icon">
+                <i class="fas fa-hashtag"></i>
+                <input type="number" id="github-max-workers" placeholder="例如：100">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="github-timeout">Githut代理超时秒数:</label>
+            <div class="input-with-icon">
+                <i class="fas fa-hashtag"></i>
+                <input type="number" id="github-timeout" placeholder="例如：100">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-cache" onchange="toggleCachePathInput()">
+                <span class="checkmark"></span>
+                启用资源缓存
+            </label>
+            
+            <div id="cache-path-group" class="sub-form-group" style="display: none; margin-top: 10px;">
+                <label for="cache-path">缓存路径:</label>
+                <div class="file-input-group">
+                    <input type="text" id="cache-path" placeholder="tmp" value="tmp">
+                    <button class="action-btn secondary" onclick="pywebview.api.browse_folder('cache-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="enable-storage" onchange="toggleStoragePathInput()">
+                <span class="checkmark"></span>
+                启用数据持久化
+            </label>
+            
+            <div id="storage-path-group" class="sub-form-group" style="display: none; margin-top: 10px;">
+                <label for="storage-path">缓存路径:</label>
+                <div class="file-input-group">
+                    <input type="text" id="storage-path" placeholder="tmp" value="tmp">
+                    <button class="action-btn secondary" onclick="pywebview.api.browse_folder('storage-path')">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="action-area">
+            <button class="primary-btn" onclick="saveSettings()">
+                <i class="fas fa-save"></i>
+                保存设置
+            </button>
+        </div>
+    </div>
+    
+    <div class="setting-card">
+        <h3 class="setting-title">配置操作</h3>
+        <div class="action-grid">
+            <button class="action-btn" onclick="useDefaultConfig()">
+                <i class="fas fa-file-alt"></i>
+                使用默认配置
+            </button>
+        </div>
+
+        <div class="action-grid">
+            <button class="action-btn danger" onclick="resetConfig()">
+                <i class="fas fa-redo"></i>
+                重置配置
+            </button>
+        </div>
+        
+        <div class="action-grid">
+            <button class="action-btn" onclick="manualCheckUpdates()">
+                <i class="fas fa-sync-alt"></i>
+                检查更新
+            </button>
+        </div>
+
+        <div class="action-grid">
+            <button class="action-btn" onclick="doUpdate()">
+                <i class="fas fa-sync-alt"></i>
+                强制进行更新
+            </button>
+        </div>
+        
+        <div class="action-grid">
+            <button class="action-btn" onclick="goTestSection(true)">
+                <i class="fas fa-sync-alt"></i>
+                进入调试页面
+            </button>
+        </div>
+
+        <div class="action-grid">
+            <button class="action-btn" onclick="goCleanSection(true)">
+                <i class="fas fa-sync-alt"></i>
+                进入已废弃的缓存清理页面
+            </button>
+        </div>
+    </div>
+</div>

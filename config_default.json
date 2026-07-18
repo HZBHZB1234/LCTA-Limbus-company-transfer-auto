@@ -125,7 +125,8 @@
             "cdn_auto_apply": true,
             "cdn_cache_ttl": "24.0",
             "speed": false,
-            "speed_factor": "2.0"
+            "speed_factor": "2.0",
+            "gui_mode": false
         },
         "last_install": {
             "llc": "0",

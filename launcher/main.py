@@ -50,19 +50,57 @@ def main_pre() -> str:
     return steam_argv
 
 def main():
+    ConfigManager()
+
+    gui_mode = ConfigManager().get("launcher.work.gui_mode", False)
+    progress = None
+    log_handler = None
+
+    if gui_mode:
+        try:
+            from launcher.gui_progress import create_progress_window, ProgressLogHandler
+            _log_manager.log("正在启动GUI进度窗口...")
+            progress = create_progress_window()
+            log_handler = ProgressLogHandler(progress)
+            _log_manager._logger.addHandler(log_handler)
+        except Exception as e:
+            _log_manager.log(f"无法创建GUI进度窗口，回退到控制台模式: {e}")
+
     steam_argv = ''
     try:
+        if progress:
+            progress.update_status("正在准备启动...")
         steam_argv = main_pre()
     except Exception as e:
         _log_manager.log_error(e)
+
     try:
+        if progress and progress.is_alive():
+            progress.set_progress_marquee()
+            progress.update_status("正在启动游戏...")
         if ConfigManager().get("launcher.work.mod", False):
             main_after_mod(steam_argv)
         else:
             main_after_game(steam_argv)
     except Exception as e:
         _log_manager.log_error(e)
+
     _log_manager.log('正常退出')
+
+    if progress and log_handler:
+        try:
+            _log_manager._logger.removeHandler(log_handler)
+        except Exception:
+            pass
+
+    if progress and progress.is_alive():
+        try:
+            progress.update_status("启动完成")
+            import time
+            time.sleep(1.0)
+            progress.close()
+        except Exception:
+            pass
 
 if __name__ == '__main__':
     main()

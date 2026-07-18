@@ -303,7 +303,10 @@ class ConfigManager {
 
             // 游戏加速
             'launcher-work-speed': 'launcher.work.speed',
-            'launcher-speed-factor': 'launcher.work.speed_factor'
+            'launcher-speed-factor': 'launcher.work.speed_factor',
+
+            // GUI进度窗口
+            'launcher-work-gui-mode': 'launcher.work.gui_mode'
         };
         
         this.configCache = {}; // 配置缓存

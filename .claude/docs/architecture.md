@@ -61,7 +61,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `webFunc/` | Infrastructure: GitHub downloads, file transfer, Lanzou parsing, web notes |
 | `translateFunc/` | Translation engine: multi-stage LLM pipeline with proper noun matching |
 | `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py` |
-| `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey |
+| `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey, optional WinForms GUI progress window |
 
 ## Design Patterns
 

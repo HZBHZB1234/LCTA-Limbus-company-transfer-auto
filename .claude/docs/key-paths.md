@@ -74,7 +74,10 @@ Files: `webui/js/cdn.js`, `webui/app.py`, `webutils/function_cdn.py`, `launcher/
 
 ```
 Launcher mode: start_webui.py -launcher
-  → launcher/main.py               main_pre() → main_after_mod() → main_after_game()
+  → launcher/main.py               ConfigManager() → check gui_mode → main_pre() → main_after_mod() → main_after_game()
+    Phase 0 (gui_mode check, if enabled):
+      → launcher/gui_progress.py    create_progress_window() — WinForms STA thread
+        → ProgressLogHandler         intercept LogManager._logger for real-time log display
     Phase 1 (main_pre):
       → launcher/updates.py         check translation pack updates
       → launcher/cdn.py             optimize CDN if configured
@@ -87,7 +90,7 @@ Launcher mode: start_webui.py -launcher
       → launcher/sound.py           apply sound mods
 ```
 
-Files: `start_webui.py`, `launcher/main.py`, `launcher/updates.py`, `launcher/cdn.py`, `launcher/game_launch.py`, `launcher/patch.py`, `launcher/modfolder.py`, `launcher/speed_hotkey.py`, `launcher/sound.py`, `launcher/changes.py`
+Files: `start_webui.py`, `launcher/main.py`, `launcher/gui_progress.py`, `launcher/updates.py`, `launcher/cdn.py`, `launcher/game_launch.py`, `launcher/patch.py`, `launcher/modfolder.py`, `launcher/speed_hotkey.py`, `launcher/sound.py`, `launcher/changes.py`
 
 ## 6. Game Speed Modification
 

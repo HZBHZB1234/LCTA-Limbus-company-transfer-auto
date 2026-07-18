@@ -11,7 +11,7 @@
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 12+ |
 | `globalManagers/` | Cross-cutting singletons | 2 |
-| `launcher/` | Standalone game launcher (GPL-3.0) | 10 |
+| `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
 | `tests/` | Pytest test suite | ~6 |
 
@@ -138,6 +138,7 @@ Standalone library with own `__init__.py` public API.
 | `changes.py` | Text data patch application |
 | `compress.py` | Compression utilities |
 | `speed_hotkey.py` | Game speed hotkey (Ctrl+Shift+S) with comprehensive lifecycle logging, foreground process check, .NET STA threading for UI |
+| `gui_progress.py` | WinForms progress window for GUI launcher mode: status label, progress bar, scrollable log area; thread-safe UI updates via BeginInvoke; custom logging.Handler for log interception |
 
 ## Import Dependency Graph
 
@@ -149,6 +150,7 @@ webui/app.py
   → globalManagers/ (ConfigManager, LogManager)
 
 launcher/main.py
+  → launcher/gui_progress.py (if gui_mode enabled: WinForms progress window)
   → launcher/updates.py (standalone, no import from webutils/)
   → launcher/game_launch.py
   → launcher/cdn.py

@@ -104,15 +104,16 @@ class FancyManager {
 
     updateEditorUI() {
         if (!this.selectedRuleset) {
-            // 清空并禁用
-            document.getElementById('fancy-ruleset-name').value = '';
-            document.getElementById('fancy-ruleset-name').disabled = true;
-            document.getElementById('fancy-ruleset-desc').value = '';
-            document.getElementById('fancy-ruleset-desc').disabled = true;
-            document.getElementById('fancy-ruleset-rules').value = '';
-            document.getElementById('fancy-ruleset-rules').disabled = true;
-            document.getElementById('fancy-ruleset-builtin').checked = false;
-            document.getElementById('fancy-save-current-btn').disabled = true;
+            const nameEl = document.getElementById('fancy-ruleset-name');
+            if (!nameEl) return;
+            nameEl.value = '';
+            nameEl.disabled = true;
+            const descEl = document.getElementById('fancy-ruleset-desc');
+            if (descEl) { descEl.value = ''; descEl.disabled = true; }
+            const rulesEl = document.getElementById('fancy-ruleset-rules');
+            if (rulesEl) { rulesEl.value = ''; rulesEl.disabled = true; }
+            const saveBtn = document.getElementById('fancy-save-current-btn');
+            if (saveBtn) saveBtn.disabled = true;
             return;
         }
 
@@ -928,9 +929,9 @@ async function init() {
     // 初始化拖拽文件管理器
     dragDropManager = new DragDropManager();
     setupDragDropCallback();
-    
-    // 加载 Markdown 内容（依赖页面结构）
-    loadAndRenderMarkdown();
+
+    // 预加载关于页面的 README 内容
+    loadMarkdownContent('/assets/README.md', 'about-content');
 
     // 初始化列表管理器（依赖 DOM 结构）
     initListManagers();

@@ -42,88 +42,50 @@ window.addEventListener('pywebviewready', function() {
     
     removeConnectionMask();
     
-    pywebview.api.get_attr('message_config')
-        .then(function(message_config) {
-            if (message_config && Array.isArray(message_config) && message_config.length === 2) {
-            showMessage(message_config[0], message_config[1]);
+    pywebview.api.get_startup_data()
+        .then(function(data) {
+            if (data.message_config && Array.isArray(data.message_config) && data.message_config.length === 2) {
+                showMessage(data.message_config[0], data.message_config[1]);
             }
-        });
 
-    pywebview.api.get_attr('first_use').then(
-        async function(result) {
-            first_use = result
-            if (result) {
-                await loadMarkdownContent('assets/firstUse.md', 'welcome-content');
+            first_use = data.first_use;
+            if (data.first_use) {
+                loadMarkdownContent('assets/firstUse.md', 'welcome-content');
                 goAndShow('welcome');
             } else {
-                // 非首次使用则刷新仪表盘
                 refreshDashboard();
             }
-        }
-    );
 
-    pywebview.api.run_func('change_icon').catch(
-        function(error) {
-            console.log(error)
-        }
-    );
+            if (data.config_ok === false) {
+                let errorMessage = "配置项格式错误，尝试修复?\n失败将会使用默认配置";
+                if (data.config_error && Array.isArray(data.config_error) && data.config_error.length > 0) {
+                    errorMessage += "\n\n详细错误信息:\n" + data.config_error.join("\n");
+                }
+                addLogMessage(errorMessage);
 
-    pywebview.api.init_cache().catch(
-        function(error) {
-            console.log(error)
-        }
-    );
-
-    pywebview.api.set_attr('http_port', window.location.port);
-    
-    pywebview.api.get_attr('config_ok')
-        .then(function(config_ok) {
-            if (config_ok === false) {
-                pywebview.api.get_attr('config_error')
-                    .then(function(config_error) {
-                        let errorMessage = "配置项格式错误，尝试修复?\n失败将会使用默认配置";
-                        if (config_error && Array.isArray(config_error) && config_error.length > 0) {
-                            errorMessage += "\n\n详细错误信息:\n" + config_error.join("\n");
-                        }
-
-                        addLogMessage(errorMessage);
-
-                        {
-                            pywebview.api.get_attr("config")
-                                .then(function(config) {
-                                    return pywebview.api.run_func('fix_config', config);
-                                })
-                                .then(function() {
-                                    return pywebview.api.use_inner();
-                                })
-                                .catch(function(error) {
-                                    showMessage("错误", "修复配置时出错，使用默认配置: " + error);
-                                    pywebview.api.use_default()
-                                    .then(function() {
-                                    })
-                                    .catch(function(error) {
-                                        showMessage("错误", "使用默认配置时出错: " + error);
-                                    });
-                                });
-                        }
-                    })
+                {
+                    pywebview.api.run_func('fix_config', data.config)
+                        .then(function() {
+                            return pywebview.api.use_inner();
+                        })
+                        .catch(function(error) {
+                            showMessage("错误", "修复配置时出错，使用默认配置: " + error);
+                            pywebview.api.use_default()
+                            .then(function() {
+                            })
+                            .catch(function(error) {
+                                showMessage("错误", "使用默认配置时出错: " + error);
+                            });
+                        });
+                }
             }
-            })
-            .catch(function(error) {
-                addLogMessage('检查配置时出错: ' + error, 'error');
-            });
-    
-    pywebview.api.get_attr('config')
-        .then(function(config) {
-            console.log('配置已加载到前端:', config);
-            window.config = config;
+
+            console.log('配置已加载到前端:', data.config);
+            window.config = data.config;
             
-            // 初始化配置管理器的缓存
             if (configManager) {
-                // 将后端配置数据填充到缓存
-                setConfigToCache(config);
+                setConfigToCache(data.config);
                 
-                // 应用配置到UI
                 configManager.applyConfigToUI().then(function() {
                     toggleCachePathInput();
                     toggleStoragePathInput();
@@ -178,7 +140,6 @@ window.addEventListener('pywebviewready', function() {
                     if (!current_select_api) {
                         current_select_api = Object.keys(apiConfigManager.apiServices)[0];
                     }
-                    // 获取选择框元素
                     const selectBox = document.querySelector('.api-service-select');
 
                     if (selectBox) {
@@ -198,7 +159,6 @@ window.addEventListener('pywebviewready', function() {
                     if (!current_select_translator) {
                         current_select_translator = Object.keys(apiConfigManager.apiServices)[0];
                     }
-                    // 获取选择框元素
                     const selectBoxtranslator = document.querySelector('.translator-service-select');
 
                     if (selectBoxtranslator) {
@@ -214,4 +174,18 @@ window.addEventListener('pywebviewready', function() {
                 }
             });
         });
+
+    pywebview.api.run_func('change_icon').catch(
+        function(error) {
+            console.log(error)
+        }
+    );
+
+    pywebview.api.init_cache().catch(
+        function(error) {
+            console.log(error)
+        }
+    );
+
+    pywebview.api.set_attr('http_port', window.location.port);
 });

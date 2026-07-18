@@ -192,6 +192,17 @@ class LCTA_API():
     def set_window(self, window):
         self._window = window
 
+    def get_startup_data(self):
+        """一次性返回启动所需的所有数据，减少多次 pywebview.api 桥接往返"""
+        config = ConfigManager().raw
+        return {
+            'message_config': self.message_config,
+            'first_use': self.first_use,
+            'config_ok': self.config_ok,
+            'config_error': self.config_error if not self.config_ok else [],
+            'config': config,
+        }
+
     def get_attr(self, attr_name):
         if hasattr(self, attr_name):
             return getattr(self, attr_name)

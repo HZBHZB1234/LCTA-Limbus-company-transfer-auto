@@ -2,27 +2,24 @@
 // 模态窗口系统与 UI 工具函数
 // ============================
 
+const _loadedMarkdowns = {};
+
 async function loadMarkdownContent(url, className) {
     try {
-        // 请求Markdown文件
         const response = await fetch(url);
         
         if (!response.ok) {
             throw new Error(`加载 ${url} 失败: ${response.status} ${response.statusText}`);
         }
         
-        // 获取文本内容
         const markdownText = await response.text();
         
-        // 检查simpleMarkdownToHtml函数是否存在
         if (typeof simpleMarkdownToHtml !== 'function') {
             throw new Error('simpleMarkdownToHtml函数未定义');
         }
         
-        // 转换Markdown为HTML
         const htmlContent = simpleMarkdownToHtml(markdownText);
         
-        // 找到目标div元素
         const targetDiv = document.querySelector(`.${className}`);
         
         if (!targetDiv) {
@@ -30,19 +27,22 @@ async function loadMarkdownContent(url, className) {
             return;
         }
         
-        // 插入HTML内容
         targetDiv.innerHTML = htmlContent;
+        _loadedMarkdowns[url] = true;
         
         console.log(`成功加载并渲染: ${url}`);
         
     } catch (error) {
         console.error(`处理 ${url} 时出错:`, error);
-        // 可以选择在对应的div中显示错误信息
         const targetDiv = document.querySelector(`.${className}`);
         if (targetDiv) {
             targetDiv.innerHTML = `<p class="error">加载内容失败: ${error.message}</p>`;
         }
     }
+}
+
+function isMarkdownLoaded(url) {
+    return !!_loadedMarkdowns[url];
 }
 
 async function loadAndRenderMarkdown() {
@@ -421,6 +421,7 @@ function browseFolder(inputId) {
 function toggleCachePathInput() {
     const enableCacheCheckbox = document.getElementById('enable-cache');
     const cachePathGroup = document.getElementById('cache-path-group');
+    if (!enableCacheCheckbox || !cachePathGroup) return;
     
     if (enableCacheCheckbox.checked) {
         cachePathGroup.style.display = 'block';
@@ -432,6 +433,7 @@ function toggleCachePathInput() {
 function toggleStoragePathInput() {
     const enableStorageCheckbox = document.getElementById('enable-storage');
     const storagePathGroup = document.getElementById('storage-path-group');
+    if (!enableStorageCheckbox || !storagePathGroup) return;
     
     if (enableStorageCheckbox.checked) {
         storagePathGroup.style.display = 'block';
@@ -443,6 +445,7 @@ function toggleStoragePathInput() {
 function toggleDevelopSettings() {
     const group = document.getElementById('dev-settings');
     const enable = document.getElementById('enable-dev-settings');
+    if (!group || !enable) return;
     if (enable.checked) {
         group.style.display = 'block';
     } 
@@ -505,6 +508,7 @@ function toggleProper() {
 function toggleAutoProper() {
     const group = document.getElementById('proper-path-text');
     const enable = document.getElementById('auto-fetch-proper');
+    if (!group || !enable) return;
     if (enable.checked) {
         group.style.display = 'none';
     } 
@@ -514,14 +518,14 @@ function toggleAutoProper() {
 };
 
 function toggleSteamCommand() {
+    const cmdElement = document.getElementById('steam-cmd');
+    if (!cmdElement) return;
     let command
     pywebview.api.run_func('get_steam_command').then(function(result) {
         command=result;
-        const cmdElement = document.getElementById('steam-cmd');
         cmdElement.value = command;
     }).catch(function(error) {
         command=`获取失败 ${error}`;
-        const cmdElement = document.getElementById('steam-cmd');
         cmdElement.value = command;
     });
 }

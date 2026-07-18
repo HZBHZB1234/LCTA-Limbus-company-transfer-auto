@@ -19,16 +19,16 @@
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core**: `LCTA_API` class (~1450 lines), bridges all backend features to JS via pywebview. Includes `perform_update_from_file()` for manual local package updates and redesigned drag-drop flow (file paths passed directly to JS) |
+| `app.py` | **Core**: `LCTA_API` class (~1527 lines), bridges all backend features to JS via pywebview. Includes `get_startup_data()` to batch-initialize frontend in a single bridge call, `perform_update_from_file()` for manual local package updates and redesigned drag-drop flow (file paths passed directly to JS) |
 | `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
 | `css/base.css` | Base styling |
 | `css/components.css` | Component-specific styles |
 | `css/layout-extras.css` | Layout utilities and extra styles |
 | `js/core.js` | Core framework: API binding, event system, navigation |
-| `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip |
-| `js/init.js` | Initialization and bootstrap |
+| `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip, FancyManager (null-guarded `updateEditorUI` for lazy section loading safety) |
+| `js/init.js` | Initialization and bootstrap: uses single `get_startup_data()` API call instead of multiple `get_attr()` calls; fire-and-forget calls for `change_icon`, `init_cache`, `set_attr` |
 | `js/utils.js` | Shared utility functions |
-| `js/modals.js` | Modal dialog management |
+| `js/modals.js` | Modal dialog management, markdown content loader with `_loadedMarkdowns` cache, toggle functions (all null-guarded for lazy section loading safety) |
 | `js/api-config.js` | API configuration page logic |
 | `js/cdn.js` | CDN optimization page logic |
 | `js/speed.js` | Game speed control page logic |

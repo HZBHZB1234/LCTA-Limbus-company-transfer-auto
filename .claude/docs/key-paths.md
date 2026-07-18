@@ -203,11 +203,18 @@ start_webui.py main()
         → sections/preload.js                  preloadAllSections() — fetch all section HTML, inject into placeholders
         → ConfigManager init                   configuration manager
         → DragDropManager init                 drag-and-drop setup
-        → loadAndRenderMarkdown()              markdown content rendering
+        → loadMarkdownContent()                preload README.md for about section (firstUse.md & update.md loaded on-demand)
         → initListManagers()                   lazy list manager instantiation
         → initNavigation()                     navigation setup
       → js/core.js                             bind pywebview.api events
     → pywebviewready event fires               JS ↔ Python bridge active
+      → pywebview.api.get_startup_data()       single bridge call returns {message_config, first_use, config_ok, config_error, config}
+      → configManager.applyConfigToUI()        apply all config values to UI (null-guarded, skips unloaded sections)
+      → toggle functions run                   all toggle funcs null-guarded (toggleCachePathInput, etc.)
+      → pywebview.api.check_show()             version change detection & release notes
+      → fancyManager.init() / elderManager.init()
+      → checkGamePath() / autoCheckUpdates() / init_github() / init_log()
+      → fire-and-forget calls:                 change_icon, init_cache, set_attr(http_port)
 ```
 
-Files: `start_webui.py`, `webui/app.py`, `globalManagers/ConfigManager.py`, `globalManagers/LogManager.py`, `webui/index.html`, `webui/js/init.js`, `webui/js/core.js`
+Files: `start_webui.py`, `webui/app.py`, `globalManagers/ConfigManager.py`, `globalManagers/LogManager.py`, `webui/index.html`, `webui/js/init.js`, `webui/js/core.js`, `webui/js/features.js`, `webui/js/modals.js`

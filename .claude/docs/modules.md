@@ -1,12 +1,12 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-17 -->
+<!-- Last updated: 2026-07-18 -->
 
 ## Directory Overview
 
 | Directory | Role | Key Files |
 |-----------|------|-----------|
-| `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 12 |
+| `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 12 + sections |
 | `webutils/` | Business logic layer (one file per feature) | 24 |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 12+ |
@@ -19,25 +19,27 @@
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core**: `LCTA_API` class (~1450 lines), bridges all backend features to JS via pywebview |
-| `index.html` | Single-page HTML shell (103KB) |
+| `app.py` | **Core**: `LCTA_API` class (~1450 lines), bridges all backend features to JS via pywebview. Includes `perform_update_from_file()` for manual local package updates and redesigned drag-drop flow (file paths passed directly to JS) |
+| `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
 | `css/base.css` | Base styling |
 | `css/components.css` | Component-specific styles |
 | `css/layout-extras.css` | Layout utilities and extra styles |
 | `js/core.js` | Core framework: API binding, event system, navigation |
-| `js/features.js` | Feature-specific UI logic |
+| `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip |
 | `js/init.js` | Initialization and bootstrap |
 | `js/utils.js` | Shared utility functions |
 | `js/modals.js` | Modal dialog management |
 | `js/api-config.js` | API configuration page logic |
 | `js/cdn.js` | CDN optimization page logic |
 | `js/speed.js` | Game speed control page logic |
-| `js/list-managers.js` | List/tab view management |
+| `js/list-managers.js` | List/tab view management, deferred instantiation via `initListManagers()` |
+| `sections/preload.js` | Async preloader: fetches all `sections/*.html` and injects into placeholder divs |
+| `sections/*.html` | 18 individual section HTML fragments (dashboard, translate, install, etc.) |
 | `guide/*.md` | 16 in-app user guide pages (one per feature tab) |
 | `elder/*.md` | 14 setup wizard pages |
-| `assets/firstUse.md` | First-time user welcome guide |
+| `assets/update.md` | Release changelog (v5.0.0+) |
 | `assets/LCTA-AU.md` | Auto-update system documentation |
-| `assets/update.md` | Release changelog |
+| `assets/firstUse.md` | First-time user welcome guide |
 
 ## webutils/ — Business Logic Layer
 
@@ -61,9 +63,9 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `function_fetch.py` | Proper noun scrape | Fetch proper nouns from remote sources |
 | `function_fancy.py` | Text effects | FL-Like visual text enhancements |
 | `function_translate.py` | Translation orchestration | Connects webui to translateFunc pipeline |
-| `function_drop.py` | Drag-and-drop | Drag-and-drop file installation |
+| `function_drop.py` | Drag-and-drop | Drag-and-drop file installation with zip/7z extraction, mod installation, update package handling via Updater |
 | `function_cdn.py` | CDN optimization | Cloudflare + CloudFront CDN speed testing and optimization |
-| `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection |
+| `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection; `is_injected()` trusts self-record when openspeedy throws |
 | `builtinFancy.py` | Built-in text rules | Built-in text beautification rules |
 | `builtinFancyFunc.py` | Fancy rule functions | Fancy rule processing functions |
 | `eiderConst.py` | Update constants | Translation pack update lists, dependency chains |
@@ -129,13 +131,13 @@ Standalone library with own `__init__.py` public API.
 | `main.py` | Entry point: update check → CDN optimize → launch game |
 | `game_launch.py` | Game launch: mod mode (with patching) or plain mode |
 | `updates.py` | Translation pack update system (Factory pattern for LLC/OurPlay/Machine) |
-| `cdn.py` | CDN optimization for launcher mode |
+| `cdn.py` | CDN optimization for launcher mode with cache TTL to avoid redundant speed tests |
 | `patch.py` | Unity asset patching for mods |
 | `modfolder.py` | Mod folder management and detection |
 | `sound.py` | Sound file replacement for mods |
 | `changes.py` | Text data patch application |
 | `compress.py` | Compression utilities |
-| `speed_hotkey.py` | Game speed hotkey (Ctrl+Shift+S) |
+| `speed_hotkey.py` | Game speed hotkey (Ctrl+Shift+S) with comprehensive lifecycle logging, foreground process check, .NET STA threading for UI |
 
 ## Import Dependency Graph
 

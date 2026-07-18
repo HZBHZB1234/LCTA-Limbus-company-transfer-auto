@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-17 -->
+<!-- Last updated: 2026-07-18 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -61,9 +61,14 @@ JS: user clicks "test speed" or "optimize"
     → subprocess: CFST/cfst.exe    CloudflareSpeedTest binary
     → parse: CFST/result_cf.csv    speed test results
     → modify: system hosts file    apply optimal CDN IP
+
+Launcher mode (auto-start):
+  → launcher/cdn.py                run_cdn_optimization()
+    → check cache TTL              if cdn_cache_ttl > 0 and last_cdn_test_time within window → skip
+    → ConfigManager.set()          store last_cdn_test_time on success
 ```
 
-Files: `webui/js/cdn.js`, `webui/app.py`, `webutils/function_cdn.py`, `CFST/cfst.exe`, `CFST/ip.txt`
+Files: `webui/js/cdn.js`, `webui/app.py`, `webutils/function_cdn.py`, `launcher/cdn.py`, `CFST/cfst.exe`, `CFST/ip.txt`
 
 ## 5. Game Launch (with Mods)
 
@@ -95,6 +100,10 @@ JS: user adjusts speed slider
 
 Launcher mode:
   → launcher/speed_hotkey.py        Ctrl+Shift+S → toggle speed
+    → foreground check              verify LimbusCompany.exe is active
+    → injection check               SpeedManager.is_injected() (trusts self-record)
+    → log each stage                hotkey press, injection, speed toggle, DLL unload
+    → .NET STA thread               WinForms slider window (System.Threading.Thread)
     → openspeedy                    inject DLL
 ```
 
@@ -110,6 +119,11 @@ Write: JS form change
   → write config.json               auto-save to disk
 
 Read: ConfigManager.get(key)        dotted-path access, falls back to config_default.json
+
+Key launcher config items:
+  launcher.work.cdn_optimize (bool)     auto CDN optimize on launch
+  launcher.work.cdn_auto_apply (bool)   auto write optimal IP to hosts
+  launcher.work.cdn_cache_ttl (str)     cache validity in hours (0 = always retest)
 
 Validate: config_check.json         JSON schema mapping keys → types ("str", "bool", etc.)
           config_default.json       default values template
@@ -130,7 +144,47 @@ JS: user clicks "check for updates" or auto-check on startup
 
 Files: `webui/app.py`, `webutils/update.py`, `webFunc/GithubDownload.py`
 
-## 9. WebUI Startup Bootstrap
+## 9. Manual Update from Local Package
+
+```
+JS: user clicks "从本地更新包手动更新" in debug settings
+  → webui/js/features.js            manualUpdateFromLocalZip()
+    → pywebview.api.browse_file()   file picker dialog
+    → confirm modal                 user confirms update
+  → webui/app.py                    LCTA_API.perform_update_from_file()
+    → extract zip                   validate start_webui.py + requirements.txt
+    → webutils/update.py            Updater.install_requirements()
+    → webutils/update.py            Updater.update_files()
+  → restart required                manual program restart needed
+```
+
+Files: `webui/js/features.js`, `webui/app.py`, `webutils/update.py`
+
+## 10. Drag-and-Drop File Installation
+
+```
+JS: user drags files onto window
+  → js/features.js                  DragDropManager — drag counter, mask UI
+    → on drop → onFileDropCallback(files)
+  → webui/app.py                    on_drop() → passes file paths as JSON to JS
+  → js/features.js                  setupDragDropCallback() receives files
+    → pywebview.api.handle_dropped_files(files)
+  → webui/app.py                    LCTA_API.handle_dropped_files(files_data)
+    → webutils/function_drop.py     evalFile() per file, makeMessage() aggregation
+    → confirm modal                 user confirms operation
+  → webui/app.py                    LCTA_API.eval_dropped_files(file_info, modal_id)
+  → webutils/function_drop.py       evalFiles()
+    → type detection:               evalZip() — top-level folder matching
+    → full/nofont:                  install_translation_package() (7z support)
+    → FLmod:                        extract_zip_smartly() or copytree to mod_path
+    → jsononly:                     extract to mod_path
+    → update:                       Updater() via webutils/update.py
+    → progress:                     LogManager modal callbacks
+```
+
+Files: `webui/js/features.js`, `webui/app.py`, `webutils/function_drop.py`, `webutils/update.py`
+
+## 11. WebUI Startup Bootstrap
 
 ```
 start_webui.py main()
@@ -141,9 +195,15 @@ start_webui.py main()
     → webui/app.py LCTA_API.__init__()         register all pywebview API methods
     → pywebview.create_window()                create native window
     → webui/index.html loads                   HTML/CSS/JS
-      → js/init.js                             bootstrap
+      → js/init.js                             DOMContentLoaded → init()
+      → js/features.js                         async init():
+        → sections/preload.js                  preloadAllSections() — fetch all section HTML, inject into placeholders
+        → ConfigManager init                   configuration manager
+        → DragDropManager init                 drag-and-drop setup
+        → loadAndRenderMarkdown()              markdown content rendering
+        → initListManagers()                   lazy list manager instantiation
+        → initNavigation()                     navigation setup
       → js/core.js                             bind pywebview.api events
-      → js/features.js                         init feature pages
     → pywebviewready event fires               JS ↔ Python bridge active
 ```
 

@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-07-17 -->
+<!-- Last updated: 2026-07-18 -->
 
 ## How to Run
 
@@ -58,9 +58,12 @@ Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_w
 1. Create `webutils/function_<newfeature>.py` with the feature logic
 2. Export public functions in `webutils/__init__.py`
 3. Add API methods in `webui/app.py` `LCTA_API` class
-4. Create guide page `webui/guide/<newfeature>.md`
-5. Add JS logic in `webui/js/features.js` or a new `webui/js/<newfeature>.js`
-6. If it has config items, update `config_default.json` and `config_check.json`
+4. Create section HTML fragment `webui/sections/<newfeature>.html`
+5. Add the section name to `preloadAllSections()` array in `webui/sections/preload.js`
+6. Add a placeholder `<div>` in `webui/index.html` with id `<newfeature>-section`
+7. Create guide page `webui/guide/<newfeature>.md`
+8. Add JS logic in `webui/js/features.js` or a new `webui/js/<newfeature>.js`
+9. If it has config items, update `config_default.json` and `config_check.json`
 
 ### Adding a New Config Item
 

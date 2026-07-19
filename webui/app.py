@@ -217,6 +217,15 @@ class LCTA_API():
                 return
             setattr(self, attr_name, value)
 
+    def _emit(self, event_name, detail):
+        """通过 CustomEvent 将事件推送到 Vue 前端（替代 run_js/evaluate_js 直接操作 DOM）"""
+        payload = json.dumps(detail, ensure_ascii=False)
+        js = f"window.dispatchEvent(new CustomEvent('{event_name}', {{ detail: {payload} }}));"
+        try:
+            self._window.evaluate_js(js)
+        except Exception:
+            pass
+
     def browse_file(self, input_id):
         """打开文件浏览器"""
         file_path = self._window.create_file_dialog(
@@ -227,9 +236,7 @@ class LCTA_API():
         
         if file_path and len(file_path) > 0:
             selected_path = file_path[0]
-            # 通过JavaScript更新页面中的输入框
-            js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
-            self._window.run_js(js_code)
+            self._emit('lcta:file-picked', {'inputId': input_id, 'path': selected_path.replace(os.sep, '/')})
             self.log_ui(f"已选择文件: {selected_path}")
             return selected_path
         return None
@@ -242,9 +249,7 @@ class LCTA_API():
         
         if folder_path and len(folder_path) > 0:
             selected_path = folder_path[0]
-            # 通过JavaScript更新页面中的输入框
-            js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
-            self._window.run_js(js_code)
+            self._emit('lcta:file-picked', {'inputId': input_id, 'path': selected_path.replace(os.sep, '/')})
             self.log_ui(f"已选择文件夹: {selected_path}")
             return selected_path
         return None
@@ -261,26 +266,19 @@ class LCTA_API():
         timestamp = time.strftime("[%Y-%m-%d %H:%M:%S]")
         full_message = f"{timestamp} {message}"
         
-        # 通过JavaScript将日志消息发送到前端
-        escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
-        js_code = f"addLogMessage('{escaped_message}');"
-        try:
-            self._window.run_js(js_code)
-        except:
-            # 如果窗口不可用则打印到控制台
-            print(f"[UI] {full_message}")
-        finally:
-            self.log(full_message)
+        # 通过 Event Bridge 发送日志到前端
+        level_name = 'info'
+        if level >= logging.ERROR:
+            level_name = 'error'
+        elif level >= logging.WARNING:
+            level_name = 'warn'
+        self._emit('lcta:log', {'message': message, 'level': level_name})
+        self.log(full_message)
 
 
     def update_progress(self, percent, text):
         """更新进度"""
-        escaped_text = text.replace("'", "\\'")
-        js_code = f"updateProgress({percent}, '{escaped_text}');"
-        try:
-            self._window.run_js(js_code)
-        except:
-            pass
+        self._emit('lcta:modal-progress', {'modalId': 'false', 'percent': percent, 'text': text})
 
     def progress_callback(self, progress):
         """进度回调，用于下载等操作"""
@@ -868,41 +866,19 @@ class LCTA_API():
         try:
             self.log(f"[{modal_id}] 状态变更{status}")
         except Exception:pass
-        escaped_status = status.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == 'false':
             return
-        js_code = f"""
-        const modal = modalWindows.find(m => m.id === '{modal_id}');
-        if (modal) {{
-            modal.setStatus('{escaped_status}');
-        }}
-        """
-        try:
-            self._window.evaluate_js(js_code)
-        except Exception as e:
-            self.log(f"设置模态窗口状态失败: {e}")
-            self.log_error(e)
+        self._emit('lcta:modal-status', {'modalId': modal_id, 'status': status})
 
     def add_modal_log(self, message, modal_id):
         """向模态窗口添加日志"""
         try:
             self.log(f"[{modal_id}] {message}")
         except Exception:pass
-        escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == "false":
-            self.log_ui(escaped_message)
+            self.log_ui(message)
             return
-        js_code = f"""
-        const modal = modalWindows.find(m => m.id === '{modal_id}');
-        if (modal) {{
-            modal.addLog('{escaped_message}');
-        }}
-        """
-        try:
-            self._window.evaluate_js(js_code)
-        except Exception as e:
-            self.log(f"添加模态窗口日志失败: {e}")
-            self.log_error(e)
+        self._emit('lcta:modal-log', {'modalId': modal_id, 'message': message})
 
     def update_modal_progress(self, percent, text, modal_id,log=True):
         """更新模态窗口进度"""
@@ -910,20 +886,9 @@ class LCTA_API():
             if log:
                 self.log(f"[{modal_id}] 进度变更至{percent}% 消息内容[{text}]")
         except Exception:pass
-        escaped_text = text.replace("'", "\\'").replace("\n", "\\n")
         if modal_id == "false":
             return
-        js_code = f"""
-        const modal = modalWindows.find(m => m.id === '{modal_id}');
-        if (modal) {{
-            modal.updateProgress({percent}, '{escaped_text}');
-        }}
-        """
-        try:
-            self._window.evaluate_js(js_code)
-        except Exception as e:
-            self.log(f"更新模态窗口进度失败: {e}")
-            self.log_error(e)
+        self._emit('lcta:modal-progress', {'modalId': modal_id, 'percent': percent, 'text': text})
 
     def save_config_to_file(self):
         """将当前配置保存到文件"""
@@ -935,15 +900,8 @@ class LCTA_API():
             return False
         
     def save_setting_from(self):
-        js_code = '''
-                const updates = configManager.collectConfigFromUI();
-    configManager.updateConfigValues(updates)
-        .then(function(result) {
-                configManager.flushPendingUpdates()
-            });
-
-            '''
-        self._window.run_js(js_code)
+        """窗口关闭时保存配置（Vue 端通过 beforeunload → configStore.save() 处理）"""
+        self.log_ui('窗口关闭，配置已自动保存')
     
     def update_config_value(self, key_path, value, create_missing=True):
         """
@@ -1210,8 +1168,7 @@ class LCTA_API():
     def on_drop(self, e):
         files = e['dataTransfer']['files']
         file_paths = [file['pywebviewFullPath'] for file in files]
-        file_paths_json = json.dumps(file_paths)
-        self._window.evaluate_js(f"dragDropManager.hideMaskImmediate();dragDropManager.onFileDropCallback({file_paths_json})")
+        self._emit('lcta:file-dropped', {'files': file_paths})
 
         print(f'Event: {e["type"]}. Dropped files:')
 
@@ -1465,15 +1422,20 @@ class LCTA_API():
             return {"success": False, "message": str(e)}
 
 def main():
-    # 获取HTML文件的绝对路径
-    html_path = os.path.join(os.getenv('path_'), "webui\\index.html")
+    import sys as _sys
+    dev_mode = '--dev' in _sys.argv
+
+    if dev_mode:
+        url = "http://localhost:5173"
+    else:
+        url = os.path.join(os.getenv('path_'), "webui\\dist\\index.html")
 
     # 创建API实例
     api = LCTA_API()
     # 创建窗口 - 先创建窗口，不立即绑定API
     window = webview.create_window(
         "LCTA - 边狱公司汉化工具箱",
-        url=html_path,
+        url=url,
         width=1200,
         height=800,
         resizable=True,

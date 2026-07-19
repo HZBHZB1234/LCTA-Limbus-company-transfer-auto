@@ -28,4 +28,6 @@ dev_assets
 translatekit
 LLc-CN_LCTA
 webui/assets/README.md
+webui/node_modules/
+webui/dist/
 CFST/

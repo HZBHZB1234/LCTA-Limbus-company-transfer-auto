@@ -1422,13 +1422,12 @@ class LCTA_API():
             return {"success": False, "message": str(e)}
 
 def main():
-    import sys as _sys
-    dev_mode = '--dev' in _sys.argv
-
-    if dev_mode:
-        url = "http://localhost:5173"
+    # 自动检测运行环境：如果 webui/dist/index.html 存在则使用构建产物，否则加载 Vite dev server
+    dist_path = os.path.join(os.getenv('path_'), "webui\\dist\\index.html")
+    if os.path.exists(dist_path):
+        url = dist_path
     else:
-        url = os.path.join(os.getenv('path_'), "webui\\dist\\index.html")
+        url = "http://localhost:5173"
 
     # 创建API实例
     api = LCTA_API()

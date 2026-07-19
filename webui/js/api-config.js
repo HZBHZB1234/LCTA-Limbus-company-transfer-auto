@@ -42,7 +42,6 @@ class APIConfigManager {
         
         const apiSelectContainer = document.querySelector('.api-select');
         if (!apiSelectContainer) {
-            console.error('找不到.api-select容器');
             return;
         }
         
@@ -104,7 +103,6 @@ class APIConfigManager {
         
         const apiSettingsContainer = document.querySelector('.api-settings-form');
         if (!apiSettingsContainer) {
-            console.error('找不到.api-settings-form容器');
             return;
         }
 
@@ -196,7 +194,6 @@ class APIConfigManager {
         
         const apiSelectContainer = document.querySelector('.translator-services');
         if (!apiSelectContainer) {
-            console.error('找不到.translator-services容器');
             return;
         }
         
@@ -224,7 +221,6 @@ class APIConfigManager {
     generateSettingsForm(serviceKey, service) {
         const apiSettingsContainer = document.querySelector('.api-settings');
         if (!apiSettingsContainer) {
-            console.error('找不到.api-settings容器');
             return;
         }
         
@@ -547,7 +543,6 @@ class APIConfigManager {
     updateServiceStatus(serviceKey, service) {
         const statusGrid = document.querySelector('.api-status-grid');
         if (!statusGrid) {
-            console.error('找不到.api-status-grid容器');
             return;
         }
         

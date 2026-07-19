@@ -50,7 +50,7 @@ window.addEventListener('pywebviewready', function() {
 
             first_use = data.first_use;
             if (data.first_use) {
-                loadMarkdownContent('assets/firstUse.md', 'welcome-content');
+                window._pendingWelcomeContent = { type: 'markdown', url: 'assets/firstUse.md' };
                 goAndShow('welcome');
             } else {
                 refreshDashboard();
@@ -100,12 +100,7 @@ window.addEventListener('pywebviewready', function() {
                 pywebview.api.check_show().then(
                     (result) => {
                         if (result.show && !first_use) {
-                            const bodyHtml = simpleMarkdownToHtml(result.message);
-                            const targetDiv = document.querySelector('.welcome-content');
-
-                            if (targetDiv) {
-                                targetDiv.innerHTML = bodyHtml;
-                            }
+                            window._pendingWelcomeContent = { type: 'html', html: simpleMarkdownToHtml(result.message) };
                             goAndShow('welcome');
                         }
                 });

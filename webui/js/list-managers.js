@@ -12,9 +12,6 @@ class ItemListManager {
      */
     constructor(containerId, options = {}) {
         this.containerElement = document.getElementById(containerId);
-        if (!this.containerElement) {
-            console.error(`容器元素未找到: #${containerId}`);
-        }
         this.items = [];
         this.selectedItem = null;
         this.onSelect = options.onSelect || null;

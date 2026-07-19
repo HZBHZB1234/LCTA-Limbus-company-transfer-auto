@@ -85,7 +85,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 ## Polyglot Boundaries
 
 - **Python ↔ JS**: `pywebview` exposes `LCTA_API` instance as `window.pywebview.api` in JS. JS calls Python methods, Python calls JS via `webview.windows[0].evaluate_js()`
-- **HTML ↔ JS**: Section HTML fragments in `webui/sections/*.html` are fetched and injected into placeholder divs by `preload.js` during async `init()`, enabling modular page composition. Markdown assets (`README.md`, `firstUse.md`, `update.md`) are loaded on-demand with fetch-caching; README.md is preloaded at startup
+- **HTML <> JS**: Section HTML fragments in `webui/sections/*.html` are lazy-loaded by `preload.js` via `loadSection()` on first navigation; `onSectionLoaded()` callback re-runs per-section initialization (config, tooltips, toggle funcs, list manager DOM refs, select box values). Markdown assets loaded on-demand with fetch-caching via `_loadedMarkdowns`; welcome content deferred via `_pendingWelcomeContent`
 - **C → Python**: Native `launcher.c` compiled with `-mwindows` (no console). Embeds Python interpreter path, verifies hash, runs Python script. Avoids console window on double-click.
 - **Python → C binaries**: Subprocess calls to `CFST/cfst.exe` (CloudflareSpeedTest) and `7z.exe` (7-Zip)
 

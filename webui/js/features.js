@@ -123,6 +123,8 @@ class FancyManager {
         const builtinCheck = document.getElementById('builtinRule');
         const saveBtn = document.getElementById('fancy-save-current-btn');
 
+        if (!nameInput) return;
+
         nameInput.value = this.selectedRuleset.name;
         descInput.value = this.selectedRuleset.desc || '';
         rulesTextarea.value = JSON.stringify(this.selectedRuleset.rules, null, 2);
@@ -929,9 +931,6 @@ async function init() {
     // 初始化拖拽文件管理器
     dragDropManager = new DragDropManager();
     setupDragDropCallback();
-
-    // 预加载关于页面的 README 内容
-    loadMarkdownContent('/assets/README.md', 'about-content');
 
     // 初始化列表管理器（依赖 DOM 结构）
     initListManagers();

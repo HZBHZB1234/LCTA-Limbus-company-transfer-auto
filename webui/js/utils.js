@@ -93,9 +93,7 @@ function initNavigation() {
                         cdnManager.init();
                     }
 
-                    if (sectionId === 'speed-section' && typeof speedPage !== 'undefined') {
-                        speedPage.init();
-                    } else if (typeof speedPage !== 'undefined') {
+                    if (sectionId !== 'speed-section' && typeof speedPage !== 'undefined') {
                         speedPage.stop();
                     }
 

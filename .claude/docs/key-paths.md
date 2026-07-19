@@ -200,21 +200,29 @@ start_webui.py main()
     → webui/index.html loads                   HTML/CSS/JS
       → js/init.js                             DOMContentLoaded → init()
       → js/features.js                         async init():
-        → sections/preload.js                  preloadAllSections() — fetch all section HTML, inject into placeholders
-        → ConfigManager init                   configuration manager
+        → sections/preload.js                  loadSection('dashboard') — only dashboard preloaded
         → DragDropManager init                 drag-and-drop setup
-        → loadMarkdownContent()                preload README.md for about section (firstUse.md & update.md loaded on-demand)
-        → initListManagers()                   lazy list manager instantiation
-        → initNavigation()                     navigation setup
-      → js/core.js                             bind pywebview.api events
+        → initListManagers()                   creates managers (containers may not exist yet)
+        → initNavigation()                     click handlers registered
     → pywebviewready event fires               JS ↔ Python bridge active
-      → pywebview.api.get_startup_data()       single bridge call returns {message_config, first_use, config_ok, config_error, config}
-      → configManager.applyConfigToUI()        apply all config values to UI (null-guarded, skips unloaded sections)
-      → toggle functions run                   all toggle funcs null-guarded (toggleCachePathInput, etc.)
-      → pywebview.api.check_show()             version change detection & release notes
-      → fancyManager.init() / elderManager.init()
-      → checkGamePath() / autoCheckUpdates() / init_github() / init_log()
-      → fire-and-forget calls:                 change_icon, init_cache, set_attr(http_port)
+      → pywebview.api.get_startup_data()       single call returns full startup bundle
+      → _pendingWelcomeContent                 deferred rendering for welcome section
+      → configManager.applyConfigToUI()        null-guarded, skips unloaded sections
+      → toggle functions                       all null-guarded
+      → fancyManager.init() / elderManager.init()  null-guarded DOM access
+      → check_show() / init_github() / init_log()
+      → fire-and-forget:                       change_icon, init_cache, set_attr(http_port)
+
+  User navigates to a section:
+    → initNavigation async handler             await loadSection(name)
+      → sections/preload.js                    fetch HTML → inject → onSectionLoaded(name)
+        → [console.log]                        per-section debug log
+        → section-specific init:               toggle funcs, list manager ref updates,
+                                               select box values, DOM ref rebuilds
+        → configManager.applyConfigToUI()      re-apply for newly injected elements
+        → initTooltips() / initPasswordToggles()
+      → section callbacks:                     refreshInstallPackageList, cdnManager.init, etc.
+      → AnimationManager.fadeIn()
 ```
 
-Files: `start_webui.py`, `webui/app.py`, `globalManagers/ConfigManager.py`, `globalManagers/LogManager.py`, `webui/index.html`, `webui/js/init.js`, `webui/js/core.js`, `webui/js/features.js`, `webui/js/modals.js`
+Files: `start_webui.py`, `webui/app.py`, `webui/index.html`, `webui/js/init.js`, `webui/js/core.js`, `webui/js/features.js`, `webui/js/modals.js`, `webui/sections/preload.js`, `webui/js/utils.js`

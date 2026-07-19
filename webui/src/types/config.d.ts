@@ -12,6 +12,20 @@ export interface ApiResult<T = unknown> {
   data?: T
 }
 
+/** Wrapper for APIs that return {success, data} envelope */
+export interface ApiDataResult<T> {
+  success: boolean
+  data: T
+  message?: string
+}
+
+/** Wrapper for APIs that return {success, packages} envelope */
+export interface ApiPackagesResult<T> {
+  success: boolean
+  packages: T[]
+  message?: string
+}
+
 export interface TranslationConfig {
   translator: string
   api_settings: Record<string, unknown>
@@ -48,9 +62,20 @@ export interface CdnStatus {
 }
 
 export interface SpeedStatus {
-  process_running: boolean
-  dll_injected: boolean
-  current_speed: number
+  /** Whether the game process is running */
+  running: boolean
+  /** Process ID if running, null otherwise */
+  pid: number | null
+  /** Process architecture (x86/x64) */
+  arch: string | null
+  /** Whether the speed DLL has been injected */
+  injected: boolean
+  /** Whether speed modification is enabled */
+  enabled: boolean
+  /** Current speed multiplier */
+  speed: number
+  /** Error message if any */
+  error: string | null
 }
 
 export interface UpdateInfo {
@@ -77,10 +102,12 @@ export interface SymlinkStatus {
 }
 
 export interface FileDropInfo {
-  files: Array<{
+  success: boolean
+  message: string
+  file_info?: string[]
+  files?: Array<{
     path: string
     type: string
     name: string
   }>
-  message: string
 }

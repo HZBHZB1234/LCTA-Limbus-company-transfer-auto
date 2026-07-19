@@ -1,5 +1,5 @@
 import type {
-  StartupData, ApiResult, TranslationConfig, PackageInfo,
+  StartupData, ApiResult, ApiDataResult, ApiPackagesResult, TranslationConfig, PackageInfo,
   InstalledPackages, InstalledMods, CdnStatus, SpeedStatus,
   UpdateInfo, FancyRulesets, FontInfo, SymlinkStatus, FileDropInfo,
 } from './config'
@@ -42,7 +42,7 @@ export interface PyWebViewApi {
   test_api(key: string, api_settings: Record<string, unknown>): Promise<ApiResult>
   format_api_settings(api_settings: Record<string, unknown>, translator: string): Promise<Record<string, unknown>>
 
-  get_translation_packages(): Promise<PackageInfo[]>
+  get_translation_packages(): Promise<ApiPackagesResult<PackageInfo>>
   delete_translation_package(package_name: string): Promise<ApiResult>
   install_translation(package_name: string, modal_id?: string): Promise<ApiResult>
   toggle_installed_package(able: boolean): Promise<ApiResult>
@@ -65,7 +65,7 @@ export interface PyWebViewApi {
   get_system_fonts_list(): Promise<{ fonts: FontInfo[] }>
   export_selected_font(font_name: string, destination_path: string): Promise<ApiResult>
 
-  cdn_get_status(): Promise<CdnStatus>
+  cdn_get_status(): Promise<ApiDataResult<CdnStatus>>
   cdn_optimize_cloudflare(modal_id?: string): Promise<ApiResult>
   cdn_optimize_cloudfront(modal_id?: string): Promise<ApiResult>
   cdn_full_optimization(modal_id?: string): Promise<ApiResult>
@@ -73,7 +73,7 @@ export interface PyWebViewApi {
   cdn_remove_cloudflare(): Promise<ApiResult>
   cdn_remove_cloudfront(): Promise<ApiResult>
 
-  speed_get_status(): Promise<SpeedStatus>
+  speed_get_status(): Promise<ApiDataResult<SpeedStatus>>
   speed_inject(): Promise<ApiResult>
   speed_eject(): Promise<ApiResult>
   speed_set(factor: number): Promise<ApiResult>
@@ -91,7 +91,7 @@ export interface PyWebViewApi {
   handle_dropped_files(files_data: string[]): Promise<FileDropInfo>
   eval_dropped_files(files_data: string[], modal_id?: string): Promise<ApiResult>
 
-  get_fancy_rulesets(): Promise<FancyRulesets>
+  get_fancy_rulesets(): Promise<ApiDataResult<FancyRulesets>>
   fancy_main(config_list: FancyRulesets['builtin'], enableMap: Record<string, boolean>): Promise<ApiResult>
 
   get_symlink_status(): Promise<SymlinkStatus>
@@ -106,4 +106,6 @@ export interface PyWebViewApi {
   resetElder(): Promise<void>
   save_setting_from(): Promise<void>
   startTest(): Promise<void>
+  eval_skip(): Promise<void>
+  sign_eval_js(): Promise<void>
 }

@@ -47,17 +47,31 @@ export const useConfigStore = defineStore('config', () => {
   const firstUse = ref(false)
   const configOk = ref(true)
   const configError = ref<string[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
 
   async function init(startupData?: StartupData): Promise<void> {
-    let data = startupData
-    if (!data) {
-      data = await getApi().get_startup_data()
+    loading.value = true
+    error.value = null
+    try {
+      let data = startupData
+      if (!data) {
+        data = await getApi().get_startup_data()
+      }
+      raw.value = data.config as Record<string, unknown>
+      firstUse.value = data.first_use
+      configOk.value = data.config_ok
+      configError.value = data.config_error
+      initialized.value = true
+    } catch (e) {
+      const msg = `配置初始化失败: ${e}`
+      console.error(msg)
+      error.value = msg
+      try { getApi().log(msg).catch(() => {}) } catch { /* ignore */ }
+      throw e
+    } finally {
+      loading.value = false
     }
-    raw.value = data.config as Record<string, unknown>
-    firstUse.value = data.first_use
-    configOk.value = data.config_ok
-    configError.value = data.config_error
-    initialized.value = true
   }
 
   function get<T = unknown>(path: string): T {
@@ -70,18 +84,39 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   async function save(): Promise<void> {
-    const updates: Record<string, unknown> = {}
-    flattenUpdates(raw.value, '', updates)
-    await getApi().update_config_batch(updates)
-    await getApi().save_config_to_file()
-    dirty.value = false
+    error.value = null
+    try {
+      const updates: Record<string, unknown> = {}
+      flattenUpdates(raw.value, '', updates)
+      await getApi().update_config_batch(updates)
+      await getApi().save_config_to_file()
+      dirty.value = false
+    } catch (e) {
+      const msg = `配置保存失败: ${e}`
+      console.error(msg)
+      error.value = msg
+      try { getApi().log(msg).catch(() => {}) } catch { /* ignore */ }
+      throw e
+    }
   }
 
   async function reload(): Promise<void> {
-    const data = await getApi().get_startup_data()
-    raw.value = data.config as Record<string, unknown>
-    dirty.value = false
+    loading.value = true
+    error.value = null
+    try {
+      const data = await getApi().get_startup_data()
+      raw.value = data.config as Record<string, unknown>
+      dirty.value = false
+    } catch (e) {
+      const msg = `配置重载失败: ${e}`
+      console.error(msg)
+      error.value = msg
+      try { getApi().log(msg).catch(() => {}) } catch { /* ignore */ }
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
 
-  return { raw, dirty, initialized, firstUse, configOk, configError, init, get, set, save, reload }
+  return { raw, dirty, initialized, firstUse, configOk, configError, loading, error, init, get, set, save, reload }
 })

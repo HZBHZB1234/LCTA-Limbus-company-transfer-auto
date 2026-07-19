@@ -10,8 +10,15 @@ const cleanNotice = ref(true)
 const cleanMods = ref(false)
 
 async function doClean() {
-  const mid = modalStore.create('progress', { title: '清理缓存' })
-  await getApi().clean_cache(mid, [], cleanProgress.value, cleanNotice.value, cleanMods.value)
+  const confirmId = modalStore.create('confirm', {
+    title: '确定要清除缓存吗？',
+    confirmText: '确定清除',
+    onConfirm: async () => {
+      modalStore.remove(confirmId)
+      const mid = modalStore.create('progress', { title: '清理缓存' })
+      await getApi().clean_cache(mid, [], cleanProgress.value, cleanNotice.value, cleanMods.value)
+    },
+  })
 }
 </script>
 
@@ -25,17 +32,33 @@ async function doClean() {
     <div class="settings-grid">
       <div class="setting-card">
         <h3 class="setting-title">清理选项</h3>
-        <div class="form-group">
-          <label class="checkbox-label"><input v-model="cleanProgress" type="checkbox" /> 清理进度缓存</label>
+        <div class="form-group" v-tooltip="'clean-progress'">
+          <label class="checkbox-label">
+            <input v-model="cleanProgress" type="checkbox" /> 清理进度缓存
+          </label>
         </div>
-        <div class="form-group">
-          <label class="checkbox-label"><input v-model="cleanNotice" type="checkbox" /> 清理通知缓存</label>
+        <div class="form-group" v-tooltip="'clean-notice'">
+          <label class="checkbox-label">
+            <input v-model="cleanNotice" type="checkbox" /> 清理通知缓存
+          </label>
         </div>
-        <div class="form-group">
-          <label class="checkbox-label"><input v-model="cleanMods" type="checkbox" /> 清理 Mod 缓存</label>
+        <div class="form-group" v-tooltip="'clean-mods'">
+          <label class="checkbox-label">
+            <input v-model="cleanMods" type="checkbox" /> 清理 Mod 缓存
+          </label>
         </div>
+
+        <div style="margin: 24px 0; padding: 16px; background: var(--color-bg-input); border-radius: var(--radius-md); border-left: 4px solid var(--color-danger);">
+          <div style="color: var(--color-danger); font-weight: 600; margin-bottom: 4px;">
+            <i class="fas fa-exclamation-triangle"></i> 注意
+          </div>
+          <p style="color: var(--color-text-secondary); font-size: 13px; margin: 0;">
+            此操作不可逆！清除后将无法恢复被删除的文件。请确认已备份重要数据。
+          </p>
+        </div>
+
         <div class="action-area">
-          <button class="primary-btn" @click="doClean"><i class="fas fa-broom"></i> 开始清理</button>
+          <button class="primary-btn danger" @click="doClean"><i class="fas fa-broom"></i> 清除缓存</button>
         </div>
       </div>
     </div>
@@ -43,17 +66,5 @@ async function doClean() {
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.settings-grid { display: grid; grid-template-columns: 1fr; gap: 20px; max-width: 500px; }
-.setting-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color); }
-.setting-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-.form-group { margin-bottom: 14px; }
-.action-area { margin-top: 16px; }
-.primary-btn {
-  padding: 10px 24px; border-radius: 8px; border: none; background: var(--accent-color); color: white; cursor: pointer; font-size: 14px;
-}
-.checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+/* Clean view uses shared global classes from main.css */
 </style>

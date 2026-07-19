@@ -1,9 +1,17 @@
 ﻿<script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useLogStore } from '@/stores/log'
 
 const logStore = useLogStore()
 const logEntries = computed(() => logStore.messages)
+const logContainer = ref<HTMLElement | null>(null)
+
+watch(logEntries, async () => {
+  await nextTick()
+  if (logContainer.value) {
+    logContainer.value.scrollTop = logContainer.value.scrollHeight
+  }
+})
 </script>
 
 <template>
@@ -13,7 +21,7 @@ const logEntries = computed(() => logStore.messages)
       <p class="section-subtitle">查看系统运行日志</p>
     </div>
 
-    <div class="log-container">
+    <div ref="logContainer" class="log-container">
       <div v-if="logEntries.length === 0" style="color: var(--text-secondary); padding: 20px">
         暂无日志记录
       </div>
@@ -27,19 +35,44 @@ const logEntries = computed(() => logStore.messages)
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
 .log-container {
-  background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);
-  max-height: 70vh; overflow-y: auto; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
 }
-.log-entry { display: flex; gap: 12px; padding: 6px 16px; border-bottom: 1px solid var(--border-color); }
-.log-entry:hover { background: var(--bg-primary); }
-.log-entry.error { color: #e74c3c; }
-.log-entry.warn { color: #f39c12; }
-.log-timestamp { color: var(--text-secondary); flex-shrink: 0; }
-.log-level { flex-shrink: 0; width: 60px; }
-.log-message { word-break: break-all; }
+.log-entry {
+  padding: 8px 12px;
+  margin: 0;
+  border-bottom: 1px solid var(--color-border-light);
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: var(--spacing-sm);
+  align-items: center;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  animation: slideIn 0.3s ease;
+}
+.log-entry:hover { background: var(--color-bg-primary); }
+.log-entry.info { border-left: 4px solid var(--color-info); }
+.log-entry.warning { border-left: 4px solid var(--color-warning); }
+.log-entry.warn { border-left: 4px solid var(--color-warning); }
+.log-entry.error { border-left: 4px solid var(--color-danger); }
+.log-entry.success { border-left: 4px solid var(--color-success); }
+.log-timestamp {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  min-width: 160px;
+  flex-shrink: 0;
+}
+.log-level {
+  font-weight: 600;
+  font-size: 11px;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+.log-message {
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
 </style>

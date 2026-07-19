@@ -10,6 +10,8 @@ const selectedService = ref('')
 const apiSettings = ref<Record<string, string>>({})
 const translatorServices = ref<Record<string, { name: string }>>({})
 const selectedTranslator = ref('')
+const servicesLoadError = ref(false)
+const translatorLoadError = ref(false)
 
 onMounted(async () => {
   try {
@@ -20,13 +22,21 @@ onMounted(async () => {
       selectedService.value = keys[0]
       onServiceChange()
     }
-  } catch { /* ignore */ }
+  } catch (e) {
+    console.error('API services load failed:', e)
+    getApi().log(`[ApiConfig] API服务列表加载失败: ${e}`).catch(() => {})
+    servicesLoadError.value = true
+  }
 
   try {
     const llmTranslator = await getApi().get_attr('LLM_TRANSLATOR') as Record<string, { name: string }>
     translatorServices.value = llmTranslator
     selectedTranslator.value = (configStore.get('ui_default.translator.translator') as string) || Object.keys(llmTranslator)[0] || ''
-  } catch { /* ignore */ }
+  } catch (e) {
+    console.error('Translator services load failed:', e)
+    getApi().log(`[ApiConfig] 翻译器列表加载失败: ${e}`).catch(() => {})
+    translatorLoadError.value = true
+  }
 })
 
 function onServiceChange() {
@@ -66,7 +76,10 @@ async function testApi() {
     <div class="settings-grid">
       <div class="setting-card">
         <h3 class="setting-title">翻译器选择</h3>
-        <div class="form-group">
+        <p v-if="translatorLoadError" style="color: var(--color-danger); font-size: 13px; display: flex; align-items: center; gap: 6px;">
+          <i class="fas fa-exclamation-triangle"></i> 翻译器列表加载失败，请检查程序是否正常启动
+        </p>
+        <div class="form-group" v-if="Object.keys(translatorServices).length > 0">
           <label>翻译器:</label>
           <select v-model="selectedTranslator">
             <option v-for="(svc, key) in translatorServices" :key="key" :value="key">{{ svc.name }}</option>
@@ -76,6 +89,9 @@ async function testApi() {
 
       <div class="setting-card" v-if="Object.keys(apiServices).length > 0">
         <h3 class="setting-title">API服务配置</h3>
+        <p v-if="servicesLoadError" style="color: var(--color-warning); font-size: 13px; display: flex; align-items: center; gap: 6px;">
+          <i class="fas fa-exclamation-triangle"></i> API服务列表加载失败，请检查程序配置
+        </p>
         <div class="form-group">
           <label>服务:</label>
           <select v-model="selectedService" @change="onServiceChange">
@@ -109,26 +125,5 @@ async function testApi() {
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
-.setting-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color); }
-.setting-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-.form-group { margin-bottom: 14px; }
-.form-group label { display: block; font-size: 14px; color: var(--text-secondary); margin-bottom: 6px; }
-.form-group input[type="text"], .form-group select {
-  width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); font-size: 14px;
-}
-.button-group { display: flex; gap: 8px; margin-top: 16px; }
-.primary-btn {
-  padding: 10px 24px; border-radius: 8px; border: none; background: var(--accent-color); color: white; cursor: pointer; font-size: 14px;
-}
-.action-btn {
-  padding: 10px 24px; border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); cursor: pointer; font-size: 14px;
-}
-.checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+/* ApiConfig view uses shared global classes from main.css */
 </style>

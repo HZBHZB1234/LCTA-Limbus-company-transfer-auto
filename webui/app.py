@@ -1422,6 +1422,9 @@ class LCTA_API():
             return {"success": False, "message": str(e)}
 
 def main():
+    import mimetypes
+    mimetypes.init()
+    mimetypes.add_type("application/javascript", ".js")
     # 自动检测运行环境：如果 webui/dist/index.html 存在则使用构建产物，否则加载 Vite dev server
     dist_path = os.path.join(os.getenv('path_'), "webui\\dist\\index.html")
     if os.path.exists(dist_path):

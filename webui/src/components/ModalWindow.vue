@@ -75,6 +75,8 @@ function handleCancelConfirm() {
         :text="modal.progressText"
       />
 
+      <div v-if="modal.type === 'message' && modal.bodyHtml" class="modal-message-body" v-html="modal.bodyHtml"></div>
+
       <div v-if="modal.type === 'confirm'" class="modal-confirm-message">
         {{ modal.title }}
       </div>
@@ -125,7 +127,18 @@ function handleCancelConfirm() {
       </template>
 
       <template v-if="modal.type === 'message'">
-        <button class="modal-btn" @click="emit('close', modal.id)">确定</button>
+        <template v-if="modal.actionButtons && modal.actionButtons.length > 0">
+          <button
+            v-for="(btn, idx) in modal.actionButtons"
+            :key="idx"
+            class="modal-btn"
+            :class="{ 'modal-btn-danger': btn.danger }"
+            @click="btn.onClick()"
+          >
+            {{ btn.text }}
+          </button>
+        </template>
+        <button v-else class="modal-btn" @click="emit('close', modal.id)">确定</button>
       </template>
     </div>
   </div>
@@ -133,77 +146,120 @@ function handleCancelConfirm() {
 
 <style scoped>
 .modal-window {
-  background: var(--bg-primary);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  width: 520px;
-  max-height: 80vh;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 600px;
+  max-width: 90vw;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.4s var(--transition-easing);
 }
 .modal-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
-  gap: 12px;
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
 }
 .modal-title {
+  font-size: 18px;
   font-weight: 600;
-  font-size: 15px;
+  color: var(--color-text-primary);
   flex: 1;
 }
 .modal-status {
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: var(--accent-color);
+  background: var(--color-primary);
   color: white;
 }
-.modal-status.canceled { background: #e74c3c; }
-.modal-status.completed { background: #27ae60; }
-.modal-header-actions { display: flex; gap: 4px; }
+.modal-status.canceled { background: var(--color-danger); }
+.modal-status.completed { background: var(--color-success); }
+
+.modal-header-actions { display: flex; gap: var(--spacing-sm); }
 .modal-btn-icon {
-  width: 28px; height: 28px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
+  width: 32px; height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-input);
+  color: var(--color-text-secondary);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all var(--transition-speed) var(--transition-easing);
 }
-.modal-btn-icon:hover { background: var(--bg-secondary); }
-.modal-body { padding: 16px 20px; flex: 1; overflow-y: auto; }
+.modal-btn-icon:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.modal-body {
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+  flex: 1;
+}
 .modal-log {
-  margin-top: 12px;
+  margin-top: var(--spacing-md);
   max-height: 200px;
   overflow-y: auto;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
+  background: var(--color-bg-input);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-md);
+  font-size: 12px;
   font-family: 'Consolas', monospace;
 }
 .modal-log-entry { display: flex; gap: 8px; padding: 2px 0; }
-.log-time { color: var(--text-secondary); flex-shrink: 0; }
+.log-time { color: var(--color-text-secondary); flex-shrink: 0; }
 .log-msg { word-break: break-all; }
-.modal-confirm-message { padding: 16px 0; }
+.modal-confirm-message { padding: var(--spacing-md) 0; }
+.modal-message-body {
+  padding: var(--spacing-md) 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.modal-message-body :deep(h1),
+.modal-message-body :deep(h2),
+.modal-message-body :deep(h3) {
+  margin-top: 0;
+  color: var(--color-text-primary);
+}
+.modal-message-body :deep(p) {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+.modal-message-body :deep(a) {
+  color: var(--color-primary);
+}
+
 .modal-footer {
+  padding: var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border-color);
+  gap: var(--spacing-sm);
 }
 .modal-btn {
   padding: 8px 20px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
   cursor: pointer;
   font-size: 14px;
+  transition: all var(--transition-speed) var(--transition-easing);
 }
-.modal-btn:hover { background: var(--bg-secondary); }
-.modal-btn-danger { color: #e74c3c; border-color: #e74c3c; }
-.modal-btn-cancel { color: var(--text-secondary); }
+.modal-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+.modal-btn-danger { color: var(--color-danger); border-color: var(--color-danger); }
+.modal-btn-danger:hover { background: var(--color-danger); color: white; }
+.modal-btn-cancel { color: var(--color-text-secondary); }
 </style>

@@ -11,6 +11,12 @@ export interface LogEntry {
   message: string
 }
 
+export interface ActionButton {
+  text: string
+  danger?: boolean
+  onClick: () => void
+}
+
 export interface ModalState {
   id: string
   type: ModalType
@@ -24,6 +30,8 @@ export interface ModalState {
   cancelText?: string
   onConfirm?: () => void
   onCancel?: () => void
+  bodyHtml?: string
+  actionButtons?: ActionButton[]
 }
 
 export interface ModalOptions {
@@ -32,6 +40,8 @@ export interface ModalOptions {
   cancelText?: string
   onConfirm?: () => void
   onCancel?: () => void
+  bodyHtml?: string
+  actionButtons?: ActionButton[]
 }
 
 function formatTime(): string {
@@ -65,6 +75,8 @@ export const useModalStore = defineStore('modal', () => {
       cancelText: options.cancelText,
       onConfirm: options.onConfirm,
       onCancel: options.onCancel,
+      bodyHtml: options.bodyHtml,
+      actionButtons: options.actionButtons,
     }
     modals.value.push(state)
     getApi().add_modal_id(id)

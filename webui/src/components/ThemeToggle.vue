@@ -27,23 +27,41 @@ const themes = [
 .theme-toggle {
   display: flex;
   gap: 4px;
-  padding: 8px;
+  padding: 4px;
 }
 .theme-btn {
-  width: 32px;
-  height: 32px;
-  border: 2px solid transparent;
-  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--color-text-light);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 16px;
+  transition: all var(--transition-speed) var(--transition-easing);
+  position: relative;
+  overflow: hidden;
+  opacity: 0.7;
+}
+.theme-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-primary);
+  transform: translateY(-2px);
+  opacity: 1;
 }
 .theme-btn.active {
-  border-color: var(--accent-color);
-  color: var(--accent-color);
+  background: var(--color-primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  opacity: 1;
+}
+.theme-btn:active:not(.active) {
+  transform: scale(0.9);
+}
+.theme-btn.changing {
+  animation: themeChanging 0.3s ease-in-out;
 }
 </style>

@@ -2,8 +2,10 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { getApi } from '@/utils/api'
 import { useModalStore } from '@/stores/modal'
+import { useConfigStore } from '@/stores/config'
 
 const modalStore = useModalStore()
+const configStore = useConfigStore()
 
 const disclaimerAccepted = ref(false)
 const processRunning = ref(false)
@@ -11,22 +13,46 @@ const dllInjected = ref(false)
 const currentSpeed = ref(1.0)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
+const launcherWorkSpeed = ref(false)
+const launcherSpeedFactor = ref(2.0)
+
 function startPolling() {
   pollTimer = setInterval(async () => {
     try {
-      const status = await getApi().speed_get_status()
-      processRunning.value = status.process_running
-      dllInjected.value = status.dll_injected
-      currentSpeed.value = status.current_speed
-    } catch { /* ignore */ }
+      const result = await getApi().speed_get_status()
+      if (!result?.success) return
+      const s = result.data
+      processRunning.value = s.running ?? false
+      dllInjected.value = s.injected ?? false
+      currentSpeed.value = s.speed ?? 1.0
+    } catch (e) {
+      console.error('Speed status polling failed:', e)
+      getApi().log(`[Speed] 状态轮询失败: ${e}`).catch(() => {})
+    }
   }, 2000)
 }
 
-onMounted(() => { if (disclaimerAccepted.value) startPolling() })
+onMounted(async () => {
+  launcherWorkSpeed.value = (configStore.get('launcher.work.speed') as boolean) ?? false
+  launcherSpeedFactor.value = (configStore.get('launcher.work.speed_factor') as number) || 2.0
+
+  // Check if disclaimer was previously accepted
+  try {
+    const accepted = await getApi().get_config_value('speed.disclaimer_accepted', false) as boolean
+    if (accepted) {
+      disclaimerAccepted.value = true
+    }
+  } catch { /* ignore */ }
+  if (disclaimerAccepted.value) startPolling()
+})
+
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 
-function acceptDisclaimer() {
+async function acceptDisclaimer() {
   disclaimerAccepted.value = true
+  try {
+    await getApi().update_config_value('speed.disclaimer_accepted', true)
+  } catch { /* ignore */ }
   startPolling()
 }
 
@@ -41,6 +67,16 @@ async function doEject() {
 
 async function setSpeed(factor: number) {
   await getApi().speed_set(factor)
+}
+
+async function saveLauncherWorkSpeed() {
+  configStore.set('launcher.work.speed', launcherWorkSpeed.value)
+  await configStore.save()
+}
+
+async function saveLauncherSpeedFactor() {
+  configStore.set('launcher.work.speed_factor', launcherSpeedFactor.value)
+  await configStore.save()
 }
 </script>
 
@@ -82,29 +118,54 @@ async function setSpeed(factor: number) {
           </div>
         </div>
       </div>
+
+      <div class="settings-grid" style="margin-top: 16px;">
+        <div class="setting-card">
+          <h3 class="setting-title">Launcher 模式下的游戏加速设置</h3>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input id="launcher-work-speed" v-model="launcherWorkSpeed" type="checkbox" @change="saveLauncherWorkSpeed" />
+              在 Launcher 模式下启用游戏加速
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="launcher-speed-factor">热键切换的速度因子:</label>
+            <input id="launcher-speed-factor" v-model.number="launcherSpeedFactor" type="number" min="0.1" max="10" step="0.1" @change="saveLauncherSpeedFactor" />
+          </div>
+          <p class="speed-info">快捷键：Ctrl+S 切换游戏加速开关，Ctrl+Shift+S 打开速度选择器</p>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.disclaimer { max-width: 500px; margin: 40px auto; text-align: center; padding: 32px; background: var(--bg-secondary); border-radius: 12px; }
-.disclaimer h2 { color: #f39c12; margin-bottom: 16px; }
-.disclaimer p { color: var(--text-secondary); margin-bottom: 24px; line-height: 1.6; }
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.settings-grid { display: grid; grid-template-columns: 1fr; gap: 20px; max-width: 500px; }
-.setting-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color); }
-.setting-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-.green { color: #27ae60; } .red { color: #e74c3c; }
-.button-group { display: flex; gap: 8px; margin-top: 12px; }
-.speed-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
-.action-btn {
-  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); cursor: pointer; font-size: 14px;
+.disclaimer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  min-height: 60vh;
+  text-align: center;
 }
-.action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.action-btn.danger { color: #e74c3c; }
-.primary-btn { padding: 10px 24px; border-radius: 8px; border: none; background: var(--accent-color); color: white; cursor: pointer; font-size: 14px; }
+.disclaimer h2 { color: #dc2626; margin-bottom: 16px; font-size: 1.3rem; }
+.disclaimer p {
+  max-width: 500px;
+  color: var(--color-text-secondary);
+  margin-bottom: 24px;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.speed-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.speed-buttons .action-btn { min-width: 42px; text-align: center; }
+
+.speed-info {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+
+.green { color: #16a34a; font-weight: 600; }
+.red { color: #9ca3af; font-weight: 600; }
 </style>

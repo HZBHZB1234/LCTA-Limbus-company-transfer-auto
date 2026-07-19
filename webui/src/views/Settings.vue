@@ -4,11 +4,13 @@ import { useRouter } from 'vue-router'
 import { getApi } from '@/utils/api'
 import { useConfigStore } from '@/stores/config'
 import { useUpdateStore } from '@/stores/update'
+import { useModalStore } from '@/stores/modal'
 import { listenEvent } from '@/utils/events'
 
 const router = useRouter()
 const configStore = useConfigStore()
 const updateStore = useUpdateStore()
+const modalStore = useModalStore()
 
 const gamePath = ref('')
 const debugMode = ref(false)
@@ -31,6 +33,10 @@ listenEvent('lcta:file-picked', (detail) => {
   if (detail.inputId === 'cache-path') cachePath.value = detail.path
   if (detail.inputId === 'storage-path') storagePath.value = detail.path
   if (detail.inputId === 'game-path') gamePath.value = detail.path
+  if (detail.inputId === 'update-file') {
+    const mid = modalStore.create('progress', { title: '从本地更新包更新' })
+    getApi().perform_update_from_file(detail.path, mid)
+  }
 })
 
 onMounted(() => {
@@ -83,6 +89,10 @@ async function resetConfig() {
 
 async function browseFolder(inputId: string) {
   await getApi().browse_folder(inputId)
+}
+
+async function manualUpdateFromLocal() {
+  await getApi().browse_file('update-file')
 }
 </script>
 
@@ -201,6 +211,9 @@ async function browseFolder(inputId: string) {
         <button class="action-btn" @click="updateStore.check()">
           <i class="fas fa-sync-alt"></i> 检查更新
         </button>
+        <button class="action-btn" @click="manualUpdateFromLocal">
+          <i class="fas fa-file-upload"></i> 从本地更新包手动更新
+        </button>
         <button class="action-btn" @click="updateStore.perform('')">
           <i class="fas fa-sync-alt"></i> 强制进行更新
         </button>
@@ -216,35 +229,5 @@ async function browseFolder(inputId: string) {
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
-.setting-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color); }
-.setting-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-.form-group { margin-bottom: 14px; }
-.form-group label { display: block; font-size: 14px; color: var(--text-secondary); margin-bottom: 6px; }
-.form-group input[type="text"],
-.form-group input[type="number"] {
-  width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); font-size: 14px;
-}
-.file-input-group { display: flex; gap: 8px; }
-.file-input-group input { flex: 1; }
-.action-btn {
-  display: block; width: 100%; padding: 10px 16px; margin-bottom: 8px;
-  border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); cursor: pointer; font-size: 14px; text-align: left;
-}
-.action-btn:hover { background: var(--bg-secondary); }
-.action-btn.danger { color: #e74c3c; border-color: #e74c3c; }
-.primary-btn {
-  padding: 10px 24px; border-radius: 8px; border: none;
-  background: var(--accent-color); color: white; cursor: pointer; font-size: 14px;
-}
-.action-area { margin-top: 8px; }
-.checkbox-label { display: flex !important; align-items: center; gap: 8px; cursor: pointer; }
-.checkbox-label input[type="checkbox"] { width: 16px; height: 16px; }
-.secondary { font-size: 12px; }
+/* Settings view uses shared global classes from main.css */
 </style>

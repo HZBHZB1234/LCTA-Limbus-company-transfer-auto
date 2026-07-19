@@ -1,4 +1,28 @@
 ﻿<script setup lang="ts">
+import { getApi } from '@/utils/api'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+async function doStartTest() {
+  await getApi().startTest()
+}
+
+async function doEvalSkip() {
+  await getApi().eval_skip()
+}
+
+async function doSignEvalJs() {
+  await getApi().sign_eval_js()
+}
+
+function doForceReload() {
+  location.reload()
+}
+
+function goWelcome() {
+  router.push('/welcome')
+}
 </script>
 
 <template>
@@ -7,16 +31,21 @@
       <h2 class="section-title"><i class="fas fa-flask"></i> 测试界面</h2>
       <p class="section-subtitle">开发和调试工具</p>
     </div>
-    <div class="setting-card">
-      <p style="color: var(--text-secondary)">测试功能区域。正常运行不需要使用此页面。</p>
+    <div class="settings-grid">
+      <div class="setting-card">
+        <h3 class="setting-title">调试功能</h3>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <button class="primary-btn" @click="doStartTest"><i class="fas fa-terminal"></i> 开始启动</button>
+          <button class="primary-btn" @click="doEvalSkip"><i class="fas fa-code"></i> 注入js</button>
+          <button class="primary-btn" @click="doSignEvalJs"><i class="fas fa-globe"></i> 为窗口订阅js</button>
+          <button class="action-btn" @click="doForceReload"><i class="fas fa-sync-alt"></i> 强制刷新缓存并重载</button>
+          <button class="action-btn" @click="goWelcome"><i class="fas fa-home"></i> 显示欢迎页面</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.setting-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color); max-width: 500px; }
+/* Test view uses shared global classes from main.css */
 </style>

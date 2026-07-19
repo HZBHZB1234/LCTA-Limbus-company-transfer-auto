@@ -10,15 +10,15 @@ onMounted(async () => {
   try {
     const readmeResp = await fetch('assets/README.md')
     if (readmeResp.ok) readmeHtml.value = await marked.parse(await readmeResp.text())
-  } catch { /* ignore */ }
+  } catch (e) { console.error('About README load failed:', e) }
   try {
     const updateResp = await fetch('assets/update.md')
     if (updateResp.ok) updateHtml.value = await marked.parse(await updateResp.text())
-  } catch { /* ignore */ }
+  } catch (e) { console.error('About update.md load failed:', e) }
   try {
     const helpResp = await fetch('assets/firstUse.md')
     if (helpResp.ok) helpHtml.value = await marked.parse(await helpResp.text())
-  } catch { /* ignore */ }
+  } catch (e) { console.error('About firstUse.md load failed:', e) }
 })
 </script>
 
@@ -65,15 +65,5 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.about-container { display: flex; flex-direction: column; gap: 20px; }
-.about-card { background: var(--bg-secondary); border-radius: 12px; padding: 24px; border: 1px solid var(--border-color); }
-.about-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-.about-logo { font-size: 32px; color: var(--accent-color); }
-.about-title h3 { font-size: 18px; margin: 0; }
-.version-badge { font-size: 13px; color: var(--text-secondary); margin: 4px 0 0; }
-.markdown-body { font-size: 14px; line-height: 1.6; }
+.about-container { display: flex; flex-direction: column; gap: var(--spacing-lg); }
 </style>

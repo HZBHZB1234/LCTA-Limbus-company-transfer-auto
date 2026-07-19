@@ -77,11 +77,14 @@ onMounted(async () => {
         apiStatus.value = '未配置 API'
         apiClass.value = 'warning'
       }
-    } catch {
+    } catch (e) {
+      console.error('Dashboard API config check failed:', e)
+      getApi().log(`[Dashboard] API配置检查失败: ${e}`).catch(() => {})
       apiStatus.value = '点击配置'
     }
-  } catch {
-    // dashboard refresh failed
+  } catch (e) {
+    console.error('Dashboard refresh failed:', e)
+    getApi().log(`[Dashboard] 首页数据刷新失败: ${e}`).catch(() => {})
   }
 })
 </script>
@@ -149,32 +152,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-.dashboard-card {
-  display: flex; gap: 16px; padding: 20px;
-  background: var(--bg-secondary); border-radius: 12px;
-  border: 1px solid var(--border-color);
-  align-items: center;
-}
-.dashboard-card.warning { border-color: #f39c12; }
-.dashboard-card.success { border-color: #27ae60; }
-.dash-card-icon { font-size: 28px; color: var(--accent-color); width: 44px; text-align: center; }
-.dash-card-content { flex: 1; }
-.dash-card-label { font-size: 13px; color: var(--text-secondary); }
-.dash-card-value { font-size: 15px; font-weight: 500; margin-top: 4px; }
-.action-btn {
-  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); cursor: pointer; font-size: 14px;
-}
-.action-btn:hover { background: var(--bg-secondary); }
-.primary-btn {
-  padding: 8px 16px; border-radius: 8px; border: none;
-  background: var(--accent-color); color: white; cursor: pointer; font-size: 14px;
-}
-.primary-btn:hover { opacity: 0.9; }
-.secondary { color: var(--text-secondary); }
+.dashboard-card.warning { border-left-color: var(--color-warning); }
+.dashboard-card.success { border-left-color: var(--color-success); }
 </style>

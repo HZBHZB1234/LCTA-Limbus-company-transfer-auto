@@ -8,12 +8,17 @@ const router = useRouter()
 const pages = ref<Array<{ name: string; title: string; done: boolean }>>([])
 
 onMounted(async () => {
-  const relyList = await getApi().get_attr('relyList') as Record<string, string[]> || {}
-  pages.value = Object.entries(relyList).map(([name]) => ({
-    name,
-    title: name,
-    done: false,
-  }))
+  try {
+    const relyList = await getApi().get_attr('relyList') as Record<string, string[]> || {}
+    pages.value = Object.entries(relyList).map(([name]) => ({
+      name,
+      title: name,
+      done: false,
+    }))
+  } catch (e) {
+    console.error('Elder relyList load failed:', e)
+    getApi().log(`[Elder] 设置向导列表加载失败: ${e}`).catch(() => {})
+  }
 })
 </script>
 
@@ -43,17 +48,5 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.settings-grid { display: grid; grid-template-columns: 1fr; gap: 20px; max-width: 500px; }
-.setting-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color); }
-.primary-btn {
-  padding: 10px 24px; border-radius: 8px; border: none; background: var(--accent-color); color: white; cursor: pointer; font-size: 14px;
-}
-.action-btn {
-  padding: 10px 24px; border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); cursor: pointer; font-size: 14px;
-}
+/* Elder view uses shared global classes from main.css */
 </style>

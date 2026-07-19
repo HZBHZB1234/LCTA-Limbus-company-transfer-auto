@@ -41,6 +41,7 @@ export const useThemeStore = defineStore('theme', () => {
       const configStore = useConfigStore()
       if (configStore.initialized) {
         configStore.set(THEME_KEY, theme)
+        configStore.save().catch(() => {})
       }
     } catch { /* config store not ready */ }
   }

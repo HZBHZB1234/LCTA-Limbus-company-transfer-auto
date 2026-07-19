@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getApi } from '@/utils/api'
 import { useModalStore } from '@/stores/modal'
 import { listenEvent } from '@/utils/events'
@@ -11,9 +11,32 @@ const configStore = useConfigStore()
 const packageDirectory = ref('')
 const packages = ref<Array<{ name: string; path: string; size?: number }>>([])
 const selectedPackage = ref<string | null>(null)
+const loadError = ref(false)
+
+// Font management state
+const fonts = ref<Array<{ name: string; path: string }>>([])
+const selectedFont = ref<string | null>(null)
+const fontsLoadError = ref(false)
+const fontFilter = ref('')
+
+const filteredFonts = computed(() => {
+  if (!fontFilter.value) return fonts.value
+  const q = fontFilter.value.toLowerCase()
+  return fonts.value.filter(f => f.name.toLowerCase().includes(q))
+})
 
 listenEvent('lcta:file-picked', (detail) => {
   if (detail.inputId === 'install-package-directory') packageDirectory.value = detail.path
+  if (detail.inputId === 'install-font-path') {
+    if (selectedPackage.value) {
+      getApi().change_font_for_package(selectedPackage.value, detail.path)
+    }
+  }
+  if (detail.inputId === 'install-font-export-dest') {
+    if (selectedFont.value) {
+      getApi().export_selected_font(selectedFont.value, detail.path)
+    }
+  }
 })
 
 onMounted(async () => {
@@ -22,7 +45,19 @@ onMounted(async () => {
 })
 
 async function refreshList() {
-  packages.value = await getApi().get_translation_packages()
+  try {
+    loadError.value = false
+    const result = await getApi().get_translation_packages() as unknown as Record<string, unknown>
+    if (result && result.success) {
+      packages.value = (result.packages as Array<{ name: string; path: string; size?: number }>) || []
+    } else {
+      packages.value = []
+    }
+  } catch (e) {
+    console.error('Install packages list load failed:', e)
+    getApi().log(`[Install] 汉化包列表加载失败: ${e}`).catch(() => {})
+    loadError.value = true
+  }
 }
 
 async function installPackage() {
@@ -39,6 +74,35 @@ async function deletePackage() {
 
 async function browseDir() {
   await getApi().browse_folder('install-package-directory')
+}
+
+// Font management methods
+async function loadFonts() {
+  try {
+    fontsLoadError.value = false
+    const result = await getApi().get_system_fonts_list()
+    fonts.value = (result.fonts || []) as Array<{ name: string; path: string }>
+  } catch (e) {
+    console.error('Font list load failed:', e)
+    getApi().log(`[Install] 系统字体列表加载失败: ${e}`).catch(() => {})
+    fontsLoadError.value = true
+  }
+}
+
+async function changeFontForPackage() {
+  if (!selectedPackage.value) return
+  await getApi().browse_file('install-font-path')
+}
+
+async function browseExportDest() {
+  if (!selectedFont.value) return
+  await getApi().browse_folder('install-font-export-dest')
+}
+
+function loadFontsIfNeeded() {
+  if (fonts.value.length === 0 && !fontsLoadError.value) {
+    loadFonts()
+  }
 }
 </script>
 
@@ -66,7 +130,12 @@ async function browseDir() {
         <div class="form-group">
           <label>可用汉化包:</label>
           <div class="list-container">
-            <div v-if="packages.length === 0" class="list-empty">
+            <div v-if="loadError" class="list-empty list-error">
+              <i class="fas fa-exclamation-triangle"></i>
+              <p>加载汉化包列表失败</p>
+              <button class="action-btn" @click="refreshList"><i class="fas fa-redo"></i> 重试</button>
+            </div>
+            <div v-else-if="packages.length === 0" class="list-empty">
               <i class="fas fa-box-open"></i>
               <p>未找到可用的汉化包</p>
             </div>
@@ -92,44 +161,68 @@ async function browseDir() {
         </div>
       </div>
     </div>
+
+    <div class="settings-grid" style="margin-top: 16px;">
+      <div class="setting-card">
+        <h3 class="setting-title"><i class="fas fa-font"></i> 字体管理</h3>
+
+        <div class="form-group">
+          <label>更换汉化包字体:</label>
+          <div class="button-group">
+            <button class="action-btn" :disabled="!selectedPackage" @click="changeFontForPackage">
+              <i class="fas fa-exchange-alt"></i> 为选中包更换字体
+            </button>
+          </div>
+          <small v-if="!selectedPackage" class="form-hint">请先在汉化包列表中选择一个汉化包</small>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label>系统字体列表:</label>
+          <div v-if="fonts.length > 0" style="margin-bottom: 8px;">
+            <input
+              v-model="fontFilter"
+              type="text"
+              placeholder="搜索字体..."
+              style="max-width: 300px; font-size: 13px;"
+            />
+          </div>
+          <div v-if="fontsLoadError" class="list-empty list-error">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>加载字体列表失败</p>
+            <button class="action-btn" @click="loadFonts"><i class="fas fa-redo"></i> 重试</button>
+          </div>
+          <div v-else-if="fonts.length === 0 && !fontsLoadError" class="list-empty">
+            <i class="fas fa-font"></i>
+            <p>点击下方按钮加载系统字体</p>
+          </div>
+          <div v-else class="list-container" style="max-height: 200px;">
+            <div
+              v-for="font in filteredFonts"
+              :key="font.path"
+              class="list-item"
+              :class="{ selected: selectedFont === font.name }"
+              @click="selectedFont = font.name"
+            >
+              <span>{{ font.name }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button class="action-btn" @click="loadFontsIfNeeded">
+            <i class="fas fa-sync-alt"></i> {{ fonts.length > 0 ? '刷新字体列表' : '加载字体列表' }}
+          </button>
+          <button class="action-btn success" :disabled="!selectedFont" @click="browseExportDest">
+            <i class="fas fa-file-export"></i> 导出选中字体
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.settings-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
-.setting-card { background: var(--bg-secondary); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color); }
-.setting-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
-.form-group { margin-bottom: 14px; }
-.form-group label { display: block; font-size: 14px; color: var(--text-secondary); margin-bottom: 6px; }
-.form-group input[type="text"] {
-  width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); font-size: 14px;
-}
-.file-input-group { display: flex; gap: 8px; }
-.file-input-group input { flex: 1; }
-.form-hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
-.list-container { border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
-.list-item {
-  padding: 10px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color);
-  display: flex; justify-content: space-between; align-items: center;
-}
-.list-item:hover { background: var(--bg-primary); }
-.list-item.selected { background: var(--accent-color); color: white; }
-.list-item:last-child { border-bottom: none; }
-.list-empty { padding: 24px; text-align: center; color: var(--text-secondary); }
 .list-item-size { font-size: 12px; opacity: 0.7; }
-.button-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-.action-btn {
-  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); cursor: pointer; font-size: 14px;
-}
-.action-btn:hover { background: var(--bg-secondary); }
-.action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.action-btn.success { border-color: #27ae60; color: #27ae60; }
-.action-btn.danger { border-color: #e74c3c; color: #e74c3c; }
-.secondary { font-size: 12px; }
+.list-error { color: var(--color-danger); }
+.list-error .action-btn { margin-top: 8px; }
 </style>

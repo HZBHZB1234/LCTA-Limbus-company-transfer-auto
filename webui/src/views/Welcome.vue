@@ -10,7 +10,9 @@ onMounted(async () => {
   try {
     const resp = await fetch('assets/firstUse.md')
     if (resp.ok) welcomeHtml.value = await marked.parse(await resp.text())
-  } catch { /* ignore */ }
+  } catch (e) {
+    console.error('Welcome markdown load failed:', e)
+  }
 })
 </script>
 
@@ -43,22 +45,5 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.section-header { margin-bottom: 24px; }
-.section-title { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-.section-title i { color: var(--accent-color); }
-.section-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.about-card { background: var(--bg-secondary); border-radius: 12px; padding: 24px; border: 1px solid var(--border-color); max-width: 700px; }
-.about-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-.about-logo { font-size: 32px; color: var(--accent-color); }
-.about-title h3 { font-size: 18px; margin: 0; }
-.version-badge { font-size: 13px; color: var(--text-secondary); margin: 4px 0 0; }
-.markdown-body { font-size: 14px; line-height: 1.6; }
-.primary-btn {
-  padding: 10px 24px; border-radius: 8px; border: none;
-  background: var(--accent-color); color: white; cursor: pointer; font-size: 14px;
-}
-.action-btn {
-  padding: 10px 24px; border-radius: 8px; border: 1px solid var(--border-color);
-  background: var(--bg-primary); color: var(--text-primary); cursor: pointer; font-size: 14px;
-}
+/* Welcome view uses shared global classes from main.css */
 </style>

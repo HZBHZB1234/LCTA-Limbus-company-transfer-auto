@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-18 -->
+<!-- Last updated: 2026-07-19 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -9,13 +9,13 @@ Feature-to-code call chain traces. Each section maps a user-visible feature to t
 ## 1. Translation Installation — LLC (零协会)
 
 ```
-JS: user clicks install button
-  → webui/js/features.js           click handler → pywebview.api.install_llc()
+Vue: user clicks install button
+  → webui/src/views/Download.vue     click handler → getApi().install_llc()
   → webui/app.py                   LCTA_API.install_llc()
   → webutils/function_llc.py       download & install LLC pack
     → webFunc/GithubDownload.py    fetch from GitHub Releases API
     → webutils/functions.py        zip extraction, 7z integration
-  → webui/app.py                   callback: progress → JS modal update
+  → webui/app.py                   _emit('lcta:modal-progress') → modalStore
 ```
 
 ## 2. Translation Installation — OurPlay
@@ -32,8 +32,9 @@ JS: user clicks install button (PC or Android source)
 ## 3. LLM Auto-Translation (核心功能)
 
 ```
-JS: user configures & clicks translate
-  → webui/app.py                   LCTA_API.translate()
+Vue: user configures & clicks translate
+  → webui/src/views/Translate.vue   getApi().start_translation(config, modalId)
+  → webui/app.py                   LCTA_API.start_translation()
   → webutils/function_translate.py orchestration entry
   → translateFunc/pipeline.py      TranslationPipeline.run()
     Stage 1: translateFunc/get_proper.py     fetch proper nouns from remote
@@ -46,7 +47,7 @@ JS: user configures & clicks translate
     Stage 5: translateFunc/matcher/engine.py post-translation proper matching
     Stage 6: translateFunc/pipeline.py       aggregate results → PipelineSummary
   → webutils/function_translate.py  write output files
-  → webui/app.py                    callback: summary → JS modal
+  → webui/app.py                    _emit('lcta:modal-progress') → modalStore
 ```
 
 Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc/pipeline.py`, `translateFunc/config.py`, `translateFunc/processor.py`, `translateFunc/workers.py`, `translateFunc/translate_request.py`, `translateFunc/get_proper.py`, `translateFunc/builder/prompt.py`, `translateFunc/builder/request.py`, `translateFunc/builder/stages.py`, `translateFunc/matcher/engine.py`, `translateFunc/matcher/ac_automaton.py`, `translateFunc/log_bridge.py`, `globalManagers/LogManager.py`
@@ -54,8 +55,8 @@ Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc
 ## 4. CDN Optimization
 
 ```
-JS: user clicks "test speed" or "optimize"
-  → webui/js/cdn.js                UI logic, progress display
+Vue: user clicks "test speed" or "optimize"
+  → webui/src/views/Cdn.vue         UI logic, progress display
   → webui/app.py                   LCTA_API.cdn_test() / .cdn_optimize()
   → webutils/function_cdn.py       CDN logic
     → subprocess: CFST/cfst.exe    CloudflareSpeedTest binary
@@ -68,7 +69,7 @@ Launcher mode (auto-start):
     → ConfigManager.set()          store last_cdn_test_time on success
 ```
 
-Files: `webui/js/cdn.js`, `webui/app.py`, `webutils/function_cdn.py`, `launcher/cdn.py`, `CFST/cfst.exe`, `CFST/ip.txt`
+Files: `webui/src/views/Cdn.vue`, `webui/app.py`, `webutils/function_cdn.py`, `launcher/cdn.py`, `CFST/cfst.exe`, `CFST/ip.txt`
 
 ## 5. Game Launch (with Mods)
 
@@ -95,9 +96,9 @@ Files: `start_webui.py`, `launcher/main.py`, `launcher/gui_progress.py`, `launch
 ## 6. Game Speed Modification
 
 ```
-JS: user adjusts speed slider
-  → webui/js/speed.js               slider change handler
-  → webui/app.py                    LCTA_API.set_speed()
+Vue: user adjusts speed slider
+  → webui/src/views/Speed.vue        disclaimer gate → slider/button
+  → webui/app.py                    LCTA_API.speed_inject() / .speed_set()
   → webutils/function_speed.py      openspeedy DLL injection
     → subprocess: openspeedy        inject DLL → hook game time APIs
 
@@ -110,18 +111,20 @@ Launcher mode:
     → openspeedy                    inject DLL
 ```
 
-Files: `webui/js/speed.js`, `webui/app.py`, `webutils/function_speed.py`, `launcher/speed_hotkey.py`
+Files: `webui/src/views/Speed.vue`, `webui/app.py`, `webutils/function_speed.py`, `launcher/speed_hotkey.py`
 
 ## 7. Config Management
 
 ```
-Write: JS form change
-  → pywebview.api.save_config()
-  → webui/app.py                    LCTA_API.save_config()
+Write: Vue component form change
+  → configStore.set(path, value)     Pinia deepSet, mark dirty
+  → configStore.save()               debounced → getApi().update_config_batch()
+  → webui/app.py                    LCTA_API.update_config_batch()
   → globalManagers/ConfigManager.py ConfigManager.set(key, value)
   → write config.json               auto-save to disk
 
-Read: ConfigManager.get(key)        dotted-path access, falls back to config_default.json
+Read: configStore.get(path)        Pinia deepGet from reactive raw object
+      ConfigManager.get(key)        dotted-path access, falls back to config_default.json
 
 Key launcher config items:
   launcher.work.cdn_optimize (bool)     auto CDN optimize on launch
@@ -166,12 +169,11 @@ Files: `webui/js/features.js`, `webui/app.py`, `webutils/update.py`
 ## 10. Drag-and-Drop File Installation
 
 ```
-JS: user drags files onto window
-  → js/features.js                  DragDropManager — drag counter, mask UI
-    → on drop → onFileDropCallback(files)
-  → webui/app.py                    on_drop() → passes file paths as JSON to JS
-  → js/features.js                  setupDragDropCallback() receives files
-    → pywebview.api.handle_dropped_files(files)
+Vue: user drags files onto window
+  → webui/src/components/DragOverlay.vue  drag counter, glass-morph overlay
+  → webui/app.py                    on_drop() → _emit('lcta:file-dropped', {files})
+  → Vue app listens                  lcta:file-dropped → file drop handler
+    → getApi().handle_dropped_files(files)
   → webui/app.py                    LCTA_API.handle_dropped_files(files_data)
     → webutils/function_drop.py     evalFile() per file, makeMessage() aggregation
     → confirm modal                 user confirms operation
@@ -182,10 +184,10 @@ JS: user drags files onto window
     → FLmod:                        extract_zip_smartly() or copytree to mod_path
     → jsononly:                     extract to mod_path
     → update:                       Updater() via webutils/update.py
-    → progress:                     LogManager modal callbacks
+    → progress:                     _emit('lcta:modal-progress') → modalStore
 ```
 
-Files: `webui/js/features.js`, `webui/app.py`, `webutils/function_drop.py`, `webutils/update.py`
+Files: `webui/src/components/DragOverlay.vue`, `webui/app.py`, `webutils/function_drop.py`, `webutils/update.py`
 
 ## 11. WebUI Startup Bootstrap
 
@@ -196,33 +198,29 @@ start_webui.py main()
     → globalManagers/ConfigManager.py          init singleton, load config.json
     → globalManagers/LogManager.py             init logger
     → webui/app.py LCTA_API.__init__()         register all pywebview API methods
-    → pywebview.create_window()                create native window
-    → webui/index.html loads                   HTML/CSS/JS
-      → js/init.js                             DOMContentLoaded → init()
-      → js/features.js                         async init():
-        → sections/preload.js                  loadSection('dashboard') — only dashboard preloaded
-        → DragDropManager init                 drag-and-drop setup
-        → initListManagers()                   creates managers (containers may not exist yet)
-        → initNavigation()                     click handlers registered
-    → pywebviewready event fires               JS ↔ Python bridge active
-      → pywebview.api.get_startup_data()       single call returns full startup bundle
-      → _pendingWelcomeContent                 deferred rendering for welcome section
-      → configManager.applyConfigToUI()        null-guarded, skips unloaded sections
-      → toggle functions                       all null-guarded
-      → fancyManager.init() / elderManager.init()  null-guarded DOM access
-      → check_show() / init_github() / init_log()
-      → fire-and-forget:                       change_icon, init_cache, set_attr(http_port)
+    → auto-detect env: dist/index.html exists?  → production (load dist/)
+                                               → dev (load localhost:5173)
+    → pywebview.create_window(url=url)          create native window
 
-  User navigates to a section:
-    → initNavigation async handler             await loadSection(name)
-      → sections/preload.js                    fetch HTML → inject → onSectionLoaded(name)
-        → [console.log]                        per-section debug log
-        → section-specific init:               toggle funcs, list manager ref updates,
-                                               select box values, DOM ref rebuilds
-        → configManager.applyConfigToUI()      re-apply for newly injected elements
-        → initTooltips() / initPasswordToggles()
-      → section callbacks:                     refreshInstallPackageList, cdnManager.init, etc.
-      → AnimationManager.fadeIn()
+  Frontend bootstrap (webui/src/main.ts):
+    → window pywebviewready event fires         JS ↔ Python bridge active
+    → import { initApi }                        await initApi() — resolves to typed PyWebViewApi
+    → const data = await getApi().get_startup_data()
+    → configStore.init(data)                    Pinia store populated
+    → createApp(App).use(pinia).use(router)
+    → app.mount('#app')
+
+  App.vue mounted:
+    → themeStore.init()                         apply body class from localStorage
+    → modalStore.setupEventListeners()          register lcta:modal-* CustomEvent handlers
+    → logStore.setupEventListeners()            register lcta:log handler
+    → if firstUse → router.push('/welcome')
+    → Vue Router lazy-loads #/dashboard
+
+  User navigates to a route:
+    → AppSidebar.nav-btn click                  router.push('/translate')
+    → Vue Router lazy-loads                     import('./views/Translate.vue')
+    → component onMounted                       fetch data from stores or getApi()
 ```
 
-Files: `start_webui.py`, `webui/app.py`, `webui/index.html`, `webui/js/init.js`, `webui/js/core.js`, `webui/js/features.js`, `webui/js/modals.js`, `webui/sections/preload.js`, `webui/js/utils.js`
+Files: `start_webui.py`, `webui/app.py`, `webui/src/main.ts`, `webui/src/App.vue`, `webui/src/router.ts`, `webui/src/stores/config.ts`, `webui/src/stores/modal.ts`, `webui/src/stores/log.ts`, `webui/src/stores/theme.ts`, `webui/src/utils/api.ts`

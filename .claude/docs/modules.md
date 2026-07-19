@@ -1,12 +1,12 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-18 -->
+<!-- Last updated: 2026-07-19 -->
 
 ## Directory Overview
 
 | Directory | Role | Key Files |
 |-----------|------|-----------|
-| `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 12 + sections |
+| `webui/` | Frontend application (Vue 3 + TypeScript + Vite) | 48 SFC, 5 stores, 3 utils |
 | `webutils/` | Business logic layer (one file per feature) | 24 |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 12+ |
@@ -15,31 +15,73 @@
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
 | `tests/` | Pytest test suite | ~6 |
 
-## webui/ — Frontend Application
+## webui/ — Frontend Application (Vue 3 + TypeScript + Vite)
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core**: `LCTA_API` class (~1528 lines), bridges all backend features to JS via pywebview. Includes `get_startup_data()` to batch-initialize frontend in a single bridge call, `perform_update_from_file()` for manual local package updates and redesigned drag-drop flow |
-| `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
-| `css/base.css` | Base styling |
-| `css/components.css` | Component-specific styles |
-| `css/layout-extras.css` | Layout utilities and extra styles |
-| `js/core.js` | Core framework: API binding, event system, navigation |
-| `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip, FancyManager (`updateEditorUI` fully null-guarded for lazy section loading) |
-| `js/init.js` | Initialization and bootstrap: uses single `get_startup_data()` call; welcome content deferred via `_pendingWelcomeContent` for lazy section loading compatibility |
-| `js/utils.js` | Navigation, encryption, sidebar search; `initNavigation` async handler with `await loadSection()`, `goAndShow` async for lazy section loading |
-| `js/modals.js` | Modal dialog management, markdown content loader with `_loadedMarkdowns` cache, toggle functions (all null-guarded for lazy section loading safety) |
-| `js/api-config.js` | API configuration page logic; container-not-found logs suppressed for lazy loading compatibility |
-| `js/cdn.js` | CDN optimization page logic |
-| `js/speed.js` | Game speed control page logic |
-| `js/list-managers.js` | List/tab view management; constructors tolerate missing containers (lazy load compatible); container refs updated by `onSectionLoaded` |
-| `sections/preload.js` | Lazy section loader: preloads only dashboard at startup, fetches others on first navigation via `loadSection()`; `onSectionLoaded()` callback re-runs per-section init (toggle funcs, list manager refs, select box values, DOM ref rebuilds) |
-| `sections/*.html` | 18 individual section HTML fragments (dashboard, translate, install, etc.) |
-| `guide/*.md` | 16 in-app user guide pages (one per feature tab) |
-| `elder/*.md` | 14 setup wizard pages |
-| `assets/update.md` | Release changelog (v5.0.0+) |
-| `assets/LCTA-AU.md` | Auto-update system documentation |
-| `assets/firstUse.md` | First-time user welcome guide |
+| `app.py` | **Core**: `LCTA_API` class, bridges all backend features to Vue via `pywebview.api` + `_emit()` Event Bridge (CustomEvent → Pinia stores). Auto-detects dev/prod environment |
+| `package.json` | npm dependencies: Vue 3, Vue Router, Pinia, marked, Font Awesome; dev: TypeScript, Vite, Vitest, ESLint |
+| `vite.config.ts` | Vite build config: `base: './'`, `strictPort: 5173`, Vue plugin, `@/` path alias |
+| `tsconfig.json` | TypeScript `strict: true`, path aliases, Vue SFC support |
+| `eslint.config.js` | ESLint flat config: `@typescript-eslint` + `eslint-plugin-vue` |
+| `vitest.config.ts` | Vitest config: happy-dom environment, 60% coverage threshold |
+| `index.html` | Vite entry point: `<div id="app">` + `<script type="module" src="/src/main.ts">` |
+| `dist/` | Vite build output (production). Excluded from git, included in release packages |
+
+### `src/` — Vue Source
+
+| Path | Purpose |
+|------|---------|
+| `main.ts` | Bootstrap: `await initApi()` → `get_startup_data()` → `configStore.init()` → `createApp(App).use(pinia).use(router).mount('#app')` |
+| `App.vue` | Root layout: AppSidebar + `<router-view>` + ModalContainer + HelpDrawer + DragOverlay. Global CSS reset + theme variables |
+| `router.ts` | Vue Router hash mode, 18 lazy routes via `() => import('./views/Xxx.vue')` |
+| `env.d.ts` | Vue SFC type shim (`declare module '*.vue'`) |
+| `types/api.d.ts` | `PyWebViewApi` interface — ~80 typed method signatures for all `pywebview.api` calls |
+| `types/config.d.ts` | `StartupData`, `PackageInfo`, `CdnStatus`, `SpeedStatus`, `UpdateInfo`, etc. |
+| `types/events.d.ts` | `LctaEventMap` — typed CustomEvent payloads (`lcta:log`, `lcta:modal-progress`, etc.) |
+| `utils/api.ts` | `initApi()` — awaits `pywebviewready`, returns typed `PyWebViewApi`; `getApi()` — returns singleton |
+| `utils/events.ts` | `listenEvent(name, handler)` — typed CustomEvent listener with cleanup return |
+| `utils/crypto.ts` | AES-256-GCM + PBKDF2 encryption (migrated from `js/utils.js`) |
+| `stores/config.ts` | Pinia configStore: `get(path)`, `set(path, value)`, `save()`, `reload()`. Single source of truth, replaces old ConfigManager.configCache |
+| `stores/modal.ts` | Pinia modalStore: `create()`, `remove()`, `updateProgress()`, `addLog()`, `setStatus()`, `minimize()`, `restore()`. Registers Event listeners for Python → Vue push |
+| `stores/log.ts` | Pinia logStore: `add(message, level)`, `clear()`. Max 500 entries |
+| `stores/theme.ts` | Pinia themeStore: `switchTheme('light'|'dark'|'purple')`, persists to localStorage |
+| `stores/update.ts` | Pinia updateStore: `check()`, `perform(modalId)` |
+
+### `src/components/` — Shared Components
+
+| File | Purpose |
+|------|---------|
+| `AppSidebar.vue` | Navigation sidebar: 3 nav groups (常用工具/管理配置/系统), ThemeToggle, minimized modals |
+| `ThemeToggle.vue` | 3-theme button group (light/dark/purple) |
+| `ModalContainer.vue` | Teleports to body, renders `v-for="modalStore.activeModals"` |
+| `ModalWindow.vue` | Modal with ProgressBar, LogPanel, cancel/pause/resume/confirm actions |
+| `ProgressBar.vue` | Animated progress bar (percent + text) |
+| `HelpDrawer.vue` | Side drawer with 3 tabs (页面帮助/使用指南/常见问题), renders markdown via `marked` |
+| `DragOverlay.vue` | Glass-morph drag-and-drop overlay |
+
+### `src/views/` — 18 Route Pages
+
+| View | Route | Feature |
+|------|-------|---------|
+| `Dashboard.vue` | `/` | 4 status cards (汉化包/启动器/更新/API) + quick actions |
+| `Translate.vue` | `/translate` | LLM translation config + start |
+| `Download.vue` | `/download` | OurPlay/零协会/LCTA/Bubble download cards |
+| `Install.vue` | `/install` | Package directory picker + package list + install/delete |
+| `Fancy.vue` | `/fancy` | Text beautification ruleset toggle + apply |
+| `Cdn.vue` | `/cdn` | Cloudflare/CloudFront CDN optimization |
+| `Speed.vue` | `/speed` | Game speed disclaimer gate + inject/eject + slider |
+| `Manage.vue` | `/manage` | Installed packages + mods toggle/delete |
+| `LauncherConfig.vue` | `/launcher` | Launcher mode settings (update, CDN, mods, steam) |
+| `ApiConfig.vue` | `/config` | API service selector + dynamic settings form + test |
+| `Proper.vue` | `/proper` | Proper noun fetch config + start |
+| `Log.vue` | `/log` | Scrollable log viewer from logStore |
+| `Settings.vue` | `/settings` | Global config: game path, debug, update, cache, storage |
+| `About.vue` | `/about` | README + update notes + help markdown |
+| `Welcome.vue` | `/welcome` | First-use welcome page + entry buttons |
+| `Elder.vue` | `/elder` | Setup wizard navigation |
+| `Test.vue` | `/test` | Debug page (placeholder) |
+| `Clean.vue` | `/clean` | Cache cleanup options + execute |
 
 ## webutils/ — Business Logic Layer
 

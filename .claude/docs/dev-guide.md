@@ -1,14 +1,25 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-07-18 -->
+<!-- Last updated: 2026-07-19 -->
 
 ## How to Run
 
 ```bash
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# WebUI mode (full desktop app)
+# Install frontend dependencies (first time / after package.json changes)
+cd webui && npm install
+
+# Development mode (with Vite HMR)
+# Terminal 1: start Vite dev server
+cd webui && npm run dev
+
+# Terminal 2: start pywebview (auto-detects dev environment)
+python start_webui.py
+
+# Production mode (requires Vite build first)
+cd webui && npm run build
 python start_webui.py
 
 # Launcher mode (game launcher only)
@@ -21,26 +32,33 @@ python start_webui.py -launcher
 .\build.ps1
 ```
 
-6-step pipeline: InitCode → C compilation (MinGW-w64) → embedded Python → dist assembly → update package clean → ZIP packaging.
+7-step pipeline: InitCode → **Vite build (1.5)** → C compilation (MinGW-w64) → embedded Python → dist assembly → update package clean → ZIP packaging.
 
 Outputs:
 - `LCTA-Portable-Full.zip` — normal release
 - `LCTA-Portable-Full-Compatible.zip` — compatible release
 - `LCTA-update.zip` — source update package
 
-Requirements: PowerShell 5.0+, MinGW-w64 (optional, skips if unavailable), Python 3.9.6, network.
+Requirements: PowerShell 5.0+, Node.js 20+, MinGW-w64 (optional, skips if unavailable), Python 3.9.6, network.
 
 ## How to Test
 
 ```bash
-# Run all tests
+# Run Python backend tests
 pytest tests/
 
 # Run specific test file
 pytest tests/test_config.py
+
+# Run frontend unit tests (Vitest)
+cd webui && npm run test
+
+# Run frontend tests in watch mode
+cd webui && npm run test:watch
 ```
 
-Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`
+Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`  
+Frontend tests: `webui/src/utils/__tests__/`, `webui/src/stores/__tests__/`
 
 ## Project Conventions
 
@@ -58,26 +76,41 @@ Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_w
 1. Create `webutils/function_<newfeature>.py` with the feature logic
 2. Export public functions in `webutils/__init__.py`
 3. Add API methods in `webui/app.py` `LCTA_API` class
-4. Create section HTML fragment `webui/sections/<newfeature>.html`
-5. Add the section name to `preloadAllSections()` array in `webui/sections/preload.js`
-6. Add a placeholder `<div>` in `webui/index.html` with id `<newfeature>-section`
+4. Create Vue view component `webui/src/views/<NewFeature>.vue`
+5. Add route entry in `webui/src/router.ts`: `{ path: '/newfeature', component: () => import('./views/NewFeature.vue') }`
+6. Add sidebar nav entry in `webui/src/components/AppSidebar.vue`
 7. Create guide page `webui/guide/<newfeature>.md`
-8. Add JS logic in `webui/js/features.js` or a new `webui/js/<newfeature>.js`
-9. If it has config items, update `config_default.json` and `config_check.json`
+8. If it has config items, update `config_default.json` and `config_check.json`
+
+### Python → Vue Communication
+
+Use the Event Bridge pattern:
+```python
+# Python side (app.py)
+self._emit('lcta:event-name', {'key': 'value'})
+```
+```typescript
+// Vue side (Pinia store or component)
+import { listenEvent } from '@/utils/events'
+listenEvent('lcta:event-name', (detail) => { /* handle */ })
+```
 
 ### Adding a New Config Item
 
 1. Add default value to `config_default.json`
 2. Add type entry to `config_check.json`
 3. If it needs a tooltip, follow `prompts/tooltip.md`
-4. UI reads via `ConfigManager.get("path.to.key")`
+4. UI reads via `configStore.get('path.to.key')` (typed)
 
 ### Adding a New Modal Operation
 
-Follow existing modal pattern in `webui/app.py`: Python method starts operation → creates modal → callback chain updates progress → modal closes on completion.
+Follow existing modal pattern: Vue component calls `modalStore.create()` → registers modalId with Python → Python emits `lcta:modal-progress`/`lcta:modal-log` events → Pinia modalStore reacts → ModalWindow renders.
 
 ## Debugging
 
+- **Frontend HMR**: Run `cd webui && npm run dev` → Vite dev server at `localhost:5173`. `python start_webui.py` auto-detects dev environment and loads from Vite.
+- **Frontend type check**: `cd webui && npx vue-tsc --noEmit` (also runs in `npm run build`)
+- **Frontend lint**: `cd webui && npx eslint src/` (also runs in `npm run build`)
 - **Debug flag**: `python start_webui.py --debug` enables verbose logging
 - **Console output**: Check terminal for `LogManager` output
 - **Log files**: Check `logs/` directory for timestamped log files
@@ -99,5 +132,6 @@ Release workflow: windows-latest runner, MSYS2/MinGW-w64 for C compilation, mirr
 - **Windows only** — uses Win32 API, pywebview, MSYS2
 - **`build.ps1` MUST be UTF-8 with BOM** (PowerShell requirement for Chinese text)
 - **Build/release sync** — changes to gcc flags or C structure must update BOTH `build.ps1` AND `.github/workflows/release.yml`
+- **Node.js 20+** required for frontend build and development
 - **etcpak==0.9.8 pinned** — version 0.9.9 crashes
 - **GPL-3.0 isolation** — `launcher/` is import-isolated from MIT-licensed main code

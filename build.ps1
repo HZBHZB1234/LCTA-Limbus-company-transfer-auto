@@ -15,7 +15,6 @@ $BuildCacheDir = "$ProjectRoot\.build_cache"
 $PythonZipCache = "$BuildCacheDir\python-$PYTHON_VERSION-embed-amd64.zip"
 $PythonEmbedCache = "$BuildCacheDir\python-embed"
 $CCompileCache = "$BuildCacheDir\c"
-$WebuiBuildCache = "$BuildCacheDir\webui-build"
 
 foreach ($d in @($BuildCacheDir, $PythonEmbedCache, $CCompileCache)) {
     if (-not (Test-Path $d)) {
@@ -36,18 +35,13 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "`n[1/6] 初始化代码..." -ForegroundColor Yellow
 
 $initScript = "$ProjectRoot\.github\InitCode.py"
-$indexHtmlPath = "$ProjectRoot\webui\index.html"
 $initCodeHashFile = "$BuildCacheDir\initcode.hash"
 $initCodeCSourcesCache = "$BuildCacheDir\initcode-c-sources"
 
 if (Test-Path $initScript) {
-    # 计算缓存键：InitCode.py 读取的所有输入文件的 MD5（与 InitCode.py 的读取逻辑同步）
-    # InitCode.py 读取的文件: InitCode.py 自身, launcher.c, webui/index.html,
-    #   webui/assets/update.md, favicon.ico, README.md
     $initInputFiles = @(
         @{Path=$initScript;                              Label="InitCode.py"},
         @{Path="$ProjectRoot\launcher.c";                Label="launcher.c"},
-        @{Path=$indexHtmlPath;                           Label="index.html"},
         @{Path="$ProjectRoot\webui\assets\update.md";    Label="update.md"},
         @{Path="$ProjectRoot\favicon.ico";              Label="favicon.ico"},
         @{Path="$ProjectRoot\README.md";                 Label="README.md"}
@@ -65,7 +59,7 @@ if (Test-Path $initScript) {
     $currentInitHash = $hashParts -join "|"
 
     $initCacheHit = $false
-    if ((Test-Path $WebuiBuildCache) -and (Test-Path $initCodeHashFile) -and (Test-Path $initCodeCSourcesCache)) {
+    if ((Test-Path $initCodeHashFile) -and (Test-Path $initCodeCSourcesCache)) {
         $cachedInitHash = (Get-Content $initCodeHashFile -Raw).Trim()
         if ($cachedInitHash -eq $currentInitHash) {
             Write-Host "  InitCode 缓存命中，跳过" -ForegroundColor Green
@@ -74,13 +68,6 @@ if (Test-Path $initScript) {
     }
 
     if (-not $initCacheHit) {
-        # 备份 webui/index.html
-        $originalIndexHtml = $null
-        if (Test-Path $indexHtmlPath) {
-            $originalIndexHtml = Get-Content -Path $indexHtmlPath -Raw -Encoding UTF8
-        }
-
-        # 执行 InitCode（会修改源码目录下的 webui/ 并在 ParentDir 写入 C 源码）
         $initOutput = & python $initScript 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  ERROR: InitCode 执行失败" -ForegroundColor Red
@@ -89,13 +76,6 @@ if (Test-Path $initScript) {
         }
         Write-Host "  InitCode 完成" -ForegroundColor Green
 
-        # 保存 InitCode 修改后的 webui 到缓存
-        if (Test-Path $WebuiBuildCache) {
-            Remove-Item $WebuiBuildCache -Recurse -Force
-        }
-        Copy-Item "$ProjectRoot\webui" $WebuiBuildCache -Recurse -Force
-
-        # 保存 InitCode 生成的 C 源文件到缓存
         if (Test-Path $initCodeCSourcesCache) {
             Remove-Item $initCodeCSourcesCache -Recurse -Force
         }
@@ -110,37 +90,9 @@ if (Test-Path $initScript) {
         }
         Write-Host "  C 源文件已缓存" -ForegroundColor Green
 
-        # 还原 webui/index.html
-        if ($originalIndexHtml) {
-            [System.IO.File]::WriteAllText($indexHtmlPath, $originalIndexHtml, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "  已还原 webui/index.html" -ForegroundColor Green
-        }
-
-        # 清理 InitCode 在源码目录产生的下载产物
-        $cleanupPaths = @(
-            "$ProjectRoot\webui\favicon.ico",
-            "$ProjectRoot\webui\assets\README.md",
-            "$ProjectRoot\update.md"
-        )
-        $cleanupDirs = @(
-            "$ProjectRoot\webui\css",
-            "$ProjectRoot\webui\webfonts",
-            "$ProjectRoot\webui\marked"
-        )
-        foreach ($p in $cleanupPaths) {
-            Remove-Item $p -ErrorAction SilentlyContinue
-        }
-        foreach ($d in $cleanupDirs) {
-            if (Test-Path $d) { Remove-Item $d -Recurse -Force }
-        }
-        Get-ChildItem "$ProjectRoot\webui\nexus\*.js" -Exclude "simulation.js" -ErrorAction SilentlyContinue |
-            Remove-Item -Force
-
-        # 写入缓存键
         $currentInitHash | Out-File -FilePath $initCodeHashFile -Encoding ASCII
         Write-Host "  InitCode 缓存已更新" -ForegroundColor Green
     } else {
-        # 从缓存恢复 C 源文件到父目录（供 Step 2 编译使用）
         Get-ChildItem "$initCodeCSourcesCache\*" -ErrorAction SilentlyContinue | ForEach-Object {
             Copy-Item $_.FullName "$ParentDir\$($_.Name)" -Force
         }
@@ -149,6 +101,29 @@ if (Test-Path $initScript) {
 } else {
     Write-Host "  WARNING: InitCode.py 未找到，跳过" -ForegroundColor Yellow
 }
+
+# ============================================================
+# Step 1.5: Vite 构建前端
+# ============================================================
+Write-Host "`n[1.5] Vite 构建前端..." -ForegroundColor Yellow
+Push-Location "$ProjectRoot\webui"
+
+if (-not (Test-Path "node_modules")) {
+    Write-Host "  安装 npm 依赖..."
+    npm install
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ERROR: npm install 失败" -ForegroundColor Red
+        Pop-Location; exit 1
+    }
+}
+
+npm run build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  ERROR: Vite 构建失败" -ForegroundColor Red
+    Pop-Location; exit 1
+}
+Write-Host "  Vite 构建完成 -> webui\dist\" -ForegroundColor Green
+Pop-Location
 
 # ============================================================
 # Step 2: 编译 C 启动器
@@ -455,15 +430,19 @@ Copy-ProjectFiles $lctaUpdate
 
 Write-Host "  源文件复制完成" -ForegroundColor Green
 
-# ---- 替换 webui 为 InitCode 修改版 ----
-if (Test-Path $WebuiBuildCache) {
-    Write-Host "  使用 InitCode 修改版 webui..."
+# ---- 复制 Vue 构建产物 (webui/dist/) 为 webui/ ----
+Write-Host "  复制 Vue 前端构建产物..."
+$vueDistDir = "$ProjectRoot\webui\dist"
+if (Test-Path $vueDistDir) {
     foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
         $destWebui = "$dest\webui"
         if (Test-Path $destWebui) { Remove-Item $destWebui -Recurse -Force }
-        Copy-Item $WebuiBuildCache $destWebui -Recurse -Force
+        Copy-Item $vueDistDir $destWebui -Recurse -Force
     }
-    Write-Host "  webui 已替换为 InitCode 修改版" -ForegroundColor Green
+    Write-Host "  Vue 构建产物已复制" -ForegroundColor Green
+} else {
+    Write-Host "  ERROR: webui/dist/ 不存在，请先运行 Vite 构建" -ForegroundColor Red
+    exit 1
 }
 
 # ---- 复制 CFST/ 目录（CDN优选用） ----

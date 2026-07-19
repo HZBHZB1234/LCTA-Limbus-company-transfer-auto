@@ -1,28 +1,27 @@
-import requests
 import os
 import shutil
-from pathlib import Path 
-import warnings
-from typing import List, Dict, Tuple
-import re
+from pathlib import Path
+from typing import List, Tuple
 
 projext_path = Path(__file__).parent.parent
 
 print('开始撰写Release Note')
 update_note = projext_path / 'webui' / 'assets' / "update.md"
 ABOUT = '''
-## 文件下载指导  
-- LCTA-Portable-Full.zip 正常版本。推荐下载此版本  
-- LCTA-Portable-Full-Compatible.zip 兼容版，空间占用较大且存在可能出现的UI界面错误，请在无法使用正常版本时使用该版本  
-- LCTA-update.zip 完整版自动更新功能需求文件，包含项目源码 
+## 文件下载指导
+- LCTA-Portable-Full.zip 正常版本。推荐下载此版本
+- LCTA-Portable-Full-Compatible.zip 兼容版，空间占用较大且存在可能出现的UI界面错误，请在无法使用正常版本时使用该版本
+- LCTA-update.zip 完整版自动更新功能需求文件，包含项目源码
 '''
 update_note = update_note.read_text(encoding='utf-8').split('\n')
 r = []
 flag = False
 for i in update_note:
     if i.startswith('##'):
-        if flag:break
-        else:flag = True
+        if flag:
+            break
+        else:
+            flag = True
     r.append(i)
 r = '\n'.join(r)
 release_note = r + '\n' + ABOUT
@@ -35,10 +34,10 @@ createC: List[Tuple[str, List[Tuple[str, str]]]] = [
     ('launcher_debug.c', [('int is_debug = 0;', 'int is_debug = 1;')]),
     ('launcher_qt.c', [('int use_qt = 0;', 'int use_qt = 1;')]),
     ('launcher_qt_debug.c', [('int use_qt = 0;', 'int use_qt = 1;'),
-                       ('int is_debug = 0;', 'int is_debug = 1;')]),
-    ('test.c', [('char script_name[MAX_PATH] = "code\\start_webui.py";', 
-    'char script_name[MAX_PATH] = "code\\webutils\\test.py";'),
-    ('int is_debug = 0;', 'int is_debug = 1;')])                   
+                             ('int is_debug = 0;', 'int is_debug = 1;')]),
+    ('test.c', [('char script_name[MAX_PATH] = "code\\start_webui.py";',
+                 'char script_name[MAX_PATH] = "code\\webutils\\test.py";'),
+                ('int is_debug = 0;', 'int is_debug = 1;')])
 ]
 os.chdir(projext_path)
 codeC = Path('launcher.c').read_text(encoding='utf-8')
@@ -58,183 +57,11 @@ print('开始复制README文件')
 shutil.copy2("README.md", "webui/assets/README.md")
 print('复制README文件完成')
 
-print("开始本地化样式资源...")
-os.chdir(projext_path / "webui")
-print(f"切换工作目录至: {os.getcwd()}")
-
-URL_TRANSFER = [("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
-                 'css/all.min.css'),
-                ("https://cdn.jsdelivr.net/npm/marked/marked.min.js",'marked/marked.min.js'),
-                ("https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css",
-                 'css/github-markdown-light.min.css')]
-
-FILES = [
-    ("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
-        'css/all.min.css'),
-    ("https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css",
-        'css/github-markdown-light.min.css'),
-    ("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2",
-        'webfonts/fa-brands-400.woff2'),
-    ("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2",
-        'webfonts/fa-solid-900.woff2'),
-    ("https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css",
-        'css/github-markdown-light.min.css'),
-    ("https://cdn.jsdelivr.net/npm/marked/marked.min.js",
-        'marked/marked.min.js'),
-    ("https://web-static-res-edge-speedtest-b1-hk.dahi.edu.eu.org/scripts/556780/1710242/NexusMods%20%E4%B8%AD%E6%96%87%E5%8C%96-%E8%AF%8D%E5%BA%93.js",
-        'nexus/dict.js'),
-    ("https://update.greasyfork.org.cn/scripts/556781/NexusMods%20%E4%B8%AD%E6%96%87%E5%8C%96%E6%8F%92%E4%BB%B6.user.js",
-        'nexus/cn.js'),
-    ("https://update.greasyfork.org.cn/scripts/519037/Nexus%20No%20Wait%20%2B%2B.user.js",
-        'nexus/skip.js')
-]
-
-print("修改index.html文件，替换CDN链接为本地链接...")
-with open('index.html', 'r', encoding='utf-8') as f:
-    html_content = f.read()
-    for url, path in URL_TRANSFER:
-        html_content = html_content.replace(url, path)
-    print("已完成替换CDN链接")
-
-with open('index.html', 'w', encoding='utf-8') as f:
-    f.write(html_content)
-    print("已保存修改后的index.html文件")
-    
-print("开始下载本地化资源文件...")
-warnings.filterwarnings('ignore', message='Unverified HTTPS request')
-for url, file in FILES:
-    file_path = Path(file)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"正在下载文件: {file}")
-    with open(file, 'wb') as f:
-        r = requests.get(url, timeout=10, verify=False)
-        r.raise_for_status()
-        f.write(r.content)
-        print(f"已成功下载: {file}")
-            
-print("所有资源文件下载完成！")
-
-
-print("修改marked.js，替换.at()")
-def replace_at_with_brackets(code: str) -> str:
-    """
-    将 JavaScript 代码中的数组 .at() 方法替换为 [] 访问。
-    只处理参数为数字字面量的情况（包括负数），对于其他表达式保持原样。
-    例如：
-        arr.at(0)   -> arr[0]
-        arr.at(-1)  -> arr[arr.length - 1]
-        arr.at(i)   -> arr.at(i)   (保持不变)
-    """
-    def repl(match):
-        array_name = match.group(1)          # 数组名，可能包含点，如 obj.arr
-        arg = match.group(2).strip()         # 参数，去除空格
-        # 检查参数是否为整数（允许负号）
-        if re.match(r'^-?\d+$', arg):
-            num = int(arg)
-            if num >= 0:
-                return f"{array_name}[{num}]"
-            else:
-                # 负数转换为 array[array.length - abs(num)]
-                return f"{array_name}[{array_name}.length - {abs(num)}]"
-        else:
-            # 非数字字面量，保持原样
-            return match.group(0)
-
-    # 匹配模式：数组名.at(参数)
-    pattern = re.compile(r'([\w.]+)\.at\(([^)]+)\)')
-    return pattern.sub(repl, code)
-with open('marked/marked.min.js', 'r', encoding='utf-8') as f:
-    marked = f.read()
-    marked = replace_at_with_brackets(marked)
-
-with open('marked/marked.min.js', 'w', encoding='utf-8') as f:
-    f.write(marked)
-
-# ---- 打包并压缩 JS / CSS ----
-print("开始打包及压缩前端资源...")
-
-js_files = [
-    'marked/marked.min.js',
-    'sections/preload.js',
-    'js/core.js',
-    'js/utils.js',
-    'js/api-config.js',
-    'js/modals.js',
-    'js/list-managers.js',
-    'js/features.js',
-    'js/init.js',
-    'js/cdn.js',
-    'js/speed.js',
-]
-js_content = ''
-for f in js_files:
-    try:
-        with open(f, 'r', encoding='utf-8') as fh:
-            js_content += fh.read() + '\n'
-    except FileNotFoundError:
-        print(f"WARNING: JS file not found, skipping: {f}")
-
-try:
-    import rjsmin
-    js_minified = rjsmin.jsmin(js_content)
-    print("JS 已通过 rjsmin 压缩")
-except ImportError:
-    print("WARNING: rjsmin 未安装，使用未压缩的 JS bundle")
-    js_minified = js_content
-
-os.makedirs('js', exist_ok=True)
-with open('js/bundle.js', 'w', encoding='utf-8') as fh:
-    fh.write(js_minified)
-print("JS 打包完成 -> js/bundle.js")
-
-css_files = [
-    'css/base.css',
-    'css/components.css',
-    'css/layout-extras.css',
-    'css/all.min.css',
-    'css/github-markdown-light.min.css',
-]
-css_content = ''
-for f in css_files:
-    try:
-        with open(f, 'r', encoding='utf-8') as fh:
-            css_content += fh.read() + '\n'
-    except FileNotFoundError:
-        print(f"WARNING: CSS file not found, skipping: {f}")
-
-try:
-    import rcssmin
-    css_minified = rcssmin.cssmin(css_content)
-    print("CSS 已通过 rcssmin 压缩")
-except ImportError:
-    print("WARNING: rcssmin 未安装，使用未压缩的 CSS bundle")
-    css_minified = css_content
-
-os.makedirs('css', exist_ok=True)
-with open('css/bundle.css', 'w', encoding='utf-8') as fh:
-    fh.write(css_minified)
-print("CSS 打包完成 -> css/bundle.css")
-
-with open('index.html', 'r', encoding='utf-8') as f:
-    html_content = f.read()
-
-html_content = re.sub(r'\s*<link rel="stylesheet" href="[^"]*">\n?', '\n', html_content)
-html_content = html_content.replace(
-    '    <title>LCTA - 边狱公司汉化工具箱</title>',
-    '    <title>LCTA - 边狱公司汉化工具箱</title>\n    <link rel="stylesheet" href="css/bundle.css">'
-)
-html_content = re.sub(r'\s*<script src="[^"]*"></script>\n?', '\n', html_content)
-html_content = html_content.replace(
-    '</body>',
-    '    <script src="js/bundle.js"></script>\n</body>'
-)
-
-with open('index.html', 'w', encoding='utf-8') as f:
-    f.write(html_content)
-print("index.html 已更新为使用 bundle 引用")
-
 # ---- 下载 CFST (CloudflareSpeedTest) ----
 import zipfile
+import requests
+import warnings
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 CFST_VERSION = "v2.3.5"
 CFST_DOWNLOAD_URL = (
@@ -246,7 +73,6 @@ IP_TXT_URL = "https://raw.githubusercontent.com/XIU2/CloudflareSpeedTest/master/
 cfst_dir = projext_path / "CFST"
 cfst_dir.mkdir(parents=True, exist_ok=True)
 
-# 下载 ip.txt
 print("下载 ip.txt...")
 with open(cfst_dir / "ip.txt", "wb") as f:
     r = requests.get(IP_TXT_URL, timeout=10, verify=False)
@@ -254,7 +80,6 @@ with open(cfst_dir / "ip.txt", "wb") as f:
     f.write(r.content)
 print("ip.txt 下载完成")
 
-# 下载并解压 cfst.exe
 print("下载 cfst.exe...")
 cfst_zip_path = cfst_dir / "cfst_windows_amd64.zip"
 with open(cfst_zip_path, "wb") as f:
@@ -264,5 +89,5 @@ with open(cfst_zip_path, "wb") as f:
 
 with zipfile.ZipFile(cfst_zip_path, "r") as zf:
     zf.extract("cfst.exe", cfst_dir)
-cfst_zip_path.unlink()  # 删除临时 zip
+cfst_zip_path.unlink()
 print("CFST 下载完成")

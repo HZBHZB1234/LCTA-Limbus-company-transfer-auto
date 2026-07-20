@@ -17,6 +17,7 @@ except Exception:
 clr.AddReference('System.Windows.Forms')
 clr.AddReference('System.Drawing')
 import System.Windows.Forms as WinForms
+from System import EventHandler
 from System.Drawing import (
     Point, Size, Color, Font, FontStyle, ContentAlignment,
 )
@@ -164,7 +165,7 @@ class LauncherProgressWindow:
         btn.Font = Font("Microsoft YaHei", 8)
         btn.FlatAppearance.BorderSize = 0
         btn.TextAlign = ContentAlignment.MiddleLeft
-        btn.add_Click(WinForms.EventHandler(self._toggle_log))
+        btn.add_Click(EventHandler(self._toggle_log))
         form.Controls.Add(btn)
         self._log_toggle_btn = btn
         y += 26
@@ -320,7 +321,7 @@ class LauncherProgressWindow:
             import System.Windows.Forms as WFTimer
             self._uptime_timer = WFTimer.Timer()
             self._uptime_timer.Interval = 1000
-            self._uptime_timer.add_Tick(WinForms.EventHandler(self._on_uptime_tick))
+            self._uptime_timer.add_Tick(EventHandler(self._on_uptime_tick))
             self._uptime_timer.Start()
         except Exception:
             pass

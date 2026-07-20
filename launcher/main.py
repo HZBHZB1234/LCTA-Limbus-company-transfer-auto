@@ -44,24 +44,6 @@ def resolve_steam_argv() -> str:
     return steam_argv
 
 
-def main_pre() -> str:
-    ConfigManager()
-
-    steam_argv = resolve_steam_argv()
-
-    try:
-        GithubDownload.init_request(quiet=True)
-
-        update_obj = create_update()
-        update_obj.run()
-
-        run_cdn_optimization(file_dir)
-    except Exception as e:
-        _log_manager.log_error(e)
-
-    return steam_argv
-
-
 def _prepare_mod_handler(**kw):
     steam_argv = kw.get('steam_argv')
     if steam_argv is None:
@@ -158,10 +140,25 @@ def main():
             progress.update_status("正在检查更新...")
 
         pipeline.emit(PHASE_CHECK_UPDATE)
-        steam_argv = main_pre()
-        pipeline.context['steam_argv'] = steam_argv
-        pipeline.emit(PHASE_CDN)
+        steam_argv = resolve_steam_argv()
+        try:
+            GithubDownload.init_request(quiet=True)
+            update_obj = create_update()
+            update_obj.run()
+        except Exception as e:
+            _log_manager.log_error(e)
 
+        if progress and progress.is_alive():
+            progress.update_status("正在进行CDN优选...")
+        pipeline.emit(PHASE_CDN)
+        try:
+            run_cdn_optimization(file_dir)
+        except Exception as e:
+            _log_manager.log_error(e)
+
+        pipeline.context['steam_argv'] = steam_argv
+        if progress and progress.is_alive():
+            progress.update_status("正在准备模组...")
         pipeline.emit(PHASE_PREPARE_MOD, steam_argv=steam_argv)
     except Exception as e:
         _log_manager.log_error(e)

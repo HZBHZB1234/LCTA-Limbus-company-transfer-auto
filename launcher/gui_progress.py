@@ -25,6 +25,7 @@ from System.Windows.Forms import (
     FlatStyle, BorderStyle, AnchorStyles,
 )
 
+from globalManagers.ConfigManager import ConfigManager
 from launcher.pipeline import (
     PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN,
     PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
@@ -42,6 +43,34 @@ _PHASE_LABELS = {
     PHASE_EXIT: "游戏已退出",
 }
 _PHASE_ORDER = [PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN, PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING]
+
+_PHASE_STATUS_TEXT = {
+    PHASE_INIT: "正在初始化...",
+    PHASE_CHECK_UPDATE: "正在检查更新...",
+    PHASE_CDN: "正在进行CDN优选...",
+    PHASE_PREPARE_MOD: "正在准备模组...",
+    PHASE_LAUNCH: "正在启动游戏...",
+    PHASE_RUNNING: "游戏运行中",
+    PHASE_EXIT: "游戏已退出",
+}
+
+
+def _get_visible_phases() -> list:
+    config = ConfigManager()
+    visible = []
+    for ph in _PHASE_ORDER:
+        if ph in (PHASE_INIT, PHASE_LAUNCH, PHASE_RUNNING):
+            visible.append(ph)
+        elif ph == PHASE_CHECK_UPDATE:
+            if config.get("launcher.work.update", "no") != "no":
+                visible.append(ph)
+        elif ph == PHASE_CDN:
+            if config.get("launcher.work.cdn_optimize", False):
+                visible.append(ph)
+        elif ph == PHASE_PREPARE_MOD:
+            if config.get("launcher.work.mod", False):
+                visible.append(ph)
+    return visible
 
 _COLOR_DONE = Color.FromArgb(76, 175, 80)
 _COLOR_ACTIVE = Color.FromArgb(33, 150, 243)
@@ -66,6 +95,8 @@ class LauncherProgressWindow:
         self._ready = threading.Event()
         self._closed = threading.Event()
         self._pipeline: Optional = None
+        self._visible_phases = list(_PHASE_ORDER)
+        self._current_phase = PHASE_INIT
         self._log_expanded = False
         self._game_start_time: Optional[float] = None
         self._uptime_timer: Optional = None
@@ -105,7 +136,8 @@ class LauncherProgressWindow:
         form.Controls.Add(flow)
         self._phase_flow = flow
 
-        for ph in _PHASE_ORDER:
+        self._visible_phases = _get_visible_phases()
+        for ph in self._visible_phases:
             lbl = WinForms.Label()
             lbl.Text = _PHASE_LABELS[ph]
             lbl.AutoSize = True
@@ -187,8 +219,8 @@ class LauncherProgressWindow:
         self._log_box = log
 
         self._form = form
+        form.CreateHandle()
         self._ready.set()
-        form.Update()
         WinForms.Application.Run(form)
         self._closed.set()
 
@@ -238,9 +270,12 @@ class LauncherProgressWindow:
     def _show_phase(self, phase: str) -> None:
         self._current_phase = phase
 
+        if phase not in self._visible_phases:
+            return
+
         def _do():
-            idx = _PHASE_ORDER.index(phase) if phase in _PHASE_ORDER else -1
-            for i, ph in enumerate(_PHASE_ORDER):
+            idx = self._visible_phases.index(phase)
+            for i, ph in enumerate(self._visible_phases):
                 lbl = self._phase_labels.get(ph)
                 if lbl is None or lbl.IsDisposed:
                     continue
@@ -264,13 +299,17 @@ class LauncherProgressWindow:
             else:
                 self._progress_bar.Visible = True
 
+            status_text = _PHASE_STATUS_TEXT.get(phase)
+            if status_text and self._status_label is not None and not self._status_label.IsDisposed:
+                self._status_label.Text = status_text
+
         self._safe_invoke(_do)
 
     def _show_game_running(self, **kw) -> None:
         self._current_phase = PHASE_RUNNING
 
         def _do():
-            for i, ph in enumerate(_PHASE_ORDER):
+            for i, ph in enumerate(self._visible_phases):
                 lbl = self._phase_labels.get(ph)
                 if lbl is None or lbl.IsDisposed:
                     continue

@@ -22,6 +22,16 @@ from launcher.pipeline import (
     PHASE_EXIT,
 )
 
+_PHASE_LABELS_LOOKUP = {
+    PHASE_INIT: "初始化",
+    PHASE_CHECK_UPDATE: "检查更新",
+    PHASE_CDN: "CDN优选",
+    PHASE_PREPARE_MOD: "模组准备",
+    PHASE_LAUNCH: "启动游戏",
+    PHASE_RUNNING: "游戏运行中",
+    PHASE_EXIT: "游戏已退出",
+}
+
 
 # ═══════════════════════════════════════════════════════════════════
 # LaunchPipeline 测试
@@ -201,8 +211,13 @@ def mock_safe_window():
                 PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING]:
         lbl = MagicMock()
         lbl.IsDisposed = False
+        lbl.Text = f"\u25cb {_PHASE_LABELS_LOOKUP[ph]}"
         w._phase_labels[ph] = lbl
 
+    w._visible_phases = [
+        PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN,
+        PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING,
+    ]
     w._current_phase = None
     return w
 
@@ -504,3 +519,148 @@ class TestSafeInvokeEdgeCases:
         w._form.IsHandleCreated = True
         w._form.BeginInvoke.side_effect = RuntimeError("disposed in the middle")
         w._safe_invoke(lambda: None)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# VisiblePhaseFiltering 测试
+# ═══════════════════════════════════════════════════════════════════
+
+class TestGetVisiblePhases:
+    def test_default_config_shows_four_phases(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            def _mock_get(key, default):
+                if key == "launcher.work.update":
+                    return "LM-G"
+                return default
+            instance.get.side_effect = _mock_get
+            result = _get_visible_phases()
+
+        assert len(result) == 4
+        assert result == [PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_LAUNCH, PHASE_RUNNING]
+
+    def test_update_no_removes_check_update(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            def _mock_get(key, default):
+                if key == "launcher.work.update":
+                    return "no"
+                return default
+            instance.get.side_effect = _mock_get
+            result = _get_visible_phases()
+
+        assert len(result) == 3
+        assert result == [PHASE_INIT, PHASE_LAUNCH, PHASE_RUNNING]
+
+    def test_cdn_enabled_includes_cdn(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            def _mock_get(key, default):
+                if key == "launcher.work.update":
+                    return "LM-G"
+                if key == "launcher.work.cdn_optimize":
+                    return True
+                return default
+            instance.get.side_effect = _mock_get
+            result = _get_visible_phases()
+
+        assert PHASE_CDN in result
+        assert result.index(PHASE_CDN) > result.index(PHASE_CHECK_UPDATE)
+        assert result.index(PHASE_CDN) < result.index(PHASE_LAUNCH)
+
+    def test_mod_enabled_includes_prepare_mod(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            def _mock_get(key, default):
+                if key == "launcher.work.update":
+                    return "LM-G"
+                if key == "launcher.work.cdn_optimize":
+                    return True
+                if key == "launcher.work.mod":
+                    return True
+                return default
+            instance.get.side_effect = _mock_get
+            result = _get_visible_phases()
+
+        assert PHASE_PREPARE_MOD in result
+        assert result.index(PHASE_PREPARE_MOD) > result.index(PHASE_CDN)
+        assert result.index(PHASE_PREPARE_MOD) < result.index(PHASE_LAUNCH)
+
+    def test_all_enabled_shows_all_six(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            def _mock_get(key, default):
+                if key == "launcher.work.update":
+                    return "LM-G"
+                if key in ("launcher.work.cdn_optimize", "launcher.work.mod"):
+                    return True
+                return default
+            instance.get.side_effect = _mock_get
+            result = _get_visible_phases()
+
+        assert len(result) == 6
+        assert result == [
+            PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN,
+            PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING,
+        ]
+
+
+class TestVisiblePhaseShowPhase:
+    def test_hidden_phase_skips_ui_updates(self, mock_safe_window):
+        mock_safe_window._visible_phases = [PHASE_INIT, PHASE_LAUNCH, PHASE_RUNNING]
+
+        mock_safe_window._show_phase(PHASE_CDN)
+
+        assert mock_safe_window._current_phase == PHASE_CDN
+        init_lbl = mock_safe_window._phase_labels[PHASE_INIT]
+        assert "\u25cb" in init_lbl.Text
+
+    def test_visible_phase_updates_labels(self, mock_safe_window):
+        mock_safe_window._visible_phases = [PHASE_INIT, PHASE_LAUNCH, PHASE_RUNNING]
+
+        mock_safe_window._show_phase(PHASE_LAUNCH)
+
+        init_lbl = mock_safe_window._phase_labels[PHASE_INIT]
+        assert "\u2713" in init_lbl.Text
+        launch_lbl = mock_safe_window._phase_labels[PHASE_LAUNCH]
+        assert "\u25cf" in launch_lbl.Text
+
+    def test_hidden_phase_does_not_update_hidden_label(self, mock_safe_window):
+        mock_safe_window._visible_phases = [PHASE_INIT, PHASE_LAUNCH, PHASE_RUNNING]
+
+        mock_safe_window._show_phase(PHASE_LAUNCH)
+
+        cdn_lbl = mock_safe_window._phase_labels[PHASE_CDN]
+        assert "\u25cb" in cdn_lbl.Text
+
+
+class TestVisiblePhaseGameRunning:
+    def test_marks_only_visible_phases_complete(self, mock_safe_window):
+        mock_safe_window._visible_phases = [PHASE_INIT, PHASE_LAUNCH, PHASE_RUNNING]
+
+        mock_safe_window._show_game_running()
+
+        for ph in [PHASE_INIT, PHASE_LAUNCH]:
+            lbl = mock_safe_window._phase_labels[ph]
+            assert "\u2713" in lbl.Text
+        running_lbl = mock_safe_window._phase_labels[PHASE_RUNNING]
+        assert "\u25cf" in running_lbl.Text
+
+    def test_hidden_phases_not_touched(self, mock_safe_window):
+        mock_safe_window._visible_phases = [PHASE_INIT, PHASE_LAUNCH, PHASE_RUNNING]
+
+        mock_safe_window._show_game_running()
+
+        for ph in [PHASE_CHECK_UPDATE, PHASE_CDN, PHASE_PREPARE_MOD]:
+            lbl = mock_safe_window._phase_labels[ph]
+            assert "\u25cb" in lbl.Text

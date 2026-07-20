@@ -104,8 +104,11 @@ Launcher mode: start_webui.py -launcher
                                         → GUI shows "游戏已退出"
 
   Cancel flow:
-    GUI FormClosing → confirm dialog → pipeline.cancel()
-      → _wait_for_game detects cancel_event → terminate game process
+    GUI FormClosing → three-way confirm dialog (YesNoCancel when game running)
+      → Yes:     pipeline.cancel() → terminate game + exit launcher
+      → No:      close launcher only (game continues running)
+      → Cancel:  keep launcher open
+      → _wait_for_game on Cancel: detects cancel_event → terminate game process
       → PHASE_EXIT callbacks still fire for cleanup
 ```
 
@@ -126,7 +129,7 @@ JS: user adjusts speed slider
 Launcher mode:
   → launcher/speed_hotkey.py        Ctrl+Shift+S → toggle speed
     → foreground check              verify LimbusCompany.exe is active
-    → injection check               SpeedManager.is_injected() (trusts self-record)
+    → injection check               SpeedManager.is_injected() (self-tracked injection state)
     → log each stage                hotkey press, injection, speed toggle, DLL unload
     → .NET STA thread               WinForms slider window (System.Threading.Thread)
     → openspeedy                    inject DLL

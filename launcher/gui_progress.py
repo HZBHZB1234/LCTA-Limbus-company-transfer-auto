@@ -188,6 +188,7 @@ class LauncherProgressWindow:
 
         self._form = form
         self._ready.set()
+        form.Update()
         WinForms.Application.Run(form)
         self._closed.set()
 
@@ -196,19 +197,28 @@ class LauncherProgressWindow:
             return
 
         if self._current_phase == PHASE_RUNNING:
-            msg = "游戏正在运行，确认退出启动器？\n\n退出启动器将同时终止游戏进程。"
+            msg = "游戏正在运行。\n\n是 - 退出启动器并终止游戏\n否 - 仅退出启动器，游戏继续运行\n取消 - 返回"
         else:
             msg = "启动流程正在进行中，确认退出？"
 
+        buttons = (
+            WinForms.MessageBoxButtons.YesNoCancel
+            if self._current_phase == PHASE_RUNNING
+            else WinForms.MessageBoxButtons.YesNo
+        )
+
         result = WinForms.MessageBox.Show(
             self._form, msg, "LCTA 启动器",
-            WinForms.MessageBoxButtons.YesNo,
+            buttons,
             WinForms.MessageBoxIcon.Warning,
         )
 
         if result == WinForms.DialogResult.Yes:
             if self._pipeline is not None:
                 self._pipeline.cancel()
+        elif result == WinForms.DialogResult.No:
+            if self._current_phase != PHASE_RUNNING:
+                e.Cancel = True
         else:
             e.Cancel = True
 

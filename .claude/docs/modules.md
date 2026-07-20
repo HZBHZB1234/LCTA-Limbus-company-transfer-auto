@@ -65,7 +65,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `function_translate.py` | Translation orchestration | Connects webui to translateFunc pipeline |
 | `function_drop.py` | Drag-and-drop | Drag-and-drop file installation with zip/7z extraction, mod installation, update package handling via Updater |
 | `function_cdn.py` | CDN optimization | Cloudflare + CloudFront CDN speed testing and optimization |
-| `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection; `is_injected()` trusts self-record when openspeedy throws |
+| `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection; `is_injected()` checks self-tracked injection state |
 | `builtinFancy.py` | Built-in text rules | Built-in text beautification rules |
 | `builtinFancyFunc.py` | Fancy rule functions | Fancy rule processing functions |
 | `eiderConst.py` | Update constants | Translation pack update lists, dependency chains |

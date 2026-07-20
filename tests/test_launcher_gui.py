@@ -380,7 +380,7 @@ class TestWindowCloseConfirmation:
 
         msg = mock_winforms.MessageBox.Show.call_args[0][1]
         assert "游戏正在运行" in msg
-        assert "终止游戏进程" in msg
+        assert "终止游戏" in msg
 
     @patch("launcher.gui_progress.WinForms")
     def test_confirm_message_during_launch_mentions_in_progress(self, mock_winforms,

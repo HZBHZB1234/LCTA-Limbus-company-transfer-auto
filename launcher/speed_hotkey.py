@@ -160,6 +160,7 @@ def _show_speed_slider_window():
         form.TopMost = True
         form.MaximizeBox = False
         form.MinimizeBox = False
+        form.Activate()
 
         # 标题标签
         title = WinForms.Label()

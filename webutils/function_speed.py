@@ -127,11 +127,7 @@ class SpeedManager:
         pid = game["pid"]
         sc = SpeedManager._instance
         if sc is not None:
-            try:
-                result["injected"] = sc.is_injected(pid)
-            except Exception as e:
-                _log_manager.log_error(e)
-                result["injected"] = SpeedManager._injected_pid == pid
+            result["injected"] = SpeedManager._injected_pid == pid
             try:
                 result["enabled"] = sc.is_enabled(pid)
             except Exception as e:
@@ -196,19 +192,13 @@ class SpeedManager:
     def is_injected() -> bool:
         """检查 LimbusCompany.exe 是否已注入。
 
-        以 Python 侧记录的注入状态为准，openspeedy 的内部检测仅作为辅助。
-        若 openspeedy 调用抛异常，信任自身记录以避免不必要的重复注入日志。
+        SpeedController 不暴露公共 is_injected 方法，因此以 Python 侧
+        记录的注入状态为准（SpeedManager 持有单例 _instance）。
 
         Returns:
             bool: 是否已注入。
         """
-        if SpeedManager._instance is None or SpeedManager._injected_pid is None:
-            return False
-        try:
-            return SpeedManager._instance.is_injected(SpeedManager._injected_pid)
-        except Exception as e:
-            _log_manager.log_error(e)
-            return True  # 信任自身记录，避免误导性的 “正在注入” 日志
+        return SpeedManager._instance is not None and SpeedManager._injected_pid is not None
 
     @staticmethod
     def eject() -> bool:

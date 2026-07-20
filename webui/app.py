@@ -213,7 +213,7 @@ class LCTA_API():
             # 防止对只读 @property 属性写入导致 AttributeError
             attr = getattr(type(self), attr_name, None)
             if isinstance(attr, property) and attr.fset is None:
-                self.log(f"警告: 试图设置只读属性 '{attr_name}'，已忽略", "WARNING")
+                self.log(f"警告: 试图设置只读属性 '{attr_name}'，已忽略")
                 return
             setattr(self, attr_name, value)
 
@@ -417,7 +417,7 @@ class LCTA_API():
         '''安装翻译包'''
         try:
             if package_name is None:
-                self.log("开始安装翻译包")
+                self.log("安装翻译包失败: 传参错误")
                 return {"success": False, "message": "传参错误"}
             
             # 获取游戏路径
@@ -1408,12 +1408,16 @@ class LCTA_API():
             self.log_ui("DLL 注入成功")
             return {"success": True, "message": "注入成功"}
         except ProcessNotFoundError:
+            self.log("DLL 注入失败: 游戏未运行")
             return {"success": False, "message": "游戏未运行，请先启动 LimbusCompany.exe"}
         except ProcessAccessDeniedError:
+            self.log("DLL 注入失败: 权限不足")
             return {"success": False, "message": "权限不足，请以管理员权限运行 LCTA"}
         except ProcessArchitectureMismatch:
+            self.log("DLL 注入失败: 架构不匹配")
             return {"success": False, "message": "架构不匹配，请使用对应版本的 Python"}
         except InjectionError as e:
+            self.log_error(e)
             return {"success": False, "message": f"注入失败，请检查杀毒软件是否拦截: {e}"}
         except Exception as e:
             self.log_error(e)
@@ -1437,8 +1441,10 @@ class LCTA_API():
             self.log_ui(f"速度已设置为 {factor}x")
             return {"success": True, "message": f"速度已设置为 {factor}x", "speed": factor}
         except SpeedRangeError:
+            self.log(f"设置速度失败: 倍率 {factor} 超出范围")
             return {"success": False, "message": "速度倍率必须在 0.001 – 1000 之间"}
         except ProcessNotFoundError:
+            self.log("设置速度失败: 游戏未运行")
             return {"success": False, "message": "游戏未运行，请先启动 LimbusCompany.exe"}
         except Exception as e:
             self.log_error(e)

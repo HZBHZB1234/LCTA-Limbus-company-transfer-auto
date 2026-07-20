@@ -29,7 +29,8 @@ def find_translation_packages(target_dir):
                     
                     if has_battle_announcer and has_font:
                         valid_packages.append(item)
-            except:
+            except Exception as e:
+                _log_manager.log_error(e)
                 continue
             
         elif os.path.isdir(item_path):

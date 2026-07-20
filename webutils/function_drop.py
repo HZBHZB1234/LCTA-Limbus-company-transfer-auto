@@ -83,6 +83,7 @@ def eval7zip(file_path):
                 return evalFolder(tmp), tmp
             return 'invalid', tmp
         except Exception as e:
+            _log_manager.log_error(e)
             return 'invalid', tmp
     
 def evalJson(json_path):
@@ -97,6 +98,7 @@ def evalJson(json_path):
             return 'FLchange'
         return 'invalid'
     except Exception as e:
+        _log_manager.log_error(e)
         return 'invalid'
         
 def evalFile(file_path):

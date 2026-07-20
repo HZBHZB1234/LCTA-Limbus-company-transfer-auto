@@ -249,7 +249,7 @@ def download_with(url, save_path, size=0, chunk_size=1024 * 100,
             _log_manager.log("\n下载完成")
         return True
     except Exception as e:
-        _log_manager.log(f"\n下载失败: {e}")
+        _log_manager.log(f"\n下载失败 ({url}): {e}")
         _log_manager.log_error(e)
         return False
 

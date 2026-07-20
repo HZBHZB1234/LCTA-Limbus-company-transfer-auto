@@ -212,6 +212,7 @@ def _build_reference_index(refer_root):
                 with open(filepath, 'r', encoding='utf-8') as f:
                     data = json.load(f)
             except (json.JSONDecodeError, UnicodeDecodeError):
+                _log_manager.log(f"参考包索引文件解析失败: {filepath}")
                 continue
 
             if 'dataList' not in data or not isinstance(data['dataList'], list):
@@ -261,6 +262,7 @@ def _build_transfile_index(hash_dir):
             with open(filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except (json.JSONDecodeError, UnicodeDecodeError):
+            _log_manager.log(f"翻译文件哈希索引解析失败: {filepath}")
             binary_count += 1
             continue
 

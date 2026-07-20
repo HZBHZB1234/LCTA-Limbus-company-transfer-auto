@@ -1,6 +1,15 @@
 import requests
 import time
 from pathlib import Path
+from globalManagers.LogManager import LogManager
+
+
+def _default_log(message):
+    print(message)
+    try:
+        LogManager().log(message)
+    except Exception:
+        pass
 
 class UpFileClient:
     def __init__(self):
@@ -157,7 +166,7 @@ class UpFileClient:
                 'error': str(e)
             }
 
-    def upload(self, file_path, log_function=print):
+    def upload(self, file_path, log_function=_default_log):
         """主上传方法"""
         try:
             file_path_obj = Path(file_path)

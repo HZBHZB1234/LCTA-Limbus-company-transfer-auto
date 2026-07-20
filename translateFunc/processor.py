@@ -730,6 +730,7 @@ class FileProcessor:
                     return
             except Exception:
                 continue
+        _logger.warning(f"[{self.file_name}] 所有回退路径均不可用，无法保存结果文件")
 
 
 # ============================================================

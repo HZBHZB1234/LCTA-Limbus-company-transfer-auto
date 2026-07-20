@@ -24,7 +24,8 @@ def _LCTA_auto_github(modal_id, use_proxy) -> str:
     else:
         _log_manager.log_modal_process("下载失败", modal_id)
         _log_manager.log_modal_status("下载失败", modal_id)
-    
+        return None
+
 def _LCTA_auto_api(modal_id) -> str:
     note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
     note_.fetch_note_info()
@@ -54,7 +55,8 @@ def _LCTA_auto_api(modal_id) -> str:
     else:
         _log_manager.log_modal_process("下载失败", modal_id)
         _log_manager.log_modal_status("下载失败", modal_id)
-    
+        return None
+
 
 def function_LCTA_auto_main(modal_id):
     _log_manager.log_modal_status("正在初始化", modal_id)
@@ -63,6 +65,10 @@ def function_LCTA_auto_main(modal_id):
     download_source = config.get('download_source', 'github')
     
     if download_source == 'github':
-        return _LCTA_auto_github(modal_id, use_proxy)
+        result = _LCTA_auto_github(modal_id, use_proxy)
     else:
-        return _LCTA_auto_api(modal_id)
+        result = _LCTA_auto_api(modal_id)
+
+    if result is None:
+        raise Exception("下载失败，无法继续翻译流程")
+    return result

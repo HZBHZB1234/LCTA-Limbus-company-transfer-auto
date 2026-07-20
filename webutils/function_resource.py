@@ -6,6 +6,8 @@ from copy import deepcopy
 import logging
 from UnityPy.enums import ClassIDType
 from typing import List
+from globalManagers.LogManager import LogManager
+_log_manager = LogManager()
 
 def extract_files_from_resource(resource_path: str, file_names: List[str], output_dir: str) -> List[str]:
     """
@@ -60,7 +62,7 @@ def extract_files_from_resource(resource_path: str, file_names: List[str], outpu
                 if hasattr(data, 'bytes'):
                     raw_data = data.bytes
                 else:
-                    print(f"警告: 对象 '{file_name}' 类型 {obj.type.name} 不支持直接提取")
+                    _log_manager.log(f"警告: 对象 '{file_name}' 类型 {obj.type.name} 不支持直接提取")
                     continue
 
             if raw_data is None:
@@ -76,7 +78,7 @@ def extract_files_from_resource(resource_path: str, file_names: List[str], outpu
                 found.append(file_name)
                 break  # 找到第一个匹配即停止处理该文件
             except Exception as e:
-                print(f"错误: 保存文件 {file_name} 失败: {e}")
+                _log_manager.log_error(e)
                 continue
 
     return found

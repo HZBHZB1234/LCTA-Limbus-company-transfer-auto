@@ -293,6 +293,7 @@ class LOUpdate(UpdateBase):
                 note_content.get('ourplay_last_update_time', '1970-01-01T00:00:00')
             )
         except (ValueError, TypeError):
+            _log_manager.log("OurPlay 更新时间戳格式异常，回退到默认值")
             ourplay_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
 
         try:
@@ -300,6 +301,7 @@ class LOUpdate(UpdateBase):
                 note_content.get('llc_last_update_time', '1970-01-01T00:00:00')
             )
         except (ValueError, TypeError):
+            _log_manager.log("LLC 更新时间戳格式异常，回退到默认值")
             llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
 
         # 返回时间戳较新的版本类型
@@ -341,6 +343,7 @@ class LMAUpdate(UpdateBase):
                 note_content.get('machine_last_update_time', '1970-01-01T00:00:00')
             )
         except (ValueError, TypeError):
+            _log_manager.log("机翻 更新时间戳格式异常，回退到默认值")
             machine_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
 
         try:
@@ -348,6 +351,7 @@ class LMAUpdate(UpdateBase):
                 note_content.get('llc_last_update_time', '1970-01-01T00:00:00')
             )
         except (ValueError, TypeError):
+            _log_manager.log("LLC 更新时间戳格式异常，回退到默认值")
             llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
 
         # 返回时间戳较新的版本类型
@@ -387,21 +391,29 @@ class LMGUpdate(UpdateBase):
         try:
             GithubDownload.GithubRequester.update_config(use_proxy)
 
-            machine_last_update = GithubDownload.GithubRequester.get_latest_release("HZBHZB1234",
-                                        "LCTA_auto_update").published_at
+            release = GithubDownload.GithubRequester.get_latest_release("HZBHZB1234",
+                                        "LCTA_auto_update")
+            if release is None:
+                raise ValueError("获取 GitHub release 失败")
+            machine_last_update = release.published_at
 
             machine_last_update = datetime.fromisoformat(machine_last_update.replace('Z', '+00:00'))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, AttributeError):
+            _log_manager.log("机翻(GitHub) 更新时间戳格式异常，回退到默认值")
             machine_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
 
         try:
             GithubDownload.GithubRequester.update_config(use_proxy)
 
-            llc_last_update = GithubDownload.GithubRequester.get_latest_release("LocalizeLimbusCompany",
-                                        "LocalizeLimbusCompany").published_at
+            release = GithubDownload.GithubRequester.get_latest_release("LocalizeLimbusCompany",
+                                        "LocalizeLimbusCompany")
+            if release is None:
+                raise ValueError("获取 GitHub release 失败")
+            llc_last_update = release.published_at
 
             llc_last_update = datetime.fromisoformat(llc_last_update.replace('Z', '+00:00'))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, AttributeError):
+            _log_manager.log("LLC(GitHub) 更新时间戳格式异常，回退到默认值")
             llc_last_update = datetime.fromisoformat('1970-01-01T00:00:00')
 
         # 返回时间戳较新的版本类型

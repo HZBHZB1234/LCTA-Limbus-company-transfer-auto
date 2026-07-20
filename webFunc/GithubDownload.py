@@ -189,6 +189,17 @@ class GitHubReleaseFetcher:
         if level == "debug" and self.quiet:
             return
         print(message)
+        try:
+            from globalManagers.LogManager import LogManager
+            lm = LogManager()
+            if level == "error":
+                lm.log(f"[GitHub] {message}")
+            elif level == "debug":
+                lm.debug(f"[GitHub] {message}")
+            else:
+                lm.log(f"[GitHub] {message}")
+        except Exception:
+            pass
     
     def _build_api_url(self, repo_owner: str, repo_name: str, endpoint: str, proxy_url: str = "") -> str:
         """构建API URL"""
@@ -217,7 +228,7 @@ class GitHubReleaseFetcher:
                 return None, proxy_url
 
         except Exception as e:
-            self._log(f"代理 {proxy_url} 请求失败", "debug")
+            self._log(f"代理 {proxy_url} 请求失败: {type(e).__name__}", "debug")
             return None, proxy_url
     
     def _make_request(self, repo_owner: str, repo_name: str, endpoint: str, **kwargs) -> Optional[Dict[str, Any]]:

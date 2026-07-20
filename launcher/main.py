@@ -12,7 +12,15 @@ sys.path.insert(0, str(file_dir))
 
 from webFunc import GithubDownload
 from globalManagers.LogManager import LogManager
-_log_manager = LogManager()
+try:
+    _log_manager = LogManager()
+except Exception as e:
+    import sys
+    print(f"无法初始化日志系统: {e}", file=sys.stderr)
+    class _FallbackLogManager:
+        def log(self, msg, *args): print(msg % args if args else msg, file=sys.stderr)
+        def log_error(self, e): print(f"ERROR: {e}", file=sys.stderr)
+    _log_manager = _FallbackLogManager()
 from globalManagers.ConfigManager import ConfigManager
 from launcher.updates import create_update
 from launcher.cdn import run_cdn_optimization

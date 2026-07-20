@@ -5,6 +5,9 @@ from pathlib import Path
 from copy import deepcopy
 from typing import List, Dict, Optional, Union
 
+from globalManagers.LogManager import LogManager
+_log_manager = LogManager()
+
 # 导入颜色渐变处理函数
 from .Faust_fancy import process_dlg_text
 from .builtinFancyFunc import builtinFunc
@@ -61,6 +64,7 @@ def apply_operations(value: str, operations: list, data: Dict[tuple, str] = {}, 
                 funcSelect = builtinFunc[funcSelectName]
             except:
                 logger.warning(f'尝试使用未定义的func: {funcSelectName}')
+                continue
             value = funcSelect(value, data, dst_tuple)
         # 正则替换操作
         elif 'from' in op and 'to' in op:
@@ -176,3 +180,4 @@ def fancy_main(game_path: str, package_name: str, config: list):
                     json.dumps(data, ensure_ascii=False, indent=4), encoding='utf-8-sig')
             except Exception as e:
                 logger.exception(f"处理文件 {file} 时出错: {e}")
+                _log_manager.log_error(e)

@@ -160,6 +160,7 @@ class LauncherProgressWindow:
         try:
             self._form.BeginInvoke(WinForms.MethodInvoker(action))
         except Exception:
+            logging.getLogger("LCTA").debug("GUI _safe_invoke 失败，窗口可能已关闭")
             pass
 
 
@@ -184,6 +185,7 @@ class ProgressLogHandler(logging.Handler):
             msg = self.format(record)
             self._window.append_log(msg)
         except Exception:
+            logging.getLogger("LCTA").debug("GUI 日志输出失败，窗口可能已关闭")
             pass
         finally:
             self._active = True

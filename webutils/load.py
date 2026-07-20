@@ -100,7 +100,8 @@ def check_config_type(key_path: str, value: Any) -> Tuple[bool, Union[str, Dict[
 def load_config() -> Optional[Dict[str, Any]]:
     try:
         return ConfigManager().raw
-    except Exception:
+    except Exception as e:
+        _log_manager.log_error(e)
         return None
 
 def load_config_default() -> Optional[Dict[str, Any]]:

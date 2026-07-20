@@ -22,6 +22,9 @@ from openspeedy import (
     SpeedControlError,
 )
 
+from globalManagers.LogManager import LogManager
+_log_manager = LogManager()
+
 logger = logging.getLogger(__name__)
 
 TARGET_PROCESS = "LimbusCompany.exe"
@@ -107,6 +110,7 @@ class SpeedManager:
         try:
             game = SpeedManager._find_game()
         except Exception as e:
+            _log_manager.log_error(e)
             result["error"] = f"进程检测失败: {e}"
             return result
 
@@ -125,22 +129,26 @@ class SpeedManager:
         if sc is not None:
             try:
                 result["injected"] = sc.is_injected(pid)
-            except Exception:
+            except Exception as e:
+                _log_manager.log_error(e)
                 result["injected"] = SpeedManager._injected_pid == pid
             try:
                 result["enabled"] = sc.is_enabled(pid)
-            except Exception:
+            except Exception as e:
+                _log_manager.log_error(e)
                 result["enabled"] = False
             try:
                 result["speed"] = sc.get_speed()
-            except Exception:
+            except Exception as e:
+                _log_manager.log_error(e)
                 result["speed"] = 1.0
         else:
             # 尚未注入，用临时控制器读取全局速度（共享内存可跨实例）
             try:
                 with SpeedController() as sc:
                     result["speed"] = sc.get_speed()
-            except Exception:
+            except Exception as e:
+                _log_manager.log_error(e)
                 result["speed"] = None
 
         return result
@@ -198,7 +206,8 @@ class SpeedManager:
             return False
         try:
             return SpeedManager._instance.is_injected(SpeedManager._injected_pid)
-        except Exception:
+        except Exception as e:
+            _log_manager.log_error(e)
             return True  # 信任自身记录，避免误导性的 “正在注入” 日志
 
     @staticmethod
@@ -215,6 +224,7 @@ class SpeedManager:
             SpeedManager._instance.eject(SpeedManager._injected_pid)
             logger.info(f"已从 PID {SpeedManager._injected_pid} 弹出 DLL")
         except Exception as e:
+            _log_manager.log_error(e)
             logger.warning(f"弹出 DLL 时出错（可能已自动弹出）: {e}")
         finally:
             SpeedManager._instance = None
@@ -250,7 +260,8 @@ class SpeedManager:
             return None
         try:
             return SpeedManager._instance.get_speed()
-        except Exception:
+        except Exception as e:
+            _log_manager.log_error(e)
             return None
 
     @staticmethod
@@ -263,6 +274,7 @@ class SpeedManager:
             logger.info(f"已启用 PID {SpeedManager._injected_pid} 的加速")
             return True
         except Exception as e:
+            _log_manager.log_error(e)
             logger.warning(f"启用加速失败: {e}")
             return False
 
@@ -276,6 +288,7 @@ class SpeedManager:
             logger.info(f"已禁用 PID {SpeedManager._injected_pid} 的加速")
             return True
         except Exception as e:
+            _log_manager.log_error(e)
             logger.warning(f"禁用加速失败: {e}")
             return False
 
@@ -290,6 +303,7 @@ class SpeedManager:
                 SpeedManager._cached_process = None
                 logger.info("SpeedManager 资源已清理")
         except Exception as e:
+            _log_manager.log_error(e)
             logger.warning(f"清理资源时出错: {e}")
             SpeedManager._instance = None
             SpeedManager._injected_pid = None

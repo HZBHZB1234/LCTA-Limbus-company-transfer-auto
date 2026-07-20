@@ -43,7 +43,8 @@ def _find_game_pid():
             if p.name == "LimbusCompany.exe":
                 _game_pid = p.pid
                 return _game_pid
-    except Exception:
+    except Exception as e:
+        _log_manager.log_error(e)
         return None
 
     return None

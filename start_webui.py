@@ -29,32 +29,6 @@ def get_resource_path():
     
     return base_path
 
-def _manage_launcher_console():
-    """Launcher模式控制台管理。
-
-    在 import launcher 之前执行，根据 gui_mode 配置决定控制台行为：
-    - gui_mode=True:  保留现状（无控制台），后续由GUI窗口接管所有交互
-    - gui_mode=False: 若当前无控制台则分配一个，供传统控制台模式日志输出
-
-    配置读取失败时静默回退（保留任何已有控制台），不会阻断启动。
-    """
-    import ctypes
-    import json
-
-    try:
-        config = json.loads((Path(__file__).parent / 'config.json').read_text('utf-8'))
-        gui_mode = config.get('launcher', {}).get('work', {}).get('gui_mode', False)
-    except Exception:
-        gui_mode = False
-
-    if gui_mode:
-        return
-
-    kernel32 = ctypes.windll.kernel32
-    if kernel32.GetConsoleWindow() is None:
-        kernel32.AllocConsole()
-
-
 def init_env():
     """初始化环境变量"""
     os.environ['path_'] = str(get_resource_path())
@@ -117,7 +91,6 @@ def start_launcher():
     try:
         init_env()
         os.environ['steam_argv'] = ' '.join([a for a in sys.argv[1:] if a != '-launcher']) if len(sys.argv) >= 2 else ''
-        _manage_launcher_console()
         
         from launcher.main import main
         print("正在启动LCTA Launcher...")

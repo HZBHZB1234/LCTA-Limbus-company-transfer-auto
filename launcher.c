@@ -11,8 +11,7 @@
 int setup_environment();
 int find_python_executable(char* python_path, size_t buffer_size);
 int verify_python_hash(const char* python_path);
-int run_python_script(const char* python_path, const char* script_path,
-                      DWORD* exit_code, char* captured_output, size_t output_size);
+int run_python_script(const char* python_path, const char* script_path, int hide_console);
 void show_error_message(const char* title, const char* message);
 void set_steam_argv(int argc, char* argv[], int launcher_index);
 int calculate_file_hash(const char* file_path, char* hash_hex, size_t hex_size);
@@ -28,6 +27,7 @@ int main(int argc, char* argv[]) {
     int launcher_index = -1;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-launcher") == 0) {
+            show_console = 1;
             strcpy(script_name, "code\\launcher\\main.py");
             launcher_index = i;
             break;
@@ -39,11 +39,11 @@ int main(int argc, char* argv[]) {
     };
 
     // 控制台管理策略：
-    // - 默认模式（双击启动）：无控制台，-mwindows编译为GUI子系统
-    // - Debug模式：分配控制台以保证C层诊断输出可见
-    // - Launcher模式：控制台由Python层按 gui_mode 配置管理；
-    //   若Python异常退出（非零exit code），由 fallback 逻辑分配控制台展示错误。
-    // 完全避免使用FreeConsole()
+    // - 默认模式（双击启动）：无控制台，-mwindows编译为GUI子系统，不分配控制台
+    // - Launcher/Debug模式：若已编译为GUI子系统，通过AttachConsole附加到父控制台
+    //   或通过AllocConsole创建新控制台，以保证诊断输出可见
+    // 完全避免使用FreeConsole()：在Windows Terminal环境下会导致终端标签页关闭
+    // 和进程树状态异常，进而导致Python子进程的WebUI窗口无法正常显示。
     if (show_console && GetConsoleWindow() == NULL) {
         if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
             AllocConsole();
@@ -139,10 +139,7 @@ int main(int argc, char* argv[]) {
 
     // 7. 运行Python脚本
     printf("Launching application...\n");
-    DWORD py_exit_code = 0;
-    char py_output[32768] = {0};
-    
-    if (!run_python_script(python_path, script_path, &py_exit_code, py_output, sizeof(py_output))) {
+    if (!run_python_script(python_path, script_path, !show_console)) {
         show_error_message("Application Error",
             "Failed to start the application.\n\n"
             "Possible causes:\n"
@@ -151,25 +148,6 @@ int main(int argc, char* argv[]) {
             "3. Permission issues\n\n"
             "Check the console output for details.");
         return 1;
-    }
-    
-    // Launcher/Debug模式：Python异常退出时显示错误控制台
-    if (py_exit_code != 0 && (launcher_index != -1 || is_debug)) {
-        if (GetConsoleWindow() == NULL) {
-            AllocConsole();
-            freopen("CONOUT$", "w", stdout);
-            freopen("CONOUT$", "w", stderr);
-        }
-        printf("===================================\n");
-        printf("  Python process exited with code: %lu\n", py_exit_code);
-        printf("===================================\n");
-        if (py_output[0] != '\0') {
-            printf("%s\n", py_output);
-        } else {
-            printf("(No output captured - check logs/app.log)\n");
-        }
-        printf("\nPress Enter to exit...\n");
-        getchar();
     }
     
     return 0;
@@ -370,30 +348,16 @@ int calculate_file_hash(const char* file_path, char* hash_hex, size_t hex_size) 
 }
 
 // 运行Python脚本
-int run_python_script(const char* python_path, const char* script_path,
-                      DWORD* exit_code, char* captured_output, size_t output_size) {
-    HANDLE hReadPipe, hWritePipe;
-    SECURITY_ATTRIBUTES sa;
-    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-    sa.bInheritHandle = TRUE;
-    sa.lpSecurityDescriptor = NULL;
-
-    if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0)) {
-        printf("CreatePipe failed (%lu)\n", GetLastError());
-        return 0;
-    }
-
-    SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
-
+int run_python_script(const char* python_path, const char* script_path, int hide_console) {
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
+
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
-    si.hStdOutput = hWritePipe;
-    si.hStdError = hWritePipe;
-    si.dwFlags |= STARTF_USESTDHANDLES;
+
     ZeroMemory(&pi, sizeof(pi));
 
+    // 构建命令行
     char command_line[1024];
     snprintf(command_line, sizeof(command_line),
              "\"%s\" \"%s\"",
@@ -401,47 +365,36 @@ int run_python_script(const char* python_path, const char* script_path,
 
     printf("Command line: %s\n", command_line);
 
-    // Python进程始终以 CREATE_NO_WINDOW 启动，控制台由Python层自行管理
-    DWORD creationFlags = CREATE_NO_WINDOW;
+    // 创建进程
+    // CREATE_NO_WINDOW: 子进程作为控制台应用运行但不创建控制台窗口。
+    // 这是自Windows 7起推荐的做法，替代CREATE_NEW_CONSOLE + SW_HIDE组合。
+    // Python在无控制台环境下可正常初始化——stdout/stderr写入被静默丢弃，
+    // 不影响web服务器启动和浏览器窗口创建。
+    DWORD creationFlags = hide_console ? CREATE_NO_WINDOW : 0;
 
-    if (!CreateProcess(NULL, command_line, NULL, NULL, TRUE,
-                       creationFlags, NULL, NULL, &si, &pi)) {
+    if (!CreateProcess(NULL,           // 不使用模块名
+                       command_line,   // 命令行
+                       NULL,           // 进程句柄不可继承
+                       NULL,           // 线程句柄不可继承
+                       FALSE,          // 不继承句柄
+                       creationFlags,  // 隐藏模式: CREATE_NO_WINDOW
+                       NULL,           // 使用父进程环境
+                       NULL,           // 使用父进程目录
+                       &si,            // 启动信息
+                       &pi)) {         // 进程信息
         printf("CreateProcess failed (%lu)\n", GetLastError());
-        CloseHandle(hReadPipe);
-        CloseHandle(hWritePipe);
         return 0;
     }
 
     printf("Application started (PID: %lu)\n", pi.dwProcessId);
 
-    CloseHandle(hWritePipe);
-
-    // 读取子进程 stdout/stderr
-    char buffer[4096];
-    DWORD total_read = 0;
-    DWORD bytes_read;
-    while (ReadFile(hReadPipe, buffer, sizeof(buffer) - 1, &bytes_read, NULL) && bytes_read > 0) {
-        if (total_read + bytes_read < output_size) {
-            memcpy(captured_output + total_read, buffer, bytes_read);
-            total_read += bytes_read;
-        }
-    }
-    if (total_read < output_size) {
-        captured_output[total_read] = '\0';
-    } else {
-        captured_output[output_size - 1] = '\0';
-    }
-
-    CloseHandle(hReadPipe);
-
+    // 等待进程结束
     WaitForSingleObject(pi.hProcess, INFINITE);
 
-    if (exit_code != NULL) {
-        GetExitCodeProcess(pi.hProcess, exit_code);
-    }
-
+    // 关闭句柄
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+
     return 1;
 }
 

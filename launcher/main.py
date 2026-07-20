@@ -109,11 +109,23 @@ def _wait_for_game(process, cancel_event):
     _log_manager.log(f"游戏进程已退出，退出码: {process.returncode}")
 
 
+def _hide_launcher_console():
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+    hwnd = kernel32.GetConsoleWindow()
+    if hwnd:
+        user32.ShowWindow(hwnd, 0)
+
+
 def main():
     ConfigManager()
 
     gui_mode = ConfigManager().get("launcher.work.gui_mode", False)
     mod_enabled = ConfigManager().get("launcher.work.mod", False)
+
+    if gui_mode:
+        _hide_launcher_console()
 
     pipeline = LaunchPipeline()
 

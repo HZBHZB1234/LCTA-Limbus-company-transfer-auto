@@ -1,5 +1,6 @@
 """CDN优选（从 launcher/main.py 拆分而来）"""
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from globalManagers.ConfigManager import ConfigManager
 
 _log_manager = LogManager()
 
-def run_cdn_optimization(project_root: Path) -> None:
+def run_cdn_optimization(project_root: Path, cancel_event: threading.Event = None) -> None:
     """CDN优选（在启动游戏前优化CDN连接）"""
     config = ConfigManager()
     if not config.get('launcher.work.cdn_optimize', False):
@@ -44,11 +45,15 @@ def run_cdn_optimization(project_root: Path) -> None:
         def launcher_progress(pct, msg):
             _log_manager.log(f"[CDN] {pct:.0f}%: {msg}")
 
+        def cancel_check():
+            if cancel_event and cancel_event.is_set():
+                raise RuntimeError("cancelled")
+
         result = function_cdn.cdn_full_optimization_simple(
             cfst_dir=cdn_dir,
             log_cb=launcher_log,
             progress_cb=launcher_progress,
-            cancel_check=None
+            cancel_check=cancel_check
         )
 
         if not (result.get('cf_ip') or result.get('cloudfront_mappings')):

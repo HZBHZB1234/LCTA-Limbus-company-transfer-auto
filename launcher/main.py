@@ -131,67 +131,76 @@ def main():
         except Exception as e:
             _log_manager.log(f"无法创建GUI进度窗口，回退到控制台模式: {e}")
 
+    def _launcher_check_running(modal_id=None, log=True):
+        if pipeline.cancel_event.is_set():
+            raise RuntimeError("cancelled")
+    _log_manager.set_modal_callbacks(check_running=_launcher_check_running)
+
     pipeline.emit(PHASE_INIT)
 
     steam_argv = ''
     try:
-        if progress and progress.is_alive():
-            progress.set_progress_marquee()
-            progress.update_status("正在检查更新...")
+        if not pipeline.cancel_event.is_set():
+            if progress and progress.is_alive():
+                progress.set_progress_marquee()
+                progress.update_status("正在检查更新...")
+            pipeline.emit(PHASE_CHECK_UPDATE)
+            steam_argv = resolve_steam_argv()
+            try:
+                GithubDownload.init_request(quiet=True)
+                update_obj = create_update()
+                update_obj.run()
+            except Exception as e:
+                _log_manager.log_error(e)
 
-        pipeline.emit(PHASE_CHECK_UPDATE)
-        steam_argv = resolve_steam_argv()
-        try:
-            GithubDownload.init_request(quiet=True)
-            update_obj = create_update()
-            update_obj.run()
-        except Exception as e:
-            _log_manager.log_error(e)
+        if not pipeline.cancel_event.is_set():
+            if progress and progress.is_alive():
+                progress.update_status("正在进行CDN优选...")
+            pipeline.emit(PHASE_CDN)
+            try:
+                run_cdn_optimization(file_dir, cancel_event=pipeline.cancel_event)
+            except Exception as e:
+                _log_manager.log_error(e)
 
-        if progress and progress.is_alive():
-            progress.update_status("正在进行CDN优选...")
-        pipeline.emit(PHASE_CDN)
-        try:
-            run_cdn_optimization(file_dir)
-        except Exception as e:
-            _log_manager.log_error(e)
-
-        pipeline.context['steam_argv'] = steam_argv
-        if progress and progress.is_alive():
-            progress.update_status("正在准备模组...")
-        pipeline.emit(PHASE_PREPARE_MOD, steam_argv=steam_argv)
+        if not pipeline.cancel_event.is_set():
+            pipeline.context['steam_argv'] = steam_argv
+            if progress and progress.is_alive():
+                progress.update_status("正在准备模组...")
+            pipeline.emit(PHASE_PREPARE_MOD, steam_argv=steam_argv)
     except Exception as e:
         _log_manager.log_error(e)
 
     game_process = None
     exit_code = -1
 
-    try:
-        if progress and progress.is_alive():
-            progress.update_status("正在启动游戏...")
-
-        pipeline.emit(PHASE_LAUNCH)
-
-        game_process = subprocess.Popen(steam_argv)
-        pipeline.context['game_process'] = game_process
-        pipeline.context['game_pid'] = game_process.pid
-        _log_manager.log(f"游戏已启动 (PID: {game_process.pid})")
-
-        pipeline.emit(PHASE_RUNNING)
-
-        _wait_for_game(game_process, pipeline.cancel_event)
-
-        exit_code = game_process.returncode if game_process.poll() is not None else -1
-    except Exception as e:
-        _log_manager.log_error(e)
-        exit_code = -1
-    finally:
+    if not pipeline.cancel_event.is_set():
         try:
-            pipeline.emit(PHASE_EXIT, exit_code=exit_code)
-        except Exception:
-            pass
+            if progress and progress.is_alive():
+                progress.update_status("正在启动游戏...")
+            pipeline.emit(PHASE_LAUNCH)
+
+            game_process = subprocess.Popen(steam_argv)
+            pipeline.context['game_process'] = game_process
+            pipeline.context['game_pid'] = game_process.pid
+            _log_manager.log(f"游戏已启动 (PID: {game_process.pid})")
+
+            pipeline.emit(PHASE_RUNNING)
+
+            _wait_for_game(game_process, pipeline.cancel_event)
+
+            exit_code = game_process.returncode if game_process.poll() is not None else -1
+        except Exception as e:
+            _log_manager.log_error(e)
+            exit_code = -1
+
+    try:
+        pipeline.emit(PHASE_EXIT, exit_code=exit_code)
+    except Exception:
+        pass
 
     _log_manager.log('正常退出')
+
+    _log_manager.set_modal_callbacks(check_running=None)
 
     if log_handler:
         try:

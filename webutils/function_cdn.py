@@ -234,6 +234,7 @@ def run_cfst(
 
     progress_re = re.compile(r"(\d+)\s*/\s*(\d+)")
 
+    proc = None
     try:
         # 通过 subprocess 运行（Windows 隐藏窗口）
         creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
@@ -377,6 +378,16 @@ def run_cfst(
         if log_cb:
             log_cb(f"cfst 运行出错：{e}")
         return None
+    finally:
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
 
 
 def _parse_float(s: str) -> float:

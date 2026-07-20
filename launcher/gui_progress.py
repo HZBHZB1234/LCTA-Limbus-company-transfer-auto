@@ -1,6 +1,7 @@
 import logging
 import threading
-from typing import Optional
+import time
+from typing import Callable, Dict, Optional
 
 try:
     import clr
@@ -16,10 +17,37 @@ except Exception:
 clr.AddReference('System.Windows.Forms')
 clr.AddReference('System.Drawing')
 import System.Windows.Forms as WinForms
-from System.Drawing import Point, Size, Color, Font, FontStyle
+from System.Drawing import (
+    Point, Size, Color, Font, FontStyle, ContentAlignment,
+)
+from System.Windows.Forms import (
+    FlatStyle, BorderStyle, AnchorStyles,
+)
 
-# 模块级窗口实例引用
+from launcher.pipeline import (
+    PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN,
+    PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
+)
+
 _window: Optional["LauncherProgressWindow"] = None
+
+_PHASE_LABELS = {
+    PHASE_INIT: "初始化",
+    PHASE_CHECK_UPDATE: "检查更新",
+    PHASE_CDN: "CDN优选",
+    PHASE_PREPARE_MOD: "模组准备",
+    PHASE_LAUNCH: "启动游戏",
+    PHASE_RUNNING: "游戏运行中",
+    PHASE_EXIT: "游戏已退出",
+}
+_PHASE_ORDER = [PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN, PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING]
+
+_COLOR_DONE = Color.FromArgb(76, 175, 80)
+_COLOR_ACTIVE = Color.FromArgb(33, 150, 243)
+_COLOR_PENDING = Color.FromArgb(158, 158, 158)
+_COLOR_BG_DARK = Color.FromArgb(30, 30, 30)
+_COLOR_FG_LIGHT = Color.FromArgb(220, 220, 220)
+_COLOR_BG_FORM = Color.FromArgb(45, 45, 48)
 
 
 class LauncherProgressWindow:
@@ -29,9 +57,28 @@ class LauncherProgressWindow:
         self._status_label: Optional[WinForms.Label] = None
         self._progress_bar: Optional[WinForms.ProgressBar] = None
         self._log_box: Optional[WinForms.RichTextBox] = None
+        self._log_toggle_btn: Optional[WinForms.Button] = None
+        self._phase_flow: Optional[WinForms.FlowLayoutPanel] = None
+        self._phase_labels: Dict[str, WinForms.Label] = {}
+        self._info_label: Optional[WinForms.Label] = None
         self._thread: Optional = None
         self._ready = threading.Event()
         self._closed = threading.Event()
+        self._pipeline: Optional = None
+        self._log_expanded = False
+        self._game_start_time: Optional[float] = None
+        self._uptime_timer: Optional = None
+
+    def register_to_pipeline(self, pipeline) -> None:
+        self._pipeline = pipeline
+
+        pipeline.on(PHASE_INIT, lambda **kw: self._show_phase(PHASE_INIT))
+        pipeline.on(PHASE_CHECK_UPDATE, lambda **kw: self._show_phase(PHASE_CHECK_UPDATE))
+        pipeline.on(PHASE_CDN, lambda **kw: self._show_phase(PHASE_CDN))
+        pipeline.on(PHASE_PREPARE_MOD, lambda **kw: self._show_phase(PHASE_PREPARE_MOD))
+        pipeline.on(PHASE_LAUNCH, lambda **kw: self._show_phase(PHASE_LAUNCH))
+        pipeline.on(PHASE_RUNNING, lambda **kw: self._show_game_running(**kw))
+        pipeline.on(PHASE_EXIT, lambda **kw: self._show_game_exited(**kw))
 
     def _create_form(self):
         WinForms.Application.EnableVisualStyles()
@@ -40,64 +87,265 @@ class LauncherProgressWindow:
         form.Text = "LCTA 启动器"
         form.FormBorderStyle = WinForms.FormBorderStyle.FixedDialog
         form.StartPosition = WinForms.FormStartPosition.CenterScreen
-        form.Size = Size(520, 380)
+        form.Size = Size(520, 440)
         form.TopMost = False
         form.MaximizeBox = False
         form.MinimizeBox = True
+        form.BackColor = _COLOR_BG_FORM
+        form.add_FormClosing(WinForms.FormClosingEventHandler(self._on_form_closing))
+
+        # ---- 阶段指示器 ----
+        flow = WinForms.FlowLayoutPanel()
+        flow.Location = Point(12, 12)
+        flow.Size = Size(496, 28)
+        flow.FlowDirection = WinForms.FlowDirection.LeftToRight
+        flow.WrapContents = False
+        flow.BackColor = Color.Transparent
+        form.Controls.Add(flow)
+        self._phase_flow = flow
+
+        for ph in _PHASE_ORDER:
+            lbl = WinForms.Label()
+            lbl.Text = _PHASE_LABELS[ph]
+            lbl.AutoSize = True
+            lbl.Font = Font("Microsoft YaHei", 8)
+            lbl.ForeColor = _COLOR_PENDING
+            lbl.Margin = WinForms.Padding(1, 4, 6, 0)
+            flow.Controls.Add(lbl)
+            self._phase_labels[ph] = lbl
+
+        y = 44
 
         # ---- 状态标签 ----
-        status_label = WinForms.Label()
-        status_label.Text = "正在初始化..."
-        status_label.Location = Point(12, 12)
-        status_label.AutoSize = True
-        status_label.Font = Font("Microsoft YaHei", 10, FontStyle.Bold)
-        form.Controls.Add(status_label)
+        status = WinForms.Label()
+        status.Text = "正在初始化..."
+        status.Location = Point(12, y)
+        status.Size = Size(496, 24)
+        status.Font = Font("Microsoft YaHei", 11, FontStyle.Bold)
+        status.ForeColor = _COLOR_FG_LIGHT
+        status.TextAlign = ContentAlignment.MiddleLeft
+        form.Controls.Add(status)
+        self._status_label = status
+        y += 28
 
         # ---- 进度条 ----
-        progress_bar = WinForms.ProgressBar()
-        progress_bar.Location = Point(12, 36)
-        progress_bar.Size = Size(480, 20)
-        progress_bar.Minimum = 0
-        progress_bar.Maximum = 100
-        progress_bar.Value = 0
-        progress_bar.Style = WinForms.ProgressBarStyle.Marquee
-        form.Controls.Add(progress_bar)
+        prog = WinForms.ProgressBar()
+        prog.Location = Point(12, y)
+        prog.Size = Size(496, 18)
+        prog.Minimum = 0
+        prog.Maximum = 100
+        prog.Value = 0
+        prog.Style = WinForms.ProgressBarStyle.Marquee
+        form.Controls.Add(prog)
+        self._progress_bar = prog
+        y += 24
+
+        # ---- 游戏运行信息区 ----
+        info = WinForms.Label()
+        info.Location = Point(12, y)
+        info.Size = Size(496, 50)
+        info.Font = Font("Microsoft YaHei", 9)
+        info.ForeColor = Color.FromArgb(180, 180, 180)
+        info.Text = ""
+        info.Visible = False
+        form.Controls.Add(info)
+        self._info_label = info
+
+        y += 54
+
+        # ---- 日志折叠按钮 ----
+        btn = WinForms.Button()
+        btn.Text = "详细日志 ▸"
+        btn.Location = Point(12, y)
+        btn.Size = Size(496, 22)
+        btn.FlatStyle = FlatStyle.Flat
+        btn.BackColor = Color.FromArgb(55, 55, 58)
+        btn.ForeColor = _COLOR_FG_LIGHT
+        btn.Font = Font("Microsoft YaHei", 8)
+        btn.FlatAppearance.BorderSize = 0
+        btn.TextAlign = ContentAlignment.MiddleLeft
+        btn.add_Click(WinForms.EventHandler(self._toggle_log))
+        form.Controls.Add(btn)
+        self._log_toggle_btn = btn
+        y += 26
 
         # ---- 日志文本框 ----
-        log_box = WinForms.RichTextBox()
-        log_box.Location = Point(12, 65)
-        log_box.Size = Size(480, 240)
-        log_box.ReadOnly = True
-        log_box.BackColor = Color.FromArgb(30, 30, 30)
-        log_box.ForeColor = Color.FromArgb(220, 220, 220)
-        log_box.Font = Font("Consolas", 9)
-        log_box.WordWrap = True
-        log_box.ScrollBars = WinForms.RichTextBoxScrollBars.Vertical
-        log_box.DetectUrls = False
-        form.Controls.Add(log_box)
+        log = WinForms.RichTextBox()
+        log.Location = Point(12, y)
+        log.Size = Size(496, 200)
+        log.ReadOnly = True
+        log.BackColor = _COLOR_BG_DARK
+        log.ForeColor = _COLOR_FG_LIGHT
+        log.Font = Font("Consolas", 8.5)
+        log.WordWrap = True
+        log.ScrollBars = WinForms.RichTextBoxScrollBars.Vertical
+        log.DetectUrls = False
+        log.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+        form.Controls.Add(log)
+        log.Hide()
+        self._log_box = log
 
-        # ---- 底部提示 ----
-        hint = WinForms.Label()
-        hint.Text = "游戏启动完成后此窗口将自动关闭"
-        hint.Location = Point(12, 315)
-        hint.AutoSize = True
-        hint.ForeColor = Color.Gray
-        hint.Font = Font("Microsoft YaHei", 8)
-        form.Controls.Add(hint)
-
-        # 赋值成员变量（仅在STA线程上访问）
         self._form = form
-        self._status_label = status_label
-        self._progress_bar = progress_bar
-        self._log_box = log_box
-
-        # 通知主线程窗体已就绪
         self._ready.set()
-
-        # 启动消息泵（阻塞直到 form.Close()）
         WinForms.Application.Run(form)
-
         self._closed.set()
+
+    def _on_form_closing(self, sender, e):
+        if self._current_phase == PHASE_EXIT:
+            return
+
+        if self._current_phase == PHASE_RUNNING:
+            msg = "游戏正在运行，确认退出启动器？\n\n退出启动器将同时终止游戏进程。"
+        else:
+            msg = "启动流程正在进行中，确认退出？"
+
+        result = WinForms.MessageBox.Show(
+            self._form, msg, "LCTA 启动器",
+            WinForms.MessageBoxButtons.YesNo,
+            WinForms.MessageBoxIcon.Warning,
+        )
+
+        if result == WinForms.DialogResult.Yes:
+            if self._pipeline is not None:
+                self._pipeline.cancel()
+        else:
+            e.Cancel = True
+
+    def _toggle_log(self, sender, e):
+        self._log_expanded = not self._log_expanded
+
+        def _do():
+            if self._log_box is not None and not self._log_box.IsDisposed:
+                if self._log_expanded:
+                    self._log_box.Show()
+                    self._log_toggle_btn.Text = "详细日志 ▾"
+                else:
+                    self._log_box.Hide()
+                    self._log_toggle_btn.Text = "详细日志 ▸"
+        self._safe_invoke(_do)
+
+    def _show_phase(self, phase: str) -> None:
+        self._current_phase = phase
+
+        def _do():
+            idx = _PHASE_ORDER.index(phase) if phase in _PHASE_ORDER else -1
+            for i, ph in enumerate(_PHASE_ORDER):
+                lbl = self._phase_labels.get(ph)
+                if lbl is None or lbl.IsDisposed:
+                    continue
+                if i < idx:
+                    lbl.ForeColor = _COLOR_DONE
+                    lbl.Text = f"\u2713 {_PHASE_LABELS[ph]}"
+                elif i == idx:
+                    lbl.ForeColor = _COLOR_ACTIVE
+                    lbl.Text = f"\u25cf {_PHASE_LABELS[ph]}"
+                    lbl.Font = Font("Microsoft YaHei", 8, FontStyle.Bold)
+                else:
+                    lbl.ForeColor = _COLOR_PENDING
+                    lbl.Text = f"\u25cb {_PHASE_LABELS[ph]}"
+                    lbl.Font = Font("Microsoft YaHei", 8)
+
+            if self._form is not None and not self._form.IsDisposed:
+                self._form.Text = f"LCTA 启动器 \u2014 {_PHASE_LABELS.get(phase, phase)}"
+
+            if phase == PHASE_RUNNING:
+                self._progress_bar.Visible = False
+            else:
+                self._progress_bar.Visible = True
+
+        self._safe_invoke(_do)
+
+    def _show_game_running(self, **kw) -> None:
+        self._current_phase = PHASE_RUNNING
+
+        def _do():
+            for i, ph in enumerate(_PHASE_ORDER):
+                lbl = self._phase_labels.get(ph)
+                if lbl is None or lbl.IsDisposed:
+                    continue
+                if ph == PHASE_RUNNING:
+                    lbl.ForeColor = _COLOR_ACTIVE
+                    lbl.Text = f"\u25cf {_PHASE_LABELS[ph]}"
+                    lbl.Font = Font("Microsoft YaHei", 8, FontStyle.Bold)
+                else:
+                    lbl.ForeColor = _COLOR_DONE
+                    lbl.Text = f"\u2713 {_PHASE_LABELS[ph]}"
+                    lbl.Font = Font("Microsoft YaHei", 8)
+
+            if self._form is not None and not self._form.IsDisposed:
+                self._form.Text = "LCTA 启动器 \u2014 游戏运行中"
+
+            self._status_label.Text = "游戏运行中"
+            self._progress_bar.Visible = False
+
+            pid = self._pipeline.context.get('game_pid', '?') if self._pipeline else '?'
+            self._info_label.Text = (
+                f"游戏进程 PID: {pid}\n"
+                f"快捷操作:  Ctrl+S 切换加速  |  Ctrl+Shift+S 倍率选择窗口"
+            )
+            self._info_label.Visible = True
+
+            self._game_start_time = time.time()
+            self._start_uptime_timer()
+
+        self._safe_invoke(_do)
+
+    def _show_game_exited(self, **kw) -> None:
+        self._current_phase = PHASE_EXIT
+        exit_code = kw.get('exit_code', '?')
+
+        def _do():
+            self._stop_uptime_timer()
+
+            if self._form is not None and not self._form.IsDisposed:
+                self._form.Text = "LCTA 启动器 \u2014 游戏已退出"
+
+            self._progress_bar.Visible = False
+
+            runtime_str = ""
+            if self._game_start_time is not None:
+                secs = int(time.time() - self._game_start_time)
+                h, m = divmod(secs, 3600)
+                m, s = divmod(m, 60)
+                runtime_str = f"\n运行时长: {h}时{m}分{s}秒"
+
+            self._status_label.Text = f"游戏已退出 (退出码: {exit_code})"
+            self._info_label.Text = f"游戏进程已结束{runtime_str}"
+            self._info_label.Visible = True
+
+        self._safe_invoke(_do)
+
+    def _start_uptime_timer(self):
+        try:
+            import System.Windows.Forms as WFTimer
+            self._uptime_timer = WFTimer.Timer()
+            self._uptime_timer.Interval = 1000
+            self._uptime_timer.add_Tick(WinForms.EventHandler(self._on_uptime_tick))
+            self._uptime_timer.Start()
+        except Exception:
+            pass
+
+    def _stop_uptime_timer(self):
+        if self._uptime_timer is not None:
+            try:
+                self._uptime_timer.Stop()
+                self._uptime_timer.Dispose()
+            except Exception:
+                pass
+            self._uptime_timer = None
+
+    def _on_uptime_tick(self, sender, e):
+        if self._game_start_time is None:
+            return
+        secs = int(time.time() - self._game_start_time)
+        h, m = divmod(secs, 3600)
+        m, s = divmod(m, 60)
+        pid = self._pipeline.context.get('game_pid', '?') if self._pipeline else '?'
+        if self._info_label is not None and not self._info_label.IsDisposed:
+            self._info_label.Text = (
+                f"游戏进程 PID: {pid}    已运行 {h:02d}:{m:02d}:{s:02d}\n"
+                f"快捷操作:  Ctrl+S 切换加速  |  Ctrl+Shift+S 倍率选择窗口"
+            )
 
     def start(self):
         import System.Threading as NetThreading
@@ -160,7 +408,6 @@ class LauncherProgressWindow:
         try:
             self._form.BeginInvoke(WinForms.MethodInvoker(action))
         except Exception:
-            logging.getLogger("LCTA").debug("GUI _safe_invoke 失败，窗口可能已关闭")
             pass
 
 
@@ -185,7 +432,6 @@ class ProgressLogHandler(logging.Handler):
             msg = self.format(record)
             self._window.append_log(msg)
         except Exception:
-            logging.getLogger("LCTA").debug("GUI 日志输出失败，窗口可能已关闭")
             pass
         finally:
             self._active = True

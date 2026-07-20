@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-18 -->
+<!-- Last updated: 2026-07-20 -->
 
 ## Directory Overview
 
@@ -128,8 +128,8 @@ Standalone library with own `__init__.py` public API.
 
 | File | Purpose |
 |------|---------|
-| `main.py` | Entry point: update check → CDN optimize → launch game |
-| `game_launch.py` | Game launch: mod mode (with patching) or plain mode |
+| `main.py` | Entry point: pipeline orchestration — creates `LaunchPipeline`, registers handlers for mod/speed-hotkey, optionally creates GUI window, then emits pipeline phases in order. Uses `subprocess.Popen` (not `subprocess.call`) for game launch to support cancel-flow from GUI |
+| `game_launch.py` | Game launch phases: `prepare_mod()` (mod patching pre-game), `cleanup_mod_assets()` (post-game restore), `start_speed_hotkey()` / `stop_speed_hotkey()` (lifecycle wrappers). Game process launch moved to `main.py` pipeline |
 | `updates.py` | Translation pack update system (Factory pattern for LLC/OurPlay/Machine) |
 | `cdn.py` | CDN optimization for launcher mode with cache TTL to avoid redundant speed tests |
 | `patch.py` | Unity asset patching for mods |
@@ -138,7 +138,8 @@ Standalone library with own `__init__.py` public API.
 | `changes.py` | Text data patch application |
 | `compress.py` | Compression utilities |
 | `speed_hotkey.py` | Game speed hotkey (Ctrl+Shift+S) with comprehensive lifecycle logging, foreground process check, .NET STA threading for UI |
-| `gui_progress.py` | WinForms progress window for GUI launcher mode: status label, progress bar, scrollable log area; thread-safe UI updates via BeginInvoke; custom logging.Handler for log interception |
+| `gui_progress.py` | WinForms companion window for GUI launcher mode: phase indicator (init→update→cdn→mod→launch→running), status label, progress bar, collapsible log area, game-running info display (PID + uptime + hotkey hints). `register_to_pipeline()` wires GUI to `LaunchPipeline` phases; `FormClosing` handler shows confirmation dialog and sets `cancel_event` on confirm |
+| `pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline: `on(phase, callback)` for module registration, `emit(phase, **kwargs)` to trigger all callbacks. Defines 7 phases (`PHASE_INIT` through `PHASE_EXIT`). `cancel_event` (threading.Event) supports GUI-initiated abort. `context` dict shares state (steam_argv, game_process, game_pid) across phases |
 
 ## Import Dependency Graph
 

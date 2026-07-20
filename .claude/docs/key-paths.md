@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-18 -->
+<!-- Last updated: 2026-07-20 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -74,23 +74,45 @@ Files: `webui/js/cdn.js`, `webui/app.py`, `webutils/function_cdn.py`, `launcher/
 
 ```
 Launcher mode: start_webui.py -launcher
-  → launcher/main.py               ConfigManager() → check gui_mode → main_pre() → main_after_mod() → main_after_game()
-    Phase 0 (gui_mode check, if enabled):
-      → launcher/gui_progress.py    create_progress_window() — WinForms STA thread
-        → ProgressLogHandler         intercept LogManager._logger for real-time log display
-    Phase 1 (main_pre):
-      → launcher/updates.py         check translation pack updates
-      → launcher/cdn.py             optimize CDN if configured
-    Phase 2 (main_after_mod):
-      → launcher/game_launch.py     launch game with mod patching
-        → launcher/patch.py         Unity asset patching
-        → launcher/modfolder.py     mod detection & management
-    Phase 3 (main_after_game):
-      → launcher/speed_hotkey.py    register Ctrl+Shift+S hotkey
-      → launcher/sound.py           apply sound mods
+  → start_webui.py                    _manage_launcher_console() — early console mgmt before imports
+  → launcher/main.py                  ConfigManager() → LaunchPipeline()
+    → launcher/pipeline.py            LaunchPipeline created; cancel_event for GUI abort
+    → launcher/gui_progress.py        (if gui_mode) create_progress_window() + register_to_pipeline()
+
+  Pipeline phases (emit order):
+    Phase init:
+      pipeline.emit(PHASE_INIT)         → GUI shows phase indicator
+    Phase check_update / cdn:
+      → launcher/main.py main_pre()     → launcher/updates.py (Factory pattern)
+                                        → launcher/cdn.py (CDN optimize with cache TTL)
+      pipeline.emit(PHASE_CDN)
+    Phase prepare_mod (if enabled):
+      pipeline.emit(PHASE_PREPARE_MOD)  → launcher/game_launch.py prepare_mod()
+                                        → launcher/patch.py (Unity asset patching)
+                                        → launcher/sound.py (sound replacement)
+                                        → launcher/changes.py (text data patches)
+    Phase launch:
+      → subprocess.Popen(steam_argv)   ← Non-blocking, stored in pipeline.context
+      pipeline.emit(PHASE_LAUNCH)       → GUI shows "游戏运行中"
+    Phase running:
+      pipeline.emit(PHASE_RUNNING)      → game_launch.py start_speed_hotkey()
+                                        → GUI shows PID + uptime + hotkey hints
+      → _wait_for_game(poll + cancel_event check)
+    Phase exit:
+      pipeline.emit(PHASE_EXIT)         → game_launch.py cleanup_mod_assets()
+                                        → game_launch.py stop_speed_hotkey()
+                                        → GUI shows "游戏已退出"
+
+  Cancel flow:
+    GUI FormClosing → confirm dialog → pipeline.cancel()
+      → _wait_for_game detects cancel_event → terminate game process
+      → PHASE_EXIT callbacks still fire for cleanup
 ```
 
-Files: `start_webui.py`, `launcher/main.py`, `launcher/gui_progress.py`, `launcher/updates.py`, `launcher/cdn.py`, `launcher/game_launch.py`, `launcher/patch.py`, `launcher/modfolder.py`, `launcher/speed_hotkey.py`, `launcher/sound.py`, `launcher/changes.py`
+C launcher fallback (launcher.c):
+  - Python always started with CREATE_NO_WINDOW + pipe-captured stdout/stderr
+  - If Python exits with non-zero code: AllocConsole → display captured output
+  - Normal exit (code 0): C exits silently, console managed by Python layer
 
 ## 6. Game Speed Modification
 
@@ -191,7 +213,7 @@ Files: `webui/js/features.js`, `webui/app.py`, `webutils/function_drop.py`, `web
 
 ```
 start_webui.py main()
-  → if -launcher flag: launcher/main.py       (launcher mode)
+  → if -launcher flag: start_launcher()        (launcher mode, see section 5)
   → else: webui/app.py:main()                 (WebUI mode)
     → globalManagers/ConfigManager.py          init singleton, load config.json
     → globalManagers/LogManager.py             init logger

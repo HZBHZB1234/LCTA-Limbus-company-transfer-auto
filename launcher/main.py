@@ -1,10 +1,10 @@
 import sys
+import time
+import subprocess
 from pathlib import Path
 
-# Needed for embedded python
 import os
 
-# DO NOT IMPORT ANY FILES BEFORE THESE TWO LINES
 print('开始')
 file_dir = Path(os.path.dirname(__file__)).parent
 print(f'\n\n{file_dir}')
@@ -24,7 +24,13 @@ except Exception as e:
 from globalManagers.ConfigManager import ConfigManager
 from launcher.updates import create_update
 from launcher.cdn import run_cdn_optimization
-from launcher.game_launch import main_after_mod, main_after_game
+
+from launcher.pipeline import (
+    LaunchPipeline,
+    PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN,
+    PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
+)
+
 
 def resolve_steam_argv() -> str:
     steam_argv = os.getenv('steam_argv', '')
@@ -33,12 +39,12 @@ def resolve_steam_argv() -> str:
         _log_manager.log("unexpectedly missing steam_argv environment variable")
         _log_manager.log("use path in config instead")
 
-        steam_argv = ConfigManager().get("game_path", "")+'LimbusCompany.exe'
+        steam_argv = ConfigManager().get("game_path", "") + 'LimbusCompany.exe'
     _log_manager.log(f"steam_argv: {steam_argv}")
     return steam_argv
 
+
 def main_pre() -> str:
-    # 初始化单例配置管理器（第一次调用完成加载）
     ConfigManager()
 
     steam_argv = resolve_steam_argv()
@@ -46,21 +52,77 @@ def main_pre() -> str:
     try:
         GithubDownload.init_request(quiet=True)
 
-        # 使用工厂模式创建更新对象并执行更新
         update_obj = create_update()
         update_obj.run()
 
-        # CDN优选（在启动游戏前优化CDN连接）
         run_cdn_optimization(file_dir)
     except Exception as e:
         _log_manager.log_error(e)
 
     return steam_argv
 
+
+def _prepare_mod_handler(**kw):
+    steam_argv = kw.get('steam_argv')
+    if steam_argv is None:
+        return
+    if ConfigManager().get("launcher.work.mod", False):
+        from launcher.game_launch import prepare_mod
+        prepare_mod(steam_argv)
+
+
+def _cleanup_mod_handler(**kw):
+    try:
+        from launcher.game_launch import cleanup_mod_assets
+        cleanup_mod_assets()
+    except Exception as e:
+        _log_manager.log_error(e)
+
+
+def _register_speed_hotkey_handler(**kw):
+    try:
+        from launcher.game_launch import start_speed_hotkey
+        start_speed_hotkey()
+    except Exception as e:
+        _log_manager.log_error(e)
+
+
+def _unregister_speed_hotkey_handler(**kw):
+    try:
+        from launcher.game_launch import stop_speed_hotkey
+        stop_speed_hotkey()
+    except Exception as e:
+        _log_manager.log_error(e)
+
+
+def _wait_for_game(process, cancel_event):
+    while process.poll() is None:
+        if cancel_event.is_set():
+            _log_manager.log("收到取消信号，正在终止游戏进程...")
+            process.terminate()
+            try:
+                process.wait(5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            return
+        time.sleep(0.5)
+    _log_manager.log(f"游戏进程已退出，退出码: {process.returncode}")
+
+
 def main():
     ConfigManager()
 
     gui_mode = ConfigManager().get("launcher.work.gui_mode", False)
+    mod_enabled = ConfigManager().get("launcher.work.mod", False)
+
+    pipeline = LaunchPipeline()
+
+    if mod_enabled:
+        pipeline.on(PHASE_PREPARE_MOD, _prepare_mod_handler)
+    pipeline.on(PHASE_EXIT, _cleanup_mod_handler)
+    pipeline.on(PHASE_RUNNING, _register_speed_hotkey_handler)
+    pipeline.on(PHASE_EXIT, _unregister_speed_hotkey_handler)
+
     progress = None
     log_handler = None
 
@@ -69,33 +131,60 @@ def main():
             from launcher.gui_progress import create_progress_window, ProgressLogHandler
             _log_manager.log("正在启动GUI进度窗口...")
             progress = create_progress_window()
+            progress.register_to_pipeline(pipeline)
             log_handler = ProgressLogHandler(progress)
             _log_manager._logger.addHandler(log_handler)
         except Exception as e:
             _log_manager.log(f"无法创建GUI进度窗口，回退到控制台模式: {e}")
 
-    steam_argv = ''
-    try:
-        if progress:
-            progress.update_status("正在准备启动...")
-        steam_argv = main_pre()
-    except Exception as e:
-        _log_manager.log_error(e)
+    pipeline.emit(PHASE_INIT)
 
+    steam_argv = ''
     try:
         if progress and progress.is_alive():
             progress.set_progress_marquee()
-            progress.update_status("正在启动游戏...")
-        if ConfigManager().get("launcher.work.mod", False):
-            main_after_mod(steam_argv)
-        else:
-            main_after_game(steam_argv)
+            progress.update_status("正在检查更新...")
+
+        pipeline.emit(PHASE_CHECK_UPDATE)
+        steam_argv = main_pre()
+        pipeline.context['steam_argv'] = steam_argv
+        pipeline.emit(PHASE_CDN)
+
+        pipeline.emit(PHASE_PREPARE_MOD, steam_argv=steam_argv)
     except Exception as e:
         _log_manager.log_error(e)
 
+    game_process = None
+    exit_code = -1
+
+    try:
+        if progress and progress.is_alive():
+            progress.update_status("正在启动游戏...")
+
+        pipeline.emit(PHASE_LAUNCH)
+
+        game_process = subprocess.Popen(steam_argv)
+        pipeline.context['game_process'] = game_process
+        pipeline.context['game_pid'] = game_process.pid
+        _log_manager.log(f"游戏已启动 (PID: {game_process.pid})")
+
+        pipeline.emit(PHASE_RUNNING)
+
+        _wait_for_game(game_process, pipeline.cancel_event)
+
+        exit_code = game_process.returncode if game_process.poll() is not None else -1
+    except Exception as e:
+        _log_manager.log_error(e)
+        exit_code = -1
+    finally:
+        try:
+            pipeline.emit(PHASE_EXIT, exit_code=exit_code)
+        except Exception:
+            pass
+
     _log_manager.log('正常退出')
 
-    if progress and log_handler:
+    if log_handler:
         try:
             _log_manager._logger.removeHandler(log_handler)
         except Exception:
@@ -103,12 +192,11 @@ def main():
 
     if progress and progress.is_alive():
         try:
-            progress.update_status("启动完成")
-            import time
-            time.sleep(1.0)
+            time.sleep(3.0)
             progress.close()
         except Exception:
             pass
+
 
 if __name__ == '__main__':
     main()

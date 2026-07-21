@@ -41,7 +41,13 @@ def translate_main(
         # 1. 从 ConfigManager 构建 TranslateConfig
         config = TranslateConfig.from_config_manager(cfg_mgr)
 
-        # 2. 解析翻译器 API 设置
+        # 2. 设定 dump 输出路径（在 tempdir 外，持久化）
+        if config.dump:
+            dump_dir = Path(os.getcwd()) / "logs" / "translation_dump"
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            config.dump_path = dump_dir / f"{ts}.jsonl"
+
+        # 3. 解析翻译器 API 设置
         translator_text = config.translator_name
         api_settings = translator_config.get(translator_text, {})
 
@@ -51,13 +57,13 @@ def translate_main(
         api_settings = formating_function(api_settings, translator_cls)
         config.translator_api = api_settings
 
-        # 3. 设置输出目录
+        # 4. 设置输出目录
         config.output_dir = tmp
 
-        # 4. 创建管线
+        # 5. 创建管线
         pipeline = TranslationPipeline(config)
 
-        # 5. 绑定 UI 回调
+        # 6. 绑定 UI 回调
         pipeline.set_callbacks(
             on_log=lambda msg: _log_manager.log(msg),
             on_status=lambda msg: _log_manager.log_modal_status(msg, modal_id),
@@ -68,10 +74,10 @@ def translate_main(
             on_check_running=lambda: _log_manager.check_running(modal_id),
         )
 
-        # 6. 运行翻译
+        # 7. 运行翻译
         summary = pipeline.run()
 
-        # 7a. 持久化处理日志（在临时目录被清理前）
+        # 8a. 持久化处理日志
         VERSION = _generate_version()
         try:
             import shutil as _shutil
@@ -85,7 +91,7 @@ def translate_main(
         except Exception:
             pass  # 日志持久化失败不应中断主流程
 
-        # 7b. 上报结果
+        # 8b. 上报结果
         _log_manager.log_modal_process(
             f"翻译完成: {summary.success_count} 成功, "
             f"{len(summary.skipped)} 跳过, {summary.fallback_count} 降级, "
@@ -94,7 +100,7 @@ def translate_main(
         )
         _log_manager.log_modal_status("正在打包汉化包", modal_id)
 
-        # 8. 打包产物
+        # 9. 打包产物
         target_dir = config.output_dir / "LLc-CN-LCTA"
         _copy_assets(target_dir, config.game_path, VERSION)
 

@@ -14,6 +14,7 @@ import traceback
 
 _logger = logging.getLogger("LCTA")  # 与 LogManager 一致的 logger，确保日志正确路由
 
+from datetime import datetime
 from translateFunc.enums import ProcessResult, FileType
 from translateFunc.config import ProcessOutcome, TranslateConfig, FilePathConfig, _suppress_translatekit_log
 from translateFunc.matcher.engine import MatcherEngine
@@ -41,12 +42,17 @@ class FileProcessor:
         engine: MatcherEngine,
         translate_config: TranslateConfig,
         translator,  # translatekit TranslatorBase 实例
+        recorder: "TranslationRecorder | None" = None,
     ):
         self.path_config = path_config
         self._engine = engine
         self._config = translate_config
         self._translator = translator
-        self._dump = translate_config.dump
+        self._recorder = recorder
+
+        self._api_calls: list[dict] = []
+        self._input_text_blocks: list[dict] = []
+        self._input_reference: dict = {}
 
         # 内部状态（在 process() 中填充）
         self.kr_json: dict = {}
@@ -81,11 +87,6 @@ class FileProcessor:
             return FileType.UI
         return FileType.OTHER
 
-    def _log(self, msg: str) -> None:
-        if self._dump:
-            from globalManagers.LogManager import LogManager
-            LogManager().log(msg)
-
     # ========== 主处理流程 ==========
 
     def process(self) -> ProcessOutcome:
@@ -95,107 +96,120 @@ class FileProcessor:
         text_blocks_count = 0
         format_used = None
         formats_tried: list[str] = []
+        outcome = None
 
-        # 1. 加载 JSON 文件
-        outcome = self._load_jsons()
-        if outcome:
-            self._write_processing_log(outcome, start_time)
-            return outcome
-
-        # 2. 检查空文件
-        outcome = self._check_empty()
-        if outcome:
-            self._write_processing_log(outcome, start_time)
-            return outcome
-
-        # 3. 初始化基础数据
-        self._init_base_data()
-
-        # 4. 构建数据索引
-        self._make_data_index()
-
-        # 5. 检查是否已翻译
         try:
-            outcome = self._check_translated()
+            # 1. 加载 JSON 文件
+            outcome = self._load_jsons()
             if outcome:
                 self._write_processing_log(outcome, start_time)
                 return outcome
-        except Exception as e:
-            _logger.exception(f"[{self.file_name}] _check_translated 异常: {e}")
-            self._save_except()
-            outcome = ProcessOutcome(
-                ProcessResult.SAVE_ERROR,
-                self.file_name,
-                {"reason": f"_check_translated 失败: {e}", "exception_type": type(e).__name__, "traceback": traceback.format_exc()},
-            )
+
+            # 2. 检查空文件
+            outcome = self._check_empty()
+            if outcome:
+                self._write_processing_log(outcome, start_time)
+                return outcome
+
+            # 3. 初始化基础数据
+            self._init_base_data()
+
+            # 4. 构建数据索引
+            self._make_data_index()
+
+            # 5. 检查是否已翻译
+            try:
+                outcome = self._check_translated()
+                if outcome:
+                    self._write_processing_log(outcome, start_time)
+                    return outcome
+            except Exception as e:
+                _logger.exception(f"[{self.file_name}] _check_translated 异常: {e}")
+                self._save_except()
+                outcome = ProcessOutcome(
+                    ProcessResult.SAVE_ERROR,
+                    self.file_name,
+                    {"reason": f"_check_translated 失败: {e}", "exception_type": type(e).__name__, "traceback": traceback.format_exc()},
+                )
+                self._write_processing_log(outcome, start_time)
+                return outcome
+
+            # 6. 获取待翻译列表
+            self._get_translating()
+            if not self.translating_list:
+                outcome = ProcessOutcome(ProcessResult.ALREADY_TRANSLATED, self.file_name)
+                self._write_processing_log(outcome, start_time)
+                return outcome
+
+            # 7. 构建请求文本
+            request_text = {
+                "kr": self._get_translating_text("kr"),
+                "jp": self._get_translating_text("jp"),
+                "en": self._get_translating_text("en"),
+            }
+
+            # 8. 构建并翻译
+            try:
+                translated_data, had_fallback = self._translate(request_text)
+            except ValueError:
+                _logger.exception(f"[{self.file_name}] 翻译数量不匹配异常")
+                self._save_except()
+                outcome = ProcessOutcome(
+                    ProcessResult.TRANSLATION_MISMATCH,
+                    self.file_name,
+                    {"reason": "译文数量与原文不匹配", "traceback": traceback.format_exc()},
+                )
+                self._write_processing_log(outcome, start_time)
+                return outcome
+            except Exception as e:
+                _logger.exception(f"[{self.file_name}] 翻译处理异常: {e}")
+                self._save_except()
+                outcome = ProcessOutcome(
+                    ProcessResult.SAVE_ERROR,
+                    self.file_name,
+                    {"reason": str(e), "exception_type": type(e).__name__, "traceback": traceback.format_exc()},
+                )
+                self._write_processing_log(outcome, start_time)
+                return outcome
+
+            # 9. 重建并保存
+            self._de_get_translating_text(translated_data)
+            result = self._de_get_translating()
+
+            try:
+                self._save_result(result)
+            except Exception as e:
+                _logger.exception(f"[{self.file_name}] 保存结果异常: {e}")
+                outcome = ProcessOutcome(
+                    ProcessResult.SAVE_ERROR,
+                    self.file_name,
+                    {"reason": str(e), "exception_type": type(e).__name__, "traceback": traceback.format_exc()},
+                )
+                self._write_processing_log(outcome, start_time)
+                return outcome
+
+            if had_fallback:
+                outcome = ProcessOutcome(
+                    ProcessResult.FALLBACK_TO_ORIGINAL,
+                    self.file_name,
+                    {"fallback_parts": "部分文本块回退为 KR 原文"},
+                )
+            else:
+                outcome = ProcessOutcome(ProcessResult.SUCCESS_SAVED, self.file_name)
+
             self._write_processing_log(outcome, start_time)
             return outcome
-
-        # 6. 获取待翻译列表
-        self._get_translating()
-        if not self.translating_list:
-            outcome = ProcessOutcome(ProcessResult.ALREADY_TRANSLATED, self.file_name)
-            self._write_processing_log(outcome, start_time)
-            return outcome
-
-        # 7. 构建请求文本
-        request_text = {
-            "kr": self._get_translating_text("kr"),
-            "jp": self._get_translating_text("jp"),
-            "en": self._get_translating_text("en"),
-        }
-
-        # 8. 构建并翻译
-        try:
-            translated_data, had_fallback = self._translate(request_text)
-        except ValueError:
-            _logger.exception(f"[{self.file_name}] 翻译数量不匹配异常")
-            self._save_except()
-            outcome = ProcessOutcome(
-                ProcessResult.TRANSLATION_MISMATCH,
-                self.file_name,
-                {"reason": "译文数量与原文不匹配", "traceback": traceback.format_exc()},
-            )
-            self._write_processing_log(outcome, start_time)
-            return outcome
-        except Exception as e:
-            _logger.exception(f"[{self.file_name}] 翻译处理异常: {e}")
-            self._save_except()
-            outcome = ProcessOutcome(
-                ProcessResult.SAVE_ERROR,
-                self.file_name,
-                {"reason": str(e), "exception_type": type(e).__name__, "traceback": traceback.format_exc()},
-            )
-            self._write_processing_log(outcome, start_time)
-            return outcome
-
-        # 9. 重建并保存
-        self._de_get_translating_text(translated_data)
-        result = self._de_get_translating()
-
-        try:
-            self._save_result(result)
-        except Exception as e:
-            _logger.exception(f"[{self.file_name}] 保存结果异常: {e}")
-            outcome = ProcessOutcome(
-                ProcessResult.SAVE_ERROR,
-                self.file_name,
-                {"reason": str(e), "exception_type": type(e).__name__, "traceback": traceback.format_exc()},
-            )
-            self._write_processing_log(outcome, start_time)
-            return outcome
-
-        if had_fallback:
-            outcome = ProcessOutcome(
-                ProcessResult.FALLBACK_TO_ORIGINAL,
-                self.file_name,
-                {"fallback_parts": "部分文本块回退为 KR 原文"},
-            )
-        else:
-            outcome = ProcessOutcome(ProcessResult.SUCCESS_SAVED, self.file_name)
-
-        self._write_processing_log(outcome, start_time)
-        return outcome
+        finally:
+            if self._recorder is not None:
+                self._recorder.write_record({
+                    "timestamp": datetime.now().isoformat(),
+                    "file_name": self.file_name,
+                    "text_blocks": self._input_text_blocks,
+                    "reference": self._input_reference,
+                    "api_calls": self._api_calls,
+                    "outcome": outcome.result.name if outcome else "INTERNAL_ERROR",
+                    "elapsed_seconds": round(time.perf_counter() - start_time, 3),
+                })
 
     def _write_processing_log(self, outcome: ProcessOutcome, start_time: float) -> None:
         """将单文件处理结果追加写入 JSONL 日志文件。"""
@@ -244,6 +258,10 @@ class FileProcessor:
             builder.build(prompt_format=self._config.prompt_format)
             stage_strategy = StageStrategy(self._config)
 
+            self._api_calls = []
+            self._input_text_blocks = builder.unified_request.get("text_blocks", [])
+            self._input_reference = builder.unified_request.get("reference", {})
+
             # ====== 阶段 0：消歧（仅主格式） ======
             user_format = self._config.prompt_format
             if stage_strategy.needs_disambiguation():
@@ -264,12 +282,24 @@ class FileProcessor:
                         raw_response = self._translator.translate(s0_user, timeout=60)
                         disambiguated = stage_strategy.parse_stage_0_result(raw_response, prompt_format=user_format)
 
+                        if self._recorder is not None:
+                            self._api_calls.append({
+                                "stage": "stage_0",
+                                "format": user_format,
+                                "system_prompt": s0_system,
+                                "user_prompt": s0_user,
+                                "response_format": self._format_to_response_format(user_format),
+                                "timeout": 60,
+                                "raw_response": str(raw_response),
+                                "parsed": disambiguated if disambiguated else [],
+                                "status": "success" if disambiguated else "parse_failed",
+                            })
+
                         if disambiguated:
-                            if self._dump:
-                                self._log(f"阶段 0 消歧：{len(disambiguated)} 个术语被评估")
+                            _logger.debug(f"[{self.file_name}] 阶段 0 消歧：{len(disambiguated)} 个术语被评估")
                             self._apply_disambiguation(builder, disambiguated)
-                        elif self._dump:
-                            self._log("阶段 0 消歧：解析结果为空，使用原始术语表")
+                        else:
+                            _logger.debug(f"[{self.file_name}] 阶段 0 消歧：解析结果为空，使用原始术语表")
                     except Exception as e:
                         _logger.exception(f"[{self.file_name}] 阶段 0 消歧异常 ({e})，使用原始术语表继续")
 
@@ -342,11 +372,24 @@ class FileProcessor:
                     try:
                         # 调用 LLM
                         raw_response = self._translator.translate(user_text, timeout=timeout)
-                        if self._dump:
-                            self._log(f"[{fmt}] 第 {i + 1} 部分: {str(raw_response)[:200]}...")
 
                         # 解析
                         parsed = stage_strategy.parse_stage_1_result(raw_response, prompt_format=fmt)
+
+                        if self._recorder is not None:
+                            self._api_calls.append({
+                                "stage": "stage_1",
+                                "part": i + 1,
+                                "format": fmt,
+                                "system_prompt": system_prompt,
+                                "user_prompt": user_text,
+                                "response_format": self._format_to_response_format(fmt),
+                                "timeout": timeout,
+                                "raw_response": str(raw_response),
+                                "parsed": parsed if parsed else [],
+                                "status": "success" if parsed else "parse_failed",
+                            })
+
                         if not parsed:
                             raise ValueError(f"{fmt}: 解析结果为空")
 
@@ -421,11 +464,21 @@ class FileProcessor:
 
                     except (json.JSONDecodeError, ValueError) as e:
                         _logger.warning(
-                            f"[{self.file_name}] [{fmt}] 解析失败 ({e})，"
-                            f"原始响应 (前500字符): {str(raw_response)[:500]}"
+                            f"[{self.file_name}] [{fmt}] 解析失败 ({e})"
                         )
-                        if self._dump:
-                            self._log(f"[{fmt}] 解析失败 ({e})，回退到下一格式\n原始响应: {raw_response}")
+                        if self._recorder is not None and isinstance(e, json.JSONDecodeError):
+                            self._api_calls.append({
+                                "stage": "stage_1",
+                                "part": i + 1,
+                                "format": fmt,
+                                "system_prompt": system_prompt,
+                                "user_prompt": user_text,
+                                "response_format": self._format_to_response_format(fmt),
+                                "timeout": timeout,
+                                "raw_response": str(raw_response) if "raw_response" in locals() else "",
+                                "parsed": [],
+                                "status": "parse_failed",
+                            })
                         continue
 
                 if part_result is None:
@@ -481,10 +534,23 @@ class FileProcessor:
                     raw_response = self._translator.translate(s2_user, timeout=120)
                     checked = stage_strategy.parse_stage_2_result(raw_response, prompt_format=user_format)
 
+                    if self._recorder is not None:
+                        self._api_calls.append({
+                            "stage": "stage_2",
+                            "format": user_format,
+                            "system_prompt": s2_system,
+                            "user_prompt": s2_user,
+                            "response_format": self._format_to_response_format(user_format),
+                            "timeout": 120,
+                            "raw_response": str(raw_response),
+                            "parsed": checked if checked else [],
+                            "status": "success" if checked else "parse_failed",
+                        })
+
                     if checked:
                         result = self._apply_corrections(result, checked)
-                    elif self._dump:
-                        self._log("阶段 2 自校验：解析结果为空，保留阶段 1 翻译")
+                    else:
+                        _logger.debug(f"[{self.file_name}] 阶段 2 自校验：解析结果为空，保留阶段 1 翻译")
                 except Exception as e:
                     _logger.exception(
                         f"[{self.file_name}] 阶段 2 自校验异常 ({e})，使用未校验的翻译结果"
@@ -569,8 +635,20 @@ class FileProcessor:
             )
 
             if not supp_parsed:
-                if self._dump:
-                    self._log("P1-2 补充翻译：解析结果为空，保留 KR 原文")
+                _logger.info(f"[{self.file_name}] P1-2 补充翻译：解析结果为空，保留 KR 原文")
+                if self._recorder is not None:
+                    self._api_calls.append({
+                        "stage": "p1_2",
+                        "part": part_idx + 1,
+                        "format": primary_format,
+                        "system_prompt": system_prompt,
+                        "user_prompt": supp_user_text,
+                        "response_format": self._format_to_response_format(primary_format),
+                        "timeout": timeout,
+                        "raw_response": str(supp_raw),
+                        "parsed": [],
+                        "status": "parse_failed",
+                    })
                 return 0
 
             supp_by_id: dict[int, dict] = {}
@@ -598,9 +676,9 @@ class FileProcessor:
                     f"[{self.file_name}] P1-2 补充翻译完成: "
                     f"修复 {fixed}/{len(kr_fallback_indices)} 条缺失"
                 )
-            elif self._dump:
-                self._log(
-                    f"P1-2 补充翻译：{len(kr_fallback_indices)} 条皆未修复，保留 KR 原文"
+            else:
+                _logger.info(
+                    f"[{self.file_name}] P1-2 补充翻译：{len(kr_fallback_indices)} 条皆未修复，保留 KR 原文"
                 )
             return fixed
 
@@ -678,8 +756,11 @@ class FileProcessor:
         # llm / hybrid 模式：收集所有匹配术语
         # 注：hybrid 模式理想行为是仅收集 LOW/UNKNOWN 置信度术语，
         # 但 confidence 数据需要 ProperAnalyzer 集成，当前暂全部收集
-        if mode == "hybrid" and self._dump:
-            self._log("hybrid 消歧模式：confidence 过滤需要 ProperAnalyzer 集成，当前收集全部匹配术语")
+        if mode == "hybrid":
+            _logger.debug(
+                f"[{self.file_name}] hybrid 消歧模式："
+                f"confidence 过滤需要 ProperAnalyzer 集成，当前收集全部匹配术语"
+            )
 
         result = []
         for term_key, block_indices in term_block_map.items():

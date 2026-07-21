@@ -48,6 +48,7 @@ class TranslateConfig:
     # --- 调试 ---
     debug_mode: bool = False
     dump: bool = False
+    dump_path: Optional[Path] = None
 
     # --- 兼容旧配置项 ---
     is_llm: bool = True

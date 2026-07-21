@@ -49,7 +49,26 @@ JS: user configures & clicks translate
   → webui/app.py                    callback: summary → JS modal
 ```
 
-Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc/pipeline.py`, `translateFunc/config.py`, `translateFunc/processor.py`, `translateFunc/workers.py`, `translateFunc/translate_request.py`, `translateFunc/get_proper.py`, `translateFunc/builder/prompt.py`, `translateFunc/builder/request.py`, `translateFunc/builder/stages.py`, `translateFunc/matcher/engine.py`, `translateFunc/matcher/ac_automaton.py`, `translateFunc/log_bridge.py`, `globalManagers/LogManager.py`
+Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc/pipeline.py`, `translateFunc/config.py`, `translateFunc/processor.py`, `translateFunc/workers.py`, `translateFunc/translate_request.py`, `translateFunc/get_proper.py`, `translateFunc/builder/prompt.py`, `translateFunc/builder/request.py`, `translateFunc/builder/stages.py`, `translateFunc/matcher/engine.py`, `translateFunc/matcher/ac_automaton.py`, `translateFunc/log_bridge.py`, `translateFunc/recorder.py`, `globalManagers/LogManager.py`
+
+### 3b. Translation Dump Recording (转储过程记录)
+
+When `ui_default.translator.dump` is enabled, each file's translation process is recorded to a separate JSONL file:
+
+```
+webutils/function_translate.py  sets config.dump_path → logs/translation_dump/{timestamp}.jsonl
+  → translateFunc/pipeline.py   creates TranslationRecorder(config.dump_path)
+  → translateFunc/processor.py  FileProcessor records each file's API calls
+    → translateFunc/recorder.py TranslationRecorder.write_record() appends to JSONL
+```
+
+Each JSONL line contains: `timestamp`, `file_name`, `text_blocks` (actual input), `reference` (proper_terms/affects/models), `api_calls[]` (system_prompt, user_prompt, raw_response, parsed, status per stage), `outcome`, `elapsed_seconds`.
+
+Log simplification: verbose data (raw LLM responses) is removed from `logs/app.log` and stored only in the dump JSONL file.
+
+Files involved: `webutils/function_translate.py`, `translateFunc/recorder.py`, `translateFunc/pipeline.py`, `translateFunc/processor.py`, `translateFunc/config.py`
+
+---
 
 ## 4. CDN Optimization
 

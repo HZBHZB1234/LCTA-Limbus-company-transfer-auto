@@ -51,6 +51,11 @@ class TranslationPipeline:
         self._config = config
         self._engine = MatcherEngine()
         self._analyzer: ProperAnalyzer | None = None
+        self._recorder: "TranslationRecorder | None" = None
+
+        if config.dump and config.dump_path:
+            from translateFunc.recorder import TranslationRecorder
+            self._recorder = TranslationRecorder(config.dump_path)
 
         # 回调函数
         self._on_log: Callable[[str], None] = lambda msg: None
@@ -227,6 +232,7 @@ class TranslationPipeline:
             engine=self._engine,
             translate_config=self._config,
             translator=translator,
+            recorder=self._recorder,
         )
         return processor.process()
 

@@ -102,6 +102,7 @@ Standalone library with own `__init__.py` public API.
 | `get_proper.py` | Proper noun fetching from remote sources |
 | `log_bridge.py` | Bridge between translateFunc logging and global LogManager |
 | `profiler.py` | `TimingProfiler` — performance profiling |
+| `recorder.py` | `TranslationRecorder` — per-translation dump record writing (JSONL) |
 
 **Subdirectories:**
 

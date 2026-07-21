@@ -66,10 +66,18 @@ class PromptFactory:
         {"priority": "P2", "text": "保留原文的代码格式，如富文本标签和f-string占位符"},
     ]
 
-    _STAGE1_FORMAT_RULES_DATA: list[dict] = [
+    # 格式规则 —— 按响应格式分离，避免 JSON/XML 转义指令混淆导致解析失败
+    # 共通规则（与响应格式无关）
+    _COMMON_FORMAT_RULES_DATA: list[dict] = [
         {"priority": "P1", "text": "控制字符：原文的控制字符已被转义（如\\n），输出翻译时也使用转义后的字符"},
-        {"priority": "P1", "text": "在XML输出中，文本内的双引号必须转义为 &amp;quot;，&amp; 写为 &amp;amp;，&lt; 写为 &amp;lt;"},
+    ]
+    # JSON 响应格式转义规则（xml_json / json_json 模式使用）
+    _JSON_FORMAT_RULES_DATA: list[dict] = [
         {"priority": "P1", "text": "在JSON输出中，文本内的双引号必须转义为 \\\"，换行符写为 \\n，反斜杠写为 \\\\"},
+    ]
+    # XML 响应格式转义规则（xml_xml 模式使用）
+    _XML_FORMAT_RULES_DATA: list[dict] = [
+        {"priority": "P1", "text": "在XML输出中，文本内的双引号必须转义为 &quot;，& 写为 &amp;，< 写为 &lt;"},
     ]
 
     _STAGE0_RULES_DATA: list[dict] = [
@@ -100,44 +108,6 @@ class PromptFactory:
         ],
     }
 
-    # ---- v1 旧版规则（向后兼容，prompt_version="v1" 时使用） ----
-
-    _STAGE1_RULES = (
-        "<rules>\n"
-        "<rule>先查看reference中的术语表及每条文本块的proper_refs/affect_refs/model引用，确保术语一致性</rule>\n"
-        "<rule>标点符号：中文翻译必须使用全角标点（！？，。：）、中文引号（&quot;&quot;），禁止使用半角标点(!?,. )和转义半角引号(\\&quot;)</rule>\n"
-        "<rule>省略号：剧情文本使用六点省略号……（不论原文是三点还是六点）；技能/UI紧凑文本使用三点省略号…。原文为长省略号时对齐长度</rule>\n"
-        "<rule>波浪号：使用半角波浪号~，不得从原文复制全角波浪号～（游戏字库缺字会导致显示异常）</rule>\n"
-        "<rule>括号选择：剧情文本使用全角括号（）；技能/UI等紧凑文本优先使用半角括号()以减少留白</rule>\n"
-        "<rule>参数保护：原文中的尖括号参数（如&lt;0&gt;、&lt;1&gt;）是游戏代码占位符，不得破坏其格式；理解参数含义后按中文语序放置到语法正确的位置</rule>\n"
-        "<rule>JSON引号：如原文前后有成对的半角引号包裹，可能是JSON格式标记，不可将其改为全角引号</rule>\n"
-        "<rule>保留原文的代码格式，如富文本标签和f-string占位符</rule>\n"
-        "<rule>术语内容可能存在错误引用，如果术语内容与原文意思偏差过大，忽略该术语</rule>\n"
-        "<rule>原文的控制字符已被转义（如\\n），输出翻译时也使用转义后的字符</rule>\n"
-        "<rule>在XML输出中，文本内的双引号必须转义为 &amp;quot;，&amp; 写为 &amp;amp;，&lt; 写为 &amp;lt;</rule>\n"
-        "<rule>在JSON输出中，文本内的双引号必须转义为 \\\"，换行符写为 \\n，反斜杠写为 \\\\</rule>\n"
-        "</rules>\n"
-    )
-
-    _STAGE0_RULES = (
-        "<rules>\n"
-        "<rule>你的任务是判断术语在当前上下文中是否适用，不需要翻译</rule>\n"
-        "<rule>对比术语的典型使用场景和当前文本块的JP/EN内容</rule>\n"
-        "<rule>如果术语明显不适用（如人名术语出现在技能描述中），标记为不适用</rule>\n"
-        "</rules>\n"
-    )
-
-    _STAGE2_RULES = (
-        "<rules>\n"
-        "<rule>校验翻译结果中的术语一致性（与reference术语表对照）</rule>\n"
-        "<rule>校验标点符号：剧情文本是否使用全角标点（！？，。：）和中文引号（&quot;&quot;）；技能文本是否使用半角括号()和三点省略号…</rule>\n"
-        "<rule>校验特殊符号：波浪号是否为半角~；省略号剧情是否为六点……且技能为三点…；尖括号参数&lt;N&gt;格式是否完好无损</rule>\n"
-        "<rule>校验代码格式：富文本标签、f-string占位符是否完整保留且未被翻译</rule>\n"
-        "<rule>检查JSON格式标记（如原文有前后半角引号包裹的文本）是否保留了格式引号</rule>\n"
-        "<rule>发现错误时自动修正，并给出具体修正说明（改了什么、为什么）</rule>\n"
-        "</rules>\n"
-    )
-
     # ---- 输出格式规范（xml_json 模式：XML 包裹的 JSON 响应描述） ----
 
     _STAGE0_FORMAT = (
@@ -166,6 +136,10 @@ class PromptFactory:
         '     "confidence": "high|medium|low"}\n'
         "  ]\n"
         "}\n"
+        "数量约束（必须严格遵守）：\n"
+        "- translations数组的长度必须等于输入text_blocks的数量，不得多出或遗漏\n"
+        "- 每条translation的id必须与对应text_block的id一致（按id一一对应）\n"
+        "- 不得合并、拆分或跳过任何文本块；每个文本块必须且只能产出一条翻译\n"
         "confidence为low的条目说明翻译不确定，需要回退到原文。\n"
         "</format>\n"
     )
@@ -186,96 +160,11 @@ class PromptFactory:
         '     }}\n'
         "  ]\n"
         "}\n"
+        "数量约束：checked_translations数组长度必须等于输入翻译数量；每条id必须与对应翻译的id一致。\n"
         "</format>\n"
     )
 
-    # ---- 输出 schema（v2 独立 schema 区块，更正式） ----
-
-    _STAGE1_OUTPUT_SCHEMA = (
-        "<output_schema>\n"
-        "{\n"
-        '  "translations": [{\n'
-        '    "id": "<number>",\n'
-        '    "reasoning": "<string: 先输出翻译决策理由>",\n'
-        '    "translation": "<string: 再输出译文>",\n'
-        '    "confidence": "<enum: high|medium|low>"\n'
-        "  }]\n"
-        "}\n"
-        "</output_schema>\n"
-    )
-
-    _STAGE2_OUTPUT_SCHEMA = (
-        "<output_schema>\n"
-        "{\n"
-        '  "checked_translations": [{\n'
-        '    "id": "<number>",\n'
-        '    "translation": "<string: 校验/修正后的译文>",\n'
-        '    "changed": "<boolean>",\n'
-        '    "change_reason": "<string>",\n'
-        '    "verification": {\n'
-        '      "terminology_ok": "<boolean>",\n'
-        '      "punctuation_ok": "<boolean>",\n'
-        '      "format_ok": "<boolean>",\n'
-        '      "notes": "<string>"\n'
-        "    }\n"
-        "  }]\n"
-        "}\n"
-        "</output_schema>\n"
-    )
-
-    # ---- 技能文档模板 ----
-
-    _SKILL_DOC_TEMPLATE = "<skill_reference>\n{content}\n</skill_reference>\n"
-
-    # ---- JSON 格式模板（json_json） ----
-
-    _JSON_BASE_ROLE = (
-        '{\n'
-        '  "role": "我是游戏作品\'边狱公司\'的翻译员，我将要把其他语言的文本翻译为中文。"\n'
-        '}\n'
-    )
-
-    _JSON_STAGE1_RULES = (
-        '{\n'
-        '  "rules": [\n'
-        '    "先查看reference中的术语表及每条文本块的proper_refs/affect_refs/model引用，确保术语一致性",\n'
-        '    "标点符号：中文翻译必须使用全角标点（！？，。：）、中文引号（\\u201c\\u201d），禁止使用半角标点(!?,. )和转义半角引号(\\\\\\")",\n'
-        '    "省略号：剧情文本使用六点省略号……（不论原文是三点还是六点）；技能/UI紧凑文本使用三点省略号…。原文为长省略号时对齐长度",\n'
-        '    "波浪号：使用半角波浪号~，不得从原文复制全角波浪号～（游戏字库缺字会导致显示异常）",\n'
-        '    "括号选择：剧情文本使用全角括号（）；技能/UI等紧凑文本优先使用半角括号()以减少留白",\n'
-        '    "参数保护：原文中的尖括号参数（如<0>、<1>）是游戏代码占位符，不得破坏其格式；理解参数含义后按中文语序放置到语法正确的位置",\n'
-        '    "JSON引号：如原文前后有成对的半角引号包裹，可能是JSON格式标记，不可将其改为全角引号",\n'
-        '    "保留原文的代码格式，如富文本标签和f-string占位符",\n'
-        '    "术语内容可能存在错误引用，如果术语内容与原文意思偏差过大，忽略该术语",\n'
-        '    "原文的控制字符已被转义（如\\\\n），输出翻译时也使用转义后的字符",\n'
-        '    "在JSON输出中，文本内的双引号必须转义为 \\\\"，换行符写为 \\\\n，反斜杠写为 \\\\\\\\",\n'
-        '    "在XML输出中，文本内的双引号必须转义为 &amp;quot;，&amp; 写为 &amp;amp;，&lt; 写为 &amp;lt;"\n'
-        '  ]\n'
-        '}\n'
-    )
-
-    _JSON_STAGE0_RULES = (
-        '{\n'
-        '  "rules": [\n'
-        '    "你的任务是判断术语在当前上下文中是否适用，不需要翻译",\n'
-        '    "对比术语的典型使用场景和当前文本块的JP/EN内容",\n'
-        '    "如果术语明显不适用（如人名术语出现在技能描述中），标记为不适用"\n'
-        '  ]\n'
-        '}\n'
-    )
-
-    _JSON_STAGE2_RULES = (
-        '{\n'
-        '  "rules": [\n'
-        '    "校验翻译结果中的术语一致性（与reference术语表对照）",\n'
-        '    "校验标点符号：剧情文本是否使用全角标点（！？，。：）和中文引号（\\u201c\\u201d）；技能文本是否使用半角括号()和三点省略号…",\n'
-        '    "校验特殊符号：波浪号是否为半角~；省略号剧情是否为六点……且技能为三点…；尖括号参数<N>格式是否完好无损",\n'
-        '    "校验代码格式：富文本标签、f-string占位符是否完整保留且未被翻译",\n'
-        '    "检查JSON格式标记（如原文有前后半角引号包裹的文本）是否保留了格式引号",\n'
-        '    "发现错误时自动修正，并给出具体修正说明（改了什么、为什么）"\n'
-        '  ]\n'
-        '}\n'
-    )
+    # ---- JSON 格式的 format 模板（json_json 模式使用） ----
 
     _JSON_STAGE0_FORMAT = (
         '{\n'
@@ -302,6 +191,7 @@ class PromptFactory:
         '        {"id": 1, "reasoning": "先说明关键决策：术语选择、歧义处理、风格考量", "translation": "再输出译文", "confidence": "high|medium|low"}\n'
         '      ]\n'
         '    },\n'
+        '    "count_constraint": "translations数组长度必须等于输入text_blocks数量；每条id必须与对应text_block的id一致",\n'
         '    "note": "confidence为low的条目说明翻译不确定，需要回退到原文",\n'
         '    "escaping": "字符串值中的换行符必须写为 \\\\n，双引号必须写为 \\\\"，反斜杠必须写为 \\\\\\\\；确保输出是合法JSON"\n'
         '  }\n'
@@ -319,6 +209,7 @@ class PromptFactory:
         '         "verification": {"terminology_ok": true, "punctuation_ok": true, "format_ok": true, "notes": "术语一致，标点正确"}}\n'
         '      ]\n'
         '    },\n'
+        '    "count_constraint": "checked_translations数组长度必须等于输入翻译数量；每条id必须与对应翻译的id一致",\n'
         '    "escaping": "字符串值中的换行符必须写为 \\\\n，双引号必须写为 \\\\"，反斜杠必须写为 \\\\\\\\；确保输出是合法JSON"\n'
         '  }\n'
         '}\n'
@@ -355,6 +246,10 @@ class PromptFactory:
         "    <confidence>high|medium|low</confidence>\n"
         "  </item>\n"
         "</translations>\n"
+        "数量约束（必须严格遵守）：\n"
+        "- translations下item的数量必须等于输入text_blocks的数量，不得多出或遗漏\n"
+        "- 每个item的id必须与对应text_block的id一致（按id一一对应）\n"
+        "- 不得合并、拆分或跳过任何文本块；每个文本块必须且只能产出一条翻译\n"
         "confidence为low的条目说明翻译不确定，需要回退到原文。\n"
         "</format>\n"
     )
@@ -406,18 +301,20 @@ class PromptFactory:
         is_json = (prompt_format == "json_json")
         is_xml_response = (prompt_format == "xml_xml")
 
+        # Role
         if is_json:
-            parts: list[str] = [
-                '{\n  "role": "你是边狱公司的术语专家。"\n}\n',
-                self._JSON_STAGE0_RULES,
-                self._JSON_STAGE0_FORMAT,
-            ]
+            parts: list[str] = ['{\n  "role": "你是边狱公司的术语专家。"\n}\n']
         else:
-            parts: list[str] = [
-                "<role>你是边狱公司的术语专家。</role>\n",
-                self._STAGE0_RULES,
-                self._XML_STAGE0_FORMAT_XML if is_xml_response else self._XML_STAGE0_FORMAT,
-            ]
+            parts: list[str] = ["<role>你是边狱公司的术语专家。</role>\n"]
+
+        # Rules (使用 v2 数据驱动渲染)
+        parts.append(self._render_rules(self._STAGE0_RULES_DATA, is_json=is_json))
+
+        # Output Format
+        if is_json:
+            parts.append(self._JSON_STAGE0_FORMAT)
+        else:
+            parts.append(self._XML_STAGE0_FORMAT_XML if is_xml_response else self._XML_STAGE0_FORMAT)
 
         return "\n".join(parts)
 
@@ -478,7 +375,6 @@ class PromptFactory:
         prompt_format: str = "xml_json",
         *,
         examples: list[dict] | None = None,
-        prompt_version: str = "v2",
     ) -> str:
         """为给定文件类型、阶段和格式构建系统提示词。
 
@@ -487,63 +383,21 @@ class PromptFactory:
             stage: 0（消歧）、1（翻译）、2（自校验）
             prompt_format: "xml_json" | "xml_xml" | "json_json"
             examples: 可选的 few-shot 示例
-            prompt_version: "v1" = 旧版, "v2" = 新版（reasoning 前置 + 规则优先级）
         """
-        if prompt_version == "v1":
-            return self._build_system_prompt_v1(file_type, stage, prompt_format, examples=examples)
-        return self._build_system_prompt_v2(file_type, stage, prompt_format, examples=examples)
+        return self._build_system_prompt(file_type, stage, prompt_format, examples=examples)
 
-    def _build_system_prompt_v1(
+    def _build_system_prompt(
         self, file_type: FileType, stage: int, prompt_format: str, *,
         examples: list[dict] | None = None,
     ) -> str:
-        """旧版系统提示词（prompt_version="v1"）。"""
-        is_json = (prompt_format == "json_json")
+        """构建系统提示词：
+        role → translation_rules → format_rules → examples → output_format
 
-        if is_json:
-            parts: list[str] = [self._JSON_BASE_ROLE]
-        else:
-            parts: list[str] = [self._BASE_ROLE]
-
-        if stage == 0:
-            parts.append(self._JSON_STAGE0_RULES if is_json else self._STAGE0_RULES)
-        elif stage == 1:
-            parts.append(self._JSON_STAGE1_RULES if is_json else self._STAGE1_RULES)
-        elif stage == 2:
-            parts.append(self._JSON_STAGE2_RULES if is_json else self._STAGE2_RULES)
-
-        if examples and not is_json:
-            parts.append(self._render_examples(examples))
-        elif examples and is_json:
-            parts.append(self._render_examples_json(examples))
-
-        if is_json:
-            if stage == 0:
-                parts.append(self._JSON_STAGE0_FORMAT)
-            elif stage == 1:
-                parts.append(self._JSON_STAGE1_FORMAT)
-            elif stage == 2:
-                parts.append(self._JSON_STAGE2_FORMAT)
-        else:
-            is_xml_response = (prompt_format == "xml_xml")
-            if stage == 0:
-                parts.append(self._XML_STAGE0_FORMAT_XML if is_xml_response else self._XML_STAGE0_FORMAT)
-            elif stage == 1:
-                parts.append(self._XML_STAGE1_FORMAT_XML if is_xml_response else self._XML_STAGE1_FORMAT)
-            elif stage == 2:
-                parts.append(self._XML_STAGE2_FORMAT_XML if is_xml_response else self._XML_STAGE2_FORMAT)
-
-        return "\n".join(parts)
-
-    def _build_system_prompt_v2(
-        self, file_type: FileType, stage: int, prompt_format: str, *,
-        examples: list[dict] | None = None,
-    ) -> str:
-        """新版系统提示词（prompt_version="v2"）：
-        role → translation_rules → format_rules → output_schema → examples
         rules 带 priority 标记，reasoning 在 translation 之前。
+        format_rules 按响应格式（JSON/XML）选择，避免转义指令混淆。
         """
         is_json = (prompt_format == "json_json")
+        is_xml_response = (prompt_format == "xml_xml")
 
         parts: list[str] = []
 
@@ -570,22 +424,23 @@ class PromptFactory:
             parts.append(self._render_rules(rules_data, is_json=is_json))
 
         # 3. Format Rules (technical escape rules, only for stage 1)
-        if stage == 1 and self._STAGE1_FORMAT_RULES_DATA:
-            parts.append(self._render_format_rules(self._STAGE1_FORMAT_RULES_DATA, is_json=is_json))
-
-        # 4. Output Schema
+        #    按响应格式选择：JSON 响应用 JSON 转义规则，XML 响应用 XML 转义规则
         if stage == 1:
-            parts.append(self._render_output_schema(self._STAGE1_OUTPUT_SCHEMA, is_json=is_json))
-        elif stage == 2:
-            parts.append(self._render_output_schema(self._STAGE2_OUTPUT_SCHEMA, is_json=is_json))
+            format_rules = list(self._COMMON_FORMAT_RULES_DATA)
+            if is_xml_response:
+                format_rules.extend(self._XML_FORMAT_RULES_DATA)
+            else:
+                format_rules.extend(self._JSON_FORMAT_RULES_DATA)
+            if format_rules:
+                parts.append(self._render_format_rules(format_rules, is_json=is_json))
 
-        # 5. Examples
+        # 4. Examples
         if examples and not is_json:
             parts.append(self._render_examples(examples))
         elif examples and is_json:
             parts.append(self._render_examples_json(examples))
 
-        # 6. Output Format (last, as concrete instruction)
+        # 5. Output Format (last, as concrete instruction)
         if is_json:
             if stage == 0:
                 parts.append(self._JSON_STAGE0_FORMAT)
@@ -594,7 +449,6 @@ class PromptFactory:
             elif stage == 2:
                 parts.append(self._JSON_STAGE2_FORMAT)
         else:
-            is_xml_response = (prompt_format == "xml_xml")
             if stage == 0:
                 parts.append(self._XML_STAGE0_FORMAT_XML if is_xml_response else self._XML_STAGE0_FORMAT)
             elif stage == 1:
@@ -642,13 +496,6 @@ class PromptFactory:
                 lines.append(f'  <rule priority="{r["priority"]}">{r["text"]}</rule>')
             lines.append("</format_rules>")
             return "\n".join(lines) + "\n"
-
-    @staticmethod
-    def _render_output_schema(schema_str: str, is_json: bool = False) -> str:
-        """渲染 output_schema 区块（JSON 格式时跳过 XML 标签）。"""
-        if is_json:
-            return schema_str  # JSON 格式直接使用，不包裹
-        return schema_str  # XML 格式保持不变
 
     # ========== 内部渲染器 ==========
 
@@ -922,11 +769,19 @@ class PromptFactory:
         except _json.JSONDecodeError:
             pass
 
-        # 9. 修复嵌套转义（\\\\n → \\n, \\\\\" → \\\"）
+        # 9. 修复嵌套转义（\\\\n → \\n, \\\\\" → \\\"）—— 最后手段，可能改变内容
         try:
             fixed_esc = cleaned.replace('\\\\\\\\n', '\\\\n')
             fixed_esc = fixed_esc.replace('\\\\\\\\\"', '\\\\\"')
             if fixed_esc != cleaned:
+                _double_newline = '\\\\n'
+                _double_quote = '\\"'
+                _logger.warning(
+                    "JSON 修复：应用嵌套转义修复（最后手段），"
+                    "替换了 %d 个 %s 和 %d 个 %s",
+                    cleaned.count('\\\\\\\\n'), _double_newline,
+                    cleaned.count('\\\\\\\\\"'), _double_quote,
+                )
                 return _json.loads(fixed_esc)
         except _json.JSONDecodeError:
             pass

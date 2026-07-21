@@ -471,30 +471,72 @@ class TestFormatAwareSplit:
         )
 
 
-class TestPromptV1BackwardCompat:
-    """v1 旧版提示词向后兼容测试。"""
+class TestFormatAwareEscapeRules:
+    """转义规则按响应格式分离的测试。"""
 
     def setup_method(self):
         self.pf = PromptFactory()
 
-    def test_v1_uses_old_rules_tag(self):
-        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_json", prompt_version="v1")
-        assert "<rules>" in sp
-        assert "<translation_rules>" not in sp
-
-    def test_v1_json_uses_old_rules_tag(self):
-        sp = self.pf.build_system_prompt(FileType.STORY, 1, "json_json", prompt_version="v1")
-        assert '"rules"' in sp
-        assert '"translation_rules"' not in sp
-
-    def test_v1_xml_xml_structure(self):
-        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_xml", prompt_version="v1")
-        assert "<rules>" in sp
-        assert "<translation>" in sp
-
-    def test_default_is_v2(self):
+    def test_xml_json_uses_json_escape_rules(self):
+        """xml_json 模式（JSON 响应）应只包含 JSON 转义规则，不包含 XML 转义规则。"""
         sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_json")
-        assert "<translation_rules>" in sp
+        assert "JSON输出中" in sp
+        assert "XML输出中" not in sp
+
+    def test_json_json_uses_json_escape_rules(self):
+        """json_json 模式应只包含 JSON 转义规则。"""
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "json_json")
+        assert "JSON输出中" in sp
+        assert "XML输出中" not in sp
+
+    def test_xml_xml_uses_xml_escape_rules(self):
+        """xml_xml 模式应只包含 XML 转义规则，不包含 JSON 转义规则。"""
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_xml")
+        assert "XML输出中" in sp
+        assert "JSON输出中" not in sp
+
+    def test_xml_json_no_amp_quot(self):
+        """xml_json 模式不应包含 &amp;quot; 等 XML 实体转义示例。"""
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_json")
+        assert "&amp;quot;" not in sp
+
+    def test_xml_xml_contains_quot(self):
+        """xml_xml 模式应包含 &quot; 作为 XML 转义示例。"""
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_xml")
+        assert "&quot;" in sp
+
+    def test_no_output_schema_block(self):
+        """系统提示词不应包含 <output_schema> 区块。"""
+        for fmt in ["xml_json", "json_json", "xml_xml"]:
+            sp = self.pf.build_system_prompt(FileType.STORY, 1, fmt)
+            assert "output_schema" not in sp, f"{fmt}: 不应包含 output_schema"
+            sp2 = self.pf.build_system_prompt(FileType.STORY, 2, fmt)
+            assert "output_schema" not in sp2, f"{fmt} stage2: 不应包含 output_schema"
+
+
+class TestCountConstraints:
+    """数量约束在提示词中正确出现。"""
+
+    def setup_method(self):
+        self.pf = PromptFactory()
+
+    def test_stage1_xml_json_has_count_constraint(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_json")
+        assert "数量约束" in sp
+        assert "translations数组的长度必须等于" in sp
+
+    def test_stage1_xml_xml_has_count_constraint(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_xml")
+        assert "数量约束" in sp
+        assert "item的数量必须等于" in sp
+
+    def test_stage1_json_json_has_count_constraint(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 1, "json_json")
+        assert "count_constraint" in sp
+
+    def test_stage2_has_count_constraint(self):
+        sp = self.pf.build_system_prompt(FileType.STORY, 2, "xml_json")
+        assert "checked_translations数组长度必须等于" in sp
 
 
 class TestReasoningFirst:
@@ -590,6 +632,7 @@ class TestConfidenceEnforcement:
         config = TranslateConfig()
         assert config.min_confidence == "medium"
 
-    def test_prompt_version_default(self):
+    def test_prompt_version_removed(self):
+        """prompt_version 字段应已从 TranslateConfig 中移除。"""
         config = TranslateConfig()
-        assert config.prompt_version == "v2"
+        assert not hasattr(config, "prompt_version")

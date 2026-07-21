@@ -151,11 +151,13 @@ class RequestBuilder:
         """将请求按 max_length 分割，使用格式感知长度估算。
 
         对三种格式均取 max 估算，确保无论后续回退到何种格式都不超限。
+        分片的 reference 按需裁剪，仅包含该分片 text_blocks 实际引用的术语。
         """
         if self.unified_request is None:
             return
 
         all_formats = ["xml_json", "xml_xml", "json_json"]
+        reference = self.unified_request.get("reference", {})
 
         def estimate(request_dict, fmt: str) -> int:
             return len(self._get_request_text(request_dict, fmt))
@@ -167,55 +169,73 @@ class RequestBuilder:
 
         text_blocks = self.unified_request.get("text_blocks", [])
         total_blocks = len(text_blocks)
+        max_parts = min(total_blocks, 50)
 
-        # 尝试 2..min(10, total_blocks) 份分割
-        for num_parts in range(2, min(10, total_blocks) + 1):
+        def _build_parts(num_parts: int) -> list[dict]:
+            """构建分片，每个分片的 reference 仅含该分片实际引用的术语。"""
             part_size = total_blocks // num_parts
             remainder = total_blocks % num_parts
             parts = []
             start_idx = 0
             for i in range(num_parts):
                 end_idx = start_idx + part_size + (1 if i < remainder else 0)
-                part = {
+                chunk_blocks = text_blocks[start_idx:end_idx]
+
+                chunk_proper_refs: set[str] = set()
+                chunk_affect_refs: set[str] = set()
+                for block in chunk_blocks:
+                    chunk_proper_refs.update(block.get("proper_refs", []))
+                    chunk_affect_refs.update(block.get("affect_refs", []))
+
+                chunk_reference = {
+                    "proper_terms": [
+                        t for t in reference.get("proper_terms", [])
+                        if t.get("term", "") in chunk_proper_refs
+                    ],
+                    "affects": [
+                        a for a in reference.get("affects", [])
+                        if f'[{a.get("id", "")}]' in chunk_affect_refs
+                    ],
+                    "models": reference.get("models", []),
+                    "model_docs": reference.get("model_docs", []),
+                    "skill_doc": reference.get("skill_doc", ""),
+                }
+
+                parts.append({
                     "metadata": {**self.unified_request["metadata"],
                                  "total_text_blocks": end_idx - start_idx},
-                    "reference": self.unified_request["reference"],
-                    "text_blocks": text_blocks[start_idx:end_idx],
-                }
-                parts.append(part)
+                    "reference": chunk_reference,
+                    "text_blocks": chunk_blocks,
+                })
                 start_idx = end_idx
+            return parts
 
-            # 每个 part 对三种格式均不超限
+        # 动态递增分片数：从 2 份开始，逐步增加直到所有分片均不超限
+        for num_parts in range(2, max_parts + 1):
+            parts = _build_parts(num_parts)
             if all(estimate(p, fmt) <= self.max_length
                    for p in parts for fmt in all_formats):
                 self.split_requests = parts
                 return
 
-        # 回退：固定按 5 份分割
-        parts = []
-        part_size = max(1, total_blocks // 5)
-        for i in range(0, total_blocks, part_size):
-            end_idx = min(i + part_size, total_blocks)
-            parts.append({
-                "metadata": {**self.unified_request["metadata"],
-                             "total_text_blocks": end_idx - i},
-                "reference": self.unified_request["reference"],
-                "text_blocks": text_blocks[i:end_idx],
-            })
+        # 即使分到上限仍超限：使用 max_parts 分片并记录详细警告
+        parts = _build_parts(max_parts)
         self.split_requests = parts
 
-        # 回退后校验：检查各 part 是否仍超限，记录警告
         over_limit_parts = []
         for idx, p in enumerate(self.split_requests):
             max_est = max(estimate(p, fmt) for fmt in all_formats)
             if max_est > self.max_length:
-                over_limit_parts.append((idx, max_est))
+                over_limit_parts.append((idx, max_est, len(p.get("text_blocks", []))))
         if over_limit_parts:
-            details = "; ".join(f"part[{i}]={v}" for i, v in over_limit_parts)
+            details = "; ".join(
+                f"part[{i}]={size}chars({blocks}blocks)"
+                for i, size, blocks in over_limit_parts
+            )
             logger.warning(
-                "回退分割后仍有 %d/%d 个 part 超限 (limit=%d): %s",
+                "分割后仍有 %d/%d 个 part 超限 (limit=%d, max_parts=%d): %s",
                 len(over_limit_parts), len(self.split_requests),
-                self.max_length, details,
+                self.max_length, max_parts, details,
             )
 
     # ========== 输出 ==========
@@ -254,15 +274,14 @@ class RequestBuilder:
     def deBuild(self, translated_texts: list[str]) -> dict:
         """将扁平翻译文本列表还原为嵌套字典结构。
 
-        当翻译数量与预期不符时，不再抛出异常：
-        - 不足时用 KR 原文填充缺失条目
-        - 多余时截断并警告
+        当翻译数量与预期不符时，按位置用对应 KR 原文填充缺失条目：
+        - 不足时：末尾 shortfall 个位置用各自的 KR 原文补齐
+        - 多余时：截断多余条目
         """
         result_dict = deepcopy(self.kr_text)
 
-        # 先计算预期数量，同时收集 KR 原文用于可能的回退填充
-        expected_count = 0
-        kr_fallbacks: list[str] = []
+        # 收集每个非空位置的 KR 原文，用于缺失时按位置精确回退
+        kr_fallback_by_pos: list[str] = []
         for idx in result_dict:
             kr_item = self.kr_text.get(idx, {})
             jp_item = self.jp_text.get(idx, {})
@@ -272,19 +291,19 @@ class RequestBuilder:
                 en_val = en_item.get(path_tuple, "")
                 kr_val = kr_item.get(path_tuple, "")
                 if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
-                    expected_count += 1
-                    kr_fallbacks.append(kr_val)
+                    kr_fallback_by_pos.append(kr_val)
 
-        # 韧性处理：数量不匹配时用 KR 原文补齐或截断
+        expected_count = len(kr_fallback_by_pos)
+
+        # 韧性处理：数量不匹配时按位置补齐或截断
         actual_count = len(translated_texts)
         if actual_count < expected_count:
             shortfall = expected_count - actual_count
             logger.warning(
                 f"翻译文本数量不足: 预期 {expected_count}, 实际 {actual_count}"
-                f"（{shortfall} 个文本块回退为 KR 原文）"
+                f"（{shortfall} 个文本块按位置回退为 KR 原文）"
             )
-            # 用最后 shortfall 个位置的 KR 原文填充
-            translated_texts = list(translated_texts) + kr_fallbacks[-shortfall:]
+            translated_texts = list(translated_texts) + kr_fallback_by_pos[actual_count:]
         elif actual_count > expected_count:
             excess = actual_count - expected_count
             logger.warning(
@@ -294,7 +313,6 @@ class RequestBuilder:
             translated_texts = translated_texts[:expected_count]
 
         translated_iter = iter(translated_texts)
-        consumed = 0
         for idx in result_dict:
             kr_item = self.kr_text.get(idx, {})
             jp_item = self.jp_text.get(idx, {})
@@ -307,7 +325,6 @@ class RequestBuilder:
                 kr_val = kr_item.get(path_tuple, "")
                 if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
                     result_dict[idx][path_tuple] = next(translated_iter)
-                    consumed += 1
 
         return result_dict
 
@@ -330,69 +347,6 @@ class RequestBuilder:
         if self.is_skill:
             return translate_doc.SKILL_DOC
         return ""
-
-    def _escape_text(self, text: str) -> str:
-        """转义特殊字符以便 LLM 理解。"""
-        if not isinstance(text, str):
-            return text
-        escape_map = {
-            "\n": "\\n", "\t": "\\t", "\r": "\\r",
-            "\"": '\\"', "\'": "\\'", "\\": "\\\\",
-            "---": "\\-\\-\\-",
-        }
-        result = text
-        for old, new in escape_map.items():
-            result = result.replace(old, new)
-        return result
-
-    def _make_text(self, texts: dict) -> str:
-        """将统一请求字典转换为纯文本格式。"""
-        result_lines = []
-
-        metadata = texts.get("metadata", {})
-        result_lines.append("【翻译请求元数据】")
-        result_lines.append(f"文本块总数: {metadata.get('total_text_blocks', 0)}")
-
-        reference = texts.get("reference", {})
-
-        if reference.get("proper_terms"):
-            result_lines.append("\n【专有名词术语表】")
-            for i, item in enumerate(reference["proper_terms"]):
-                note = f" (备注: {item.get('note')})" if item.get("note") else ""
-                result_lines.append(
-                    f"{i + 1}. {item.get('term', '')} → {item.get('translation', '')}{note}"
-                )
-
-        if reference.get("affects"):
-            result_lines.append("\n【状态效果术语表】")
-            for i, item in enumerate(reference["affects"]):
-                result_lines.append(
-                    f"{i + 1}. [ID: {item.get('id', '')}] {item.get('kr', '')} → {item.get('cn', '')}"
-                )
-
-        if self.is_story and reference.get("model_docs"):
-            result_lines.append("\n【角色说话风格参考】")
-            for doc in reference["model_docs"]:
-                for k, v in doc.items():
-                    result_lines.append(f"  {k}: {v}")
-
-        if self.is_skill and reference.get("skill_doc"):
-            result_lines.append("\n【技能翻译指南】")
-            result_lines.append(reference["skill_doc"])
-
-        result_lines.append("\n" + "=" * 30)
-        result_lines.append("【以下为需要翻译的文本块】")
-
-        text_blocks = texts.get("text_blocks", [])
-        for idx, block in enumerate(text_blocks):
-            if idx > 0:
-                result_lines.append("\n" + "-" * 20)
-            result_lines.append(f"\n【文本块 {idx + 1}】")
-            result_lines.append(f"韩文: {self._escape_text(block.get('kr', ''))}")
-            result_lines.append(f"英文: {self._escape_text(block.get('en', ''))}")
-            result_lines.append(f"日文: {self._escape_text(block.get('jp', ''))}")
-
-        return "\n".join(result_lines)
 
     def _make_xml_user_prompt(self, request_data: dict) -> str:
         """将统一请求字典转换为 XML 格式的 user prompt。"""

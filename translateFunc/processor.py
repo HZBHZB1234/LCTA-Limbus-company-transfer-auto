@@ -253,15 +253,13 @@ class FileProcessor:
                     try:
                         s0_system = stage_strategy.build_stage_0_prompt(prompt_format=user_format)
                         self._update_translator_prompt(s0_system, self._format_to_response_format(user_format))
-                        # user message = 消歧上下文数据 + 完整请求数据
-                        s0_data = stage_strategy.build_stage_0_user_prompt(
+                        # user message 仅含消歧上下文数据（候选术语 + 文本块）
+                        # 不拼接完整 Stage 1 请求，避免上下文混乱
+                        s0_user = stage_strategy.build_stage_0_user_prompt(
                             ambiguous_terms,
                             builder.unified_request.get("text_blocks", []),
                             prompt_format=user_format,
                         )
-                        s0_user_prompts = builder.get_request_text(prompt_format=user_format)
-                        s0_full = s0_user_prompts[0] if s0_user_prompts else ""
-                        s0_user = s0_data + "\n" + s0_full
 
                         raw_response = self._translator.translate(s0_user, timeout=60)
                         disambiguated = stage_strategy.parse_stage_0_result(raw_response, prompt_format=user_format)
@@ -298,7 +296,7 @@ class FileProcessor:
                 part_result = None
                 tried_formats: list[str] = []
 
-                for fmt in formats_chain:
+                for fmt_idx, fmt in enumerate(formats_chain):
                     tried_formats.append(fmt)
                     # 按当前格式构建 system prompt
                     system_prompt = stage_strategy.build_stage_1_prompt(
@@ -310,17 +308,36 @@ class FileProcessor:
                     user_prompt = builder.get_request_text(prompt_format=fmt)
                     user_text = user_prompt[i] if i < len(user_prompt) else user_prompt[0]
 
-                    # 自适应超时：基于实际请求长度
-                    timeout = max(len(json.dumps(request_part, ensure_ascii=False)) // 200 + 1, 40)
+                    # 自适应超时：基于实际请求长度 + 预期输出长度
+                    input_len = len(json.dumps(request_part, ensure_ascii=False))
+                    timeout = max(input_len * 3 // 400 + 40, 60)
+
+                    # P0-3: LLM 调用前预检查分片大小，记录详细诊断数据
+                    _rendered_len = len(user_text)
+                    text_blocks_for_part = part_data.get("text_blocks", [])
+                    ref_for_part = part_data.get("reference", {})
+                    if _rendered_len > 20000:
+                        _logger.warning(
+                            f"[{self.file_name}] [{fmt}] 第 {i + 1}/{len(builder.split_requests)} 部分 "
+                            f"超限: 渲染长度={_rendered_len} > 限制=20000 | "
+                            f"text_blocks={len(text_blocks_for_part)} | "
+                            f"proper_terms={len(ref_for_part.get('proper_terms', []))} | "
+                            f"affects={len(ref_for_part.get('affects', []))} | "
+                            f"models={len(ref_for_part.get('models', []))} | "
+                            f"model_docs={len(ref_for_part.get('model_docs', []))} | "
+                            f"skill_doc_len={len(ref_for_part.get('skill_doc', ''))}"
+                        )
 
                     # 更新线程本地 translator 的 system_prompt 和 response_format
                     # 放在 try 外：配置更新失败不应被当作解析失败
                     self._update_translator_prompt(system_prompt, self._format_to_response_format(fmt))
 
-                    # 清除缓存，防止跨格式缓存污染
-                    # （xml_json 和 xml_xml 共用 _make_xml_user_prompt 产生相同 user_text，
+                    # 仅在 xml_json ↔ xml_xml 回退时清除缓存
+                    # （两者共用 _make_xml_user_prompt 产生相同 user_text，
                     #  缓存键仅含 user_text hash，不区分 system_prompt/response_format）
-                    self._translator.clear_cache()
+                    # 其他格式回退（json_json）user_text 不同，无需清缓存
+                    if fmt_idx > 0 and {formats_chain[fmt_idx - 1], fmt} == {"xml_json", "xml_xml"}:
+                        self._translator.clear_cache()
 
                     try:
                         # 调用 LLM
@@ -333,36 +350,74 @@ class FileProcessor:
                         if not parsed:
                             raise ValueError(f"{fmt}: 解析结果为空")
 
-                        # 提取翻译文本
-                        part_result = [
-                            t.get("translation", "") if isinstance(t, dict) else str(t)
-                            for t in parsed
-                        ]
+                        # 按 id 对齐解析结果与文本块（解决 LLM 跳过/重排条目导致的错位）
+                        text_blocks = part_data.get("text_blocks", [])
+                        expected_count = len(text_blocks)
 
-                        # 置信度检查：低于 min_confidence 的条目回退为 KR 原文
+                        # 构建 id → parsed_item 映射
+                        parsed_by_id: dict[int, dict] = {}
+                        for t in parsed:
+                            if isinstance(t, dict):
+                                try:
+                                    tid = int(t.get("id", 0))
+                                    if tid:
+                                        parsed_by_id[tid] = t
+                                except (ValueError, TypeError):
+                                    continue
+
+                        # 置信度检查准备
                         _CONFIDENCE_ORDER = {"low": 0, "medium": 1, "high": 2}
                         threshold = _CONFIDENCE_ORDER.get(self._config.min_confidence, 1)
                         low_conf_count = 0
-                        for idx, t in enumerate(parsed):
-                            conf = t.get("confidence", "medium") if isinstance(t, dict) else "medium"
-                            if _CONFIDENCE_ORDER.get(str(conf).lower(), 1) < threshold:
-                                reasoning = t.get("reasoning", "") if isinstance(t, dict) else ""
+                        missing_ids: list[int] = []
+
+                        # 按 text_block 顺序（1-based id）提取翻译
+                        part_result: list[str] = []
+                        for idx, block in enumerate(text_blocks):
+                            expected_id = idx + 1
+                            t = parsed_by_id.get(expected_id)
+                            if t is None and idx < len(parsed):
+                                # id 未匹配，尝试按顺序回退（LLM 可能未输出 id）
+                                fallback_t = parsed[idx]
+                                if isinstance(fallback_t, dict):
+                                    t = fallback_t
+
+                            if t is not None and isinstance(t, dict):
+                                translation = t.get("translation", "")
+                                # 置信度检查：低于 min_confidence 的条目回退为 KR 原文
+                                conf = str(t.get("confidence", "medium")).lower()
+                                if _CONFIDENCE_ORDER.get(conf, 1) < threshold:
+                                    reasoning = t.get("reasoning", "")
+                                    _logger.warning(
+                                        f"[{self.file_name}] [{fmt}] 低置信度条目 #{expected_id}: "
+                                        f"confidence={conf}, reasoning={reasoning[:200]}"
+                                    )
+                                    low_conf_count += 1
+                                    translation = block.get("kr", "")
+                                part_result.append(translation)
+                            else:
+                                part_result.append(block.get("kr", ""))
+                                missing_ids.append(expected_id)
+
+                        # P1-1: 缺失条目时若还有剩余格式则尝试下一格式
+                        if missing_ids:
+                            if fmt_idx + 1 < len(formats_chain):
                                 _logger.warning(
-                                    f"[{self.file_name}] [{fmt}] 低置信度条目 #{t.get('id', idx + 1)}: "
-                                    f"confidence={conf}, reasoning={reasoning[:200]}"
+                                    f"[{self.file_name}] [{fmt}] {len(missing_ids)} 个文本块缺失翻译 "
+                                    f"(id: {missing_ids[:10]}...)，尝试下一格式"
                                 )
-                                low_conf_count += 1
-                                # 回退为 KR 原文
-                                text_blocks = part_data.get("text_blocks", [])
-                                if idx < len(text_blocks):
-                                    part_result[idx] = text_blocks[idx].get("kr", "")
+                                continue
+                            _logger.warning(
+                                f"[{self.file_name}] [{fmt}] {len(missing_ids)} 个文本块缺失翻译 "
+                                f"(id: {missing_ids[:10]}...)，已回退为 KR 原文"
+                            )
                         if low_conf_count > 0:
                             _logger.info(
                                 f"[{self.file_name}] [{fmt}] {low_conf_count} 条翻译因低置信度"
                                 f" (min={self._config.min_confidence}) 回退为 KR 原文"
                             )
 
-                        break  # 成功，退出格式回退循环
+                        break  # 翻译完整，退出格式回退循环
 
                     except (json.JSONDecodeError, ValueError) as e:
                         _logger.warning(
@@ -382,6 +437,20 @@ class FileProcessor:
                     had_fallback = True
                     text_blocks = part_data.get("text_blocks", [])
                     part_result = [b.get("kr", "") for b in text_blocks]
+                else:
+                    # P1-2: 部分格式成功但存在缺失条目 → 补充翻译重试
+                    text_blocks = part_data.get("text_blocks", [])
+                    kr_fallback_indices: list[int] = [
+                        idx for idx, (block, trans) in enumerate(zip(text_blocks, part_result))
+                        if trans == block.get("kr", "")
+                    ]
+                    if kr_fallback_indices and len(kr_fallback_indices) < len(text_blocks):
+                        fixed = self._retry_missing_entries(
+                            builder, stage_strategy, part_data, part_result,
+                            kr_fallback_indices, tried_formats, i,
+                        )
+                        if fixed > 0:
+                            had_fallback = True
 
                 result.extend(part_result)
 
@@ -402,11 +471,12 @@ class FileProcessor:
                         prompt_format=user_format,
                     )
                     self._update_translator_prompt(s2_system, self._format_to_response_format(user_format))
-                    # 阶段 2 的 user message 包含原文/译文对
+                    # 阶段 2 的 user message 包含原文/译文对 + 引用字段 + 术语表
                     s2_user = stage_strategy.build_stage_2_user_prompt(
                         original_blocks,
                         translations_for_check,
                         prompt_format=user_format,
+                        reference=builder.unified_request.get("reference"),
                     )
                     raw_response = self._translator.translate(s2_user, timeout=120)
                     checked = stage_strategy.parse_stage_2_result(raw_response, prompt_format=user_format)
@@ -428,6 +498,117 @@ class FileProcessor:
             request_texts = simple_builder.get_request_text(from_lang=self._config.from_lang)
             result = self._translator.translate(request_texts)
             return simple_builder.deBuild(result), False
+
+    def _retry_missing_entries(
+        self,
+        builder: "RequestBuilder",
+        stage_strategy: "StageStrategy",
+        part_data: dict,
+        part_result: list[str],
+        kr_fallback_indices: list[int],
+        tried_formats: list[str],
+        part_idx: int,
+    ) -> int:
+        """P1-2: 对全部格式均缺失的条目发起补充翻译重试。
+
+        仅当 part_result 非空且缺失条目数 < 总条目数时调用——部分成功部分
+        失败才发起补充翻译（全部失败时补充请求等同于完整重试，无意义）。
+
+        Returns:
+            成功修复的条目数。
+        """
+        text_blocks = part_data.get("text_blocks", [])
+        missing_blocks = [text_blocks[idx] for idx in kr_fallback_indices]
+
+        miss_proper_refs: set[str] = set()
+        miss_affect_refs: set[str] = set()
+        for block in missing_blocks:
+            miss_proper_refs.update(block.get("proper_refs", []))
+            miss_affect_refs.update(block.get("affect_refs", []))
+
+        ref = builder.unified_request.get("reference", {})
+        miss_reference = {
+            "proper_terms": [t for t in ref.get("proper_terms", [])
+                            if t.get("term", "") in miss_proper_refs],
+            "affects": [a for a in ref.get("affects", [])
+                       if f'[{a.get("id", "")}]' in miss_affect_refs],
+            "models": ref.get("models", []),
+            "model_docs": ref.get("model_docs", []),
+            "skill_doc": ref.get("skill_doc", ""),
+        }
+        supp_request = {
+            "metadata": {
+                **builder.unified_request["metadata"],
+                "total_text_blocks": len(missing_blocks),
+            },
+            "reference": miss_reference,
+            "text_blocks": missing_blocks,
+        }
+
+        primary_format = tried_formats[0] if tried_formats else "xml_json"
+        supp_user_text = builder._get_request_text(supp_request, primary_format)
+
+        _logger.info(
+            f"[{self.file_name}] P1-2 补充翻译: {len(kr_fallback_indices)} 个缺失条目 "
+            f"(原 id: {[idx + 1 for idx in kr_fallback_indices][:10]}...)"
+            f" | 请求长度={len(supp_user_text)}"
+        )
+
+        system_prompt = stage_strategy.build_stage_1_prompt(
+            self.file_type, prompt_format=primary_format,
+        )
+        self._update_translator_prompt(
+            system_prompt, self._format_to_response_format(primary_format),
+        )
+
+        try:
+            timeout = max(len(supp_user_text) * 3 // 400 + 40, 60)
+            supp_raw = self._translator.translate(supp_user_text, timeout=timeout)
+            supp_parsed = stage_strategy.parse_stage_1_result(
+                supp_raw, prompt_format=primary_format,
+            )
+
+            if not supp_parsed:
+                if self._dump:
+                    self._log("P1-2 补充翻译：解析结果为空，保留 KR 原文")
+                return 0
+
+            supp_by_id: dict[int, dict] = {}
+            for t in supp_parsed:
+                if isinstance(t, dict):
+                    try:
+                        tid = int(t.get("id", 0))
+                        if tid:
+                            supp_by_id[tid] = t
+                    except (ValueError, TypeError):
+                        continue
+
+            fixed = 0
+            for local_idx, src_idx in enumerate(kr_fallback_indices):
+                expected_id = local_idx + 1
+                st = supp_by_id.get(expected_id)
+                if st is not None and isinstance(st, dict):
+                    trans = st.get("translation", "") or ""
+                    if trans and trans != text_blocks[src_idx].get("kr", ""):
+                        part_result[src_idx] = trans
+                        fixed += 1
+
+            if fixed > 0:
+                _logger.info(
+                    f"[{self.file_name}] P1-2 补充翻译完成: "
+                    f"修复 {fixed}/{len(kr_fallback_indices)} 条缺失"
+                )
+            elif self._dump:
+                self._log(
+                    f"P1-2 补充翻译：{len(kr_fallback_indices)} 条皆未修复，保留 KR 原文"
+                )
+            return fixed
+
+        except Exception as e:
+            _logger.warning(
+                f"[{self.file_name}] P1-2 补充翻译异常 ({e})，保留 KR 原文"
+            )
+            return 0
 
     def _build_format_chain(self) -> list[str]:
         """构建格式回退链：[用户选择] + fallback? [xml_json, json_json, xml_xml] : [].
@@ -814,7 +995,6 @@ class _SimpleRequestBuilder:
             translated_texts = translated_texts[:expected_count]
 
         it = iter(translated_texts)
-        consumed = 0
         for idx in original:
             kr_item = self.kr_texts.get(idx, {})
             jp_item = self.jp_texts.get(idx, {})
@@ -825,5 +1005,4 @@ class _SimpleRequestBuilder:
                 kr_val = kr_item[path_tuple]
                 if not (jp_val in EMPTY_TEXT and en_val in EMPTY_TEXT and kr_val in EMPTY_TEXT):
                     original[idx][path_tuple] = next(it)
-                    consumed += 1
         return original

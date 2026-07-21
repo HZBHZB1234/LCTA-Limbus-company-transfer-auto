@@ -38,7 +38,6 @@ class TranslateConfig:
     disambiguation_mode: str = "hybrid"       # "similarity" | "llm" | "hybrid"
     min_confidence: str = "medium"            # "high" | "medium" | "low"
     prompt_format: str = "xml_json"           # "xml_json" | "xml_xml" | "json_json"
-    prompt_version: str = "v2"                # "v1" = 旧版提示词, "v2" = 新版（reasoning 前置 + 规则优先级）
 
     # --- 保存 ---
     save_result: bool = True

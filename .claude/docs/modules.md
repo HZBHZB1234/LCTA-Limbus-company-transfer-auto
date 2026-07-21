@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-20 -->
+<!-- Last updated: 2026-07-21 -->
 
 ## Directory Overview
 
@@ -107,7 +107,7 @@ Standalone library with own `__init__.py` public API.
 
 | Path | Purpose |
 |------|---------|
-| `builder/prompt.py` | LLM prompt construction for translation |
+| `builder/prompt.py` | LLM prompt construction: `PromptFactory` with XML/JSON format-aware escape rules, response parsing with repair fallbacks. v1 prompt_version removed; only v2 (priority-tagged rules, reasoning-first) remains |
 | `builder/request.py` | API request building |
 | `builder/stages.py` | Pipeline stage definitions |
 | `builder/examples.py` | Example translations for few-shot prompting |

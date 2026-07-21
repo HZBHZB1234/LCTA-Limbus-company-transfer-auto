@@ -220,8 +220,7 @@ class TestRegressionFixes:
         processor._make_data_index()
         assert processor.kr_index == {"A001": data[0], "A002": data[1]}
 
-    def test_prompt_version_config_exists(self):
-        """TranslateConfig 应有 prompt_version 字段。"""
+    def test_prompt_version_removed(self):
+        """prompt_version 字段应已从 TranslateConfig 中移除。"""
         config = TranslateConfig()
-        assert hasattr(config, "prompt_version")
-        assert config.prompt_version == "v2"
+        assert not hasattr(config, "prompt_version")

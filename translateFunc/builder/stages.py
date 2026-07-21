@@ -74,10 +74,9 @@ class StageStrategy:
         *,
         examples: list[dict] | None = None,
     ) -> str:
-        """构建主翻译系统提示词。v2 模式下自动加载 few-shot 示例。"""
-        prompt_version = getattr(self._config, "prompt_version", "v2")
-        # v2 模式下自动加载 FileType 对应的 few-shot 示例
-        if prompt_version != "v1" and examples is None:
+        """构建主翻译系统提示词。自动加载 FileType 对应的 few-shot 示例。"""
+        # 自动加载 FileType 对应的 few-shot 示例
+        if examples is None:
             try:
                 from translateFunc.builder.examples import get_examples
                 examples = get_examples(file_type.name)
@@ -88,7 +87,6 @@ class StageStrategy:
             stage=1,
             prompt_format=prompt_format,
             examples=examples,
-            prompt_version=prompt_version,
         )
 
     def build_stage_1_user_prompt(
@@ -138,7 +136,6 @@ class StageStrategy:
         """构建阶段 2 的 system prompt（仅 role + rules + format，不含数据）。"""
         return self._prompt_factory.build_system_prompt(
             file_type=file_type, stage=2, prompt_format=prompt_format,
-            prompt_version=getattr(self._config, "prompt_version", "v2"),
         )
 
     def build_stage_2_user_prompt(
@@ -146,25 +143,54 @@ class StageStrategy:
         original_blocks: list[dict],
         translations: list[dict],
         prompt_format: str = "xml_json",
+        *,
+        reference: dict | None = None,
     ) -> str:
-        """构建阶段 2 的 user message（原文/译文对）。"""
+        """构建阶段 2 的 user message（原文/译文对 + 引用字段 + 术语表）。
+
+        Args:
+            original_blocks: 原文文本块（含 proper_refs/affect_refs/model 等引用字段）
+            translations: 阶段 1 的翻译结果 [{id, translation}, ...]
+            prompt_format: 提示词格式
+            reference: 可选的 reference dict（含 proper_terms/affects），用于术语一致性校验
+        """
         _xml_escape = self._prompt_factory._xml_escape
-        lines = [
-            "<context>",
-            "请校验以下翻译的术语一致性和格式正确性：",
-        ]
+        parts: list[str] = []
+
+        # 术语表（帮助 LLM 校验术语一致性）
+        if reference:
+            if reference.get("proper_terms"):
+                parts.append(self._prompt_factory.render_glossary(reference["proper_terms"]))
+            if reference.get("affects"):
+                from translateFunc.builder.request import RequestBuilder
+                builder = RequestBuilder.__new__(RequestBuilder)
+                parts.append(builder._render_affects_xml(reference["affects"]))
+
+        parts.append("<context>")
+        parts.append("请校验以下翻译的术语一致性和格式正确性：")
         for i, (orig, trans) in enumerate(zip(original_blocks, translations)):
-            lines.append(f'  <pair id="{i + 1}">')
-            lines.append(f"    <original>")
-            lines.append(f"      <kr>{_xml_escape(orig.get('kr', ''))}</kr>")
-            lines.append(f"      <jp>{_xml_escape(orig.get('jp', ''))}</jp>")
-            lines.append(f"      <en>{_xml_escape(orig.get('en', ''))}</en>")
-            lines.append(f"    </original>")
+            parts.append(f'  <pair id="{i + 1}">')
+            parts.append(f"    <original>")
+            parts.append(f"      <kr>{_xml_escape(orig.get('kr', ''))}</kr>")
+            if orig.get('jp'):
+                parts.append(f"      <jp>{_xml_escape(orig.get('jp', ''))}</jp>")
+            if orig.get('en'):
+                parts.append(f"      <en>{_xml_escape(orig.get('en', ''))}</en>")
+            parts.append(f"    </original>")
+            # 引用字段（帮助 LLM 校验术语一致性）
+            if orig.get('proper_refs'):
+                refs = ", ".join(orig['proper_refs'])
+                parts.append(f"    <proper_refs>{_xml_escape(refs)}</proper_refs>")
+            if orig.get('affect_refs'):
+                refs = ", ".join(orig['affect_refs'])
+                parts.append(f"    <affect_refs>{_xml_escape(refs)}</affect_refs>")
+            if orig.get('model'):
+                parts.append(f"    <model>{_xml_escape(orig['model'])}</model>")
             trans_text = trans.get("translation", "") if isinstance(trans, dict) else str(trans)
-            lines.append(f"    <translation>{_xml_escape(trans_text)}</translation>")
-            lines.append(f"  </pair>")
-        lines.append("</context>")
-        return "\n".join(lines)
+            parts.append(f"    <translation>{_xml_escape(trans_text)}</translation>")
+            parts.append(f"  </pair>")
+        parts.append("</context>")
+        return "\n".join(parts)
 
     def parse_stage_2_result(self, result_text: str, prompt_format: str = "xml_json") -> list[dict]:
         """解析自校验结果。"""

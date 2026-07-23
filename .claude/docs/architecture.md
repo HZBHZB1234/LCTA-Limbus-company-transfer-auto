@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-07-21 -->
+<!-- Last updated: 2026-07-23 -->
 
 ## Project Purpose
 
@@ -37,6 +37,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │  translateFunc/           LLM translation pipeline   │
 │    pipeline.py            orchestration              │
 │    processor.py           per-file logic             │
+│    validator.py           rule-based post-processing │
 │    workers.py             concurrency                │
 │    builder/               prompt & request building  │
 │    matcher/               proper noun AC matching    │

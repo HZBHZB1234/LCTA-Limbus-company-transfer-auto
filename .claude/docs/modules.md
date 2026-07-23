@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-21 -->
+<!-- Last updated: 2026-07-23 -->
 
 ## Directory Overview
 
@@ -9,7 +9,7 @@
 | `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 12 + sections |
 | `webutils/` | Business logic layer (one file per feature) | 24 |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
-| `translateFunc/` | Translation engine (LLM pipeline) | 12+ |
+| `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
 | `globalManagers/` | Cross-cutting singletons | 2 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
@@ -103,12 +103,13 @@ Standalone library with own `__init__.py` public API.
 | `log_bridge.py` | Bridge between translateFunc logging and global LogManager |
 | `profiler.py` | `TimingProfiler` — performance profiling |
 | `recorder.py` | `TranslationRecorder` — per-translation dump record writing (JSONL) |
+| `validator.py` | `RuleBasedValidator` — deterministic post-processing checks between Stage 1 and Stage 2. Detects/auto-fixes: `[ID]` bracket spacing errors, missing effect references. Skill files only, controlled by `enable_rule_validation` config |
 
 **Subdirectories:**
 
 | Path | Purpose |
 |------|---------|
-| `builder/prompt.py` | LLM prompt construction: `PromptFactory` with XML/JSON format-aware escape rules, response parsing with repair fallbacks. v1 prompt_version removed; only v2 (priority-tagged rules, reasoning-first) remains |
+| `builder/prompt.py` | LLM prompt construction: `PromptFactory` with XML/JSON format-aware escape rules, response parsing with repair fallbacks. v1 prompt_version removed; only v2 (priority-tagged rules, reasoning-first) remains. Supports file-type-conditional rules via `_FILETYPE_RULES` (SKILL/STORY/UI) |
 | `builder/request.py` | API request building |
 | `builder/stages.py` | Pipeline stage definitions |
 | `builder/examples.py` | Example translations for few-shot prompting |

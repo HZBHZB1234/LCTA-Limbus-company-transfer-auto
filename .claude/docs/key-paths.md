@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-21 -->
+<!-- Last updated: 2026-07-23 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -43,13 +43,17 @@ JS: user configures & clicks translate
       → translateFunc/builder/prompt.py      construct LLM prompts
       → translateFunc/builder/request.py     build API requests
       → translateFunc/translate_request.py   call LLM API, parse response
+      → translateFunc/validator.py           rule-based post-processing (skill files only,
+                                              controlled by enable_rule_validation config):
+                                              validate [ID] bracket spacing → auto-fix
+                                              validate effect refs from source → warning
     Stage 5: translateFunc/matcher/engine.py post-translation proper matching
     Stage 6: translateFunc/pipeline.py       aggregate results → PipelineSummary
   → webutils/function_translate.py  write output files
   → webui/app.py                    callback: summary → JS modal
 ```
 
-Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc/pipeline.py`, `translateFunc/config.py`, `translateFunc/processor.py`, `translateFunc/workers.py`, `translateFunc/translate_request.py`, `translateFunc/get_proper.py`, `translateFunc/builder/prompt.py`, `translateFunc/builder/request.py`, `translateFunc/builder/stages.py`, `translateFunc/matcher/engine.py`, `translateFunc/matcher/ac_automaton.py`, `translateFunc/log_bridge.py`, `translateFunc/recorder.py`, `globalManagers/LogManager.py`
+Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc/pipeline.py`, `translateFunc/config.py`, `translateFunc/processor.py`, `translateFunc/validator.py`, `translateFunc/workers.py`, `translateFunc/translate_request.py`, `translateFunc/get_proper.py`, `translateFunc/builder/prompt.py`, `translateFunc/builder/request.py`, `translateFunc/builder/stages.py`, `translateFunc/matcher/engine.py`, `translateFunc/matcher/ac_automaton.py`, `translateFunc/log_bridge.py`, `translateFunc/recorder.py`, `globalManagers/LogManager.py`
 
 ### 3b. Translation Dump Recording (转储过程记录)
 

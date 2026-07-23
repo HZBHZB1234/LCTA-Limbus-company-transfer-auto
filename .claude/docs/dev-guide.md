@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-07-18 -->
+<!-- Last updated: 2026-07-23 -->
 
 ## How to Run
 
@@ -40,7 +40,7 @@ pytest tests/
 pytest tests/test_config.py
 ```
 
-Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`
+Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`
 
 ## Project Conventions
 

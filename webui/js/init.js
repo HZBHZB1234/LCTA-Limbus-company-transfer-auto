@@ -53,7 +53,7 @@ window.addEventListener('pywebviewready', function() {
                 window._pendingWelcomeContent = { type: 'markdown', url: 'assets/firstUse.md' };
                 goAndShow('welcome');
             } else {
-                refreshDashboard();
+                goAndShow('translate');
             }
 
             if (data.config_ok === false) {

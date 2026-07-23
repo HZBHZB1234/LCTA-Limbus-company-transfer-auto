@@ -228,6 +228,7 @@ class ConfigManager {
             "translation-mode": "ui_default.translator.translation_mode",
             "enable-self-check": "ui_default.translator.enable_self_check",
             "enable-thinking": "ui_default.translator.enable_thinking",
+            "enable-rule-validation": "ui_default.translator.enable_rule_validation",
             "disambiguation-mode": "ui_default.translator.disambiguation_mode",
             "min-confidence": "ui_default.translator.min_confidence",
             

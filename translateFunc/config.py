@@ -98,6 +98,7 @@ class TranslateConfig:
             min_confidence=configs.get("min_confidence", "medium"),
             prompt_format=configs.get("prompt_format", "xml_json"),
             enable_thinking=configs.get("enable_thinking", False),
+            enable_rule_validation=configs.get("enable_rule_validation", True),
         )
 
 

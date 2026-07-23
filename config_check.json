@@ -23,7 +23,8 @@
             "enable_self_check": "bool",
             "disambiguation_mode": "str",
             "min_confidence": "str",
-            "enable_thinking": "bool"
+            "enable_thinking": "bool",
+            "enable_rule_validation": "bool"
         },
         "install": {
             "package_directory": "str"

@@ -73,6 +73,18 @@
     </div>
 </div>
 
+<div class="elder-option-card">
+    <div class="elder-option-icon"><i class="fas fa-check-double"></i></div>
+    <div class="elder-option-body">
+        <h4>规则化后处理校验</h4>
+        <p>翻译完成后使用确定性规则引擎自动检测和修复 Buff ID 空格、特殊效果引用缺失等问题。仅对技能文件生效。</p>
+        <label class="checkbox-container">
+            <input type="checkbox" id="elder-enable-rule-validation" checked>
+            <span class="checkmark"></span> 启用规则化校验
+        </label>
+    </div>
+</div>
+
 </div>
 
 <button class="primary-btn" onclick="elderManager.switchPage()">

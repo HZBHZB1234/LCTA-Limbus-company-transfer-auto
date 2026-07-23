@@ -362,6 +362,7 @@ const TOOLTIP_DATA = {
     'translation-mode': '多阶段翻译（推荐）：消歧→翻译→自检三阶段管线，质量更高但耗时更长。单阶段翻译：直接翻译，速度更快但可能遗漏上下文匹配。',
     'enable-self-check': '翻译完成后由 LLM 自行检查翻译质量并修正明显错误。可提升质量但会增加 API 调用次数和耗时。',
     'enable-thinking': '启用后 LLM 将在翻译前进行深度思考（chain-of-thought），提高翻译质量但会增加 API 响应时间和 token 消耗。DeepSeek 使用原生思考模式，其他 LLM 使用 OpenAI 通用 reasoning_effort 参数。',
+    'enable-rule-validation': '在 Stage 1 翻译完成后、Stage 2 LLM 校验前，使用确定性规则引擎检测并自动修复机械性错误（如 Buff ID 中误用空格、特殊效果引用缺失）。仅对技能文件生效。',
     'disambiguation-mode': '混合模式（推荐）：相似度匹配优先，必要时使用 LLM 消歧。相似度匹配：仅用 Jaccard 相似度进行 JP/EN 交叉验证。LLM 消歧：完全由 LLM 判断专有名词归属。',
     'min-confidence': '专有名词匹配的最低置信度阈值。高：只采纳最确定的匹配，漏翻可能增加。低：采纳更多匹配但可能引入错误。推荐使用"中"。',
 

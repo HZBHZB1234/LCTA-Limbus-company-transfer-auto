@@ -129,6 +129,9 @@ bindRefer = {
         'elder-fallback': [
             'fallback', 'ui_default.translator.fallback',
         ],
+        'elder-enable-rule-validation': [
+            'enable-rule-validation', 'ui_default.translator.enable_rule_validation',
+        ],
     },
 
     'download': {

@@ -22,6 +22,7 @@ from translateFunc.builder.request import RequestBuilder, EMPTY_TEXT, AVOID_PATH
 from translateFunc.builder.stages import StageStrategy
 from translateFunc.proper import flatten_dict_enhanced, update_dict_with_flattened
 from translateFunc.validator import RuleBasedValidator
+from translateFunc.recorder import TranslationRecorder
 
 EMPTY_DATA = [{"dataList": []}, {}, []]
 EMPTY_DATA_LIST = [[], [{}]]
@@ -43,7 +44,7 @@ class FileProcessor:
         engine: MatcherEngine,
         translate_config: TranslateConfig,
         translator,  # translatekit TranslatorBase 实例
-        recorder: "TranslationRecorder | None" = None,
+        recorder: "TranslationRecorder" = None,
     ):
         self.path_config = path_config
         self._engine = engine
@@ -835,25 +836,6 @@ class FileProcessor:
                 "note": term_data.get("note", ""),
                 "text_block_indices": block_indices,
             })
-
-        # 检测复合术语关系（子串 ↔ 父术语）
-        all_terms = list(term_block_map.keys())
-        compound_parents: dict[str, set[str]] = {}  # sub_term → {parent_terms}
-        for i, term_a in enumerate(all_terms):
-            for term_b in all_terms[i + 1:]:
-                if term_a != term_b:
-                    if term_a in term_b:
-                        compound_parents.setdefault(term_a, set()).add(term_b)
-                    elif term_b in term_a:
-                        compound_parents.setdefault(term_b, set()).add(term_a)
-
-        for term_data in result:
-            kr_term = term_data.get("kr", "")
-            if kr_term in compound_parents:
-                parents = ", ".join(sorted(compound_parents[kr_term]))
-                existing_note = term_data.get("note", "")
-                compound_note = f" [复合关系: 此术语是 '{parents}' 的子串，请勿因'未单独出现'而标记为不适用]"
-                term_data["note"] = existing_note + compound_note
 
         return result
 

@@ -98,9 +98,11 @@ class PromptFactory:
     # FileType 特有规则
     _FILETYPE_RULES: dict = {
         "STORY": [
-            {"priority": "P1", "text": "角色语气一致性：保持角色性格对应的语言风格（如傲慢角色用语凌厉，温和角色用语柔和）"},
+            {"priority": "P1", "text": "角色语气一致性：保持角色性格对应的语言风格"},
         ],
         "SKILL": [
+            {"priority": "P0", "text": "Buff名称空格（强制）：所有Buff/状态效果的中文名称翻译后必须后跟一个半角空格（如'震颤 '），即使位于句尾或标点前也绝不可省略此空格。示例：'施加2层震颤 。'正确，'施加2层震颤。'错误。除非位于[]中"},
+            {"priority": "P0", "text": "위력↔强度、횟수↔层数"},
             {"priority": "P1", "text": "技能描述紧凑：技能效果描述需精炼，Buff/Debuff名称遵循术语表约定"},
         ],
         "UI": [
@@ -416,7 +418,10 @@ class PromptFactory:
             if file_type.name in self._FILETYPE_RULES:
                 rules_data.extend(self._FILETYPE_RULES[file_type.name])
         elif stage == 2:
-            rules_data = self._STAGE2_RULES_DATA
+            rules_data = list(self._STAGE2_RULES_DATA)
+            # FileType 特有规则
+            if file_type.name in self._FILETYPE_RULES:
+                rules_data.extend(self._FILETYPE_RULES[file_type.name])
         else:
             rules_data = []
 

@@ -21,6 +21,7 @@ from translateFunc.matcher.engine import MatcherEngine
 from translateFunc.builder.request import RequestBuilder, EMPTY_TEXT, AVOID_PATH
 from translateFunc.builder.stages import StageStrategy
 from translateFunc.proper import flatten_dict_enhanced, update_dict_with_flattened
+from translateFunc.validator import RuleBasedValidator
 
 EMPTY_DATA = [{"dataList": []}, {}, []]
 EMPTY_DATA_LIST = [[], [{}]]
@@ -507,6 +508,69 @@ class FileProcessor:
 
                 result.extend(part_result)
 
+            # ====== 规则化后处理校验（技能文件专用） ======
+            if self.is_skill and self._config.enable_rule_validation:
+                _logger.debug(f"[{self.file_name}] 规则化后处理校验")
+                try:
+                    reference = builder.unified_request.get("reference", {})
+                    affects_data = reference.get("affects", [])
+                    if affects_data:
+                        validator = RuleBasedValidator(affects_data)
+                        text_blocks_for_check = builder.unified_request.get("text_blocks", [])
+                        report = validator.run_all_checks(text_blocks_for_check, result)
+
+                        error_count = sum(
+                            1 for v in report.violations if v.severity == "error"
+                        )
+                        warn_count = report.warnings_remaining
+                        if error_count > 0 or warn_count > 0:
+                            _logger.info(
+                                f"[{self.file_name}] 规则校验: {error_count} 个错误, "
+                                f"{warn_count} 个警告"
+                            )
+
+                        # 应用自动修正
+                        if report.auto_fixes_applied > 0:
+                            result = validator.apply_auto_fixes(result, report.violations)
+                            _logger.info(
+                                f"[{self.file_name}] 规则校验自动修正了 "
+                                f"{report.auto_fixes_applied} 处问题"
+                            )
+
+                        # 记录不可自动修正的违规
+                        for v in report.violations:
+                            if not v.auto_fixable:
+                                _logger.warning(
+                                    f"[{self.file_name}] [规则校验警告] "
+                                    f"{v.rule}: {v.message} (block #{v.block_id})"
+                                )
+
+                        # 记录到 API 调用历史
+                        if self._recorder is not None:
+                            self._api_calls.append({
+                                "stage": "rule_validation",
+                                "format": user_format,
+                                "system_prompt": "",
+                                "user_prompt": "",
+                                "response_format": "",
+                                "timeout": 0,
+                                "raw_response": "",
+                                "parsed": [
+                                    {
+                                        "rule": v.rule,
+                                        "severity": v.severity,
+                                        "message": v.message,
+                                        "auto_fixable": v.auto_fixable,
+                                    }
+                                    for v in report.violations
+                                ],
+                                "status": "success" if error_count == 0 else "fixed" if report.auto_fixes_applied > 0 else "warnings",
+                            })
+                except Exception as e:
+                    _logger.exception(
+                        f"[{self.file_name}] 规则化校验异常 ({e})，使用未校验的翻译结果"
+                    )
+
             # ====== 阶段 2：自校验（仅主格式，阶段 1 全部成功时执行） ======
             if stage_strategy.needs_self_check() and not had_fallback:
                 _logger.debug(f"[{self.file_name}] 阶段 2: 自校验")
@@ -771,6 +835,26 @@ class FileProcessor:
                 "note": term_data.get("note", ""),
                 "text_block_indices": block_indices,
             })
+
+        # 检测复合术语关系（子串 ↔ 父术语）
+        all_terms = list(term_block_map.keys())
+        compound_parents: dict[str, set[str]] = {}  # sub_term → {parent_terms}
+        for i, term_a in enumerate(all_terms):
+            for term_b in all_terms[i + 1:]:
+                if term_a != term_b:
+                    if term_a in term_b:
+                        compound_parents.setdefault(term_a, set()).add(term_b)
+                    elif term_b in term_a:
+                        compound_parents.setdefault(term_b, set()).add(term_a)
+
+        for term_data in result:
+            kr_term = term_data.get("kr", "")
+            if kr_term in compound_parents:
+                parents = ", ".join(sorted(compound_parents[kr_term]))
+                existing_note = term_data.get("note", "")
+                compound_note = f" [复合关系: 此术语是 '{parents}' 的子串，请勿因'未单独出现'而标记为不适用]"
+                term_data["note"] = existing_note + compound_note
+
         return result
 
     def _apply_disambiguation(

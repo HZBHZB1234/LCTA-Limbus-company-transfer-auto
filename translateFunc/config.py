@@ -35,6 +35,7 @@ class TranslateConfig:
     # --- 提示词 / 管线 ---
     translation_mode: str = "multi_stage"     # "multi_stage" | "single_stage"
     enable_self_check: bool = False
+    enable_rule_validation: bool = True   # 启用确定性规则后处理校验（仅技能文件）
     disambiguation_mode: str = "hybrid"       # "similarity" | "llm" | "hybrid"
     min_confidence: str = "medium"            # "high" | "medium" | "low"
     prompt_format: str = "xml_json"           # "xml_json" | "xml_xml" | "json_json"

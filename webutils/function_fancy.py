@@ -87,67 +87,111 @@ def apply_operations(value: str, operations: list, data: Dict[tuple, str] = {}, 
 
     return value
 
+def _normalize_rule(rule: dict) -> dict:
+    """将旧版 trigger/aim 格式归一化为 conditions 数组格式"""
+    if "conditions" in rule:
+        return rule
+    rule = dict(rule)
+    condition = {}
+    if "trigger" in rule:
+        condition["trigger"] = rule.pop("trigger")
+    if "aim" in rule:
+        condition["aim"] = rule.pop("aim")
+    if "fallback" in rule:
+        condition["fallback"] = rule.pop("fallback")
+    rule["conditions"] = [condition]
+    return rule
+
 def exec_json(data: dict, config: list) -> dict:
     """
     根据规则列表更新数据。
-    config: 规则列表，每个元素格式：
-        {
-            "aimFile": "regex for file path",      # 可选，在 fancy_main 中预筛选
-            "aim": "path regex (no trigger) or path template (with trigger)",
-            "trigger": { "aim": "path regex", "re": "content regex" },  # 可选
-            "action": [ {"from": "...", "to": "..."}, {"rate": 2.0} ]   # 操作列表，可混合多种类型
-        }
+    支持三种规则格式（经 _normalize_rule 归一化后统一为 conditions 数组）：
+        1. 旧版 aim-only：{"aim": "path regex", "action": [...]}
+        2. 旧版 trigger+aim：{"trigger": {"aim": "path regex", "re": "content regex"}, "aim": "template", "action": [...]}
+        3. 新版 conditions：{"conditions": [{"trigger": {...}, "aim": "template"}, ...], "action": [...]}
+           多个 condition 之间为 AND 关系，需在同一 dataList[N] 父条目内同时成立。
     """
     flat_data = flatten_dict_enhanced(data)
     updates = {}
-
-    # 将扁平数据转换为 (点路径, 元组路径, 值) 列表，便于多次匹配
     flat_items = [(path_tuple_to_str(k), k, v) for k, v in flat_data.items()]
 
     for rule in config:
-        aim_pattern_str = rule.get('aim')
-        if not aim_pattern_str:
+        rule = _normalize_rule(rule)
+        conditions = rule.get('conditions', [])
+        if not conditions:
             continue
 
-        # 获取操作列表，兼容旧格式
         operations = rule.get('action', [])
-        trigger = rule.get('trigger')
+        first_cond = conditions[0]
 
-        if trigger:
-            # 有 trigger 的情况
-            trigger_aim_re = re.compile(trigger['aim'])
-            trigger_re_re = re.compile(trigger['re'])
-
-            # 匹配 trigger.aim 路径
-            matched_paths = [
-                (key_str, key_tuple, val)
-                for key_str, key_tuple, val in flat_items
-                if trigger_aim_re.search(key_str)
-            ]
-
-            # 对每个匹配的路径，检查值是否匹配 trigger.re
-            for src_str, src_tuple, src_val in matched_paths:
-                if isinstance(src_val, str) and trigger_re_re.search(src_val):
-                    # 路径转换
-                    dst_tuple = transform_path(src_tuple, aim_pattern_str)
-                    # 应用操作列表
-                    new_val = apply_operations(get_value_by_path(data, dst_tuple), operations,
-                     data=flat_data, dst_tuple=dst_tuple)
-                    updates[dst_tuple] = new_val
+        if first_cond.get('trigger'):
+            first_aim_pattern = first_cond['trigger']['aim']
         else:
-            # 无 trigger：直接匹配 aim 路径
-            aim_re = re.compile(aim_pattern_str)
-            matched_paths = [
-                (key_str, key_tuple, val)
-                for key_str, key_tuple, val in flat_items
-                if aim_re.search(key_str)
-            ]
-            for key_str, key_tuple, val in matched_paths:
-                new_val = apply_operations(val, operations, data=flat_data, dst_tuple=key_tuple)
-                updates[key_tuple] = new_val
+            first_aim_pattern = first_cond['aim']
 
-    # 将更新应用到原始数据
+        first_aim_re = re.compile(first_aim_pattern)
+
+        matched_paths = [
+            (key_str, key_tuple, val)
+            for key_str, key_tuple, val in flat_items
+            if first_aim_re.search(key_str)
+        ]
+
+        for key_str, key_tuple, val in matched_paths:
+            all_conditions_met = True
+            for cond in conditions:
+                if cond.get('trigger'):
+                    trigger_aim_re = re.compile(cond['trigger']['aim'])
+                    trigger_re_re = re.compile(cond['trigger']['re'])
+                    trigger_matched_paths = [
+                        (ks, kt, v2)
+                        for ks, kt, v2 in flat_items
+                        if trigger_aim_re.search(ks) and _is_same_parent(kt, key_tuple)
+                    ]
+                    trigger_hit = any(
+                        isinstance(v2, (str, int, float, bool)) and trigger_re_re.search(str(v2))
+                        for _, _, v2 in trigger_matched_paths
+                    )
+                    if not trigger_hit:
+                        all_conditions_met = False
+                        break
+                else:
+                    aim_re = re.compile(cond['aim'])
+                    if not aim_re.search(key_str):
+                        all_conditions_met = False
+                        break
+
+            if not all_conditions_met:
+                continue
+
+            for cond in conditions:
+                if cond.get('trigger'):
+                    dst_tuple = transform_path(key_tuple, cond.get('aim', ''))
+                else:
+                    dst_tuple = key_tuple
+                new_val = apply_operations(
+                    get_value_by_path(data, dst_tuple),
+                    operations,
+                    data=flat_data,
+                    dst_tuple=dst_tuple
+                )
+                updates[dst_tuple] = new_val
+
     return update_dict_with_flattened(data, updates)
+
+
+def _is_same_parent(tuple_a: tuple, tuple_b: tuple) -> bool:
+    """判断两个扁平路径是否属于同一个 dataList 父条目"""
+    def find_datalist_index(t):
+        for i, part in enumerate(t):
+            if part == 'dataList' and i + 1 < len(t):
+                return i + 1
+        return None
+    idx_a = find_datalist_index(tuple_a)
+    idx_b = find_datalist_index(tuple_b)
+    if idx_a is None or idx_b is None:
+        return False
+    return tuple_a[idx_a] == tuple_b[idx_b]
 
 def fancy_main(game_path: str, package_name: str, config: list):
     """

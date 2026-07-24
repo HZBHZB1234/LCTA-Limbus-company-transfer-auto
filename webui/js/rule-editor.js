@@ -755,8 +755,6 @@
         if (genBtn) genBtn.addEventListener('click', generateRule);
         const applyBtn = $i('re-apply-btn');
         if (applyBtn) applyBtn.addEventListener('click', onApplyRuleset);
-        const smartBtn = $i('re-smart-gen-btn');
-        if (smartBtn) smartBtn.addEventListener('click', openSmartGeneration);
 
         const tplSel = $i('re-template-select');
         if (tplSel) tplSel.addEventListener('change', onTemplateSelectChange);

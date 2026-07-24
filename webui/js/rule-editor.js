@@ -40,7 +40,28 @@
         fileCache: new Map(),
         advancedContentView: null,
         selectedFieldPath: null,
-        selectedItemId: null
+        selectedItemId: null,
+        autocomplete: null,
+        advancedEditor: null,
+        smartChanges: [],
+        smartGenOverlay: null,
+        smartGenGroups: null,
+        templates: [],
+        lastPreviewRule: null
+    };
+
+    const CATEGORY_FILE_PATTERNS = {
+        'Skill': 'Skill.*\\.json$', 'Bufs': 'Bufs.*\\.json$',
+        'BattleSpeechBubbleDlg': 'BattleSpeechBubbleDlg.*\\.json$',
+        'Egos': '(Skills_Ego_Personality|Egos).*\\.json$',
+        'Passives': 'Passives.*\\.json$', 'Personalities': 'Personalities.*\\.json$',
+        'Enemies': 'Enemies.*\\.json$', 'EGOgift': 'EGOgift.*\\.json$',
+        'Railway': 'Railway.*\\.json$', 'MirrorDungeon': 'MirrorDungeon.*\\.json$',
+        'Dungeon': 'Dungeon.*\\.json$', 'Stage': 'Stage.*\\.json$',
+        'Story': 'Story.*\\.json$', 'Event': 'Event.*\\.json$',
+        'BattleUIText': 'BattleUIText.*\\.json$', 'BattleKeywords': 'BattleKeywords.*\\.json$',
+        'AbEvents': 'AbEvents.*\\.json$', 'Announcer': 'Announcer.*\\.json$',
+        'UnitKeyword': 'UnitKeyword.*\\.json$'
     };
 
     function $i(id) { return document.getElementById(id); }
@@ -102,7 +123,9 @@
 
     async function onApiReady() {
         setMode('simple', true);
-        await Promise.all([loadLangFiles(), loadRulesets()]);
+        initAdvancedMode();
+        await Promise.all([loadLangFiles(), loadRulesets(), initSimpleFileSelect(), loadTemplates()]);
+        syncAdvancedFromRuleset();
     }
 
     async function loadLangFiles() {
@@ -147,6 +170,7 @@
             state.currentRuleset = null;
         }
         renderRulesPreview();
+        syncAdvancedFromRuleset();
     }
 
     async function openFile(relativePath) {
@@ -376,13 +400,26 @@
         let html = '';
         for (let i = 0; i < rules.length; i++) {
             const rule = rules[i];
-            const aimFile = rule.aimFile || '?';
-            const actionCount = Array.isArray(rule.action) ? rule.action.length : 0;
+            const aimFile = rule.aimFile || 'no aimFile';
             let conds = rule.conditions;
             if (!conds && (rule.trigger || rule.aim)) conds = [rule];
-            const targetField = (conds && conds[0]) ? (conds[0].aim || '?') : '?';
-            html += '<div class="re-rule-summary">#' + (i + 1) + ' ' + escapeHtml(aimFile) + ' → ' +
-                escapeHtml(targetField) + ' [' + actionCount + ' ops]</div>';
+            let targetField = '?';
+            if (conds && conds[0]) {
+                targetField = conds[0].aim || (conds[0].trigger ? conds[0].trigger.aim : '') || '?';
+            }
+            let actionStr = '';
+            if (Array.isArray(rule.action) && rule.action.length) {
+                actionStr = rule.action.map(function (a) {
+                    if (a && 'from' in a && 'to' in a) return escapeHtml(String(a.from)) + '→' + escapeHtml(String(a.to));
+                    return escapeHtml(JSON.stringify(a));
+                }).join(', ');
+            }
+            html += '<div class="re-rule-summary">' +
+                '<span class="re-rule-index">#' + (i + 1) + '</span>' +
+                '<span class="re-rule-summary-text">' + escapeHtml(aimFile) + ' → ' + escapeHtml(targetField) +
+                (actionStr ? ' {' + actionStr + '}' : '') + '</span>' +
+                '<button class="re-btn re-btn-sm re-btn-danger re-remove-rule-btn" data-idx="' + i + '" title="移除规则">✕</button>' +
+                '</div>';
         }
         container.innerHTML = html;
     }
@@ -489,6 +526,7 @@
         const advContent = $i('re-content-advanced');
         if (simpleContent) simpleContent.style.display = mode === 'simple' ? '' : 'none';
         if (advContent) advContent.style.display = mode === 'advanced' ? '' : 'none';
+        if (mode === 'advanced' && !state.advancedEditor) initAdvancedMode();
         if (!skipContentRefresh) refreshContentPanel();
     }
 
@@ -526,24 +564,47 @@
         }
 
         const addCond = $i('re-add-condition-btn');
-        if (addCond) addCond.addEventListener('click', stubTask6('add condition'));
+        if (addCond) addCond.addEventListener('click', addConditionRow);
         const addOp = $i('re-add-op-btn');
-        if (addOp) addOp.addEventListener('click', stubTask6('add operation'));
+        if (addOp) addOp.addEventListener('click', addOperationRow);
         const previewBtn = $i('re-preview-rule-btn');
-        if (previewBtn) previewBtn.addEventListener('click', stubTask6('preview rule'));
+        if (previewBtn) previewBtn.addEventListener('click', previewRule);
         const genBtn = $i('re-generate-rule-btn');
-        if (genBtn) genBtn.addEventListener('click', stubTask6('generate rule'));
+        if (genBtn) genBtn.addEventListener('click', generateRule);
         const applyBtn = $i('re-apply-btn');
-        if (applyBtn) applyBtn.addEventListener('click', stubTask6('apply ruleset'));
+        if (applyBtn) applyBtn.addEventListener('click', onApplyRuleset);
         const smartBtn = $i('re-smart-gen-btn');
-        if (smartBtn) smartBtn.addEventListener('click', stubTask6('smart generate'));
+        if (smartBtn) smartBtn.addEventListener('click', openSmartGeneration);
+
+        const tplSel = $i('re-template-select');
+        if (tplSel) tplSel.addEventListener('change', onTemplateSelectChange);
+        const fmtBtn = $i('re-format-json-btn');
+        if (fmtBtn) fmtBtn.addEventListener('click', formatAdvancedContent);
+        const valBtn = $i('re-validate-btn');
+        if (valBtn) valBtn.addEventListener('click', validateAdvancedContent);
+
+        const opsCont = $i('re-simple-operations');
+        if (opsCont) opsCont.addEventListener('click', function (e) {
+            const btn = e.target.closest('.re-remove-op-btn');
+            if (btn) { const row = btn.closest('.re-operation-item'); if (row) row.remove(); }
+        });
+        const condCont = $i('re-simple-conditions');
+        if (condCont) condCont.addEventListener('click', function (e) {
+            const btn = e.target.closest('.re-remove-cond-btn');
+            if (btn) { const row = btn.closest('.re-condition-item'); if (row) row.remove(); }
+        });
+        const previewList = $i('re-rules-preview-list');
+        if (previewList) previewList.addEventListener('click', function (e) {
+            const btn = e.target.closest('.re-remove-rule-btn');
+            if (btn) { const idx = parseInt(btn.dataset.idx, 10); if (!isNaN(idx)) removeRule(idx); }
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && state.smartGenOverlay) closeSmartGenDialog();
+        });
 
         const simpleContent = $i('re-content-simple');
         if (simpleContent) simpleContent.addEventListener('click', onContentPanelClick);
-    }
-
-    function stubTask6(label) {
-        return function () { console.log('[rule-editor] ' + label + ' — Task 6 wires this'); };
     }
 
     function onContentPanelClick(e) {
@@ -598,12 +659,57 @@
         await loadRulesetByName(trimmed);
     }
 
-    function onSaveRuleset() {
-        console.log('[rule-editor] save ruleset — Task 6 wires form-aware save');
+    async function onSaveRuleset() {
+        if (!state.currentRuleset || !state.currentRuleset.name) {
+            showToast('没有可保存的规则集（请先选择或新建）', 'error');
+            return;
+        }
+        const api = getApi();
+        if (!api || !api.save_ruleset) return warnNoApi();
+        try {
+            const res = await api.save_ruleset(state.currentRuleset.name, state.currentRuleset);
+            if (res && res.success === false) showToast('保存失败: ' + (res.error || ''), 'error');
+            else showToast('规则集已保存', 'success');
+        } catch (e) {
+            showToast('保存异常: ' + (e && e.message ? e.message : e), 'error');
+        }
     }
 
-    function onDeleteRuleset() {
-        console.log('[rule-editor] delete ruleset — Task 6 wires confirm + delete');
+    async function onDeleteRuleset() {
+        if (!state.currentRuleset || !state.currentRuleset.name) return;
+        if (!window.confirm('确认删除规则集 "' + state.currentRuleset.name + '"？此操作不可撤销。')) return;
+        const api = getApi();
+        if (!api || !api.delete_ruleset) return warnNoApi();
+        try {
+            const res = await api.delete_ruleset(state.currentRuleset.name);
+            if (res && res.success === false) {
+                showToast('删除失败: ' + (res.error || ''), 'error');
+                return;
+            }
+            showToast('规则集已删除', 'success');
+            state.currentRuleset = null;
+            await loadRulesets();
+            renderRulesPreview();
+            syncAdvancedFromRuleset();
+        } catch (e) {
+            showToast('删除异常: ' + (e && e.message ? e.message : e), 'error');
+        }
+    }
+
+    async function onApplyRuleset() {
+        if (!state.currentRuleset || !state.currentRuleset.name) {
+            showToast('请先选择一个规则集', 'error');
+            return;
+        }
+        const api = getApi();
+        if (!api || !api.apply_ruleset) return warnNoApi();
+        try {
+            const res = await api.apply_ruleset(state.currentRuleset.name);
+            if (res && res.success) showToast('已应用: ' + (res.message || ''), 'success');
+            else showToast('应用失败: ' + ((res && res.message) || ''), 'error');
+        } catch (e) {
+            showToast('应用异常: ' + (e && e.message ? e.message : e), 'error');
+        }
     }
 
     /** selectField — store user's field selection into state and fill the simple-mode form targeting inputs. */
@@ -642,6 +748,854 @@
                 if (line) line.classList.add('is-selected');
             }
         }
+    }
+
+    function escapeRegex(s) {
+        return String(s == null ? '' : s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function filePatternFromSelection(selection) {
+        if (!selection) return '.*\\.json$';
+        if (CATEGORY_FILE_PATTERNS[selection]) return CATEGORY_FILE_PATTERNS[selection];
+        if (/[.*+?^${}()|[\]\\]/.test(selection)) return selection;
+        return escapeRegex(selection) + '.*\\.json$';
+    }
+
+    function categoryToPattern(catName) {
+        for (let i = 0; i < FILE_PREFIX_RULES.length; i++) {
+            if (FILE_PREFIX_RULES[i][1] === catName) {
+                const prefix = FILE_PREFIX_RULES[i][0];
+                return CATEGORY_FILE_PATTERNS[prefix] || (escapeRegex(prefix) + '.*\\.json$');
+            }
+        }
+        if (CATEGORY_FILE_PATTERNS[catName]) return CATEGORY_FILE_PATTERNS[catName];
+        return escapeRegex(catName) + '.*\\.json$';
+    }
+
+    /** initSimpleFileSelect — populate #re-simple-file, preferring autocomplete data; cache it. */
+    async function initSimpleFileSelect() {
+        const sel = $i('re-simple-file');
+        if (!sel) return;
+        const api = getApi();
+        if (api && api.get_autocomplete_data) {
+            try {
+                const data = await api.get_autocomplete_data();
+                if (data && data.file_patterns) state.autocomplete = data;
+            } catch (e) {
+                console.warn('[rule-editor] get_autocomplete_data failed', e);
+            }
+        }
+        if (!state.autocomplete) state.autocomplete = localAutocompleteFallback();
+        const prefixToCategory = {};
+        for (let i = 0; i < FILE_PREFIX_RULES.length; i++) prefixToCategory[FILE_PREFIX_RULES[i][0]] = FILE_PREFIX_RULES[i][1];
+        const fps = (state.autocomplete && state.autocomplete.file_patterns) ? state.autocomplete.file_patterns : [];
+        if (!fps.length) { populateSimpleFileSelect(); return; }
+        let opts = ['<option value="">-- 选择文件分类 --</option>'];
+        const seen = {};
+        for (let i = 0; i < fps.length; i++) {
+            const key = fps[i].label || '';
+            if (!key || seen[key]) continue;
+            seen[key] = true;
+            const display = prefixToCategory[key] || key;
+            opts.push('<option value="' + escapeAttr(key) + '">' + escapeHtml(display) + '</option>');
+        }
+        sel.innerHTML = opts.join('');
+    }
+
+    function localAutocompleteFallback() {
+        const fps = [];
+        for (let i = 0; i < FILE_PREFIX_RULES.length; i++) {
+            const prefix = FILE_PREFIX_RULES[i][0];
+            const value = CATEGORY_FILE_PATTERNS[prefix] || (prefix + '.*\\.json$');
+            fps.push({ label: prefix, value: value });
+        }
+        return {
+            file_patterns: fps,
+            common_replacements: [
+                { from: '大于', to: '>' }, { from: '小于', to: '<' },
+                { from: '不低于', to: '≥' }, { from: '不高于', to: '≤' },
+                { from: '自身', to: '<u><color=#7C5738>自身</color></u>' },
+                { from: '目标', to: '<u><color=#7C5738>目标</color></u>' },
+                { from: '护盾', to: '<u><color=#81BBE8>护盾</color></u>' },
+                { from: '体力', to: '<u><color=#61DA61>体力</color></u>' }
+            ]
+        };
+    }
+
+    function buildFormData() {
+        const fileSel = $i('re-simple-file');
+        const fileCustom = $i('re-simple-file-custom');
+        let file_pattern = '';
+        if (fileCustom && fileCustom.value.trim()) file_pattern = fileCustom.value.trim();
+        else if (fileSel) file_pattern = fileSel.value || '';
+        const useId = $i('re-simple-use-id');
+        const useIdChecked = !!(useId && useId.checked);
+        const idEl = $i('re-simple-item-id');
+        let item_ids = [];
+        if (useIdChecked && idEl && idEl.value.trim()) {
+            item_ids = idEl.value.split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s.length; }).map(function (s) {
+                const n = Number(s);
+                return isNaN(n) ? s : n;
+            });
+        }
+        const fieldEl = $i('re-simple-field');
+        const field_path = fieldEl ? (fieldEl.value.trim() || 'desc') : 'desc';
+        return {
+            file_pattern: file_pattern,
+            item_ids: item_ids,
+            field_path: field_path,
+            operations: readOperationRows(),
+            extra_conditions: readConditionRows()
+        };
+    }
+
+    function readOperationRows() {
+        const cont = $i('re-simple-operations');
+        if (!cont) return [];
+        const rows = cont.querySelectorAll('.re-operation-item');
+        const out = [];
+        for (let i = 0; i < rows.length; i++) {
+            const fromEl = rows[i].querySelector('.re-op-from');
+            const toEl = rows[i].querySelector('.re-op-to');
+            const from = fromEl ? fromEl.value : '';
+            const to = toEl ? toEl.value : '';
+            if (from.length || to.length) out.push({ from: from, to: to });
+        }
+        return out;
+    }
+
+    function readConditionRows() {
+        const cont = $i('re-simple-conditions');
+        if (!cont) return [];
+        const rows = cont.querySelectorAll('.re-condition-item');
+        const out = [];
+        for (let i = 0; i < rows.length; i++) {
+            const fieldEl = rows[i].querySelector('.re-cond-field');
+            const patEl = rows[i].querySelector('.re-cond-pattern');
+            const field = fieldEl ? fieldEl.value : '';
+            const pattern = patEl ? patEl.value : '';
+            if (field && pattern) out.push({ field: field, pattern: pattern });
+        }
+        return out;
+    }
+
+    function buildRuleLocally(form) {
+        const aim_file = filePatternFromSelection(form.file_pattern || '');
+        const item_ids = form.item_ids || [];
+        const field_path = form.field_path || 'desc';
+        const operations = form.operations || [];
+        const extra_conditions = form.extra_conditions || [];
+        const conditions = [];
+        if (item_ids.length) {
+            const idPattern = '^(' + item_ids.map(function (i) { return escapeRegex(String(i)); }).join('|') + ')$';
+            conditions.push({
+                trigger: { aim: 'dataList\\.\\d+\\.id', re: idPattern },
+                aim: '[back].' + field_path
+            });
+        } else {
+            conditions.push({ aim: 'dataList\\.\\d+\\.' + escapeRegex(field_path) });
+        }
+        for (let i = 0; i < extra_conditions.length; i++) {
+            const ec = extra_conditions[i];
+            if (ec.field && ec.pattern) {
+                conditions.push({
+                    trigger: { aim: 'dataList\\.\\d+\\.' + escapeRegex(ec.field), re: ec.pattern },
+                    aim: '[back].' + field_path
+                });
+            }
+        }
+        const action = operations.map(function (op) { return { from: op.from, to: op.to }; });
+        return { aimFile: aim_file, conditions: conditions, action: action };
+    }
+
+    function validateRuleLocally(rule) {
+        const errors = [];
+        if (!rule || typeof rule !== 'object') return { valid: false, errors: ['规则必须是 JSON 对象'] };
+        if (!rule.aimFile) errors.push('缺少 aimFile 字段（文件匹配模式）');
+        const conds = rule.conditions || [];
+        if (!conds.length && !rule.aim && !rule.trigger) errors.push('缺少 conditions 或 aim 字段（定位条件）');
+        const action = rule.action || [];
+        if (!action.length) errors.push('缺少 action 字段（操作列表）');
+        else {
+            for (let i = 0; i < action.length; i++) {
+                const a = action[i];
+                if (!a || typeof a !== 'object') errors.push('action[' + i + '] 不是有效的操作对象');
+                else if ('from' in a && !('to' in a)) errors.push('action[' + i + '] 有 from 但缺少 to');
+                else if ('to' in a && !('from' in a)) errors.push('action[' + i + '] 有 to 但缺少 from');
+            }
+        }
+        try { new RegExp(rule.aimFile || ''); } catch (e) { errors.push('aimFile 正则语法错误: ' + e.message); }
+        return { valid: errors.length === 0, errors: errors };
+    }
+
+    async function previewRule() {
+        const form = buildFormData();
+        let rule = null;
+        const api = getApi();
+        if (api && api.build_rule_from_form) {
+            try { rule = await api.build_rule_from_form(form); }
+            catch (e) { console.warn('[rule-editor] build_rule_from_form failed, local fallback', e); rule = null; }
+        }
+        if (!rule) rule = buildRuleLocally(form);
+        state.lastPreviewRule = rule;
+        const pre = $i('re-simple-preview-content');
+        const wrap = $i('re-simple-preview');
+        if (pre) pre.textContent = JSON.stringify(rule, null, 2);
+        if (wrap) wrap.style.display = '';
+        return rule;
+    }
+
+    async function generateRule() {
+        const rule = await previewRule();
+        if (!rule) return;
+        let valid = true, errors = [];
+        const api = getApi();
+        if (api && api.validate_rule) {
+            try {
+                const r = await api.validate_rule(JSON.stringify(rule));
+                valid = !!(r && r.valid);
+                errors = (r && r.errors) ? r.errors : [];
+            } catch (e) { console.warn(e); }
+        } else {
+            const r = validateRuleLocally(rule);
+            valid = r.valid; errors = r.errors;
+        }
+        if (!valid) {
+            showToast('规则验证失败: ' + (errors.join('; ') || '未知错误'), 'error');
+            return;
+        }
+        if (!state.currentRuleset) {
+            showToast('请先选择或新建一个规则集', 'error');
+            return;
+        }
+        if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
+        state.currentRuleset.rules.push(rule);
+        renderRulesPreview();
+        syncAdvancedFromRuleset();
+        await persistCurrentRuleset();
+        showToast('已添加规则到当前规则集', 'success');
+    }
+
+    async function persistCurrentRuleset() {
+        if (!state.currentRuleset || !state.currentRuleset.name) return;
+        const api = getApi();
+        if (!api || !api.save_ruleset) return;
+        try { await api.save_ruleset(state.currentRuleset.name, state.currentRuleset); }
+        catch (e) { console.error('[rule-editor] persist failed:', e); }
+    }
+
+    function removeRule(index) {
+        if (!state.currentRuleset || !Array.isArray(state.currentRuleset.rules)) return;
+        if (index < 0 || index >= state.currentRuleset.rules.length) return;
+        state.currentRuleset.rules.splice(index, 1);
+        renderRulesPreview();
+        syncAdvancedFromRuleset();
+        persistCurrentRuleset();
+    }
+
+    function addConditionRow() {
+        const cont = $i('re-simple-conditions');
+        if (!cont) return;
+        const fields = ['id', 'name', 'desc', 'dlg', 'text', 'title', 'comment', 'keyword'];
+        let opts = '';
+        for (let i = 0; i < fields.length; i++) {
+            opts += '<option value="' + escapeAttr(fields[i]) + '">' + escapeHtml(fields[i]) + '</option>';
+        }
+        const row = document.createElement('div');
+        row.className = 're-condition-item';
+        row.innerHTML = '<select class="re-cond-field">' + opts + '</select>' +
+            '<input type="text" class="re-cond-pattern" placeholder="匹配正则">' +
+            '<button class="re-btn re-btn-sm re-remove-cond-btn">✕</button>';
+        cont.appendChild(row);
+    }
+
+    function addOperationRow() {
+        const cont = $i('re-simple-operations');
+        if (!cont) return;
+        const row = document.createElement('div');
+        row.className = 're-operation-item';
+        row.innerHTML = '<input type="text" placeholder="查找" class="re-op-from">' +
+            '<span>→</span>' +
+            '<input type="text" placeholder="替换为" class="re-op-to">' +
+            '<button class="re-btn re-btn-sm re-remove-op-btn">✕</button>';
+        cont.appendChild(row);
+    }
+
+    function initAdvancedMode() {
+        if (state.advancedEditor) return state.advancedEditor;
+        const container = $i('re-advanced-editor');
+        if (!container) return null;
+        if (!window.CodeMirror || !window.CodeMirror.EditorView) {
+            console.warn('[rule-editor] CodeMirror not loaded; advanced editor disabled');
+            return null;
+        }
+        const CM = window.CodeMirror;
+        try {
+            state.advancedEditor = new CM.EditorView({
+                doc: '{}',
+                extensions: [CM.basicSetup, CM.json()],
+                parent: container
+            });
+        } catch (e) {
+            console.error('[rule-editor] initAdvancedMode failed:', e);
+            state.advancedEditor = null;
+            return null;
+        }
+        if (state.currentRuleset) {
+            try { setAdvancedEditorDoc(JSON.stringify(state.currentRuleset, null, 2)); } catch (err) { void err; }
+        }
+        return state.advancedEditor;
+    }
+
+    function setAdvancedEditorDoc(text) {
+        const view = initAdvancedMode();
+        if (!view) return;
+        const len = view.state.doc.length;
+        view.dispatch({ changes: { from: 0, to: len, insert: text || '' } });
+    }
+
+    function getAdvancedContent() {
+        if (!state.advancedEditor) initAdvancedMode();
+        const v = state.advancedEditor;
+        if (!v) return null;
+        const text = v.state.doc.toString();
+        try { return JSON.parse(text); }
+        catch (e) {
+            const res = $i('re-validation-result');
+            if (res) { res.className = 'invalid'; res.textContent = '❌ JSON 解析错误: ' + e.message; }
+            return null;
+        }
+    }
+
+    function validateAdvancedContent() {
+        const parsed = getAdvancedContent();
+        if (parsed == null) return;
+        const api = getApi();
+        const run = async function () {
+            let result;
+            if (api && api.validate_rule) {
+                try { result = await api.validate_rule(JSON.stringify(parsed)); }
+                catch (e) { console.warn(e); result = validateRuleLocally(parsed); }
+            } else {
+                result = validateRuleLocally(parsed);
+            }
+            const res = $i('re-validation-result');
+            if (!res) return;
+            if (result && result.valid) {
+                res.className = 'valid'; res.textContent = '✓ 有效';
+            } else {
+                res.className = 'invalid';
+                const errs = (result && result.errors) ? result.errors : ['未知错误'];
+                res.innerHTML = '❌ 无效<ul style="margin:4px 0 0 16px;">' +
+                    errs.map(function (e) { return '<li>' + escapeHtml(e) + '</li>'; }).join('') + '</ul>';
+            }
+        };
+        run();
+    }
+
+    function formatAdvancedContent() {
+        const parsed = getAdvancedContent();
+        if (parsed == null) return;
+        setAdvancedEditorDoc(JSON.stringify(parsed, null, 2));
+        const res = $i('re-validation-result');
+        if (res) { res.className = ''; res.textContent = '已格式化'; }
+    }
+
+    function syncAdvancedFromRuleset() {
+        if (!state.advancedEditor) return;
+        let doc = '{}';
+        if (state.currentRuleset) {
+            try { doc = JSON.stringify(state.currentRuleset, null, 2); } catch (e) { doc = '{}'; }
+        }
+        setAdvancedEditorDoc(doc);
+    }
+
+    async function loadTemplates() {
+        const sel = $i('re-template-select');
+        if (!sel) return;
+        let templates = [];
+        const api = getApi();
+        if (api && api.get_templates) {
+            try { const t = await api.get_templates(); if (Array.isArray(t)) templates = t; }
+            catch (e) { console.warn(e); templates = localTemplates(); }
+        } else {
+            templates = localTemplates();
+        }
+        state.templates = templates;
+        let opts = ['<option value="">📋 模板...</option>'];
+        for (let i = 0; i < templates.length; i++) {
+            opts.push('<option value="' + escapeAttr(String(i)) + '">' +
+                escapeHtml(templates[i].name || ('模板 ' + (i + 1))) + '</option>');
+        }
+        sel.innerHTML = opts.join('');
+    }
+
+    function localTemplates() {
+        return [
+            { name: '空规则集', template: { name: '', desc: '', rules: [] } },
+            { name: '简单文本替换', template: { name: '', desc: '', rules: [{
+                aimFile: 'Skill.*\\.json$',
+                conditions: [{ aim: 'dataList\\.\\d+\\.desc' }],
+                action: [{ from: '查找', to: '替换' }]
+            }] } },
+            { name: '按ID定位替换', template: { name: '', desc: '', rules: [{
+                aimFile: 'Skill.*\\.json$',
+                conditions: [{ trigger: { aim: 'dataList\\.\\d+\\.id', re: '^10001$' }, aim: '[back].desc' }],
+                action: [{ from: '查找', to: '替换' }]
+            }] } },
+            { name: '颜色渐变', template: { name: '', desc: '', rules: [{
+                aimFile: 'BattleSpeechBubbleDlg.*\\.json$',
+                conditions: [{ aim: 'dataList\\.\\d+\\.dlg' }],
+                action: [{ rate: 0.4 }]
+            }] } }
+        ];
+    }
+
+    function onTemplateSelectChange() {
+        const sel = $i('re-template-select');
+        if (!sel || !sel.value) return;
+        const idx = parseInt(sel.value, 10);
+        if (isNaN(idx) || !state.templates || !state.templates[idx]) return;
+        const tpl = state.templates[idx].template;
+        let doc;
+        try { doc = JSON.stringify(tpl, null, 2); } catch (e) { doc = '{}'; }
+        setAdvancedEditorDoc(doc);
+        const res = $i('re-validation-result');
+        if (res) { res.className = ''; res.textContent = '已加载模板: ' + state.templates[idx].name; }
+    }
+
+    async function openSmartGeneration() {
+        const api = getApi();
+        if (!state.smartChanges) state.smartChanges = [];
+        let groups = null;
+        if (api && api.analyze_changes) {
+            try {
+                const res = await api.analyze_changes(state.smartChanges);
+                if (res && Array.isArray(res.groups)) groups = res.groups;
+            } catch (e) { console.warn('[rule-editor] analyze_changes failed', e); groups = null; }
+        }
+        if (!groups) groups = analyzeChangesLocally(state.smartChanges);
+        showSmartGenDialog(groups);
+    }
+
+    function showSmartGenDialog(groups) {
+        closeSmartGenDialog();
+        const overlay = document.createElement('div');
+        overlay.className = 're-overlay';
+        state.smartGenOverlay = overlay;
+        state.smartGenGroups = groups || [];
+
+        let bodyHtml;
+        if (!groups || !groups.length) {
+            bodyHtml = '<div class="re-empty-state">' +
+                '<i class="fas fa-info-circle"></i>' +
+                '未检测到修改。可在下方粘贴一个 JSON 数组（每项含 file, field_path, item_id, old_val, new_val）进行分析。<br>' +
+                '<textarea id="re-smart-changes-input" style="width:100%;min-height:120px;font-family:Consolas,monospace;font-size:12px;margin-top:8px;padding:6px;border-radius:6px;border:1px solid var(--color-border);"></textarea>' +
+                '<button class="re-btn re-btn-primary re-btn-sm" id="re-smart-parse-btn" style="margin-top:6px;">解析并分析</button>' +
+                '</div>';
+        } else {
+            bodyHtml = '';
+            for (let i = 0; i < groups.length; i++) bodyHtml += renderSmartGroupCard(groups[i], i);
+            bodyHtml += '<div style="text-align:right;margin-top:8px;">' +
+                '<button class="re-btn re-btn-accent re-btn-sm" id="re-gen-all-btn">✅ 一键应用所有推荐</button></div>';
+        }
+
+        overlay.innerHTML =
+            '<div class="re-smart-gen-dialog">' +
+            '<div class="re-smart-gen-header"><h3><i class="fas fa-brain"></i> 智能生成规则集</h3>' +
+            '<button class="re-btn re-btn-sm" id="re-smart-close-btn">✕</button></div>' +
+            '<div class="re-smart-gen-body">' + bodyHtml + '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        const closeBtn = overlay.querySelector('#re-smart-close-btn');
+        if (closeBtn) closeBtn.addEventListener('click', closeSmartGenDialog);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) closeSmartGenDialog(); });
+        const parseBtn = overlay.querySelector('#re-smart-parse-btn');
+        if (parseBtn) parseBtn.addEventListener('click', reparseSmartChanges);
+        const genAllBtn = overlay.querySelector('#re-gen-all-btn');
+        if (genAllBtn) genAllBtn.addEventListener('click', generateAllSmart);
+        const previewBtns = overlay.querySelectorAll('.re-smart-preview-btn');
+        for (let i = 0; i < previewBtns.length; i++) {
+            previewBtns[i].addEventListener('click', (function (idx) {
+                return function () { previewSmartGroup(state.smartGenGroups[idx]); };
+            })(parseInt(previewBtns[i].dataset.idx, 10)));
+        }
+        const applyBtns = overlay.querySelectorAll('.re-smart-apply-btn');
+        for (let i = 0; i < applyBtns.length; i++) {
+            applyBtns[i].addEventListener('click', (function (idx) {
+                return function () { applySmartGroup(state.smartGenGroups[idx]); };
+            })(parseInt(applyBtns[i].dataset.idx, 10)));
+        }
+    }
+
+    function renderSmartGroupCard(group, idx) {
+        const score = group.score || {};
+        const priority = score.priority || 0;
+        let tier, tierLabel, badgeCls;
+        if (priority >= 70) { tier = '🟢'; tierLabel = '推荐'; badgeCls = 're-score-green'; }
+        else if (priority >= 40) { tier = '🟡'; tierLabel = '可选'; badgeCls = 're-score-yellow'; }
+        else { tier = '🔴'; tierLabel = '需审查'; badgeCls = 're-score-red'; }
+
+        let html = '<div class="re-smart-gen-group" data-group-idx="' + idx + '">';
+        html += '<h4>组 #' + (idx + 1) + ' — ' + tier + ' ' + escapeHtml(tierLabel) +
+            ' <span class="re-score-badge ' + badgeCls + '">' + priority + '分</span></h4>';
+        if (group.change_type) html += '<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">类型: ' + escapeHtml(group.change_type) + '</div>';
+        if (group.summary) html += '<div style="margin-bottom:6px;font-size:13px;">💡 ' + escapeHtml(group.summary) + '</div>';
+        if (group.action_preview && group.action_preview.length) {
+            html += '<div class="re-group-patterns">';
+            for (let i = 0; i < group.action_preview.length; i++) {
+                const ap = group.action_preview[i];
+                html += '<span class="re-pattern-pair">' + escapeHtml(String(ap.from || '')) +
+                    ' → ' + escapeHtml(String(ap.to || '')) + '</span>';
+            }
+            html += '</div>';
+        }
+        if (group.suggestions && group.suggestions.length) {
+            html += '<ul style="margin:4px 0 8px 18px;font-size:12px;color:var(--color-text-secondary);">';
+            for (let i = 0; i < group.suggestions.length; i++) html += '<li>' + escapeHtml(group.suggestions[i]) + '</li>';
+            html += '</ul>';
+        }
+        html += renderL1(group.l1_options, idx);
+        html += renderL2(group.l2_options, idx);
+        html += renderL3(group.l3_options, idx);
+        html += renderL4(group.l4_options, idx);
+        html += '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">' +
+            '<button class="re-btn re-btn-sm re-smart-edit-btn">✏ 编辑范围</button>' +
+            '<button class="re-btn re-btn-sm re-smart-preview-btn" data-idx="' + idx + '">📋 预览JSON</button>' +
+            '<button class="re-btn re-btn-sm re-btn-success re-smart-apply-btn" data-idx="' + idx + '">✅ 生成此规则</button>' +
+            '</div>';
+        html += '<pre class="re-smart-preview-out" style="display:none;margin-top:6px;font-size:12px;background:var(--color-bg-primary);padding:8px;border-radius:6px;overflow:auto;max-height:200px;white-space:pre-wrap;"></pre>';
+        html += '</div>';
+        return html;
+    }
+
+    function renderL1(l1, scopeId) {
+        if (!l1) return '';
+        let html = '<div class="re-tier-label">L1 文件范围</div>';
+        const suggested = l1.suggested || 'category';
+        const opts = [
+            { val: 'all', text: '全部文件' },
+            { val: 'category', text: '按分类筛选' },
+            { val: 'exact', text: '精确文件' },
+            { val: 'custom', text: '自定义正则' }
+        ];
+        for (let i = 0; i < opts.length; i++) {
+            const checked = (opts[i].val === suggested) ? 'checked' : '';
+            html += '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l1-' + scopeId +
+                '" value="' + opts[i].val + '" ' + checked + '><span class="re-tier-text">' + opts[i].text + '</span></label>';
+        }
+        if (l1.categories && l1.categories.length) {
+            html += '<div class="re-tier-checks">';
+            for (let i = 0; i < l1.categories.length; i++) {
+                const c = l1.categories[i];
+                const ck = c.selected ? 'checked' : '';
+                html += '<label class="re-checkbox"><input type="checkbox" class="re-l1-cat" value="' +
+                    escapeAttr(c.name) + '" ' + ck + '> ' + escapeHtml(c.name) + ' (' + c.count + ')</label>';
+            }
+            html += '</div>';
+        }
+        html += '<div class="re-tier-hint"><input type="text" class="re-l1-custom" placeholder="自定义正则" style="width:80%;"></div>';
+        if (l1.exact_files && l1.exact_files.length) {
+            html += '<div class="re-tier-hint">精确文件: ' + escapeHtml(l1.exact_files.join(', ')) + '</div>';
+        }
+        return html;
+    }
+
+    function renderL2(l2, scopeId) {
+        if (!l2) return '';
+        let html = '<div class="re-tier-label">L2 条目定位</div>';
+        const suggested = l2.suggested || (l2.item_ids && l2.item_ids.length ? 'id' : 'full_text');
+        const opts = [
+            { val: 'full_text', text: '全文匹配（对所有 dataList 项生效）' },
+            { val: 'id', text: '按 id 定位' }
+        ];
+        for (let i = 0; i < opts.length; i++) {
+            const checked = (opts[i].val === suggested) ? 'checked' : '';
+            html += '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l2-' + scopeId +
+                '" value="' + opts[i].val + '" ' + checked + '><span class="re-tier-text">' + opts[i].text + '</span></label>';
+        }
+        const idsStr = (l2.item_ids || []).join(',');
+        html += '<div class="re-tier-hint"><input type="text" class="re-l2-ids" placeholder="ID 列表（逗号分隔）" value="' +
+            escapeAttr(idsStr) + '" style="width:80%;"></div>';
+        return html;
+    }
+
+    function renderL3(l3, scopeId) {
+        if (!l3) return '';
+        let html = '<div class="re-tier-label">L3 字段约束</div>';
+        const suggested = l3.suggested || 'restricted';
+        const opts = [
+            { val: 'restricted', text: '限定字段' },
+            { val: 'all_text', text: '所有文本字段' }
+        ];
+        for (let i = 0; i < opts.length; i++) {
+            const checked = (opts[i].val === suggested) ? 'checked' : '';
+            html += '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l3-' + scopeId +
+                '" value="' + opts[i].val + '" ' + checked + '><span class="re-tier-text">' + opts[i].text + '</span></label>';
+        }
+        if (l3.fields && l3.fields.length) {
+            html += '<div class="re-tier-checks">';
+            for (let i = 0; i < l3.fields.length; i++) {
+                const ck = (l3.fields.length === 1) ? 'checked' : '';
+                html += '<label class="re-checkbox"><input type="checkbox" class="re-l3-field" value="' +
+                    escapeAttr(l3.fields[i]) + '" ' + ck + '> ' + escapeHtml(l3.fields[i]) + '</label>';
+            }
+            html += '</div>';
+        }
+        return html;
+    }
+
+    function renderL4(l4, scopeId) {
+        if (!l4) return '';
+        let html = '<div class="re-tier-label">L4 额外条件</div>';
+        const suggested = l4.suggested || 'exact';
+        const opts = [
+            { val: 'exact', text: '完整匹配（避免误替换）' },
+            { val: 'none', text: '无额外条件' },
+            { val: 'custom', text: '自定义' }
+        ];
+        for (let i = 0; i < opts.length; i++) {
+            const checked = (opts[i].val === suggested) ? 'checked' : '';
+            html += '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l4-' + scopeId +
+                '" value="' + opts[i].val + '" ' + checked + '><span class="re-tier-text">' + opts[i].text + '</span></label>';
+        }
+        html += '<div class="re-tier-checks">' +
+            '<input type="text" class="re-l4-field" placeholder="字段" style="width:32%;padding:4px 8px;"> ' +
+            '<input type="text" class="re-l4-pattern" placeholder="匹配正则" style="width:48%;padding:4px 8px;">' +
+            '</div>';
+        return html;
+    }
+
+    function previewSmartGroup(group) {
+        const idx = state.smartGenGroups ? state.smartGenGroups.indexOf(group) : -1;
+        if (idx < 0 || !state.smartGenOverlay) return;
+        const card = state.smartGenOverlay.querySelector('.re-smart-gen-group[data-group-idx="' + idx + '"]');
+        if (!card) return;
+        const sel = readSmartSelections(card, idx);
+        const rules = buildSmartGroupRules(group, sel);
+        const out = card.querySelector('.re-smart-preview-out');
+        if (!out) return;
+        out.textContent = JSON.stringify(rules, null, 2);
+        out.style.display = '';
+    }
+
+    async function applySmartGroup(group) {
+        if (!group) return;
+        const idx = state.smartGenGroups ? state.smartGenGroups.indexOf(group) : -1;
+        if (idx < 0) { showToast('找不到该组', 'error'); return; }
+        if (!state.smartGenOverlay) return;
+        const card = state.smartGenOverlay.querySelector('.re-smart-gen-group[data-group-idx="' + idx + '"]');
+        if (!card) { showToast('找不到组的 DOM', 'error'); return; }
+        const sel = readSmartSelections(card, idx);
+        const rules = buildSmartGroupRules(group, sel);
+        if (!rules || !rules.length) { showToast('未能从该组生成规则', 'error'); return; }
+        if (!state.currentRuleset) { showToast('请先选择或新建一个规则集', 'error'); return; }
+        if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
+        for (let i = 0; i < rules.length; i++) state.currentRuleset.rules.push(rules[i]);
+        renderRulesPreview();
+        syncAdvancedFromRuleset();
+        await persistCurrentRuleset();
+        showToast('已添加 ' + rules.length + ' 条规则', 'success');
+    }
+
+    function readSmartSelections(card, idx) {
+        const sel = {};
+        function radio(name) {
+            const nodes = card.querySelectorAll('input[name="' + name + '"]');
+            for (let i = 0; i < nodes.length; i++) if (nodes[i].checked) return nodes[i].value;
+            return '';
+        }
+        function val(selector) {
+            const el = card.querySelector(selector);
+            return (el && el.value) ? el.value : '';
+        }
+        sel.l1 = radio('l1-' + idx);
+        sel.l2 = radio('l2-' + idx);
+        sel.l3 = radio('l3-' + idx);
+        sel.l4 = radio('l4-' + idx);
+        sel.l1Categories = [];
+        const catNodes = card.querySelectorAll('.re-l1-cat');
+        for (let i = 0; i < catNodes.length; i++) if (catNodes[i].checked) sel.l1Categories.push(catNodes[i].value);
+        sel.l1Custom = val('.re-l1-custom');
+        sel.l2Ids = val('.re-l2-ids').split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s.length; });
+        sel.l3Fields = [];
+        const fNodes = card.querySelectorAll('.re-l3-field');
+        for (let i = 0; i < fNodes.length; i++) if (fNodes[i].checked) sel.l3Fields.push(fNodes[i].value);
+        sel.l4Field = val('.re-l4-field');
+        sel.l4Pattern = val('.re-l4-pattern');
+        return sel;
+    }
+
+    function buildSmartGroupRules(group, sel) {
+        const rules = [];
+        const actionPreview = group.action_preview || [];
+        if (!actionPreview.length) return rules;
+
+        let aimFile;
+        if (sel.l1 === 'all') aimFile = '.*\\.json$';
+        else if (sel.l1 === 'custom') aimFile = sel.l1Custom || '.*\\.json$';
+        else if (sel.l1 === 'exact') {
+            const files = (group.l1_options && group.l1_options.exact_files) || [];
+            const pats = files.map(function (f) { return escapeRegex(f) + '\\.json$'; });
+            aimFile = pats.length ? pats.join('|') : '.*\\.json$';
+        } else if (sel.l1 === 'category') {
+            const cats = sel.l1Categories.length ? sel.l1Categories :
+                ((group.l1_options && group.l1_options.categories) || []).map(function (c) { return c.name; });
+            const pats = cats.map(categoryToPattern);
+            aimFile = pats.length ? pats.join('|') : '.*\\.json$';
+        } else { aimFile = '.*\\.json$'; }
+
+        let fields = sel.l3Fields.slice();
+        if (!fields.length) fields = ((group.l3_options && group.l3_options.fields) || []).slice();
+        if (!fields.length) fields = ['desc'];
+
+        const useId = sel.l2 === 'id' && sel.l2Ids && sel.l2Ids.length;
+        const idPattern = useId ? '^(' + sel.l2Ids.map(function (i) { return escapeRegex(String(i)); }).join('|') + ')$' : '';
+        const exact = sel.l4 === 'exact';
+        const customCond = (sel.l4 === 'custom' && sel.l4Field && sel.l4Pattern);
+
+        rules.push(buildSmartRule(aimFile, fields, useId, idPattern, exact, customCond, sel, actionPreview));
+        return rules;
+    }
+
+    function buildSmartRule(aimFile, fields, useId, idPattern, exact, customCond, sel, actionPreview) {
+        const conditions = [];
+        for (let i = 0; i < fields.length; i++) {
+            const f = fields[i] || 'desc';
+            if (useId) {
+                conditions.push({
+                    trigger: { aim: 'dataList\\.\\d+\\.id', re: idPattern },
+                    aim: '[back].' + f
+                });
+            } else {
+                conditions.push({ aim: 'dataList\\.\\d+\\.' + escapeRegex(f) });
+            }
+        }
+        if (customCond) {
+            conditions.push({
+                trigger: { aim: 'dataList\\.\\d+\\.' + escapeRegex(sel.l4Field), re: sel.l4Pattern },
+                aim: '[back].' + (fields[0] || 'desc')
+            });
+        }
+        const action = [];
+        for (let i = 0; i < actionPreview.length; i++) {
+            const ap = actionPreview[i];
+            const from = exact ? ('^' + ap.from + '$') : ap.from;
+            action.push({ from: from, to: ap.to });
+        }
+        return { aimFile: aimFile, conditions: conditions, action: action };
+    }
+
+    async function generateAllSmart() {
+        const groups = state.smartGenGroups || [];
+        if (!groups.length) { showToast('没有可应用的组', 'error'); return; }
+        let count = 0;
+        for (let i = 0; i < groups.length; i++) {
+            await applySmartGroup(groups[i]);
+            count++;
+        }
+        showToast('已应用 ' + count + ' 个组的推荐规则', 'success');
+    }
+
+    async function reparseSmartChanges() {
+        if (!state.smartGenOverlay) return;
+        const ta = state.smartGenOverlay.querySelector('#re-smart-changes-input');
+        if (!ta) return;
+        let arr = [];
+        try {
+            arr = JSON.parse(ta.value || '[]');
+            if (!Array.isArray(arr)) arr = [];
+        } catch (e) {
+            showToast('JSON 解析失败: ' + e.message, 'error');
+            return;
+        }
+        state.smartChanges = arr;
+        let groups = null;
+        const api = getApi();
+        if (api && api.analyze_changes) {
+            try { const res = await api.analyze_changes(arr); if (res && Array.isArray(res.groups)) groups = res.groups; }
+            catch (e) { groups = null; }
+        }
+        if (!groups) groups = analyzeChangesLocally(arr);
+        closeSmartGenDialog();
+        showSmartGenDialog(groups);
+    }
+
+    function closeSmartGenDialog() {
+        if (state.smartGenOverlay && state.smartGenOverlay.parentNode) {
+            state.smartGenOverlay.parentNode.removeChild(state.smartGenOverlay);
+        }
+        state.smartGenOverlay = null;
+        state.smartGenGroups = null;
+    }
+
+    function analyzeChangesLocally(changes) {
+        if (!changes || !changes.length) return [];
+        const buckets = {};
+        const order = [];
+        for (let i = 0; i < changes.length; i++) {
+            const c = changes[i];
+            const key = String(c.old_val) + '::' + String(c.new_val);
+            if (!buckets[key]) { buckets[key] = []; order.push(key); }
+            buckets[key].push(c);
+        }
+        const groups = [];
+        for (let i = 0; i < order.length; i++) {
+            const items = buckets[order[i]];
+            const first = items[0];
+            const files = uniqArr(items.map(function (c) { return c.file; }));
+            const itemIds = uniqArr(items.map(function (c) { return c.item_id; }).filter(function (v) { return v != null && v !== ''; }));
+            const fieldPaths = uniqArr(items.map(function (c) { return c.field_path; }));
+            const cats = {};
+            for (let j = 0; j < files.length; j++) {
+                const cc = classifyPath(files[j]).category;
+                cats[cc] = (cats[cc] || 0) + 1;
+            }
+            const catList = Object.keys(cats).map(function (k) { return { name: k, count: cats[k], selected: true }; });
+            const priority = Math.min(80, 30 + items.length * 5);
+            groups.push({
+                change_type: 'PURE_REPLACE',
+                summary: '检测到 ' + items.length + ' 处相同替换 (' + first.old_val + ' → ' + first.new_val + ')',
+                suggestions: [],
+                action_preview: [{ from: first.old_val, to: first.new_val }],
+                file_count: files.length, item_count: itemIds.length, occurrence_count: items.length,
+                l1_options: { suggested: catList.length <= 2 ? 'category' : 'multi_category', categories: catList, exact_files: files },
+                l2_options: { suggested: itemIds.length ? 'id' : 'full_text', item_ids: itemIds },
+                l3_options: { suggested: fieldPaths.length === 1 ? 'restricted' : 'all_text', fields: fieldPaths },
+                l4_options: { suggested: 'exact' },
+                score: { priority: priority }
+            });
+        }
+        return groups;
+    }
+
+    function uniqArr(arr) {
+        const seen = {}; const out = [];
+        for (let i = 0; i < arr.length; i++) {
+            const k = String(arr[i]);
+            if (!seen[k]) { seen[k] = true; out.push(arr[i]); }
+        }
+        return out;
+    }
+
+    function showToast(message, kind) {
+        const main = document.querySelector('.re-main');
+        if (!main) { console.log('[rule-editor] ' + message); return; }
+        let toast = main.querySelector('.re-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.className = 're-toast';
+            toast.style.cssText = 'position:sticky;top:0;left:0;right:0;margin:0 0 8px;padding:8px 12px;border-radius:6px;font-size:13px;z-index:50;box-shadow:0 2px 6px rgba(0,0,0,.15);';
+            main.insertBefore(toast, main.firstChild);
+        }
+        const bg = kind === 'error' ? '#e74c3c' : (kind === 'success' ? '#2ecc71' : '#3498db');
+        toast.style.background = bg;
+        toast.style.color = '#fff';
+        toast.textContent = message;
+        toast.style.display = 'block';
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(function () { toast.style.display = 'none'; }, 3000);
     }
 
     document.addEventListener('DOMContentLoaded', init);

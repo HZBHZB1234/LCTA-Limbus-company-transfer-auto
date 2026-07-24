@@ -1479,14 +1479,42 @@ class LCTA_API():
 
     def open_rule_editor(self):
         html_path = os.path.join(os.getenv('path_'), "webui/rule-editor.html")
+        # 读取当前主题，注入到新窗口
+        current_theme = ConfigManager().get('theme', 'light')
         window = webview.create_window(
             "LCTA - 美化规则编辑器", url=html_path,
             width=1200, height=800, resizable=True, text_select=True,
             js_api=RuleEditorAPI()
         )
+        # 窗口创建后立即注入主题（在 JS init 之前执行）
+        try:
+            window.evaluate_js(f"""
+                (function() {{
+                    if (document.body) {{
+                        document.body.className = 'theme-{current_theme}';
+                        document.body.setAttribute('data-injected-theme', '{current_theme}');
+                    }}
+                }})();
+            """)
+        except Exception:
+            pass
         if not hasattr(self, '_rule_editor_windows'):
             self._rule_editor_windows = []
         self._rule_editor_windows.append(window)
+
+    def sync_theme_to_rule_editor(self, theme):
+        """推送主题变更到所有打开的规则编辑器窗口"""
+        if not hasattr(self, '_rule_editor_windows'):
+            return
+        for w in self._rule_editor_windows:
+            try:
+                w.evaluate_js(f"""
+                    if (typeof applyTheme === 'function') {{
+                        applyTheme('{theme}');
+                    }}
+                """)
+            except Exception:
+                pass
 
 
 class RuleEditorAPI:
@@ -1510,6 +1538,10 @@ class RuleEditorAPI:
         self.validate_rule = validate_rule
         self.analyze_changes = analyze_changes
         self.save_file_content = save_file_content
+
+    def get_config_value(self, key_path, default_value=None):
+        """规则编辑器查询主应用配置（如 theme）"""
+        return ConfigManager().get(key_path, default_value)
 
     def apply_ruleset(self, name: str) -> dict:
         from webutils.function_fancy import fancy_main

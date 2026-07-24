@@ -20,13 +20,13 @@
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core**: `LCTA_API` class (~1540 lines), bridges all backend features to JS via pywebview. Includes `RuleEditorAPI` class (the rule editor window's bridge), `open_rule_editor()` to spawn a second pywebview window. `get_fancy_rulesets()` now loads user rules from `fancy/` folder via `load_fancy_folder_rules()`. Auto-migrates old `user_fancy` config on startup |
+| `app.py` | **Core**: `LCTA_API` class (~1570 lines), bridges all backend features to JS via pywebview. Includes `RuleEditorAPI` class (the rule editor window's bridge with `get_config_value` for cross-window config queries), `open_rule_editor()` to spawn a second pywebview window with theme injection, `sync_theme_to_rule_editor()` for live theme push. `get_fancy_rulesets()` now loads user rules from `fancy/` folder via `load_fancy_folder_rules()`. Auto-migrates old `user_fancy` config on startup |
 | `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
-| `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器 (Fancy Rule Editor): sidebar file browser + two main mode tabs (file-edit / ruleset-edit) + bottom file content preview panel. File-edit tab has editable CodeMirror + change tracking + smart gen from edits. Ruleset-edit tab wraps old simple/advanced modes |
-| `css/base.css` | Base styling |
-| `css/components.css` | Component-specific styles |
-| `css/layout-extras.css` | Layout utilities and extra styles |
-| `css/rule-editor.css` | Rule editor specific styles: sidebar+main+bottom panel layout, data cards, smart-gen dialog, tiered scope options |
+| `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器. Sidebar file browser + two main mode tabs (file-edit / ruleset-edit). File-edit tab: VSCode-style CodeMirror 6 editor with find/replace (Ctrl+F/H), match highlighting, dirty state indicator, status bar, change tracking, smart ruleset generation from edits. Ruleset-edit tab: simple form + advanced JSON editors for ruleset CRUD. Theme syncs with main app window (light/dark/purple) |
+| `css/base.css` | Base styling with 3 theme definitions (light/dark/purple) and CSS custom properties |
+| `css/components.css` | Component-specific styles: cards, buttons, forms, progress bars, modals |
+| `css/layout-extras.css` | Layout utilities, modals, drawers, scrollbars, responsive breakpoints. Now also loaded by rule-editor.html |
+| `css/rule-editor.css` | Rule editor styles: sidebar+main+bottom panel layout, VSCode-style find bar, data cards, smart-gen dialog, tiered scope options, editor status bar, match highlight decorations, toast notifications, per-theme editor colors |
 | `js/core.js` | Core framework: API binding, event system, navigation |
 | `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip, FancyManager (saveAll now persists to `fancy/` folder via `pywebview.api.save_ruleset()`), `openRuleEditor()` global function |
 | `js/init.js` | Initialization and bootstrap: uses single `get_startup_data()` call; welcome content deferred via `_pendingWelcomeContent` for lazy section loading compatibility |

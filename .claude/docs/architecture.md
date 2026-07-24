@@ -13,7 +13,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | Python 3.9.6+ | Backend (primary) | Business logic, translation engine, webview bridge |
 | C (MinGW-w64) | Native launcher | `launcher.c` → compiled to .exe as PE entry point for packaged releases |
 | JavaScript | Frontend | 10 modules in `webui/js/`, bridges to Python via `pywebview.api` |
-| HTML/CSS | Frontend | SPA in `webui/index.html` with 18 section fragments in `webui/sections/` loaded dynamically + standalone `webui/rule-editor.html` window, 4 CSS files |
+| HTML/CSS | Frontend | SPA in `webui/index.html` with 18 section fragments in `webui/sections/` loaded dynamically + standalone `webui/rule-editor.html` window with theme sync, 4 CSS files |
 | PowerShell | Build system | `build.ps1` (617 lines), 6-step build pipeline |
 | YAML | CI/CD | GitHub Actions: `release.yml`, `check.yml` |
 
@@ -79,8 +79,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 
 | Interface | File | Role |
 |-----------|------|------|
-| `LCTA_API` | `webui/app.py` | Central hub: ~1540 lines, bridges all backend features to JS frontend. Includes `get_startup_data()` for consolidated frontend init, `open_rule_editor()` to spawn the rule editor window, and redesigned drag-drop file handling |
-| `RuleEditorAPI` | `webui/app.py` | Secondary pywebview bridge for the rule editor window: wraps `webutils/function_rule_editor.py` methods (file browser, rules CRUD, rule building, validation, smart analysis). Instantiated as `js_api=RuleEditorAPI()` in a separate `webview.create_window()` call |
+| `LCTA_API` | `webui/app.py` | Central hub: ~1570 lines, bridges all backend features to JS frontend. Includes `get_startup_data()` for consolidated frontend init, `open_rule_editor()` to spawn the rule editor window with theme injection, `sync_theme_to_rule_editor()` for live cross-window theme sync, and redesigned drag-drop file handling |
+| `RuleEditorAPI` | `webui/app.py` | Secondary pywebview bridge for the rule editor window: wraps `webutils/function_rule_editor.py` methods (file browser, rules CRUD, rule building, validation, smart analysis), plus `get_config_value()` for cross-window config queries (e.g. theme). Instantiated as `js_api=RuleEditorAPI()` in a separate `webview.create_window()` call |
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |
 | `TranslationPipeline` | `translateFunc/pipeline.py` | Orchestrates the 6-stage LLM translation pipeline |
 | `LogManager` | `globalManagers/LogManager.py` | Singleton logger: file rotation, console, webview modal callbacks |

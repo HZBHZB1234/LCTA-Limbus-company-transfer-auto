@@ -70,8 +70,16 @@ class ThemeManager {
         
         this.currentTheme = theme;
         configManager.updateConfigValue('--theme', theme);
-        
+        configManager.flushPendingUpdates();  // 立即持久化，供规则编辑器窗口读取
+
         this.updateThemeButtons(theme);
+
+        // 推送主题变更到规则编辑器窗口（如果已打开）
+        if (typeof window !== 'undefined' && window.pywebview && window.pywebview.api) {
+            try {
+                window.pywebview.api.sync_theme_to_rule_editor(theme);
+            } catch (e) { /* 规则编辑器可能未打开 */ }
+        }
         this.addThemeTransition();
     }
     

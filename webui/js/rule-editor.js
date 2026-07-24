@@ -56,7 +56,11 @@
         pendingChanges: [],
         // Find bar state
         findMatches: [],
-        findCurrent: -1
+        findCurrent: -1,
+        findKeyword: '',
+        findCaseSensitive: false,
+        // Dirty state
+        isDirty: false
     };
 
     const CATEGORY_FILE_PATTERNS = {
@@ -124,10 +128,21 @@
         populateSimpleFileSelect();
         switchTab('file-list');
         switchMainTab('file-edit');
+        // 检查 pywebview API 是否已可用（防竞态）
         if (getApi()) {
             onApiReady();
         } else {
-            window.addEventListener('pywebviewready', onApiReady);
+            let readyFlag = false;
+            function handleReady() {
+                if (readyFlag) return;
+                readyFlag = true;
+                onApiReady();
+            }
+            window.addEventListener('pywebviewready', handleReady);
+            // 兜底：若事件在注册前已触发
+            if (window.pywebview && window.pywebview.api) {
+                handleReady();
+            }
         }
     }
 
@@ -137,6 +152,34 @@
         initFileEditor();
         await Promise.all([loadLangFiles(), loadRulesets(), initSimpleFileSelect(), loadTemplates()]);
         syncAdvancedFromRuleset();
+        syncThemeFromMain();
+    }
+
+    async function syncThemeFromMain() {
+        const api = getApi();
+        if (!api || !api.get_config_value) return;
+        try {
+            const theme = await api.get_config_value('theme', 'light');
+            applyTheme(theme);
+        } catch (e) {
+            console.warn('[rule-editor] 主题同步失败:', e);
+        }
+    }
+
+    function applyTheme(theme) {
+        const valid = ['light', 'dark', 'purple'];
+        const t = valid.includes(theme) ? theme : 'light';
+        document.body.className = 'theme-' + t;
+        updateEditorTheme(t);
+    }
+
+    function updateEditorTheme(theme) {
+        // CodeMirror 编辑器通过 CSS 变量适配主题，无需额外操作
+        // 如需刷新编辑器可 dispatch 空事务
+        const editor = state.fileEditor;
+        if (editor) {
+            editor.dispatch({});
+        }
     }
 
     async function loadLangFiles() {
@@ -186,6 +229,10 @@
 
     async function openFile(relativePath) {
         if (!relativePath) return;
+        // 未保存更改时提示
+        if (state.isDirty && state.currentFile !== relativePath) {
+            if (!window.confirm('当前文件有未保存的更改，是否放弃更改并打开新文件？')) return;
+        }
         const api = getApi();
         if (!api) return warnNoApi();
         if (state.fileCache.has(relativePath)) {
@@ -250,8 +297,10 @@
         }
         state.fileOriginalContent = raw;
         state.fileOriginalParsed = parsed ? JSON.parse(JSON.stringify(parsed)) : null;
+        state.isDirty = false;
         clearPendingChanges();
         hideFindBar();
+        updateFileEditTabLabel();
     }
 
     function renderFileList(filtered) {
@@ -298,6 +347,8 @@
     }
 
     function refreshContentPanel() {
+        // 文件编辑模式下不渲染底部预览面板（已隐藏）
+        if (state.activeMainTab === 'file-edit') return;
         if (state.mode === 'simple') renderSimpleContent();
         else renderAdvancedContent();
     }
@@ -337,22 +388,22 @@
 
     function renderDataCard(item, idx) {
         if (item == null || typeof item !== 'object') {
-            return '<div class="re-data-card"><div class="re-card-header">[' + idx + '] ' +
+            return '<div class="re-data-card"><div class="re-data-card-header">[' + idx + '] ' +
                 escapeHtml(String(item)) + '</div></div>';
         }
         const id = (item.id != null) ? String(item.id) : '';
         const name = (item.name != null) ? String(item.name) : '';
         let html = '<div class="re-data-card" data-card-idx="' + idx + '">';
-        html += '<div class="re-card-header"><span class="re-card-id">🎯 id:' + escapeHtml(id) +
+        html += '<div class="re-data-card-header"><span class="re-card-id">🎯 id:' + escapeHtml(id) +
             '</span> <span class="re-card-name">' + escapeHtml(name) + '</span></div>';
-        html += '<div class="re-card-body">';
+        html += '<div class="re-data-card-body">';
         const keys = Object.keys(item);
         for (let k = 0; k < keys.length; k++) {
             if (keys[k] === 'id' || keys[k] === 'name') continue;
             html += renderFieldLine(keys[k], item[keys[k]], id);
         }
         html += '</div>';
-        html += '<div class="re-card-footer"><button class="re-btn re-btn-sm re-add-item-btn" data-item-id="' +
+        html += '<div class="re-data-card-footer"><button class="re-btn re-btn-sm re-add-item-btn" data-item-id="' +
             escapeAttr(id) + '">＋ 将此条目加入规则</button></div>';
         html += '</div>';
         return html;
@@ -471,15 +522,15 @@
             renderFileList(state.langFiles);
             return;
         }
-        var kw = keyword.toLowerCase();
-        var filtered = [];
-        for (var i = 0; i < state.langFiles.length; i++) {
+        let kw = keyword.toLowerCase();
+        let filtered = [];
+        for (let i = 0; i < state.langFiles.length; i++) {
             if (state.langFiles[i].toLowerCase().indexOf(kw) !== -1) {
                 filtered.push(state.langFiles[i]);
             }
         }
         renderFileList(filtered);
-        var hint = $i('re-search-hint');
+        let hint = $i('re-search-hint');
         if (hint) {
             if (filtered.length) {
                 hint.className = 're-search-hint re-search-hint-file';
@@ -495,14 +546,14 @@
     }
 
     async function performSearch() {
-        var api = getApi();
-        var input = $i('re-file-search');
-        var keyword = input ? input.value : '';
-        var cb = $i('re-case-sensitive');
-        var caseSensitive = !!(cb && cb.checked);
+        let api = getApi();
+        let input = $i('re-file-search');
+        let keyword = input ? input.value : '';
+        let cb = $i('re-case-sensitive');
+        let caseSensitive = !!(cb && cb.checked);
         if (!keyword.trim()) { clearSearch(); return; }
         // First try filename filter
-        var filtered = filterFilesByKeyword(keyword);
+        let filtered = filterFilesByKeyword(keyword);
         if (filtered.length) {
             switchTab('file-list');
             return;
@@ -511,7 +562,7 @@
         if (!api) return warnNoApi();
         setSearchHint('content', '正在搜索文件内容...');
         try {
-            var res = await api.search_files(keyword, caseSensitive);
+            let res = await api.search_files(keyword, caseSensitive);
             if (res && res.results_by_category) {
                 state.searchResults = res.results_by_category;
                 state.searchTotal = res.total_matches || 0;
@@ -526,7 +577,7 @@
         }
         renderSearchCategories();
         if (state.searchTotal > 0) {
-            var hint = $i('re-search-hint');
+            let hint = $i('re-search-hint');
             if (hint) { hint.style.display = 'none'; }
             switchTab('search-results');
         } else {
@@ -535,7 +586,7 @@
     }
 
     function setSearchHint(type, msg) {
-        var hint = $i('re-search-hint');
+        let hint = $i('re-search-hint');
         if (!hint) return;
         hint.textContent = msg;
         hint.style.display = '';
@@ -593,7 +644,7 @@
         renderSearchCategories();
         renderFileList();
         switchTab('file-list');
-        var hint = $i('re-search-hint');
+        let hint = $i('re-search-hint');
         if (hint) hint.style.display = 'none';
     }
 
@@ -644,6 +695,8 @@
         }
         if (tab === 'file-edit' && state.currentFile) {
             loadFileIntoEditor(state.currentFile);
+        } else if (tab === 'ruleset-edit') {
+            refreshContentPanel();
         }
     }
 
@@ -658,7 +711,10 @@
                 filterFilesByKeyword(searchInput.value);
             });
             searchInput.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') performSearch();
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    performSearch();
+                }
             });
         }
 
@@ -744,8 +800,6 @@
         if (feRevert) feRevert.addEventListener('click', revertEditedFile);
         const feRefresh = $i('re-fe-refresh-btn');
         if (feRefresh) feRefresh.addEventListener('click', refreshEditedFile);
-        const feBatch = $i('re-fe-batch-btn');
-        if (feBatch) feBatch.addEventListener('click', onFileEditBatchReplace);
         const feDiff = $i('re-fe-diff-btn');
         if (feDiff) feDiff.addEventListener('click', diffAndTrackChanges);
         const clearChangesBtn = $i('re-clear-changes-btn');
@@ -766,24 +820,24 @@
                 if (e.key === 'Escape') hideFindBar();
             });
         }
-        var findPrevBtn = $i('re-find-prev');
+        let findPrevBtn = $i('re-find-prev');
         if (findPrevBtn) findPrevBtn.addEventListener('click', findPrev);
-        var findNextBtn = $i('re-find-next');
+        let findNextBtn = $i('re-find-next');
         if (findNextBtn) findNextBtn.addEventListener('click', findNext);
-        var findCase = $i('re-find-case');
+        let findCase = $i('re-find-case');
         if (findCase) {
             findCase.addEventListener('change', function () {
                 toggleFindCase();
                 findInEditor();
             });
         }
-        var findClose = $i('re-find-close');
+        let findClose = $i('re-find-close');
         if (findClose) findClose.addEventListener('click', hideFindBar);
 
         // Replace toggle
-        var replaceToggle = $i('re-find-replace-toggle');
+        let replaceToggle = $i('re-find-replace-toggle');
         if (replaceToggle) replaceToggle.addEventListener('click', toggleReplaceRow);
-        var replaceInput = $i('re-replace-input');
+        let replaceInput = $i('re-replace-input');
         if (replaceInput) {
             replaceInput.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter') {
@@ -794,9 +848,9 @@
                 if (e.key === 'Escape') hideFindBar();
             });
         }
-        var replaceOneBtn = $i('re-replace-one');
+        let replaceOneBtn = $i('re-replace-one');
         if (replaceOneBtn) replaceOneBtn.addEventListener('click', replaceOne);
-        var replaceAllBtn = $i('re-replace-all');
+        let replaceAllBtn = $i('re-replace-all');
         if (replaceAllBtn) replaceAllBtn.addEventListener('click', replaceAll);
     }
 
@@ -1779,12 +1833,9 @@
         if (!toast) {
             toast = document.createElement('div');
             toast.className = 're-toast';
-            toast.style.cssText = 'position:sticky;top:0;left:0;right:0;margin:0 0 8px;padding:8px 12px;border-radius:6px;font-size:13px;z-index:50;box-shadow:0 2px 6px rgba(0,0,0,.15);';
             main.insertBefore(toast, main.firstChild);
         }
-        const bg = kind === 'error' ? '#e74c3c' : (kind === 'success' ? '#2ecc71' : '#3498db');
-        toast.style.background = bg;
-        toast.style.color = '#fff';
+        toast.className = 're-toast re-toast-' + (kind || 'info');
         toast.textContent = message;
         toast.style.display = 'block';
         clearTimeout(showToast._t);
@@ -1794,6 +1845,51 @@
     // ═══════════════════════════════════════════════════════
     //  File Edit Mode — init, editor, diff, save
     // ═══════════════════════════════════════════════════════
+
+    // ---- Find Highlight Plugin (VSCode-style match decorations) ----
+    function buildFindDecorations(view) {
+        const keyword = state.findKeyword;
+        const current = state.findCurrent;
+        if (!keyword || !state.findMatches.length) return window.CodeMirror.Decoration.none;
+
+        const doc = view.state.doc.toString();
+        const caseSensitive = state.findCaseSensitive || false;
+        const searchText = caseSensitive ? doc : doc.toLowerCase();
+        const searchStr = caseSensitive ? keyword : keyword.toLowerCase();
+
+        // 重新计算所有匹配位置（文档可能已变更）
+        const matches = [];
+        let pos = 0;
+        while (true) {
+            const idx = searchText.indexOf(searchStr, pos);
+            if (idx === -1) break;
+            matches.push(idx);
+            pos = idx + 1;
+        }
+        state.findMatches = matches;
+
+        const CM = window.CodeMirror;
+        const normalMark = CM.Decoration.mark({class: 'cm-find-match'});
+        const currentMark = CM.Decoration.mark({class: 'cm-find-match cm-find-match-current'});
+        const decos = [];
+        for (let i = 0; i < matches.length; i++) {
+            const isCurrent = (i === current);
+            decos.push((isCurrent ? currentMark : normalMark).range(matches[i], matches[i] + keyword.length));
+        }
+        return CM.Decoration.set(decos);
+    }
+
+    const findHighlightPlugin = function () {
+        const CM = window.CodeMirror;
+        return CM.ViewPlugin.fromClass(class {
+            constructor(view) { this.decorations = buildFindDecorations(view); }
+            update(update) {
+                if (update.docChanged || update.viewportChanged || update.selectionSet) {
+                    this.decorations = buildFindDecorations(update.view);
+                }
+            }
+        }, {decorations: function (v) { return v.decorations; }});
+    };
 
     function initFileEditor() {
         if (state.fileEditor) return state.fileEditor;
@@ -1807,16 +1903,39 @@
         const empty = container.querySelector('.re-empty-state');
         if (empty) empty.style.display = 'none';
         const CM = window.CodeMirror;
-        // Custom keymap to intercept Ctrl+F / F3 before CodeMirror's internal handlers
+        // Custom keymap: Ctrl+F / Ctrl+H / F3 / Shift+F3
         const feKeymap = CM.keymap.of([
             {key: 'Ctrl-f', run: function () { showFindBar(); return true; }},
+            {key: 'Ctrl-h', run: function () { showFindBar(); toggleReplaceRow(); return true; }},
             {key: 'F3', run: function () { findNext(); return true; }},
             {key: 'Shift-F3', run: function () { findPrev(); return true; }},
         ]);
+
+        // Status bar cursor position listener
+        const statusListener = CM.EditorView.updateListener.of(function (update) {
+            if (update.selectionSet) {
+                const pos = update.state.selection.main.head;
+                const line = update.state.doc.lineAt(pos);
+                const statusEl = document.getElementById('re-status-cursor');
+                if (statusEl) {
+                    statusEl.textContent = '行 ' + line.number + ', 列 ' + (pos - line.from + 1);
+                }
+            }
+            if (update.docChanged) {
+                updateDirtyState();
+            }
+        });
+
+        const extensions = [
+            feKeymap, CM.basicSetup, CM.json(),
+            statusListener,
+            findHighlightPlugin()
+        ];
+
         try {
             state.fileEditor = new CM.EditorView({
                 doc: '',
-                extensions: [CM.basicSetup, CM.json(), feKeymap],
+                extensions: extensions,
                 parent: container
             });
         } catch (e) {
@@ -1840,16 +1959,45 @@
         editor.dispatch({ changes: { from: 0, to: len, insert: text || '' } });
     }
 
+    // ---- Dirty State & File Tab Label ----
+    function updateDirtyState() {
+        const editor = state.fileEditor;
+        if (!editor) return;
+        const current = editor.state.doc.toString();
+        const isDirty = (state.fileOriginalContent !== null && current !== state.fileOriginalContent);
+        state.isDirty = isDirty;
+        // 更新文件编辑标签页图标
+        const tab = document.querySelector('.re-main-tab[data-maintab="file-edit"]');
+        if (tab) {
+            const icon = tab.querySelector('i');
+            if (icon) {
+                icon.className = isDirty ? 'fas fa-circle re-dirty-dot' : 'fas fa-pen';
+            }
+        }
+        // 更新窗口标题
+        document.title = (isDirty ? '● ' : '') + 'LCTA - 美化规则编辑器';
+    }
+
+    function updateFileEditTabLabel() {
+        const tab = document.querySelector('.re-main-tab[data-maintab="file-edit"]');
+        if (!tab) return;
+        const name = state.currentFile;
+        const display = name
+            ? (name.length > 30 ? '...' + name.slice(-27) : name)
+            : '未打开文件';
+        tab.innerHTML = '<i class="fas fa-pen"></i> ' + escapeHtml(display);
+    }
+
     /** Recursive JSON diff returning [(path_string, old_val, new_val)] */
     function diffJson(original, modified, prefix) {
         if (prefix == null) prefix = '';
-        var changes = [];
+        let changes = [];
         if (typeof original !== typeof modified) {
             changes.push([prefix, original, modified]);
         } else if (Array.isArray(original) && Array.isArray(modified)) {
-            var maxLen = Math.max(original.length, modified.length);
-            for (var i = 0; i < maxLen; i++) {
-                var newPrefix = prefix + '[' + i + ']';
+            let maxLen = Math.max(original.length, modified.length);
+            for (let i = 0; i < maxLen; i++) {
+                let newPrefix = prefix + '[' + i + ']';
                 if (i >= original.length) {
                     changes.push([newPrefix, null, modified[i]]);
                 } else if (i >= modified.length) {
@@ -1859,13 +2007,13 @@
                 }
             }
         } else if (typeof original === 'object' && original !== null && typeof modified === 'object' && modified !== null) {
-            var allKeys = {};
-            for (var k in original) { if (original.hasOwnProperty(k)) allKeys[k] = true; }
-            for (var k in modified) { if (modified.hasOwnProperty(k)) allKeys[k] = true; }
-            var sortedKeys = Object.keys(allKeys).sort();
-            for (var ki = 0; ki < sortedKeys.length; ki++) {
-                var key = sortedKeys[ki];
-                var newPrefix = prefix ? prefix + '.' + key : key;
+            let allKeys = {};
+            for (let k in original) { if (original.hasOwnProperty(k)) allKeys[k] = true; }
+            for (let k in modified) { if (modified.hasOwnProperty(k)) allKeys[k] = true; }
+            let sortedKeys = Object.keys(allKeys).sort();
+            for (let ki = 0; ki < sortedKeys.length; ki++) {
+                let key = sortedKeys[ki];
+                let newPrefix = prefix ? prefix + '.' + key : key;
                 if (!(key in original)) {
                     changes.push([newPrefix, null, modified[key]]);
                 } else if (!(key in modified)) {
@@ -1882,7 +2030,7 @@
 
     /** Parse a diff path like "dataList[0].desc" → {field_path: "desc", itemIdx: 0} */
     function parseDiffPath(path) {
-        var match = path.match(/^dataList\[(\d+)\]\.(.+)$/);
+        let match = path.match(/^dataList\[(\d+)\]\.(.+)$/);
         if (match) {
             return { field_path: match[2], itemIdx: parseInt(match[1], 10) };
         }
@@ -1891,20 +2039,20 @@
 
     /** Convert diff entries to {file, field_path, item_id, old_val, new_val} format */
     function extractChangesFromDiff(diffEntries, filePath, parsedData) {
-        var changes = [];
-        for (var i = 0; i < diffEntries.length; i++) {
-            var entry = diffEntries[i];
-            var path = entry[0];
-            var oldVal = entry[1];
-            var newVal = entry[2];
+        let changes = [];
+        for (let i = 0; i < diffEntries.length; i++) {
+            let entry = diffEntries[i];
+            let path = entry[0];
+            let oldVal = entry[1];
+            let newVal = entry[2];
             // Only track string value changes
             if (typeof newVal !== 'string' || typeof oldVal !== 'string') continue;
-            var parsed = parseDiffPath(path);
+            let parsed = parseDiffPath(path);
             // Only track dataList items (rules can only target these)
             if (parsed.itemIdx == null) continue;
-            var itemId = null;
+            let itemId = null;
             if (parsedData && parsedData.dataList && parsedData.dataList[parsed.itemIdx]) {
-                var item = parsedData.dataList[parsed.itemIdx];
+                let item = parsedData.dataList[parsed.itemIdx];
                 itemId = (item.id != null) ? String(item.id) : null;
             }
             changes.push({
@@ -1923,51 +2071,51 @@
             showToast('请先打开一个文件', 'error');
             return;
         }
-        var raw = getFileEditorDoc();
+        let raw = getFileEditorDoc();
         if (!raw.trim()) {
             showToast('编辑器内容为空', 'error');
             return;
         }
-        var parsed;
+        let parsed;
         try {
             parsed = JSON.parse(raw);
         } catch (e) {
             showToast('JSON 解析错误: ' + e.message, 'error');
             return;
         }
-        var originalParsed = state.fileOriginalParsed;
+        let originalParsed = state.fileOriginalParsed;
         if (!originalParsed) {
             showToast('没有原始内容可比较（请先加载文件）', 'error');
             return;
         }
-        var diffs = diffJson(originalParsed, parsed, '');
+        let diffs = diffJson(originalParsed, parsed, '');
         if (!diffs.length) {
             showToast('未检测到变更', 'info');
             clearPendingChanges();
             return;
         }
-        var changes = extractChangesFromDiff(diffs, state.currentFile, originalParsed);
+        let changes = extractChangesFromDiff(diffs, state.currentFile, originalParsed);
         state.pendingChanges = changes;
         renderChangeList();
         showToast('检测到 ' + changes.length + ' 处文本变更', 'success');
     }
 
     function renderChangeList() {
-        var container = $i('re-change-list');
-        var panel = $i('re-changes-panel');
-        var countEl = $i('re-change-count');
+        let container = $i('re-change-list');
+        let panel = $i('re-changes-panel');
+        let countEl = $i('re-change-count');
         if (!container) return;
-        var changes = state.pendingChanges || [];
+        let changes = state.pendingChanges || [];
         if (panel) panel.style.display = changes.length ? '' : 'none';
         if (countEl) countEl.textContent = String(changes.length);
         if (!changes.length) {
             container.innerHTML = '<div class="re-change-empty">暂无变更 — 编辑文件后点击「比较变更」</div>';
             return;
         }
-        var html = '';
-        for (var i = 0; i < changes.length; i++) {
-            var c = changes[i];
-            var displayFile = c.file || '';
+        let html = '';
+        for (let i = 0; i < changes.length; i++) {
+            let c = changes[i];
+            let displayFile = c.file || '';
             if (displayFile.length > 40) displayFile = '...' + displayFile.slice(-37);
             html += '<div class="re-change-item">' +
                 '<span class="re-change-file" title="' + escapeAttr(c.file) + '">' + escapeHtml(displayFile) + '</span>' +
@@ -1990,7 +2138,7 @@
             showToast('没有打开的文件', 'error');
             return;
         }
-        var raw = getFileEditorDoc();
+        let raw = getFileEditorDoc();
         if (!raw.trim()) {
             showToast('编辑器内容为空', 'error');
             return;
@@ -2001,19 +2149,21 @@
             showToast('JSON 格式无效，无法保存: ' + e.message, 'error');
             return;
         }
-        var api = getApi();
+        let api = getApi();
         if (!api || !api.save_file_content) return warnNoApi();
         try {
-            var res = await api.save_file_content(state.currentFile, raw);
+            let res = await api.save_file_content(state.currentFile, raw);
             if (res && res.success) {
                 // Update cache and original
                 state.fileOriginalContent = raw;
+                state.isDirty = false;
                 try { state.fileOriginalParsed = JSON.parse(raw); } catch (e) { void e; }
                 if (state.fileCache.has(state.currentFile)) {
-                    var cached = state.fileCache.get(state.currentFile);
+                    let cached = state.fileCache.get(state.currentFile);
                     cached.raw = raw;
                     try { cached.parsed = JSON.parse(raw); } catch (e) { void e; }
                 }
+                updateDirtyState();
                 showToast('文件已保存到游戏: ' + state.currentFile, 'success');
             } else {
                 showToast('保存失败: ' + ((res && res.error) || ''), 'error');
@@ -2026,7 +2176,9 @@
     function revertEditedFile() {
         if (state.fileOriginalContent != null) {
             setFileEditorDoc(state.fileOriginalContent);
+            state.isDirty = false;
             clearPendingChanges();
+            updateDirtyState();
             showToast('已撤销所有更改', 'info');
         } else {
             showToast('没有可撤销的版本', 'error');
@@ -2034,11 +2186,11 @@
     }
 
     function refreshEditedFile() {
-        var path = state.currentFile;
+        let path = state.currentFile;
         if (!path) { showToast('没有打开的文件', 'error'); return; }
         // Reload from cache or backend
         if (state.fileCache.has(path)) {
-            var cached = state.fileCache.get(path);
+            let cached = state.fileCache.get(path);
             state.currentFileRaw = cached.raw;
             state.currentFileParsed = cached.parsed;
             loadRawIntoEditor(cached.raw, cached.parsed);
@@ -2049,20 +2201,8 @@
         }
     }
 
-    function onFileEditBatchReplace() {
-        if (!state.currentFile) {
-            showToast('没有打开的文件', 'error');
-            return;
-        }
-        // Open find bar with replace mode expanded
-        showFindBar();
-        toggleReplaceRow();
-        var findInput = $i('re-find-input');
-        if (findInput) findInput.focus();
-    }
-
     async function generateRulesFromChanges() {
-        var changes = state.pendingChanges;
+        let changes = state.pendingChanges;
         if (!changes || !changes.length) {
             showToast('没有待处理的变更 — 请先在文件编辑中修改内容并点击「比较变更」', 'error');
             return;
@@ -2084,10 +2224,10 @@
     // ═══════════════════════════════════════════════════════
 
     function showFindBar() {
-        var bar = $i('re-find-bar');
+        let bar = $i('re-find-bar');
         if (!bar) return;
         bar.style.display = '';
-        var input = $i('re-find-input');
+        let input = $i('re-find-input');
         if (input) {
             input.value = '';
             input.focus();
@@ -2098,73 +2238,74 @@
     }
 
     function hideFindBar() {
-        var bar = $i('re-find-bar');
+        let bar = $i('re-find-bar');
         if (bar) bar.style.display = 'none';
-        var input = $i('re-find-input');
+        let input = $i('re-find-input');
         if (input) input.value = '';
-        var replaceInput = $i('re-replace-input');
+        let replaceInput = $i('re-replace-input');
         if (replaceInput) replaceInput.value = '';
         state.findMatches = [];
         state.findCurrent = -1;
         updateFindCount(0, 0);
         // Collapse replace row
-        var replaceRow = $i('re-replace-row');
+        let replaceRow = $i('re-replace-row');
         if (replaceRow) replaceRow.style.display = 'none';
-        var toggle = $i('re-find-replace-toggle');
+        let toggle = $i('re-find-replace-toggle');
         if (toggle) toggle.classList.remove('re-find-toggle-active');
         // Clear editor selection
-        var editor = state.fileEditor;
+        let editor = state.fileEditor;
         if (editor) {
-            var pos = editor.state.selection.main.head;
+            let pos = editor.state.selection.main.head;
             editor.dispatch({ selection: { anchor: pos, head: pos } });
         }
     }
 
     function updateFindCount(current, total) {
-        var el = $i('re-find-count');
+        let el = $i('re-find-count');
         if (!el) return;
         el.textContent = total > 0 ? (current + '/' + total) : '0/0';
     }
 
     function toggleFindCase() {
-        var cb = $i('re-find-case');
+        let cb = $i('re-find-case');
         if (!cb) return;
-        var label = cb.closest('.re-find-label');
+        let label = cb.closest('.re-find-label');
         if (label) label.classList.toggle('active', cb.checked);
+        state.findCaseSensitive = cb.checked;
     }
 
     function toggleReplaceRow() {
-        var row = $i('re-replace-row');
-        var toggle = $i('re-find-replace-toggle');
+        let row = $i('re-replace-row');
+        let toggle = $i('re-find-replace-toggle');
         if (!row) return;
-        var showing = row.style.display !== 'none';
+        let showing = row.style.display !== 'none';
         row.style.display = showing ? 'none' : '';
         if (toggle) toggle.classList.toggle('re-find-toggle-active', !showing);
         if (!showing) {
-            var replaceInput = $i('re-replace-input');
+            let replaceInput = $i('re-replace-input');
             if (replaceInput) replaceInput.focus();
         }
     }
 
     function findInEditor() {
-        var input = $i('re-find-input');
-        var keyword = input ? input.value : '';
-        var caseCheck = $i('re-find-case');
-        var caseSensitive = !!(caseCheck && caseCheck.checked);
-        var editor = state.fileEditor;
+        let input = $i('re-find-input');
+        let keyword = input ? input.value : '';
+        let caseCheck = $i('re-find-case');
+        let caseSensitive = !!(caseCheck && caseCheck.checked);
+        let editor = state.fileEditor;
         if (!editor || !keyword.trim()) {
             state.findMatches = [];
             state.findCurrent = -1;
             updateFindCount(0, 0);
             return;
         }
-        var text = editor.state.doc.toString();
-        var searchStr = caseSensitive ? keyword : keyword.toLowerCase();
-        var searchText = caseSensitive ? text : text.toLowerCase();
-        var matches = [];
-        var pos = 0;
+        let text = editor.state.doc.toString();
+        let searchStr = caseSensitive ? keyword : keyword.toLowerCase();
+        let searchText = caseSensitive ? text : text.toLowerCase();
+        let matches = [];
+        let pos = 0;
         while (true) {
-            var idx = searchText.indexOf(searchStr, pos);
+            let idx = searchText.indexOf(searchStr, pos);
             if (idx === -1) break;
             matches.push(idx);
             pos = idx + 1;
@@ -2177,7 +2318,7 @@
             return;
         }
         state.findCurrent = 0;
-        var matchPos = matches[0];
+        let matchPos = matches[0];
         editor.dispatch({
             selection: { anchor: matchPos, head: matchPos + keyword.length },
             scrollIntoView: true
@@ -2187,13 +2328,13 @@
     }
 
     function findNext() {
-        var editor = state.fileEditor;
-        var matches = state.findMatches;
-        var keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
+        let editor = state.fileEditor;
+        let matches = state.findMatches;
+        let keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
         if (!editor || !matches.length || !keyword) return;
-        var next = (state.findCurrent + 1) % matches.length;
+        let next = (state.findCurrent + 1) % matches.length;
         state.findCurrent = next;
-        var matchPos = matches[next];
+        let matchPos = matches[next];
         editor.dispatch({
             selection: { anchor: matchPos, head: matchPos + keyword.length },
             scrollIntoView: true
@@ -2203,13 +2344,13 @@
     }
 
     function findPrev() {
-        var editor = state.fileEditor;
-        var matches = state.findMatches;
-        var keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
+        let editor = state.fileEditor;
+        let matches = state.findMatches;
+        let keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
         if (!editor || !matches.length || !keyword) return;
-        var prev = (state.findCurrent - 1 + matches.length) % matches.length;
+        let prev = (state.findCurrent - 1 + matches.length) % matches.length;
         state.findCurrent = prev;
-        var matchPos = matches[prev];
+        let matchPos = matches[prev];
         editor.dispatch({
             selection: { anchor: matchPos, head: matchPos + keyword.length },
             scrollIntoView: true
@@ -2219,12 +2360,12 @@
     }
 
     function replaceOne() {
-        var editor = state.fileEditor;
-        var matches = state.findMatches;
-        var keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
-        var replaceText = $i('re-replace-input') ? $i('re-replace-input').value : '';
+        let editor = state.fileEditor;
+        let matches = state.findMatches;
+        let keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
+        let replaceText = $i('re-replace-input') ? $i('re-replace-input').value : '';
         if (!editor || !matches.length || !keyword || state.findCurrent < 0) return;
-        var matchPos = matches[state.findCurrent];
+        let matchPos = matches[state.findCurrent];
         editor.dispatch({
             changes: { from: matchPos, to: matchPos + keyword.length, insert: replaceText }
         });
@@ -2233,14 +2374,14 @@
     }
 
     function replaceAll() {
-        var editor = state.fileEditor;
-        var matches = state.findMatches;
-        var keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
-        var replaceText = $i('re-replace-input') ? $i('re-replace-input').value : '';
+        let editor = state.fileEditor;
+        let matches = state.findMatches;
+        let keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
+        let replaceText = $i('re-replace-input') ? $i('re-replace-input').value : '';
         if (!editor || !matches.length || !keyword) return;
         // Replace from end to start to preserve positions
-        var changes = [];
-        for (var i = matches.length - 1; i >= 0; i--) {
+        let changes = [];
+        for (let i = matches.length - 1; i >= 0; i--) {
             changes.push({ from: matches[i], to: matches[i] + keyword.length, insert: replaceText });
         }
         editor.dispatch({ changes: changes });

@@ -6,16 +6,17 @@
     <title>LCTA - 美化规则编辑器</title>
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/layout-extras.css">
     <link rel="stylesheet" href="css/rule-editor.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module">
         import {EditorView, basicSetup} from "https://esm.sh/codemirror@6.0.1";
-        import {keymap} from "https://esm.sh/@codemirror/view@6.0.1";
+        import {keymap, ViewPlugin, Decoration} from "https://esm.sh/@codemirror/view@6.0.1";
         import {json} from "https://esm.sh/@codemirror/lang-json@6.0.1";
-        window.CodeMirror = {EditorView, basicSetup, keymap, json};
+        window.CodeMirror = {EditorView, basicSetup, keymap, json, ViewPlugin, Decoration};
     </script>
 </head>
-<body class="theme-light">
+<body>
 <div class="rule-editor-container">
     <div class="re-sidebar">
         <div class="re-sidebar-header">
@@ -48,7 +49,6 @@
                 <button id="re-fe-save-btn" class="re-btn re-btn-primary"><i class="fas fa-save"></i> 保存到游戏</button>
                 <button id="re-fe-revert-btn" class="re-btn"><i class="fas fa-undo"></i> 撤销更改</button>
                 <button id="re-fe-refresh-btn" class="re-btn"><i class="fas fa-sync"></i> 刷新</button>
-                <button id="re-fe-batch-btn" class="re-btn"><i class="fas fa-exchange-alt"></i> 批量替换</button>
                 <button id="re-fe-diff-btn" class="re-btn"><i class="fas fa-search-plus"></i> 比较变更</button>
             </div>
             <div class="re-find-bar" id="re-find-bar" style="display:none;">
@@ -76,6 +76,12 @@
                     <i class="fas fa-file-alt"></i>
                     双击左侧文件以在编辑器中打开
                 </div>
+            </div>
+            <div class="re-editor-statusbar" id="re-editor-statusbar">
+                <span id="re-status-cursor">行 1, 列 1</span>
+                <span class="re-status-spacer"></span>
+                <span id="re-status-lang">JSON</span>
+                <span id="re-status-encoding">UTF-8</span>
             </div>
             <div class="re-changes-panel" id="re-changes-panel" style="display:none;">
                 <div class="re-changes-header">

@@ -61,14 +61,7 @@ function onSectionLoaded(name) {
         case 'fancy':
             console.log('[LCTA] Init section: fancy');
             if (typeof fancyManager !== 'undefined' && fancyManager) {
-                fancyManager.listManager = new ToggleItemListManager(
-                    'fancy-ruleset-list', {
-                        emptyMessage: '暂无规则集',
-                        itemIcon: 'fa-paint-brush',
-                        defaultEnabled: false,
-                        onSelect: function(item) { fancyManager.onSelectRuleset(item); },
-                        onToggle: function(item, enabled) { fancyManager.onToggleRuleset(item, enabled); }
-                    });
+                fancyManager.listManager.containerElement = document.getElementById('fancy-ruleset-list');
                 fancyManager.loadRulesets();
             }
             break;

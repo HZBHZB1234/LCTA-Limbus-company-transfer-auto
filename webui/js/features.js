@@ -139,7 +139,7 @@ class FancyManager {
     }
 
     // 保存当前编辑的规则集
-    saveCurrent() {
+    async saveCurrent() {
         if (!this.selectedRuleset || this.selectedRuleset.builtin) return;
 
         const newName = document.getElementById('fancy-ruleset-name').value.trim();
@@ -188,7 +188,13 @@ class FancyManager {
         this.listManager.items = this.rulesets.map(rs => rs.name);
         this.listManager.updateList();
 
-        showMessage('成功', '规则集已保存');
+        // 持久化到后端
+        try {
+            await pywebview.api.save_ruleset(newName, { name: newName, desc: newDesc, rules: newRules });
+            showMessage('成功', '规则集已保存');
+        } catch (e) {
+            showMessage('错误', '保存失败: ' + (e.message || e));
+        }
     }
 
     // 新建规则集
@@ -253,11 +259,16 @@ class FancyManager {
         const userData = userRulesets.map(({ builtin, ...rest }) => rest);
 
         // 将用户规则集逐个写入 fancy/ 文件夹
-        for (const rs of userData) {
-            await pywebview.api.save_ruleset(rs.name, rs);
+        try {
+            for (const rs of userData) {
+                await pywebview.api.save_ruleset(rs.name, rs);
+            }
+            await configManager.updateConfigValue('fancy-allow', JSON.stringify(this.enabledMap));
+            await configManager.flushPendingUpdates();
+            showMessage('成功', '全部规则集已保存');
+        } catch (e) {
+            showMessage('错误', '保存全部失败: ' + (e.message || e));
         }
-        configManager.updateConfigValue('fancy-allow', JSON.stringify(this.enabledMap));
-        configManager.flushPendingUpdates();
     }
 
     // 格式化当前规则 JSON

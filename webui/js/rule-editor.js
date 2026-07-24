@@ -64,6 +64,16 @@
         _lastViewedFile: null,      // 用于标签页切换时判断文件是否变化
     };
 
+    // 跨标签搜索状态桥接
+    var _searchBridge = {
+        query: '',
+        replaceQuery: '',
+        caseSensitive: false,
+        wholeWord: false,
+        regexp: false,
+        isOpen: false
+    };
+
     var CATEGORY_FILE_PATTERNS = {
         'Skill': 'Skill.*\\.json$', 'Bufs': 'Bufs.*\\.json$',
         'BattleSpeechBubbleDlg': 'BattleSpeechBubbleDlg.*\\.json$',
@@ -287,6 +297,12 @@
     function activateFileTab(path) {
         if (!path || !state.openFiles.has(path)) return;
 
+        // 捕获当前活动编辑器的搜索状态
+        var oldTs = getActiveTabState();
+        if (oldTs && oldTs.editor) {
+            _captureSearchState(oldTs.editor);
+        }
+
         var allWrappers = document.querySelectorAll('.re-file-editor-wrapper');
         for (var i = 0; i < allWrappers.length; i++) {
             allWrappers[i].classList.remove('active');
@@ -308,6 +324,13 @@
 
         var empty = document.getElementById('re-fe-empty');
         if (empty) empty.style.display = 'none';
+
+        // 恢复搜索状态到新编辑器
+        if (ts && ts.editor && _searchBridge.isOpen) {
+            setTimeout(function () {
+                _restoreSearchState(ts.editor, ts.container);
+            }, 50);
+        }
     }
 
     async function closeFileTab(path, force) {
@@ -1109,22 +1132,35 @@
         var ts = getActiveTabState();
         if (!ts || !ts.editor) return;
 
+        // 保存到跨标签搜索桥接
+        _searchBridge.query = query;
+        _searchBridge.replaceQuery = '';
+        _searchBridge.caseSensitive = false;
+        _searchBridge.wholeWord = false;
+        _searchBridge.regexp = false;
+        _searchBridge.isOpen = true;
+
         var CM = window.CodeMirror;
-        if (CM && CM.openSearchPanel) {
+        if (!CM || !CM.openSearchPanel) return;
+
+        try {
             CM.openSearchPanel(ts.editor);
-        }
+        } catch(e) {}
 
         setTimeout(function () {
-            var container = ts.container;
-            if (!container) return;
-            var searchInput = container.querySelector('.cm-search input[type="text"]');
-            if (searchInput) {
-                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
-                nativeInputValueSetter.call(searchInput, query);
-                searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-                searchInput.dispatchEvent(new Event('change', { bubbles: true }));
+            if (!_searchBridge.isOpen) return;
+            if (CM.SearchQuery && CM.setSearchQuery) {
+                try {
+                    ts.editor.dispatch({
+                        effects: CM.setSearchQuery.of(new CM.SearchQuery({
+                            search: query,
+                            replace: '',
+                            caseSensitive: false,
+                            wholeWord: false,
+                            regexp: false
+                        }))
+                    });
+                } catch(e) {}
             }
         }, 100);
     }
@@ -1299,7 +1335,7 @@
         });
 
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && state.smartGenOverlay) { closeSmartGenDialog(); return; }
+            if (e.key === 'Escape' && state.smartGenOverlay) { closeAnySmartGenDialog(); return; }
 
             var ctrl = e.ctrlKey || e.metaKey;
             if (ctrl && e.key === 's') {
@@ -1320,12 +1356,20 @@
                 return;
             }
             if (ctrl && e.key === 'f') {
-                // Allow default browser/editor search
                 var ts = getActiveTabState();
                 if (ts && ts.editor) {
                     e.preventDefault();
                     var CM = window.CodeMirror;
-                    if (CM && CM.openSearchPanel) CM.openSearchPanel(ts.editor);
+                    if (CM && CM.openSearchPanel) {
+                        if (_searchBridge.isOpen && _searchBridge.query) {
+                            // 恢复保存的搜索状态（内部打开面板 + 设置查询）
+                            _restoreSearchState(ts.editor, ts.container);
+                        } else {
+                            // 打开空白搜索面板
+                            CM.openSearchPanel(ts.editor);
+                            _searchBridge.isOpen = true;
+                        }
+                    }
                 }
                 return;
             }
@@ -2273,6 +2317,16 @@
         state.smartGenGroups = null;
     }
 
+    function closeAnySmartGenDialog() {
+        // Unified close for V1/V2/V3 dialogs
+        if (state.smartGenOverlay && state.smartGenOverlay.parentNode) {
+            state.smartGenOverlay.parentNode.removeChild(state.smartGenOverlay);
+        }
+        state.smartGenOverlay = null;
+        state.smartGenGroups = null;
+        state.smartGenV2Bias = 'conservative';
+    }
+
     // ═══════════════════════════════════════════════════════
     //  V2 偏向式智能生成（保守/进取）+ 交集逻辑
     // ═══════════════════════════════════════════════════════
@@ -2569,6 +2623,1031 @@
         groups.sort(function (a, b) { return (b.score.priority || 0) - (a.score.priority || 0); });
 
         return { groups: groups, merge_suggestions: mergeSuggestions };
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  V3 统一智能规则生成 — 无模式选择 + 自动合并 + 即时展示
+    // ═══════════════════════════════════════════════════════
+
+    async function analyzeChangesV3(changes) {
+        var result = null;
+        var api = getApi();
+        if (api && api.analyze_changes_v3) {
+            try {
+                var res = await api.analyze_changes_v3(changes);
+                if (res && Array.isArray(res.groups)) result = res;
+            } catch (e) {
+                console.warn('[rule-editor] analyze_changes_v3 failed, using local fallback', e);
+            }
+        }
+        if (!result) {
+            result = analyzeChangesLocallyV3(changes);
+        }
+        return result;
+    }
+
+    function analyzeChangesLocallyV3(changes) {
+        if (!changes || !changes.length) return {
+            groups: [], merge_suggestions: [],
+            stats: { change_count: 0, group_count: 0, file_count: 0, category_count: 0 },
+            merge_candidates: []
+        };
+
+        // 按 (old_val, new_val, field_path) 合并 key 分桶
+        var buckets = {};
+        var order = [];
+        for (var i = 0; i < changes.length; i++) {
+            var c = changes[i];
+            var key = String(c.old_val) + '::' + String(c.new_val) + '::' + String(c.field_path);
+            if (!buckets[key]) { buckets[key] = []; order.push(key); }
+            buckets[key].push(c);
+        }
+
+        var allFiles = {};
+        var allCats = {};
+        var groups = [];
+
+        for (var oi = 0; oi < order.length; oi++) {
+            var items = buckets[order[oi]];
+            var first = items[0];
+            var files = uniqArr(items.map(function (c) { return c.file; }));
+            var itemIds = uniqArr(items.map(function (c) { return c.item_id; }).filter(function (v) { return v != null && v !== ''; }));
+            var fieldPaths = uniqArr(items.map(function (c) { return c.field_path; }));
+
+            for (var fi = 0; fi < files.length; fi++) {
+                allFiles[files[fi]] = true;
+                var cc = classifyPath(files[fi]).category;
+                allCats[cc] = true;
+            }
+
+            var cats = {};
+            for (var fj = 0; fj < files.length; fj++) {
+                var ccc = classifyPath(files[fj]).category;
+                cats[ccc] = (cats[ccc] || 0) + 1;
+            }
+            var catList = Object.keys(cats).map(function (k) { return { name: k, count: cats[k], selected: true }; });
+
+            var priority = Math.min(80, 30 + items.length * 5);
+
+            // 构建 merged_from
+            var mergedFrom = [];
+            for (var mf = 0; mf < files.length; mf++) {
+                var fname = files[mf];
+                var fcount = 0;
+                for (var mc = 0; mc < items.length; mc++) {
+                    if (items[mc].file === fname) fcount++;
+                }
+                mergedFrom.push({ file: fname, count: fcount });
+            }
+
+            var totalItemCount = itemIds.length || items.length;
+            groups.push({
+                change_type: 'PURE_REPLACE',
+                summary: '检测到 ' + items.length + ' 处相同替换 (' + first.old_val + ' → ' + first.new_val + ')',
+                suggestions: [],
+                action_preview: [{ from: first.old_val, to: first.new_val }],
+                file_count: files.length,
+                item_count: itemIds.length,
+                occurrence_count: items.length,
+                l1_options: {
+                    suggested: 'exact',
+                    categories: catList,
+                    exact_files: files,
+                    available: [
+                        { level: 'exact', label: '仅涉及文件', count: files.length },
+                        { level: 'category', label: '同分类文件', count: Object.keys(cats).length > 0 ? Object.values(cats).reduce(function(a,b){return a+b;},0) : files.length },
+                        { level: 'all', label: '所有文件', count: Object.keys(cats).length > 0 ? Object.values(cats).reduce(function(a,b){return a+b;},0) : files.length }
+                    ]
+                },
+                l2_options: {
+                    suggested: itemIds.length ? 'id' : 'full_text',
+                    item_ids: itemIds,
+                    available: [
+                        { level: 'id', label: '按ID定位', count: itemIds.length },
+                        { level: 'full_text', label: '全文匹配', count: totalItemCount }
+                    ]
+                },
+                l3_options: {
+                    suggested: fieldPaths.length === 1 ? 'restricted' : 'all_text',
+                    fields: fieldPaths,
+                    available: [
+                        { level: 'restricted', label: '限定字段', count: fieldPaths.length },
+                        { level: 'all_text', label: '全部字段', count: fieldPaths.length }
+                    ]
+                },
+                l4_options: {
+                    suggested: 'exact',
+                    available: [
+                        { level: 'exact', label: '完整匹配' },
+                        { level: 'none', label: '子串匹配' }
+                    ]
+                },
+                score: { priority: priority },
+                merged_from: mergedFrom,
+                is_merged: files.length > 1,
+                merge_candidates: []
+            });
+        }
+
+        // 检测可合并的组对（本地简化版）
+        var candidates = [];
+        for (var i = 0; i < groups.length; i++) {
+            for (var j = i + 1; j < groups.length; j++) {
+                var g1 = groups[i], g2 = groups[j];
+                var f1 = g1.l3_options.fields || [];
+                var f2 = g2.l3_options.fields || [];
+                var fieldOverlap = false;
+                for (var fa = 0; fa < f1.length; fa++) {
+                    for (var fb = 0; fb < f2.length; fb++) {
+                        if (f1[fa] === f2[fb]) { fieldOverlap = true; break; }
+                    }
+                    if (fieldOverlap) break;
+                }
+                if (!fieldOverlap) continue;
+
+                var ap1 = g1.action_preview.map(function (a) { return a.from; });
+                var ap2 = g2.action_preview.map(function (a) { return a.from; });
+                if (ap1.join(',') === ap2.join(',')) continue;
+
+                var files1 = g1.l1_options.exact_files || [];
+                var files2 = g2.l1_options.exact_files || [];
+                var cats1 = (g1.l1_options.categories || []).map(function (c) { return c.name; });
+                var cats2 = (g2.l1_options.categories || []).map(function (c) { return c.name; });
+
+                var sharedFiles = 0;
+                for (var sf = 0; sf < files1.length; sf++) {
+                    for (var sg = 0; sg < files2.length; sg++) {
+                        if (files1[sf] === files2[sg]) { sharedFiles++; break; }
+                    }
+                }
+                var sharedCats = 0;
+                for (var ca = 0; ca < cats1.length; ca++) {
+                    for (var cb = 0; cb < cats2.length; cb++) {
+                        if (cats1[ca] === cats2[cb]) { sharedCats++; break; }
+                    }
+                }
+
+                var score = 10 + (sharedFiles >= 2 ? 5 : 0) + (sharedCats >= 2 ? 3 : 0);
+                if (score >= 8) {
+                    var sharedField = f1[0];  // we know there's at least one overlap
+                    for (var fa2 = 0; fa2 < f1.length; fa2++) {
+                        for (var fb2 = 0; fb2 < f2.length; fb2++) {
+                            if (f1[fa2] === f2[fb2]) { sharedField = f1[fa2]; break; }
+                        }
+                    }
+                    var reason = '相同字段 \'' + sharedField + '\'，可合并为更宽的作用域';
+                    candidates.push({ idx1: i, idx2: j, score: score, reason: reason });
+                    groups[i].merge_candidates.push([j, score, reason]);
+                    groups[j].merge_candidates.push([i, score, reason]);
+                }
+            }
+        }
+
+        groups.sort(function (a, b) { return (b.score.priority || 0) - (a.score.priority || 0); });
+
+        return {
+            groups: groups,
+            merge_suggestions: [],
+            stats: {
+                change_count: changes.length,
+                group_count: groups.length,
+                file_count: Object.keys(allFiles).length,
+                category_count: Object.keys(allCats).length
+            },
+            merge_candidates: candidates
+        };
+    }
+
+    async function openSmartGenerationV3() {
+        var changes = collectChangesForSmartGen();
+        var counts = getChangeCounts();
+        closeSmartGenDialogV3();
+
+        // 创建 overlay
+        var overlay = document.createElement('div');
+        overlay.className = 're-overlay';
+        state.smartGenOverlay = overlay;
+        state.smartGenGroups = null;
+
+        // 渲染加载状态
+        overlay.innerHTML =
+            '<div class="re-smart-gen-dialog">' +
+            '<div class="re-smart-gen-header"><h3><i class="fas fa-brain"></i> 智能生成规则集</h3>' +
+            '<button class="re-btn re-btn-sm" id="re-v3-close-btn">✕</button></div>' +
+            '<div class="re-smart-gen-body" id="re-v3-body">' +
+            '<div class="re-empty-state" style="padding:40px;">' +
+            '<i class="fas fa-spinner fa-pulse"></i>' +
+            '正在分析 ' + changes.length + ' 处变更...</div>' +
+            '</div>' +
+            '</div>';
+
+        document.body.appendChild(overlay);
+
+        var closeBtn = overlay.querySelector('#re-v3-close-btn');
+        if (closeBtn) closeBtn.addEventListener('click', closeSmartGenDialogV3);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) closeSmartGenDialogV3(); });
+
+        // 立即分析
+        var result = await analyzeChangesV3(changes);
+        state.smartGenGroups = result.groups || [];
+
+        // 渲染结果
+        renderV3Results(result, counts);
+    }
+
+    function closeSmartGenDialogV3() {
+        if (state.smartGenOverlay && state.smartGenOverlay.parentNode) {
+            state.smartGenOverlay.parentNode.removeChild(state.smartGenOverlay);
+        }
+        state.smartGenOverlay = null;
+        state.smartGenGroups = null;
+    }
+
+    function renderV3Results(result, counts) {
+        var overlay = state.smartGenOverlay;
+        if (!overlay) return;
+
+        var body = overlay.querySelector('#re-v3-body');
+        if (!body) return;
+
+        var groups = result.groups || [];
+        var stats = result.stats || {};
+        var mergeCandidates = result.merge_candidates || [];
+
+        if (!groups.length) {
+            body.innerHTML = '<div class="re-empty-state"><i class="fas fa-info-circle"></i>' +
+                '未检测到可生成规则的变更。<br><small>请先在文件中修改并保存，然后点击"比较变更"后再试。</small></div>';
+            return;
+        }
+
+        // 自动合并高置信度候选
+        var autoMergeResult = _autoMergeCandidates(groups, mergeCandidates);
+        groups = autoMergeResult.groups;
+        mergeCandidates = autoMergeResult.remaining;
+        var autoMergedCount = 0;
+        for (var ai = 0; ai < groups.length; ai++) {
+            if (groups[ai]._auto_merged) autoMergedCount++;
+        }
+
+        // 保存 mergeCandidates 供拆分时使用
+        state._lastMergeCandidates = mergeCandidates;
+
+        // 顶部摘要栏
+        var html = '<div class="re-v3-summary-bar">' +
+            '<span>📊 ' + (stats.change_count || 0) + ' 处变更 → ' + groups.length + ' 个规则建议</span>' +
+            '<span class="re-v3-stat">' + (stats.file_count || 0) + ' 个文件</span>' +
+            '<span class="re-v3-stat">' + (stats.category_count || 0) + ' 个分类</span>';
+        if (autoMergedCount) {
+            html += '<span class="re-v3-stat re-v3-stat-auto-merge">🔄 已自动合并 ' + autoMergedCount + ' 组</span>';
+        } else if (mergeCandidates.length) {
+            html += '<span class="re-v3-stat re-v3-stat-merge">🔄 ' + mergeCandidates.length + ' 组可合并</span>';
+        }
+        html += '</div>';
+
+        // 检查 merge candidate 关系，用于在卡片间插入连接器
+        var mergeMap = {};  // idx -> [mergeInfo, ...]
+        if (mergeCandidates.length) {
+            for (var mi = 0; mi < mergeCandidates.length; mi++) {
+                var mc = mergeCandidates[mi];
+                if (!mergeMap[mc.idx1]) mergeMap[mc.idx1] = [];
+                mergeMap[mc.idx1].push(mc);
+            }
+        }
+
+        // 渲染组卡片（按结果顺序渲染，在可合并组之间插入连接器）
+        var rendered = {};
+        for (var i = 0; i < groups.length; i++) {
+            html += renderV3GroupCard(groups[i], i);
+
+            // 如果有指向后续组的 merge，插入连接器提示
+            if (mergeMap[i]) {
+                for (var mj = 0; mj < mergeMap[i].length; mj++) {
+                    var mc2 = mergeMap[i][mj];
+                    if (mc2.idx2 > i && !rendered[mc2.idx1 + '_' + mc2.idx2]) {
+                        rendered[mc2.idx1 + '_' + mc2.idx2] = true;
+                        html += renderMergeConnector(mc2.idx1, mc2.idx2, mc2.score, mc2.reason);
+                    }
+                }
+            }
+        }
+
+        // 底部操作栏
+        html += '<div class="re-v3-footer">' +
+            '<button class="re-btn re-btn-accent" id="re-v3-apply-all-btn">✅ 全部应用 (' + groups.length + '条)</button>' +
+            '<button class="re-btn" id="re-v3-close-footer-btn">关闭</button>' +
+            '</div>';
+
+        body.innerHTML = html;
+
+        // 绑定事件
+        var closeFooterBtn = overlay.querySelector('#re-v3-close-footer-btn');
+        if (closeFooterBtn) closeFooterBtn.addEventListener('click', closeSmartGenDialogV3);
+
+        var applyAllBtn = overlay.querySelector('#re-v3-apply-all-btn');
+        if (applyAllBtn) applyAllBtn.addEventListener('click', applyAllV3WithDedup);
+
+        var previewBtns = body.querySelectorAll('.re-v3-preview-btn');
+        for (var pi = 0; pi < previewBtns.length; pi++) {
+            previewBtns[pi].addEventListener('click', (function (idx) {
+                return function () { previewV3Group(groups[idx]); };
+            })(parseInt(previewBtns[pi].dataset.idx, 10)));
+        }
+
+        var applyBtns = body.querySelectorAll('.re-v3-apply-btn');
+        for (var ai = 0; ai < applyBtns.length; ai++) {
+            applyBtns[ai].addEventListener('click', (function (idx) {
+                return function () { applyV3Group(groups[idx]); };
+            })(parseInt(applyBtns[ai].dataset.idx, 10)));
+        }
+
+        var expandToggles = body.querySelectorAll('.re-v3-group-header');
+        for (var ei = 0; ei < expandToggles.length; ei++) {
+            expandToggles[ei].addEventListener('click', function () {
+                var card = this.closest('.re-v3-group-card');
+                if (!card) return;
+                var controls = card.querySelector('.re-v3-tier-controls');
+                var toggle = this.querySelector('.re-v3-expand-toggle');
+                if (controls) controls.classList.toggle('collapsed');
+                if (toggle) toggle.classList.toggle('expanded');
+            });
+        }
+
+        var mergeBtns = body.querySelectorAll('.re-v3-merge-btn');
+        for (var mbi = 0; mbi < mergeBtns.length; mbi++) {
+            mergeBtns[mbi].addEventListener('click', (function (g1Idx, g2Idx) {
+                return function () { mergeAndApplyV3(g1Idx, g2Idx); };
+            })(parseInt(mergeBtns[mbi].dataset.g1 || '0', 10),
+               parseInt(mergeBtns[mbi].dataset.g2 || '0', 10)));
+        }
+
+        var splitBtns = body.querySelectorAll('.re-v3-split-btn');
+        for (var si = 0; si < splitBtns.length; si++) {
+            splitBtns[si].addEventListener('click', (function (idx) {
+                return function (e) {
+                    e.stopPropagation();
+                    splitAutoMergedGroup(idx);
+                };
+            })(parseInt(splitBtns[si].dataset.idx, 10)));
+        }
+
+        var promoteBtns = body.querySelectorAll('.re-v3-promote-btn');
+        for (var pmi = 0; pmi < promoteBtns.length; pmi++) {
+            promoteBtns[pmi].addEventListener('click', (function (btn) {
+                return function (e) {
+                    e.stopPropagation();
+                    var tier = btn.dataset.tier;
+                    var level = btn.dataset.level;
+                    var idx = parseInt(btn.dataset.idx, 10);
+                    promoteConstraint(idx, tier, level);
+                };
+            })(promoteBtns[pmi]));
+        }
+    }
+
+    function renderV3GroupCard(group, idx) {
+        var score = group.score || {};
+        var priority = score.priority || 0;
+        var tier, tierLabel, badgeCls;
+        if (priority >= 70) { tier = '🟢'; tierLabel = '推荐'; badgeCls = 're-score-green'; }
+        else if (priority >= 40) { tier = '🟡'; tierLabel = '可选'; badgeCls = 're-score-yellow'; }
+        else { tier = '🔴'; tierLabel = '需审查'; badgeCls = 're-score-red'; }
+
+        // 高分组默认收起 L1-L4
+        var collapsedClass = (priority >= 70) ? ' collapsed' : '';
+
+        var html = '<div class="re-v3-group-card" data-group-idx="' + idx + '">';
+        html += '<div class="re-v3-group-header">' +
+            '<h4><span>' + tier + '</span> 规则 #' + (idx + 1) +
+            ' · <span class="re-score-badge ' + badgeCls + '">' + priority + '分</span>';
+        if (group.is_merged) {
+            html += ' <span class="re-v3-merged-badge">已合并 ' + (group.file_count || 0) + ' 文件</span>';
+        }
+        if (group._auto_merged) {
+            html += ' <span class="re-v3-auto-merged-badge">🔄 已自动合并 ' +
+                (group._split_origin ? group._split_origin.length : 0) + ' 组</span>';
+        }
+        html += '</h4>' +
+            '<span class="re-v3-expand-toggle' + (priority >= 70 ? '' : ' expanded') + '">▼</span>' +
+            '</div>';
+
+        // 摘要
+        if (group.summary) {
+            html += '<div class="re-v3-summary">💡 ' + escapeHtml(group.summary) + '</div>';
+        }
+
+        // Action preview chips
+        if (group.action_preview && group.action_preview.length) {
+            html += '<div class="re-v3-action-patterns">';
+            for (var i = 0; i < group.action_preview.length; i++) {
+                var ap = group.action_preview[i];
+                html += '<span class="re-v3-pattern-chip">' +
+                    escapeHtml(String(ap.from || '')) + ' → ' + escapeHtml(String(ap.to || '')) + '</span>';
+            }
+            html += '</div>';
+        }
+
+        // 作用域摘要
+        var files = group.l1_options && group.l1_options.exact_files ? group.l1_options.exact_files : [];
+        var categories = group.l1_options && group.l1_options.categories ? group.l1_options.categories : [];
+        html += '<div class="re-v3-scope-summary">📁 ';
+        if (categories.length) {
+            var catNames = [];
+            for (var ci = 0; ci < categories.length; ci++) catNames.push(categories[ci].name + '(' + categories[ci].count + ')');
+            html += escapeHtml(catNames.join(', '));
+        }
+        if (files.length <= 5 && files.length > 0) {
+            html += ' — ' + escapeHtml(files.join(', '));
+        }
+        html += '</div>';
+
+        // 合并来源展示
+        if (group.merged_from && group.merged_from.length > 1) {
+            html += '<div class="re-v3-merged-from">';
+            html += '<span class="re-v3-merged-label">🔗 合并来源: </span>';
+            var mfParts = [];
+            for (var mi = 0; mi < Math.min(group.merged_from.length, 5); mi++) {
+                var mf = group.merged_from[mi];
+                var shortName = mf.file.length > 35 ? '...' + mf.file.slice(-32) : mf.file;
+                mfParts.push(escapeHtml(shortName) + '(' + mf.count + ')');
+            }
+            html += mfParts.join(', ');
+            if (group.merged_from.length > 5) {
+                html += ' +' + (group.merged_from.length - 5) + ' 更多';
+            }
+            html += '</div>';
+        }
+
+        // 简化的 L1-L4 控件
+        html += renderSimplifiedTierControls(group, idx, collapsedClass);
+
+        // 操作按钮
+        html += '<div class="re-v3-actions-row">' +
+            '<button class="re-btn re-btn-sm re-v3-preview-btn" data-idx="' + idx + '">📋 预览JSON</button>' +
+            '<button class="re-btn re-btn-sm re-btn-success re-v3-apply-btn" data-idx="' + idx + '">✅ 生成此规则</button>';
+        if (group._auto_merged) {
+            html += '<button class="re-btn re-btn-xs re-v3-split-btn" data-idx="' + idx + '" title="拆分为原始组">↩ 拆分</button>';
+        }
+        html += '</div>';
+
+        // 预览输出区域
+        html += '<pre class="re-v3-preview-out" style="display:none;margin-top:6px;font-size:12px;background:var(--color-bg-primary);padding:8px;border-radius:6px;overflow:auto;max-height:200px;white-space:pre-wrap;"></pre>';
+
+        html += '</div>';
+        return html;
+    }
+
+    function renderSimplifiedTierControls(group, idx, collapsedClass) {
+        var l1 = group.l1_options || {};
+        var l2 = group.l2_options || {};
+        var l3 = group.l3_options || {};
+        var l4 = group.l4_options || {};
+
+        var html = '<div class="re-v3-tier-controls' + (collapsedClass || '') + '">';
+
+        // L1: 文件范围 — 紧凑 radio + 分类复选框
+        var l1Default = l1.suggested || 'exact';
+        // 确保 valid 值
+        if (['all', 'category', 'exact', 'custom'].indexOf(l1Default) === -1) l1Default = 'exact';
+        html += '<div class="re-v3-tier-row">' +
+            '<span class="re-v3-tier-label">L1 文件范围</span>';
+        var l1Opts = [
+            { val: 'category', text: '按分类' },
+            { val: 'all', text: '全部文件' },
+            { val: 'exact', text: '精确文件' },
+            { val: 'custom', text: '自定义' }
+        ];
+        for (var oi = 0; oi < l1Opts.length; oi++) {
+            var checked = (l1Opts[oi].val === l1Default) ? 'checked' : '';
+            html += '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l1-' + idx +
+                '" value="' + l1Opts[oi].val + '" ' + checked + '>' +
+                '<span class="re-tier-text">' + l1Opts[oi].text + '</span></label>';
+        }
+        // L1 推广按钮
+        var l1Avail = l1.available || [];
+        if (l1Avail.length > 1) {
+            for (var l1ai = 0; l1ai < l1Avail.length - 1; l1ai++) {
+                if (l1Avail[l1ai].level === l1Default) {
+                    var nextL1 = l1Avail[l1ai + 1];
+                    html += '<button class="re-v3-promote-btn" data-tier="l1" data-level="' + nextL1.level +
+                        '" data-idx="' + idx + '" title="放宽文件范围">▸ ' + escapeHtml(nextL1.label) +
+                        ' (' + (nextL1.count || '?') + ')</button>';
+                    break;
+                }
+            }
+        }
+        html += '</div>';
+        if (l1.categories && l1.categories.length) {
+            html += '<div class="re-v3-tier-row" style="margin-left:74px;">';
+            for (var ci = 0; ci < l1.categories.length; ci++) {
+                var c = l1.categories[ci];
+                var ck = c.selected !== false ? 'checked' : '';
+                html += '<label class="re-checkbox"><input type="checkbox" class="re-l1-cat" value="' +
+                    escapeAttr(c.name) + '" ' + ck + '> ' + escapeHtml(c.name) + ' (' + c.count + ')</label>';
+            }
+            html += '</div>';
+        }
+        html += '<div class="re-v3-tier-row" style="margin-left:74px;">' +
+            '<input type="text" class="re-l1-custom re-v3-custom-input" placeholder="自定义正则" style="width:60%;">' +
+            '</div>';
+
+        // L2: 条目定位
+        var useId = l2.suggested === 'id' && l2.item_ids && l2.item_ids.length;
+        var l2Default = useId ? 'id' : 'full_text';
+        html += '<div class="re-v3-tier-row">' +
+            '<span class="re-v3-tier-label">L2 条目定位</span>' +
+            '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l2-' + idx +
+            '" value="full_text"' + (useId ? '' : ' checked') + '>全文</label>' +
+            '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l2-' + idx +
+            '" value="id"' + (useId ? ' checked' : '') + '>按ID:</label>' +
+            '<input type="text" class="re-l2-ids re-v3-l2-input" placeholder="id1,id2" value="' +
+            escapeAttr((l2.item_ids || []).join(',')) + '">';
+        // L2 推广按钮
+        var l2Avail = l2.available || [];
+        if (l2Avail.length > 1) {
+            for (var l2ai = 0; l2ai < l2Avail.length - 1; l2ai++) {
+                if (l2Avail[l2ai].level === l2Default) {
+                    var nextL2 = l2Avail[l2ai + 1];
+                    html += '<button class="re-v3-promote-btn" data-tier="l2" data-level="' + nextL2.level +
+                        '" data-idx="' + idx + '" title="放宽条目定位">▸ ' + escapeHtml(nextL2.label) +
+                        ' (' + (nextL2.count || '?') + ')</button>';
+                    break;
+                }
+            }
+        }
+        html += '</div>';
+
+        // L3: 字段约束
+        var fields = l3.fields || [];
+        html += '<div class="re-v3-tier-row">' +
+            '<span class="re-v3-tier-label">L3 字段约束</span>' +
+            '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l3-' + idx +
+            '" value="restricted"' + (fields.length <= 1 ? ' checked' : '') + '>限定</label>' +
+            '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l3-' + idx +
+            '" value="all_text"' + (fields.length > 1 ? ' checked' : '') + '>所有文本</label>';
+        if (fields.length) {
+            html += '<div class="re-v3-tier-checks">';
+            for (var fi = 0; fi < fields.length; fi++) {
+                var fck = (fields.length === 1) ? 'checked' : '';
+                html += '<label class="re-checkbox"><input type="checkbox" class="re-l3-field" value="' +
+                    escapeAttr(fields[fi]) + '" ' + fck + '> ' + escapeHtml(fields[fi]) + '</label>';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+
+        // L4: 额外条件
+        var l4Suggested = l4.suggested || 'exact';
+        html += '<div class="re-v3-tier-row">' +
+            '<span class="re-v3-tier-label">L4 额外条件</span>' +
+            '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l4-' + idx +
+            '" value="exact"' + (l4Suggested === 'exact' ? ' checked' : '') + '>完整匹配</label>' +
+            '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l4-' + idx +
+            '" value="none"' + (l4Suggested === 'none' ? ' checked' : '') + '>无</label>' +
+            '<label class="re-tier-option"><input type="radio" class="re-tier-radio" name="l4-' + idx +
+            '" value="custom"' + (l4Suggested === 'custom' ? ' checked' : '') + '>自定义</label>' +
+            '<input type="text" class="re-l4-field re-v3-l4-field" placeholder="字段" style="width:80px;">' +
+            '<input type="text" class="re-l4-pattern re-v3-l4-pattern" placeholder="匹配正则" style="width:120px;">';
+        // L4 推广按钮
+        var l4Avail = l4.available || [];
+        if (l4Avail.length > 1) {
+            for (var l4ai = 0; l4ai < l4Avail.length - 1; l4ai++) {
+                if (l4Avail[l4ai].level === l4Suggested) {
+                    var nextL4 = l4Avail[l4ai + 1];
+                    html += '<button class="re-v3-promote-btn" data-tier="l4" data-level="' + nextL4.level +
+                        '" data-idx="' + idx + '" title="放宽匹配方式">▸ ' + escapeHtml(nextL4.label) + '</button>';
+                    break;
+                }
+            }
+        }
+        html += '</div>';
+
+        html += '</div>';
+        return html;
+    }
+
+    function renderMergeConnector(g1Idx, g2Idx, score, reason) {
+        return '<div class="re-v3-merge-connector">' +
+            '<span class="re-v3-merge-icon">🔄</span>' +
+            '<span class="re-v3-merge-text">规则 #' + (g1Idx + 1) + ' 和 #' + (g2Idx + 1) +
+            ' — ' + escapeHtml(String(reason)) + '</span>' +
+            '<button class="re-btn re-btn-sm re-v3-merge-btn" data-g1="' + g1Idx + '" data-g2="' + g2Idx + '">合并并应用</button>' +
+            '</div>';
+    }
+
+    function previewV3Group(group) {
+        var idx = state.smartGenGroups ? state.smartGenGroups.indexOf(group) : -1;
+        if (idx < 0 || !state.smartGenOverlay) return;
+        var card = state.smartGenOverlay.querySelector('.re-v3-group-card[data-group-idx="' + idx + '"]');
+        if (!card) return;
+        var sel = readSmartSelections(card, idx);
+        var rules = buildSmartGroupRules(group, sel);
+        var out = card.querySelector('.re-v3-preview-out');
+        if (!out) return;
+        out.textContent = JSON.stringify(rules, null, 2);
+        out.style.display = '';
+    }
+
+    async function applyV3Group(group) {
+        if (!group) return;
+        var idx = state.smartGenGroups ? state.smartGenGroups.indexOf(group) : -1;
+        if (idx < 0) { showToast('找不到该组', 'error'); return; }
+        if (!state.smartGenOverlay) return;
+        var card = state.smartGenOverlay.querySelector('.re-v3-group-card[data-group-idx="' + idx + '"]');
+        if (!card) { showToast('找不到组的 DOM', 'error'); return; }
+        var sel = readSmartSelections(card, idx);
+        var rules = buildSmartGroupRules(group, sel);
+        if (!rules || !rules.length) { showToast('未能从该组生成规则', 'error'); return; }
+        if (!state.currentRuleset) { showToast('请先选择或新建一个规则集', 'error'); return; }
+        if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
+        for (var i = 0; i < rules.length; i++) state.currentRuleset.rules.push(rules[i]);
+        renderRulesPreview();
+        syncAdvancedFromRuleset();
+        await persistCurrentRuleset();
+        showToast('已添加 ' + rules.length + ' 条规则', 'success');
+
+        // 视觉反馈
+        card.style.borderColor = 'var(--color-success, #2ecc71)';
+        var applyBtn = card.querySelector('.re-v3-apply-btn');
+        if (applyBtn) { applyBtn.textContent = '✓ 已应用'; applyBtn.disabled = true; }
+    }
+
+    function _mergeTwoGroups(g1, g2) {
+        // 合并 action_preview
+        var mergedActions = (g1.action_preview || []).slice();
+        for (var i = 0; i < (g2.action_preview || []).length; i++) {
+            var dup = false;
+            for (var j = 0; j < mergedActions.length; j++) {
+                if (mergedActions[j].from === g2.action_preview[i].from &&
+                    mergedActions[j].to === g2.action_preview[i].to) { dup = true; break; }
+            }
+            if (!dup) mergedActions.push(g2.action_preview[i]);
+        }
+
+        // 合并文件范围
+        var files1 = (g1.l1_options && g1.l1_options.exact_files) || [];
+        var files2 = (g2.l1_options && g2.l1_options.exact_files) || [];
+        var mergedFiles = uniqArr(files1.concat(files2));
+
+        var cats1 = (g1.l1_options && g1.l1_options.categories) || [];
+        var cats2 = (g2.l1_options && g2.l1_options.categories) || [];
+        var catMap = {};
+        for (var k = 0; k < cats1.length; k++) catMap[cats1[k].name] = cats1[k].count;
+        for (var k = 0; k < cats2.length; k++) {
+            if (catMap[cats2[k].name]) catMap[cats2[k].name] = Math.max(catMap[cats2[k].name], cats2[k].count);
+            else catMap[cats2[k].name] = cats2[k].count;
+        }
+        var mergedCats = Object.keys(catMap).map(function (cn) { return { name: cn, count: catMap[cn], selected: true }; });
+
+        var mergedFields = uniqArr(
+            (g1.l3_options && g1.l3_options.fields || []).concat(
+            g2.l3_options && g2.l3_options.fields || [])
+        );
+
+        var mergedFrom = (g1.merged_from || []).concat(g2.merged_from || []);
+        var mergedIds = uniqArr((g1.l2_options && g1.l2_options.item_ids || []).concat(
+                                g2.l2_options && g2.l2_options.item_ids || []));
+
+        return {
+            change_type: g1.change_type,
+            summary: '已合并 2 组规则: ' + (g1.summary || '') + ' + ' + (g2.summary || ''),
+            suggestions: [],
+            action_preview: mergedActions,
+            file_count: mergedFiles.length,
+            item_count: (g1.item_count || 0) + (g2.item_count || 0),
+            occurrence_count: (g1.occurrence_count || 0) + (g2.occurrence_count || 0),
+            l1_options: { suggested: mergedCats.length <= 2 ? 'category' : 'multi_category', categories: mergedCats, exact_files: mergedFiles },
+            l2_options: { suggested: mergedIds.length ? 'id' : 'full_text', item_ids: mergedIds },
+            l3_options: { suggested: mergedFields.length === 1 ? 'restricted' : 'all_text', fields: mergedFields },
+            l4_options: { suggested: 'exact' },
+            score: { priority: Math.max(g1.score && g1.score.priority || 0, g2.score && g2.score.priority || 0) },
+            merged_from: mergedFrom,
+            is_merged: true,
+            merge_candidates: [],
+            _original_groups: [JSON.parse(JSON.stringify(g1)), JSON.parse(JSON.stringify(g2))]
+        };
+    }
+
+    function _autoMergeCandidates(groups, mergeCandidates) {
+        if (!mergeCandidates || !mergeCandidates.length) return { groups: groups.slice(), remaining: [] };
+
+        // 只自动合并高分候选（score >= 10）
+        var highConf = [];
+        for (var h = 0; h < mergeCandidates.length; h++) {
+            if (mergeCandidates[h].score >= 10) highConf.push(mergeCandidates[h]);
+        }
+        if (!highConf.length) return { groups: groups.slice(), remaining: mergeCandidates.slice() };
+
+        // 按分数降序排序
+        highConf.sort(function (a, b) { return b.score - a.score; });
+
+        var merged = {};   // idx -> mergedGroup
+        var consumed = {}; // idx -> true
+
+        for (var i = 0; i < highConf.length; i++) {
+            var mc = highConf[i];
+            var idx1 = mc.idx1, idx2 = mc.idx2;
+            if (consumed[idx1] || consumed[idx2]) continue;
+
+            var g1 = merged[idx1] || groups[idx1];
+            var g2 = groups[idx2];
+
+            var mergedGroup = _mergeTwoGroups(g1, g2);
+            mergedGroup._auto_merged = true;
+            mergedGroup._split_origin = [idx1, idx2];
+
+            merged[idx1] = mergedGroup;
+            consumed[idx2] = true;
+        }
+
+        // 构建新的 groups 列表
+        var newGroups = [];
+        var oldToNew = {};  // 旧 idx -> 新 idx
+        for (var j = 0; j < groups.length; j++) {
+            if (consumed[j]) continue;
+            if (merged[j]) {
+                oldToNew[j] = newGroups.length;
+                newGroups.push(merged[j]);
+            } else {
+                oldToNew[j] = newGroups.length;
+                newGroups.push(groups[j]);
+            }
+        }
+
+        // 过滤剩余 candidates（去重 + 重映射 idx）
+        var remaining = [];
+        var seenPairs = {};
+        for (var k = 0; k < mergeCandidates.length; k++) {
+            var rmc = mergeCandidates[k];
+            var ni1 = oldToNew.hasOwnProperty(rmc.idx1) ? oldToNew[rmc.idx1] : rmc.idx1;
+            var ni2 = oldToNew.hasOwnProperty(rmc.idx2) ? oldToNew[rmc.idx2] : rmc.idx2;
+            // 跳过已自动合并的（两者映射到相同 idx）
+            if (ni1 === ni2) continue;
+            var pairKey = Math.min(ni1, ni2) + '_' + Math.max(ni1, ni2);
+            if (seenPairs[pairKey]) continue;
+            seenPairs[pairKey] = true;
+            if (rmc.score < 10) {
+                remaining.push({ idx1: ni1, idx2: ni2, score: rmc.score, reason: rmc.reason });
+            }
+        }
+
+        return { groups: newGroups, remaining: remaining };
+    }
+
+    async function mergeAndApplyV3(g1Idx, g2Idx) {
+        var groups = state.smartGenGroups;
+        if (!groups || g1Idx >= groups.length || g2Idx >= groups.length) {
+            showToast('找不到要合并的组', 'error');
+            return;
+        }
+        var g1 = groups[g1Idx], g2 = groups[g2Idx];
+        var mergedGroup = _mergeTwoGroups(g1, g2);
+        await applyV3Group(mergedGroup);
+    }
+
+    function splitAutoMergedGroup(groupIdx) {
+        var groups = state.smartGenGroups;
+        if (!groups || groupIdx >= groups.length) return;
+        var group = groups[groupIdx];
+        var originGroups = group._original_groups || [];
+        if (originGroups.length < 2) {
+            showToast('该组没有可拆分的来源', 'error');
+            return;
+        }
+
+        // 用原始组替换当前合并组
+        var newGroups = [];
+        for (var i = 0; i < groups.length; i++) {
+            if (i === groupIdx) {
+                for (var j = 0; j < originGroups.length; j++) {
+                    var og = JSON.parse(JSON.stringify(originGroups[j]));
+                    delete og._auto_merged;
+                    delete og._split_origin;
+                    delete og._original_groups;
+                    newGroups.push(og);
+                }
+            } else {
+                newGroups.push(groups[i]);
+            }
+        }
+
+        state.smartGenGroups = newGroups;
+
+        // 重新渲染
+        var overlay = state.smartGenOverlay;
+        if (!overlay) return;
+        var result = {
+            groups: newGroups,
+            merge_candidates: state._lastMergeCandidates || [],
+            stats: { group_count: newGroups.length }
+        };
+        // 重新检测合并候选
+        if (typeof analyzeChangesLocallyV3 !== 'undefined') {
+            // 使用本地检测重新计算 merge_candidates
+            result.merge_candidates = (function () {
+                var candidates = [];
+                for (var a = 0; a < newGroups.length; a++) {
+                    for (var b = a + 1; b < newGroups.length; b++) {
+                        var ga = newGroups[a], gb = newGroups[b];
+                        if (ga.change_type !== gb.change_type) continue;
+                        var fa = ga.l3_options && ga.l3_options.fields || [];
+                        var fb = gb.l3_options && gb.l3_options.fields || [];
+                        var overlap = false;
+                        for (var fi = 0; fi < fa.length; fi++) {
+                            if (fb.indexOf(fa[fi]) !== -1) { overlap = true; break; }
+                        }
+                        if (!overlap) continue;
+                        var filesA = ga.l1_options && ga.l1_options.exact_files || [];
+                        var filesB = gb.l1_options && gb.l1_options.exact_files || [];
+                        var sharedFiles = 0;
+                        for (var sfi = 0; sfi < filesA.length; sfi++) {
+                            if (filesB.indexOf(filesA[sfi]) !== -1) sharedFiles++;
+                        }
+                        var score = 10 + (sharedFiles >= 2 ? 5 : 0);
+                        if (score >= 8) {
+                            candidates.push({ idx1: a, idx2: b, score: score, reason: '相同字段，文件重叠 ' + sharedFiles + ' 个' });
+                        }
+                    }
+                }
+                return candidates;
+            })();
+        }
+        renderV3Results(result, {});
+        showToast('已拆分为 ' + originGroups.length + ' 个独立组', 'success');
+    }
+
+    function promoteConstraint(idx, tier, level) {
+        if (!state.smartGenOverlay) return;
+        var card = state.smartGenOverlay.querySelector('.re-v3-group-card[data-group-idx="' + idx + '"]');
+        if (!card) return;
+
+        // 找到对应 radio 并选中
+        var radio = card.querySelector('input[name="' + tier + '-' + idx + '"][value="' + level + '"]');
+        if (!radio) {
+            // 检查是否是 L1 category 特殊情况
+            if (tier === 'l1' && level === 'category') {
+                // 选中按分类 radio + 勾选所有分类
+                var catRadio = card.querySelector('input[name="l1-' + idx + '"][value="category"]');
+                if (catRadio) { catRadio.checked = true; catRadio.dispatchEvent(new Event('change', { bubbles: true })); }
+                var catChecks = card.querySelectorAll('.re-l1-cat');
+                for (var cci = 0; cci < catChecks.length; cci++) { catChecks[cci].checked = true; }
+            }
+            return;
+        }
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+
+        // 更新推广按钮（隐藏当前按钮，显示下一级）
+        updatePromoteButtons(card, idx);
+    }
+
+    function updatePromoteButtons(card, idx) {
+        if (!card) return;
+
+        // L1: promote button shows NEXT broader level; hide if already at or past its target
+        var l1Radios = card.querySelectorAll('input[name="l1-' + idx + '"]');
+        var currentL1 = '';
+        for (var ri = 0; ri < l1Radios.length; ri++) {
+            if (l1Radios[ri].checked) { currentL1 = l1Radios[ri].value; break; }
+        }
+        // L1 broadening order: exact → category → all
+        var l1Order = ['exact', 'category', 'all'];
+        var l1CurrentIdx = l1Order.indexOf(currentL1);
+        var l1PromoteBtns = card.querySelectorAll('.re-v3-promote-btn[data-tier="l1"]');
+        for (var pi = 0; pi < l1PromoteBtns.length; pi++) {
+            var btnTargetIdx = l1Order.indexOf(l1PromoteBtns[pi].dataset.level);
+            // Show only the button that targets the immediate next level
+            l1PromoteBtns[pi].style.display = (btnTargetIdx === l1CurrentIdx + 1) ? '' : 'none';
+        }
+
+        // L2 broadening order: id → full_text
+        var l2Radios = card.querySelectorAll('input[name="l2-' + idx + '"]');
+        var currentL2 = '';
+        for (var rj = 0; rj < l2Radios.length; rj++) {
+            if (l2Radios[rj].checked) { currentL2 = l2Radios[rj].value; break; }
+        }
+        var l2Order = ['id', 'full_text'];
+        var l2CurrentIdx = l2Order.indexOf(currentL2);
+        var l2PromoteBtns = card.querySelectorAll('.re-v3-promote-btn[data-tier="l2"]');
+        for (var pj = 0; pj < l2PromoteBtns.length; pj++) {
+            var btnTargetIdx2 = l2Order.indexOf(l2PromoteBtns[pj].dataset.level);
+            l2PromoteBtns[pj].style.display = (btnTargetIdx2 === l2CurrentIdx + 1) ? '' : 'none';
+        }
+
+        // L4 broadening order: exact → none
+        var l4Radios = card.querySelectorAll('input[name="l4-' + idx + '"]');
+        var currentL4 = '';
+        for (var rk = 0; rk < l4Radios.length; rk++) {
+            if (l4Radios[rk].checked) { currentL4 = l4Radios[rk].value; break; }
+        }
+        var l4Order = ['exact', 'none'];
+        var l4CurrentIdx = l4Order.indexOf(currentL4);
+        var l4PromoteBtns = card.querySelectorAll('.re-v3-promote-btn[data-tier="l4"]');
+        for (var pk = 0; pk < l4PromoteBtns.length; pk++) {
+            var btnTargetIdx4 = l4Order.indexOf(l4PromoteBtns[pk].dataset.level);
+            l4PromoteBtns[pk].style.display = (btnTargetIdx4 === l4CurrentIdx + 1) ? '' : 'none';
+        }
+    }
+
+    function checkPostPromotionMerge(groupIdx) {
+        // 检查推广后是否可与其他组合并
+        var groups = state.smartGenGroups;
+        if (!groups || groupIdx >= groups.length) return;
+        var card = state.smartGenOverlay ?
+            state.smartGenOverlay.querySelector('.re-v3-group-card[data-group-idx="' + groupIdx + '"]') : null;
+        if (!card) return;
+        var sel = readSmartSelections(card, groupIdx);
+        var thisRules = buildSmartGroupRules(groups[groupIdx], sel);
+        if (!thisRules || !thisRules.length) return;
+        var thisSig = _computeRuleSignature(thisRules[0]);
+        if (!thisSig) return;
+
+        for (var i = 0; i < groups.length; i++) {
+            if (i === groupIdx) continue;
+            var otherCard = state.smartGenOverlay ?
+                state.smartGenOverlay.querySelector('.re-v3-group-card[data-group-idx="' + i + '"]') : null;
+            if (!otherCard) continue;
+            var otherSel = readSmartSelections(otherCard, i);
+            var otherRules = buildSmartGroupRules(groups[i], otherSel);
+            if (!otherRules || !otherRules.length) continue;
+            var otherSig = _computeRuleSignature(otherRules[0]);
+            if (thisSig === otherSig) {
+                showToast('推广后规则与规则 #' + (i + 1) + ' 相同，建议合并', 'info');
+                return;
+            }
+        }
+    }
+
+    async function applyAllV3WithDedup() {
+        var groups = state.smartGenGroups || [];
+        if (!groups.length) { showToast('没有可应用的组', 'error'); return; }
+        if (!state.currentRuleset) { showToast('请先选择或新建一个规则集', 'error'); return; }
+
+        var existingRules = state.currentRuleset.rules || [];
+        var appliedSigs = {};
+        var appliedCount = 0;
+        var skippedCount = 0;
+
+        // 为已有规则建立签名索引
+        for (var ei = 0; ei < existingRules.length; ei++) {
+            var sig = _computeRuleSignature(existingRules[ei]);
+            if (sig) appliedSigs[sig] = true;
+        }
+
+        for (var i = 0; i < groups.length; i++) {
+            var group = groups[i];
+            var card = state.smartGenOverlay ?
+                state.smartGenOverlay.querySelector('.re-v3-group-card[data-group-idx="' + i + '"]') : null;
+            var sel = card ? readSmartSelections(card, i) : {
+                l1: 'category',
+                l1Categories: (group.l1_options && group.l1_options.categories || []).map(function (c) { return c.name; }),
+                l1Custom: '',
+                l2: (group.l2_options && group.l2_options.item_ids && group.l2_options.item_ids.length) ? 'id' : 'full_text',
+                l2Ids: (group.l2_options && group.l2_options.item_ids) || [],
+                l3: (group.l3_options && group.l3_options.fields && group.l3_options.fields.length <= 1) ? 'restricted' : 'all_text',
+                l3Fields: (group.l3_options && group.l3_options.fields) || [],
+                l4: 'exact',
+                l4Field: '',
+                l4Pattern: ''
+            };
+
+            var rules = buildSmartGroupRules(group, sel);
+            if (!rules || !rules.length) continue;
+
+            for (var j = 0; j < rules.length; j++) {
+                var sig = _computeRuleSignature(rules[j]);
+                if (sig && appliedSigs[sig]) {
+                    skippedCount++;
+                    continue;
+                }
+                if (sig) appliedSigs[sig] = true;
+                existingRules.push(rules[j]);
+                appliedCount++;
+            }
+        }
+
+        if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
+        state.currentRuleset.rules = existingRules;
+
+        renderRulesPreview();
+        syncAdvancedFromRuleset();
+        await persistCurrentRuleset();
+        closeSmartGenDialogV3();
+        showToast('已应用 ' + appliedCount + ' 条规则' +
+            (skippedCount > 0 ? '（跳过 ' + skippedCount + ' 条重复）' : ''), 'success');
+    }
+
+    function _computeRuleSignature(rule) {
+        if (!rule) return null;
+        var aimFile = rule.aimFile || '';
+        var conds = (rule.conditions || []).map(function (c) {
+            var aim = c.aim || '';
+            var trigger = c.trigger || {};
+            return aim + '|' + (trigger.aim || '') + '|' + (trigger.re || '');
+        }).join(';;');
+        var actions = (rule.action || []).map(function (a) {
+            return (a.from || '') + '→' + (a.to || '');
+        }).join(';;');
+        return aimFile + '||' + conds + '||' + actions;
     }
 
     function analyzeChangesLocally(changes) {
@@ -2933,7 +4012,7 @@
             showToast('请先选择或新建一个规则集', 'error');
             return;
         }
-        await openSmartGenerationV2();
+        await openSmartGenerationV3();
     }
 
     // ═══════════════════════════════════════════════════════
@@ -2971,11 +4050,24 @@
         if (searchEl._localized) return;
         searchEl._localized = true;
 
+        // 监听关闭按钮，同步 _searchBridge 状态（必须在 CM6 移除面板前更新）
+        var closeBtn = searchEl.querySelector('button[name="close"]');
+        if (closeBtn && !closeBtn._closePatched) {
+            closeBtn._closePatched = true;
+            closeBtn.addEventListener('mousedown', function () {
+                _searchBridge.isOpen = false;
+                if (_searchBridge._restoreTimeout) {
+                    clearTimeout(_searchBridge._restoreTimeout);
+                    _searchBridge._restoreTimeout = null;
+                }
+            });
+        }
+
         // 翻译字典：英文 → 中文
         const T = {
             "Find": "查找", "Replace": "替换",
             "next": "下一个", "previous": "上一个", "all": "全部",
-            "match case": "区分大小写", "regexp": "正则",
+            "match case": "区分大小写", "regexp": "正则", "by word": "全词匹配",
             "replace": "替换", "replace all": "全部替换", "close": "关闭"
         };
 
@@ -2986,17 +4078,22 @@
             if (ph && T[ph]) inputs[i].placeholder = T[ph];
         }
 
-        // 翻译 button title / textContent
+        // 翻译 button title / textContent（大小写不敏感）
         const buttons = searchEl.querySelectorAll('button');
         for (let i = 0; i < buttons.length; i++) {
             const btn = buttons[i];
             const title = btn.getAttribute('title');
-            if (title && T[title]) btn.setAttribute('title', T[title]);
+            if (title) {
+                const lower = title.toLowerCase();
+                if (T[title]) { btn.setAttribute('title', T[title]); }
+                else if (T[lower]) { btn.setAttribute('title', T[lower]); }
+            }
             const name = btn.getAttribute('name');
             if (name && T[name]) btn.setAttribute('title', T[name]);
             // 替换按钮文字（如 "replace all" → "全部替换"）
-            if (btn.textContent && T[btn.textContent.trim()]) {
-                btn.textContent = T[btn.textContent.trim()];
+            const trimmed = btn.textContent && btn.textContent.trim();
+            if (trimmed && T[trimmed]) {
+                btn.textContent = T[trimmed];
             }
         }
 
@@ -3063,6 +4160,87 @@
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
         });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  跨标签搜索状态桥接 — 标签切换时保存/恢复搜索面板
+    // ═══════════════════════════════════════════════════════
+    function _captureSearchState(editorView) {
+        var CM = window.CodeMirror;
+        if (!CM || !CM.getSearchQuery) return;
+        try {
+            var query = CM.getSearchQuery(editorView.state);
+            if (query && query.search !== '') {
+                _searchBridge.query = query.search || '';
+                _searchBridge.replaceQuery = query.replace || '';
+                _searchBridge.caseSensitive = !!query.caseSensitive;
+                _searchBridge.wholeWord = !!query.wholeWord;
+                _searchBridge.regexp = !!query.regexp;
+                _searchBridge.isOpen = true;
+            } else {
+                _searchBridge.isOpen = false;
+            }
+            // 关闭旧编辑器的搜索面板，防止切换标签后 DOM 残留
+            if (CM.closeSearchPanel) {
+                try { CM.closeSearchPanel(editorView); } catch(e) {}
+            }
+        } catch(e) { /* CM6 getSearchQuery may fail across versions */ }
+    }
+
+    function _restoreSearchState(editorView, container) {
+        var CM = window.CodeMirror;
+        if (!CM || !CM.openSearchPanel || !_searchBridge.isOpen) return;
+        if (!_searchBridge.query) return;
+
+        // 目标编辑器已有可见搜索面板：仅更新查询，不重复打开
+        if (container) {
+            var existingPanel = container.querySelector('.cm-search');
+            if (existingPanel) {
+                if (CM.SearchQuery && CM.setSearchQuery) {
+                    try {
+                        editorView.dispatch({
+                            effects: CM.setSearchQuery.of(new CM.SearchQuery({
+                                search: _searchBridge.query,
+                                replace: _searchBridge.replaceQuery || '',
+                                caseSensitive: !!_searchBridge.caseSensitive,
+                                wholeWord: !!_searchBridge.wholeWord,
+                                regexp: !!_searchBridge.regexp
+                            }))
+                        });
+                    } catch(e) {}
+                }
+                return;
+            }
+        }
+
+        // 无现有面板：打开新面板
+        try {
+            CM.openSearchPanel(editorView);
+        } catch(e) {}
+
+        // 取消之前的待执行恢复
+        if (_searchBridge._restoreTimeout) {
+            clearTimeout(_searchBridge._restoreTimeout);
+            _searchBridge._restoreTimeout = null;
+        }
+
+        _searchBridge._restoreTimeout = setTimeout(function () {
+            _searchBridge._restoreTimeout = null;
+            if (!_searchBridge.isOpen) return; // 用户可能已关闭面板
+            if (CM.SearchQuery && CM.setSearchQuery) {
+                try {
+                    editorView.dispatch({
+                        effects: CM.setSearchQuery.of(new CM.SearchQuery({
+                            search: _searchBridge.query,
+                            replace: _searchBridge.replaceQuery || '',
+                            caseSensitive: !!_searchBridge.caseSensitive,
+                            wholeWord: !!_searchBridge.wholeWord,
+                            regexp: !!_searchBridge.regexp
+                        }))
+                    });
+                } catch(e) {}
+            }
+        }, 80);
     }
 
     // ═══════════════════════════════════════════════════════

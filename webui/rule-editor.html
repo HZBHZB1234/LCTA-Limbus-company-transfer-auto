@@ -13,7 +13,8 @@
         import {EditorView, basicSetup} from "https://esm.sh/codemirror@6.0.1";
         import {keymap} from "https://esm.sh/@codemirror/view@6.0.1";
         import {json} from "https://esm.sh/@codemirror/lang-json@6.0.1";
-        window.CodeMirror = {EditorView, basicSetup, keymap, json};
+        import {openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery, SearchQuery} from "https://esm.sh/@codemirror/search@6.0.1";
+        window.CodeMirror = {EditorView, basicSetup, keymap, json, openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery, SearchQuery};
     </script>
 </head>
 <body>

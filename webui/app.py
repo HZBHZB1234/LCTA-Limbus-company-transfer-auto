@@ -1524,7 +1524,7 @@ class RuleEditorAPI:
             get_ruleset_list, get_ruleset, save_ruleset,
             create_ruleset, delete_ruleset,
             build_rule_from_form, validate_rule, analyze_changes,
-            analyze_changes_v2,
+            analyze_changes_v2, analyze_changes_v3,
             save_file_content,
         )
         self.get_lang_files = get_lang_files
@@ -1539,6 +1539,7 @@ class RuleEditorAPI:
         self.validate_rule = validate_rule
         self.analyze_changes = analyze_changes
         self.analyze_changes_v2 = analyze_changes_v2
+        self.analyze_changes_v3 = analyze_changes_v3
         self.save_file_content = save_file_content
 
     def get_config_value(self, key_path, default_value=None):

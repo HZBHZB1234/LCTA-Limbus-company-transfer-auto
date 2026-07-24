@@ -485,9 +485,9 @@ body {
 
 /* ---- CM6 Search Panel — VSCode floating style ---- */
 #re-file-edit-panel .cm-panels {
-    position: absolute;
-    top: 48px;
-    right: 12px;
+    position: absolute !important;  /* 覆盖 CM6 默认 sticky */
+    top: 84px;                      /* 移除 !important，允许拖动覆盖 */
+    right: 12px;                    /* 移除 !important，允许拖动覆盖 */
     z-index: 100;
     background: transparent;
     border: none;
@@ -504,6 +504,13 @@ body {
     max-width: 460px;
     cursor: grab;
     user-select: none;
+}
+
+#re-file-edit-panel .cm-search input,
+#re-file-edit-panel .cm-search button,
+#re-file-edit-panel .cm-search label {
+    cursor: auto;
+    user-select: auto;
 }
 
 #re-file-edit-panel .cm-search.dragging {
@@ -1841,4 +1848,320 @@ body.re-resizing-bottom {
     margin-top: 12px;
     padding-top: 10px;
     border-top: 1px solid var(--color-border-light, #ecf0f1);
+}
+
+/* ═══════════════════════════════════════════════════════
+   V3 统一智能规则生成 — 无模式选择 + 自动合并 + 即时展示
+   ═══════════════════════════════════════════════════════ */
+
+.re-v3-summary-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--color-bg-primary, #f8f9fa);
+    border-bottom: 1px solid var(--color-border-light, #ecf0f1);
+    font-size: 13px;
+    color: var(--color-text-secondary, #7f8c8d);
+}
+
+.re-v3-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    background: var(--color-bg-secondary, #ffffff);
+    border: 1px solid var(--color-border-light, #ecf0f1);
+}
+
+.re-v3-stat-merge {
+    color: var(--color-warning, #f39c12);
+    border-color: rgba(243, 156, 18, 0.3);
+    background: rgba(243, 156, 18, 0.06);
+}
+
+.re-v3-group-card {
+    border: 1px solid var(--color-border, #e0e0e0);
+    border-radius: var(--radius-md, 10px);
+    padding: 12px 16px;
+    margin: 6px 12px;
+    background: var(--color-bg-card, #ffffff);
+    transition: border-color 0.2s, box-shadow 0.15s;
+}
+
+.re-v3-group-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.re-v3-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.re-v3-group-header h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-text-primary, #2c3e50);
+}
+
+.re-v3-merged-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    background: rgba(52, 152, 219, 0.1);
+    color: var(--color-primary, #3498db);
+}
+
+.re-v3-expand-toggle {
+    font-size: 11px;
+    color: var(--color-text-secondary, #7f8c8d);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+
+.re-v3-expand-toggle.expanded {
+    transform: rotate(180deg);
+}
+
+.re-v3-summary {
+    margin: 4px 0 6px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--color-text-primary, #2c3e50);
+}
+
+.re-v3-action-patterns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.re-v3-pattern-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    background: var(--color-bg-primary, #f8f9fa);
+    border: 1px solid var(--color-border-light, #ecf0f1);
+    color: var(--color-text-primary, #2c3e50);
+}
+
+.re-v3-scope-summary {
+    font-size: 12px;
+    color: var(--color-text-secondary, #7f8c8d);
+    margin-bottom: 6px;
+    word-break: break-all;
+}
+
+.re-v3-merged-from {
+    font-size: 11px;
+    color: var(--color-text-secondary, #7f8c8d);
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    background: rgba(52, 152, 219, 0.04);
+    border-radius: 6px;
+    line-height: 1.5;
+}
+
+.re-v3-merged-label {
+    color: var(--color-primary, #3498db);
+    font-weight: 500;
+}
+
+/* ---- V3 Simplified Tier Controls ---- */
+.re-v3-tier-controls {
+    border-top: 1px solid var(--color-border-light, #ecf0f1);
+    padding-top: 8px;
+    margin-top: 6px;
+}
+
+.re-v3-tier-controls.collapsed {
+    display: none;
+}
+
+.re-v3-tier-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 12px;
+    flex-wrap: wrap;
+    min-height: 28px;
+}
+
+.re-v3-tier-label {
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--color-text-secondary, #7f8c8d);
+    min-width: 70px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.re-v3-tier-row select {
+    padding: 3px 6px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    width: auto;
+    min-width: 100px;
+}
+
+.re-v3-tier-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    font-size: 11px;
+}
+
+.re-v3-tier-checks .re-checkbox {
+    font-size: 11px;
+}
+
+.re-v3-l2-input,
+.re-v3-l4-field,
+.re-v3-l4-pattern {
+    padding: 3px 6px;
+    font-size: 12px;
+    border: 1px solid var(--color-border, #e0e0e0);
+    border-radius: 4px;
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+}
+
+.re-v3-l2-input { width: 100px !important; }
+.re-v3-l4-field { width: 70px !important; }
+.re-v3-l4-pattern { width: 110px !important; }
+
+.re-v3-custom-input {
+    padding: 3px 6px !important;
+    font-size: 12px !important;
+    border: 1px solid var(--color-border, #e0e0e0) !important;
+    border-radius: 4px !important;
+    margin-top: 4px;
+}
+
+/* ---- V3 Merge Connector ---- */
+.re-v3-merge-connector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    margin: -2px 12px 4px;
+    font-size: 12px;
+    background: rgba(243, 156, 18, 0.06);
+    border-left: 3px solid var(--color-warning, #f39c12);
+    border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0;
+}
+
+.re-v3-merge-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.re-v3-merge-text {
+    flex: 1;
+    color: var(--color-text-secondary, #7f8c8d);
+    min-width: 0;
+}
+
+.re-v3-merge-btn {
+    flex-shrink: 0;
+}
+
+/* ---- V3 Actions Row ---- */
+.re-v3-actions-row {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding-top: 8px;
+    margin-top: 4px;
+    border-top: 1px solid var(--color-border-light, #ecf0f1);
+}
+
+/* ---- V3 Footer ---- */
+.re-v3-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 10px 16px;
+    border-top: 1px solid var(--color-border, #e0e0e0);
+    background: var(--color-bg-primary, #f8f9fa);
+}
+
+.re-v3-footer .re-btn-accent {
+    margin-right: auto;
+}
+
+/* ---- V3 Auto-Merge Badge & Split Button ---- */
+.re-v3-auto-merged-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(46, 204, 113, 0.1);
+    color: var(--color-success, #2ecc71);
+}
+
+.re-v3-stat-auto-merge {
+    color: var(--color-success, #2ecc71);
+    font-weight: 600;
+}
+
+.re-v3-split-btn {
+    margin-left: 8px;
+    padding: 2px 10px;
+    font-size: 11px;
+    border: 1px solid var(--color-border, #d4d4d4);
+    border-radius: 4px;
+    background: var(--color-bg-primary, #f8f9fa);
+    cursor: pointer;
+    color: var(--color-text-secondary, #7f8c8d);
+    transition: all 0.15s;
+}
+
+.re-v3-split-btn:hover {
+    background: var(--color-warning, #f39c12);
+    color: #fff;
+    border-color: var(--color-warning, #f39c12);
+}
+
+/* ---- V3 Promote (推广) Buttons ---- */
+.re-v3-promote-btn {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    font-size: 10px;
+    border: 1px dashed var(--color-accent, #8a2be2);
+    border-radius: 10px;
+    background: rgba(138, 43, 226, 0.05);
+    cursor: pointer;
+    color: var(--color-accent, #8a2be2);
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.re-v3-promote-btn:hover {
+    background: var(--color-accent, #8a2be2);
+    color: #fff;
+    border-style: solid;
 }

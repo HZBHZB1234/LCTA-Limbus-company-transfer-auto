@@ -231,10 +231,398 @@ body {
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    overflow-y: auto;
+    overflow: hidden;
     padding: var(--spacing-md, 16px);
     gap: var(--spacing-md, 16px);
     background: var(--color-bg-primary, #f8f9fa);
+}
+
+/* ---- Main Mode Tabs ---- */
+.re-main-tabs {
+    flex-shrink: 0;
+    display: flex;
+    gap: 2px;
+    border-bottom: 2px solid var(--color-border-light, #ecf0f1);
+}
+
+.re-main-tab {
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    border-radius: 0;
+    color: var(--color-text-secondary, #7f8c8d);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color var(--transition-speed, 0.15s) var(--transition-easing, cubic-bezier(0.4,0,0.2,1));
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.re-main-tab:hover {
+    color: var(--color-primary, #3498db);
+}
+
+.re-main-tab.active {
+    color: var(--color-primary, #3498db);
+    border-bottom-color: var(--color-primary, #3498db);
+    font-weight: 600;
+}
+
+/* ---- Main Panels ---- */
+.re-main-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    gap: var(--spacing-sm, 8px);
+}
+
+#re-ruleset-edit-panel {
+    overflow-y: auto;
+}
+
+#re-file-edit-panel {
+    overflow: hidden;
+}
+
+/* ---- File Edit Toolbar ---- */
+.re-file-edit-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm, 8px);
+    padding-bottom: var(--spacing-sm, 8px);
+    border-bottom: 1px solid var(--color-border-light, #ecf0f1);
+}
+
+/* ---- File Editor Area ---- */
+.re-file-editor-area {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-border, #e0e0e0);
+    border-radius: var(--radius-md, 10px);
+    background: var(--color-bg-secondary, #ffffff);
+}
+
+.re-file-editor-area .cm-editor {
+    height: 100%;
+    max-height: 100%;
+}
+
+.re-file-editor-area .cm-editor .cm-scroller {
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 13px;
+}
+
+.re-file-editor-area .re-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+/* ---- Changes Panel ---- */
+.re-changes-panel {
+    flex-shrink: 0;
+    max-height: 200px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border, #e0e0e0);
+    border-radius: var(--radius-md, 10px);
+    background: var(--color-bg-card, #ffffff);
+    overflow: hidden;
+}
+
+.re-changes-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--color-bg-primary, #f8f9fa);
+    border-bottom: 1px solid var(--color-border-light, #ecf0f1);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.re-changes-header i {
+    color: var(--color-primary, #3498db);
+}
+
+.re-change-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: var(--color-primary, #3498db);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.re-changes-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+}
+
+.re-change-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px 8px;
+}
+
+.re-change-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border-light, #ecf0f1);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.re-change-item:last-child {
+    border-bottom: none;
+}
+
+.re-change-file {
+    font-family: "Consolas", "Monaco", monospace;
+    color: var(--color-text-secondary, #7f8c8d);
+    font-size: 11px;
+    min-width: 120px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.re-change-detail {
+    flex: 1;
+    min-width: 0;
+}
+
+.re-change-old {
+    color: var(--color-danger, #e74c3c);
+    text-decoration: line-through;
+}
+
+.re-change-new {
+    color: var(--color-success, #2ecc71);
+}
+
+.re-change-arrow {
+    color: var(--color-text-secondary, #7f8c8d);
+    margin: 0 4px;
+}
+
+.re-change-empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--color-text-secondary, #7f8c8d);
+    font-size: 12px;
+}
+
+/* ---- Search Hint (sidebar) ---- */
+.re-search-hint {
+    width: 100%;
+    font-size: 11px;
+    color: var(--color-text-secondary, #7f8c8d);
+    padding: 2px 0;
+}
+
+.re-search-hint.re-search-hint-file {
+    color: var(--color-primary, #3498db);
+}
+
+.re-search-hint.re-search-hint-content {
+    color: var(--color-accent, #8a2be2);
+}
+
+/* ---- Find Bar (file editor) — VS Code style ---- */
+.re-find-bar {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 8px 4px 0;
+    background: var(--color-bg-primary, #f5f5f5);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.re-find-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+}
+
+.re-find-icon {
+    width: 24px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--color-text-secondary, #888);
+    flex-shrink: 0;
+}
+
+.re-find-bar input[type="text"] {
+    flex: 1;
+    min-width: 80px;
+    padding: 4px 8px;
+    font-size: 13px;
+    border: 1px solid var(--color-border, #cecece);
+    border-radius: 3px;
+    background: var(--color-bg-card, #fff);
+    color: var(--color-text-primary, #333);
+    outline: none;
+    transition: border-color 0.1s;
+}
+
+.re-find-bar input[type="text"]:focus {
+    border-color: var(--color-primary, #0078d4);
+}
+
+.re-find-bar input[type="text"]::placeholder {
+    color: var(--color-text-secondary, #aaa);
+}
+
+.re-find-count {
+    font-size: 12px;
+    color: var(--color-text-secondary, #888);
+    min-width: 36px;
+    text-align: center;
+    font-family: "Consolas", "Monaco", monospace;
+    flex-shrink: 0;
+}
+
+.re-find-nav,
+.re-find-toggle {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--color-text-secondary, #666);
+    cursor: pointer;
+    font-size: 12px;
+    flex-shrink: 0;
+    transition: background 0.1s;
+}
+
+.re-find-nav:hover,
+.re-find-toggle:hover {
+    background: var(--color-border, #e0e0e0);
+}
+
+.re-find-nav:active,
+.re-find-toggle:active {
+    background: var(--color-border-dark, #ccc);
+}
+
+.re-find-toggle.re-find-toggle-active {
+    background: var(--color-border, #e0e0e0);
+    color: var(--color-primary, #0078d4);
+}
+
+.re-find-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-secondary, #666);
+    user-select: none;
+    flex-shrink: 0;
+    transition: background 0.1s;
+}
+
+.re-find-label:hover {
+    background: var(--color-border, #e0e0e0);
+}
+
+.re-find-label input[type="checkbox"] {
+    display: none;
+}
+
+.re-find-label.re-find-case {
+    min-width: 26px;
+    text-align: center;
+    font-style: italic;
+    font-family: "Georgia", serif;
+}
+
+.re-find-label.re-find-case.active {
+    color: var(--color-primary, #0078d4);
+    background: rgba(0, 120, 212, 0.1);
+}
+
+.re-find-close {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--color-text-secondary, #888);
+    cursor: pointer;
+    font-size: 13px;
+    flex-shrink: 0;
+    transition: color 0.1s, background 0.1s;
+}
+
+.re-find-close:hover {
+    background: var(--color-border, #e0e0e0);
+    color: var(--color-text-primary, #333);
+}
+
+/* Replace row */
+.re-replace-btn {
+    padding: 3px 10px;
+    font-size: 12px;
+    border: 1px solid var(--color-border, #cecece);
+    border-radius: 3px;
+    background: var(--color-bg-secondary, #fff);
+    color: var(--color-text-primary, #333);
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+    transition: background 0.1s;
+}
+
+.re-replace-btn:hover {
+    background: var(--color-border, #e0e0e0);
+}
+
+.re-replace-btn:active {
+    background: var(--color-border-dark, #ccc);
+}
+
+.re-replace-row .re-btn-sm {
+    padding: 3px 10px;
 }
 
 .re-toolbar {
@@ -871,6 +1259,23 @@ body {
     justify-content: flex-end;
     padding: var(--spacing-md, 16px) var(--spacing-lg, 24px);
     border-top: 1px solid var(--color-border, #e0e0e0);
+}
+
+.re-form-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border, #e0e0e0);
+    border-radius: var(--radius-sm, 6px);
+    font-size: 13px;
+    color: var(--color-text-primary, #2c3e50);
+    background: var(--color-bg-primary, #f8f9fa);
+    box-sizing: border-box;
+}
+
+.re-form-input:focus {
+    outline: none;
+    border-color: var(--color-primary, #3498db);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.15);
 }
 
 .re-empty-state {

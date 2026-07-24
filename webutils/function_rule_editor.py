@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shutil
 import logging
 from pathlib import Path
 from typing import Optional
@@ -451,3 +452,29 @@ def analyze_changes(changes: list) -> dict:
 
     result_groups.sort(key=lambda g: g["score"]["priority"], reverse=True)
     return {"groups": result_groups, "merge_suggestions": []}
+
+
+def save_file_content(relative_path: str, content: str) -> dict:
+    """Save edited file content back to the game Lang directory.
+    Validates JSON, creates a .bak backup, and writes the file.
+    """
+    lang_dir = _get_lang_dir()
+    if not lang_dir:
+        return {"success": False, "error": "Lang 文件夹未配置"}
+    full_path = lang_dir / relative_path
+    if not full_path.exists():
+        return {"success": False, "error": f"文件不存在: {relative_path}"}
+    try:
+        json.loads(content)
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"JSON 格式错误: {e}"}
+    try:
+        backup_path = full_path.with_suffix('.json.bak')
+        shutil.copy2(full_path, backup_path)
+    except Exception as e:
+        logger.warning("备份文件失败: %s", e)
+    try:
+        full_path.write_text(content, encoding='utf-8')
+        return {"success": True, "path": str(full_path)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

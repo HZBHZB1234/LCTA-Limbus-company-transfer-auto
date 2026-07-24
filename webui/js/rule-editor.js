@@ -35,6 +35,7 @@
         rulesetList: [],
         mode: 'simple',
         activeTab: 'file-list',
+        activeMainTab: 'file-edit',
         searchResults: null,
         searchTotal: 0,
         fileCache: new Map(),
@@ -47,7 +48,15 @@
         smartGenOverlay: null,
         smartGenGroups: null,
         templates: [],
-        lastPreviewRule: null
+        lastPreviewRule: null,
+        // File editing mode state
+        fileEditor: null,
+        fileOriginalContent: null,
+        fileOriginalParsed: null,
+        pendingChanges: [],
+        // Find bar state
+        findMatches: [],
+        findCurrent: -1
     };
 
     const CATEGORY_FILE_PATTERNS = {
@@ -114,6 +123,7 @@
         bindEvents();
         populateSimpleFileSelect();
         switchTab('file-list');
+        switchMainTab('file-edit');
         if (getApi()) {
             onApiReady();
         } else {
@@ -124,6 +134,7 @@
     async function onApiReady() {
         setMode('simple', true);
         initAdvancedMode();
+        initFileEditor();
         await Promise.all([loadLangFiles(), loadRulesets(), initSimpleFileSelect(), loadTemplates()]);
         syncAdvancedFromRuleset();
     }
@@ -211,16 +222,47 @@
         const fileSel = $i('re-simple-file');
         if (fileSel && state.currentFilePrefix) fileSel.value = state.currentFilePrefix;
         refreshContentPanel();
+        if (state.activeMainTab === 'file-edit') {
+            loadFileIntoEditor(relativePath);
+        }
     }
 
-    function renderFileList() {
-        const container = $i('re-file-list-container');
-        if (!container) return;
-        if (!state.langFiles.length) {
-            container.innerHTML = '<div class="re-empty-state">未找到 Lang 文件，请先在主应用配置游戏路径。</div>';
+    function loadFileIntoEditor(relativePath) {
+        if (!relativePath) return;
+        const raw = state.currentFileRaw;
+        if (raw == null && state.fileCache.has(relativePath)) {
+            const cached = state.fileCache.get(relativePath);
+            loadRawIntoEditor(cached.raw, cached.parsed);
             return;
         }
-        const groups = groupFilesByCategory(state.langFiles);
+        if (raw != null) {
+            loadRawIntoEditor(raw, state.currentFileParsed);
+        }
+    }
+
+    function loadRawIntoEditor(raw, parsed) {
+        initFileEditor();
+        const editor = state.fileEditor;
+        if (!editor) return;
+        if (raw != null) {
+            const len = editor.state.doc.length;
+            editor.dispatch({ changes: { from: 0, to: len, insert: raw } });
+        }
+        state.fileOriginalContent = raw;
+        state.fileOriginalParsed = parsed ? JSON.parse(JSON.stringify(parsed)) : null;
+        clearPendingChanges();
+        hideFindBar();
+    }
+
+    function renderFileList(filtered) {
+        const container = $i('re-file-list-container');
+        if (!container) return;
+        const files = filtered || state.langFiles;
+        if (!files.length) {
+            container.innerHTML = '<div class="re-empty-state">未找到匹配的文件</div>';
+            return;
+        }
+        const groups = groupFilesByCategory(files);
         let html = '';
         for (let ci = 0; ci < CATEGORY_ORDER.length; ci++) {
             const category = CATEGORY_ORDER[ci];
@@ -424,16 +466,52 @@
         container.innerHTML = html;
     }
 
+    function filterFilesByKeyword(keyword) {
+        if (!keyword.trim()) {
+            renderFileList(state.langFiles);
+            return;
+        }
+        var kw = keyword.toLowerCase();
+        var filtered = [];
+        for (var i = 0; i < state.langFiles.length; i++) {
+            if (state.langFiles[i].toLowerCase().indexOf(kw) !== -1) {
+                filtered.push(state.langFiles[i]);
+            }
+        }
+        renderFileList(filtered);
+        var hint = $i('re-search-hint');
+        if (hint) {
+            if (filtered.length) {
+                hint.className = 're-search-hint re-search-hint-file';
+                hint.textContent = '🔍 文件名匹配: ' + filtered.length + ' 个文件';
+                hint.style.display = '';
+            } else {
+                hint.className = 're-search-hint';
+                hint.textContent = '未找到文件名匹配，点击「搜索」查找文件内容';
+                hint.style.display = '';
+            }
+        }
+        return filtered;
+    }
+
     async function performSearch() {
-        const api = getApi();
-        const input = $i('re-file-search');
-        const keyword = input ? input.value : '';
-        const cb = $i('re-case-sensitive');
-        const caseSensitive = !!(cb && cb.checked);
-        if (!api) return warnNoApi();
+        var api = getApi();
+        var input = $i('re-file-search');
+        var keyword = input ? input.value : '';
+        var cb = $i('re-case-sensitive');
+        var caseSensitive = !!(cb && cb.checked);
         if (!keyword.trim()) { clearSearch(); return; }
+        // First try filename filter
+        var filtered = filterFilesByKeyword(keyword);
+        if (filtered.length) {
+            switchTab('file-list');
+            return;
+        }
+        // No filename matches, do full-text content search
+        if (!api) return warnNoApi();
+        setSearchHint('content', '正在搜索文件内容...');
         try {
-            const res = await api.search_files(keyword, caseSensitive);
+            var res = await api.search_files(keyword, caseSensitive);
             if (res && res.results_by_category) {
                 state.searchResults = res.results_by_category;
                 state.searchTotal = res.total_matches || 0;
@@ -447,7 +525,23 @@
             state.searchTotal = 0;
         }
         renderSearchCategories();
-        switchTab('search-results');
+        if (state.searchTotal > 0) {
+            var hint = $i('re-search-hint');
+            if (hint) { hint.style.display = 'none'; }
+            switchTab('search-results');
+        } else {
+            setSearchHint('', '未找到任何匹配');
+        }
+    }
+
+    function setSearchHint(type, msg) {
+        var hint = $i('re-search-hint');
+        if (!hint) return;
+        hint.textContent = msg;
+        hint.style.display = '';
+        if (type === 'file') hint.className = 're-search-hint re-search-hint-file';
+        else if (type === 'content') hint.className = 're-search-hint re-search-hint-content';
+        else hint.className = 're-search-hint';
     }
 
     function renderSearchCategories() {
@@ -497,7 +591,10 @@
         const input = $i('re-file-search');
         if (input) input.value = '';
         renderSearchCategories();
+        renderFileList();
         switchTab('file-list');
+        var hint = $i('re-search-hint');
+        if (hint) hint.style.display = 'none';
     }
 
     function switchTab(tab) {
@@ -530,15 +627,40 @@
         if (!skipContentRefresh) refreshContentPanel();
     }
 
+    function switchMainTab(tab) {
+        state.activeMainTab = tab;
+        const tabs = document.querySelectorAll('.re-main-tab');
+        for (let i = 0; i < tabs.length; i++) {
+            tabs[i].classList.toggle('active', tabs[i].dataset.maintab === tab);
+        }
+        const fePanel = $i('re-file-edit-panel');
+        const rePanel = $i('re-ruleset-edit-panel');
+        if (fePanel) fePanel.style.display = tab === 'file-edit' ? '' : 'none';
+        if (rePanel) rePanel.style.display = tab === 'ruleset-edit' ? '' : 'none';
+        // Hide bottom preview panel in file-edit mode
+        const bottomPanel = document.querySelector('.re-bottom-panel');
+        if (bottomPanel) {
+            bottomPanel.style.display = tab === 'file-edit' ? 'none' : '';
+        }
+        if (tab === 'file-edit' && state.currentFile) {
+            loadFileIntoEditor(state.currentFile);
+        }
+    }
+
     function bindEvents() {
         const searchBtn = $i('re-search-btn');
         if (searchBtn) searchBtn.addEventListener('click', performSearch);
         const searchClear = $i('re-search-clear-btn');
         if (searchClear) searchClear.addEventListener('click', clearSearch);
         const searchInput = $i('re-file-search');
-        if (searchInput) searchInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') performSearch();
-        });
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                filterFilesByKeyword(searchInput.value);
+            });
+            searchInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') performSearch();
+            });
+        }
 
         const tabs = document.querySelectorAll('.re-tab');
         for (let i = 0; i < tabs.length; i++) {
@@ -547,6 +669,15 @@
             })(tabs[i]));
         }
 
+        // Main tabs
+        const mainTabs = document.querySelectorAll('.re-main-tab');
+        for (let i = 0; i < mainTabs.length; i++) {
+            mainTabs[i].addEventListener('click', (function (el) {
+                return function () { switchMainTab(el.dataset.maintab); };
+            })(mainTabs[i]));
+        }
+
+        // Ruleset toolbar
         const rsSelect = $i('re-ruleset-select');
         if (rsSelect) rsSelect.addEventListener('change', onRulesetSelectChange);
         const newBtn = $i('re-new-ruleset-btn');
@@ -605,6 +736,68 @@
 
         const simpleContent = $i('re-content-simple');
         if (simpleContent) simpleContent.addEventListener('click', onContentPanelClick);
+
+        // File edit toolbar buttons
+        const feSave = $i('re-fe-save-btn');
+        if (feSave) feSave.addEventListener('click', saveEditedFile);
+        const feRevert = $i('re-fe-revert-btn');
+        if (feRevert) feRevert.addEventListener('click', revertEditedFile);
+        const feRefresh = $i('re-fe-refresh-btn');
+        if (feRefresh) feRefresh.addEventListener('click', refreshEditedFile);
+        const feBatch = $i('re-fe-batch-btn');
+        if (feBatch) feBatch.addEventListener('click', onFileEditBatchReplace);
+        const feDiff = $i('re-fe-diff-btn');
+        if (feDiff) feDiff.addEventListener('click', diffAndTrackChanges);
+        const clearChangesBtn = $i('re-clear-changes-btn');
+        if (clearChangesBtn) clearChangesBtn.addEventListener('click', clearPendingChanges);
+        const genFromChanges = $i('re-gen-from-changes-btn');
+        if (genFromChanges) genFromChanges.addEventListener('click', generateRulesFromChanges);
+
+        // Find bar events
+        const findInput = $i('re-find-input');
+        if (findInput) {
+            findInput.addEventListener('input', findInEditor);
+            findInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (e.shiftKey) findPrev();
+                    else findNext();
+                }
+                if (e.key === 'Escape') hideFindBar();
+            });
+        }
+        var findPrevBtn = $i('re-find-prev');
+        if (findPrevBtn) findPrevBtn.addEventListener('click', findPrev);
+        var findNextBtn = $i('re-find-next');
+        if (findNextBtn) findNextBtn.addEventListener('click', findNext);
+        var findCase = $i('re-find-case');
+        if (findCase) {
+            findCase.addEventListener('change', function () {
+                toggleFindCase();
+                findInEditor();
+            });
+        }
+        var findClose = $i('re-find-close');
+        if (findClose) findClose.addEventListener('click', hideFindBar);
+
+        // Replace toggle
+        var replaceToggle = $i('re-find-replace-toggle');
+        if (replaceToggle) replaceToggle.addEventListener('click', toggleReplaceRow);
+        var replaceInput = $i('re-replace-input');
+        if (replaceInput) {
+            replaceInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (e.shiftKey) replaceOne();
+                    else replaceOne();
+                }
+                if (e.key === 'Escape') hideFindBar();
+            });
+        }
+        var replaceOneBtn = $i('re-replace-one');
+        if (replaceOneBtn) replaceOneBtn.addEventListener('click', replaceOne);
+        var replaceAllBtn = $i('re-replace-all');
+        if (replaceAllBtn) replaceAllBtn.addEventListener('click', replaceAll);
     }
 
     function onContentPanelClick(e) {
@@ -1596,6 +1789,463 @@
         toast.style.display = 'block';
         clearTimeout(showToast._t);
         showToast._t = setTimeout(function () { toast.style.display = 'none'; }, 3000);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  File Edit Mode — init, editor, diff, save
+    // ═══════════════════════════════════════════════════════
+
+    function initFileEditor() {
+        if (state.fileEditor) return state.fileEditor;
+        const container = $i('re-file-editor-container');
+        if (!container) return null;
+        if (!window.CodeMirror || !window.CodeMirror.EditorView) {
+            console.warn('[rule-editor] CodeMirror not loaded; file editor disabled');
+            return null;
+        }
+        // Remove empty state placeholder
+        const empty = container.querySelector('.re-empty-state');
+        if (empty) empty.style.display = 'none';
+        const CM = window.CodeMirror;
+        // Custom keymap to intercept Ctrl+F / F3 before CodeMirror's internal handlers
+        const feKeymap = CM.keymap.of([
+            {key: 'Ctrl-f', run: function () { showFindBar(); return true; }},
+            {key: 'F3', run: function () { findNext(); return true; }},
+            {key: 'Shift-F3', run: function () { findPrev(); return true; }},
+        ]);
+        try {
+            state.fileEditor = new CM.EditorView({
+                doc: '',
+                extensions: [CM.basicSetup, CM.json(), feKeymap],
+                parent: container
+            });
+        } catch (e) {
+            console.error('[rule-editor] initFileEditor failed:', e);
+            state.fileEditor = null;
+            return null;
+        }
+        return state.fileEditor;
+    }
+
+    function getFileEditorDoc() {
+        const editor = state.fileEditor;
+        if (!editor) return '';
+        return editor.state.doc.toString();
+    }
+
+    function setFileEditorDoc(text) {
+        const editor = initFileEditor();
+        if (!editor) return;
+        const len = editor.state.doc.length;
+        editor.dispatch({ changes: { from: 0, to: len, insert: text || '' } });
+    }
+
+    /** Recursive JSON diff returning [(path_string, old_val, new_val)] */
+    function diffJson(original, modified, prefix) {
+        if (prefix == null) prefix = '';
+        var changes = [];
+        if (typeof original !== typeof modified) {
+            changes.push([prefix, original, modified]);
+        } else if (Array.isArray(original) && Array.isArray(modified)) {
+            var maxLen = Math.max(original.length, modified.length);
+            for (var i = 0; i < maxLen; i++) {
+                var newPrefix = prefix + '[' + i + ']';
+                if (i >= original.length) {
+                    changes.push([newPrefix, null, modified[i]]);
+                } else if (i >= modified.length) {
+                    changes.push([newPrefix, original[i], null]);
+                } else {
+                    changes = changes.concat(diffJson(original[i], modified[i], newPrefix));
+                }
+            }
+        } else if (typeof original === 'object' && original !== null && typeof modified === 'object' && modified !== null) {
+            var allKeys = {};
+            for (var k in original) { if (original.hasOwnProperty(k)) allKeys[k] = true; }
+            for (var k in modified) { if (modified.hasOwnProperty(k)) allKeys[k] = true; }
+            var sortedKeys = Object.keys(allKeys).sort();
+            for (var ki = 0; ki < sortedKeys.length; ki++) {
+                var key = sortedKeys[ki];
+                var newPrefix = prefix ? prefix + '.' + key : key;
+                if (!(key in original)) {
+                    changes.push([newPrefix, null, modified[key]]);
+                } else if (!(key in modified)) {
+                    changes.push([newPrefix, original[key], null]);
+                } else {
+                    changes = changes.concat(diffJson(original[key], modified[key], newPrefix));
+                }
+            }
+        } else if (original !== modified) {
+            changes.push([prefix, original, modified]);
+        }
+        return changes;
+    }
+
+    /** Parse a diff path like "dataList[0].desc" → {field_path: "desc", itemIdx: 0} */
+    function parseDiffPath(path) {
+        var match = path.match(/^dataList\[(\d+)\]\.(.+)$/);
+        if (match) {
+            return { field_path: match[2], itemIdx: parseInt(match[1], 10) };
+        }
+        return { field_path: path.split('.').pop(), itemIdx: null };
+    }
+
+    /** Convert diff entries to {file, field_path, item_id, old_val, new_val} format */
+    function extractChangesFromDiff(diffEntries, filePath, parsedData) {
+        var changes = [];
+        for (var i = 0; i < diffEntries.length; i++) {
+            var entry = diffEntries[i];
+            var path = entry[0];
+            var oldVal = entry[1];
+            var newVal = entry[2];
+            // Only track string value changes
+            if (typeof newVal !== 'string' || typeof oldVal !== 'string') continue;
+            var parsed = parseDiffPath(path);
+            // Only track dataList items (rules can only target these)
+            if (parsed.itemIdx == null) continue;
+            var itemId = null;
+            if (parsedData && parsedData.dataList && parsedData.dataList[parsed.itemIdx]) {
+                var item = parsedData.dataList[parsed.itemIdx];
+                itemId = (item.id != null) ? String(item.id) : null;
+            }
+            changes.push({
+                file: filePath,
+                field_path: parsed.field_path,
+                item_id: itemId,
+                old_val: oldVal,
+                new_val: newVal
+            });
+        }
+        return changes;
+    }
+
+    function diffAndTrackChanges() {
+        if (!state.currentFile) {
+            showToast('请先打开一个文件', 'error');
+            return;
+        }
+        var raw = getFileEditorDoc();
+        if (!raw.trim()) {
+            showToast('编辑器内容为空', 'error');
+            return;
+        }
+        var parsed;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (e) {
+            showToast('JSON 解析错误: ' + e.message, 'error');
+            return;
+        }
+        var originalParsed = state.fileOriginalParsed;
+        if (!originalParsed) {
+            showToast('没有原始内容可比较（请先加载文件）', 'error');
+            return;
+        }
+        var diffs = diffJson(originalParsed, parsed, '');
+        if (!diffs.length) {
+            showToast('未检测到变更', 'info');
+            clearPendingChanges();
+            return;
+        }
+        var changes = extractChangesFromDiff(diffs, state.currentFile, originalParsed);
+        state.pendingChanges = changes;
+        renderChangeList();
+        showToast('检测到 ' + changes.length + ' 处文本变更', 'success');
+    }
+
+    function renderChangeList() {
+        var container = $i('re-change-list');
+        var panel = $i('re-changes-panel');
+        var countEl = $i('re-change-count');
+        if (!container) return;
+        var changes = state.pendingChanges || [];
+        if (panel) panel.style.display = changes.length ? '' : 'none';
+        if (countEl) countEl.textContent = String(changes.length);
+        if (!changes.length) {
+            container.innerHTML = '<div class="re-change-empty">暂无变更 — 编辑文件后点击「比较变更」</div>';
+            return;
+        }
+        var html = '';
+        for (var i = 0; i < changes.length; i++) {
+            var c = changes[i];
+            var displayFile = c.file || '';
+            if (displayFile.length > 40) displayFile = '...' + displayFile.slice(-37);
+            html += '<div class="re-change-item">' +
+                '<span class="re-change-file" title="' + escapeAttr(c.file) + '">' + escapeHtml(displayFile) + '</span>' +
+                '<span class="re-change-detail">' +
+                '<span class="re-change-old">' + escapeHtml(String(c.old_val)) + '</span>' +
+                '<span class="re-change-arrow"> → </span>' +
+                '<span class="re-change-new">' + escapeHtml(String(c.new_val)) + '</span>' +
+                '</span></div>';
+        }
+        container.innerHTML = html;
+    }
+
+    function clearPendingChanges() {
+        state.pendingChanges = [];
+        renderChangeList();
+    }
+
+    async function saveEditedFile() {
+        if (!state.currentFile) {
+            showToast('没有打开的文件', 'error');
+            return;
+        }
+        var raw = getFileEditorDoc();
+        if (!raw.trim()) {
+            showToast('编辑器内容为空', 'error');
+            return;
+        }
+        try {
+            JSON.parse(raw);
+        } catch (e) {
+            showToast('JSON 格式无效，无法保存: ' + e.message, 'error');
+            return;
+        }
+        var api = getApi();
+        if (!api || !api.save_file_content) return warnNoApi();
+        try {
+            var res = await api.save_file_content(state.currentFile, raw);
+            if (res && res.success) {
+                // Update cache and original
+                state.fileOriginalContent = raw;
+                try { state.fileOriginalParsed = JSON.parse(raw); } catch (e) { void e; }
+                if (state.fileCache.has(state.currentFile)) {
+                    var cached = state.fileCache.get(state.currentFile);
+                    cached.raw = raw;
+                    try { cached.parsed = JSON.parse(raw); } catch (e) { void e; }
+                }
+                showToast('文件已保存到游戏: ' + state.currentFile, 'success');
+            } else {
+                showToast('保存失败: ' + ((res && res.error) || ''), 'error');
+            }
+        } catch (e) {
+            showToast('保存异常: ' + (e && e.message ? e.message : e), 'error');
+        }
+    }
+
+    function revertEditedFile() {
+        if (state.fileOriginalContent != null) {
+            setFileEditorDoc(state.fileOriginalContent);
+            clearPendingChanges();
+            showToast('已撤销所有更改', 'info');
+        } else {
+            showToast('没有可撤销的版本', 'error');
+        }
+    }
+
+    function refreshEditedFile() {
+        var path = state.currentFile;
+        if (!path) { showToast('没有打开的文件', 'error'); return; }
+        // Reload from cache or backend
+        if (state.fileCache.has(path)) {
+            var cached = state.fileCache.get(path);
+            state.currentFileRaw = cached.raw;
+            state.currentFileParsed = cached.parsed;
+            loadRawIntoEditor(cached.raw, cached.parsed);
+            showToast('已刷新', 'info');
+        } else {
+            // Use openFile which will fetch from backend
+            openFile(path);
+        }
+    }
+
+    function onFileEditBatchReplace() {
+        if (!state.currentFile) {
+            showToast('没有打开的文件', 'error');
+            return;
+        }
+        // Open find bar with replace mode expanded
+        showFindBar();
+        toggleReplaceRow();
+        var findInput = $i('re-find-input');
+        if (findInput) findInput.focus();
+    }
+
+    async function generateRulesFromChanges() {
+        var changes = state.pendingChanges;
+        if (!changes || !changes.length) {
+            showToast('没有待处理的变更 — 请先在文件编辑中修改内容并点击「比较变更」', 'error');
+            return;
+        }
+        // Only proceed if a ruleset is selected
+        if (!state.currentRuleset || !state.currentRuleset.name) {
+            // Switch to ruleset tab and prompt
+            switchMainTab('ruleset-edit');
+            showToast('请先选择或新建一个规则集', 'error');
+            return;
+        }
+        // Feed changes into smart gen dialog
+        state.smartChanges = changes;
+        await openSmartGeneration();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Find Bar — in-editor search for file-edit mode
+    // ═══════════════════════════════════════════════════════
+
+    function showFindBar() {
+        var bar = $i('re-find-bar');
+        if (!bar) return;
+        bar.style.display = '';
+        var input = $i('re-find-input');
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+        state.findMatches = [];
+        state.findCurrent = -1;
+        updateFindCount(0, 0);
+    }
+
+    function hideFindBar() {
+        var bar = $i('re-find-bar');
+        if (bar) bar.style.display = 'none';
+        var input = $i('re-find-input');
+        if (input) input.value = '';
+        var replaceInput = $i('re-replace-input');
+        if (replaceInput) replaceInput.value = '';
+        state.findMatches = [];
+        state.findCurrent = -1;
+        updateFindCount(0, 0);
+        // Collapse replace row
+        var replaceRow = $i('re-replace-row');
+        if (replaceRow) replaceRow.style.display = 'none';
+        var toggle = $i('re-find-replace-toggle');
+        if (toggle) toggle.classList.remove('re-find-toggle-active');
+        // Clear editor selection
+        var editor = state.fileEditor;
+        if (editor) {
+            var pos = editor.state.selection.main.head;
+            editor.dispatch({ selection: { anchor: pos, head: pos } });
+        }
+    }
+
+    function updateFindCount(current, total) {
+        var el = $i('re-find-count');
+        if (!el) return;
+        el.textContent = total > 0 ? (current + '/' + total) : '0/0';
+    }
+
+    function toggleFindCase() {
+        var cb = $i('re-find-case');
+        if (!cb) return;
+        var label = cb.closest('.re-find-label');
+        if (label) label.classList.toggle('active', cb.checked);
+    }
+
+    function toggleReplaceRow() {
+        var row = $i('re-replace-row');
+        var toggle = $i('re-find-replace-toggle');
+        if (!row) return;
+        var showing = row.style.display !== 'none';
+        row.style.display = showing ? 'none' : '';
+        if (toggle) toggle.classList.toggle('re-find-toggle-active', !showing);
+        if (!showing) {
+            var replaceInput = $i('re-replace-input');
+            if (replaceInput) replaceInput.focus();
+        }
+    }
+
+    function findInEditor() {
+        var input = $i('re-find-input');
+        var keyword = input ? input.value : '';
+        var caseCheck = $i('re-find-case');
+        var caseSensitive = !!(caseCheck && caseCheck.checked);
+        var editor = state.fileEditor;
+        if (!editor || !keyword.trim()) {
+            state.findMatches = [];
+            state.findCurrent = -1;
+            updateFindCount(0, 0);
+            return;
+        }
+        var text = editor.state.doc.toString();
+        var searchStr = caseSensitive ? keyword : keyword.toLowerCase();
+        var searchText = caseSensitive ? text : text.toLowerCase();
+        var matches = [];
+        var pos = 0;
+        while (true) {
+            var idx = searchText.indexOf(searchStr, pos);
+            if (idx === -1) break;
+            matches.push(idx);
+            pos = idx + 1;
+        }
+        state.findKeyword = keyword;
+        state.findMatches = matches;
+        if (matches.length === 0) {
+            state.findCurrent = -1;
+            updateFindCount(0, 0);
+            return;
+        }
+        state.findCurrent = 0;
+        var matchPos = matches[0];
+        editor.dispatch({
+            selection: { anchor: matchPos, head: matchPos + keyword.length },
+            scrollIntoView: true
+        });
+        editor.focus();
+        updateFindCount(1, matches.length);
+    }
+
+    function findNext() {
+        var editor = state.fileEditor;
+        var matches = state.findMatches;
+        var keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
+        if (!editor || !matches.length || !keyword) return;
+        var next = (state.findCurrent + 1) % matches.length;
+        state.findCurrent = next;
+        var matchPos = matches[next];
+        editor.dispatch({
+            selection: { anchor: matchPos, head: matchPos + keyword.length },
+            scrollIntoView: true
+        });
+        editor.focus();
+        updateFindCount(next + 1, matches.length);
+    }
+
+    function findPrev() {
+        var editor = state.fileEditor;
+        var matches = state.findMatches;
+        var keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
+        if (!editor || !matches.length || !keyword) return;
+        var prev = (state.findCurrent - 1 + matches.length) % matches.length;
+        state.findCurrent = prev;
+        var matchPos = matches[prev];
+        editor.dispatch({
+            selection: { anchor: matchPos, head: matchPos + keyword.length },
+            scrollIntoView: true
+        });
+        editor.focus();
+        updateFindCount(prev + 1, matches.length);
+    }
+
+    function replaceOne() {
+        var editor = state.fileEditor;
+        var matches = state.findMatches;
+        var keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
+        var replaceText = $i('re-replace-input') ? $i('re-replace-input').value : '';
+        if (!editor || !matches.length || !keyword || state.findCurrent < 0) return;
+        var matchPos = matches[state.findCurrent];
+        editor.dispatch({
+            changes: { from: matchPos, to: matchPos + keyword.length, insert: replaceText }
+        });
+        // Re-run find to refresh match positions
+        findInEditor();
+    }
+
+    function replaceAll() {
+        var editor = state.fileEditor;
+        var matches = state.findMatches;
+        var keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
+        var replaceText = $i('re-replace-input') ? $i('re-replace-input').value : '';
+        if (!editor || !matches.length || !keyword) return;
+        // Replace from end to start to preserve positions
+        var changes = [];
+        for (var i = matches.length - 1; i >= 0; i--) {
+            changes.push({ from: matches[i], to: matches[i] + keyword.length, insert: replaceText });
+        }
+        editor.dispatch({ changes: changes });
+        // Refresh find
+        findInEditor();
     }
 
     document.addEventListener('DOMContentLoaded', init);

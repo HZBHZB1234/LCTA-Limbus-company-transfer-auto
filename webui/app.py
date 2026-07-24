@@ -1496,7 +1496,7 @@ class RuleEditorAPI:
             get_ruleset_list, get_ruleset, save_ruleset,
             create_ruleset, delete_ruleset,
             build_rule_from_form, validate_rule, analyze_changes,
-            CATEGORY_FILE_PATTERNS
+            save_file_content, CATEGORY_FILE_PATTERNS
         )
         self.get_lang_files = get_lang_files
         self.get_file_content = get_file_content
@@ -1509,6 +1509,7 @@ class RuleEditorAPI:
         self.build_rule_from_form = build_rule_from_form
         self.validate_rule = validate_rule
         self.analyze_changes = analyze_changes
+        self.save_file_content = save_file_content
 
     def apply_ruleset(self, name: str) -> dict:
         from webutils.function_fancy import fancy_main

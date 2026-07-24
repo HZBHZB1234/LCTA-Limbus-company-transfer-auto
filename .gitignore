@@ -4,6 +4,7 @@ webui/nexus/*.js
 !webui/nexus/simulation.js
 tmp
 *\example/
+fancy
 .rmv
 *.pyc
 *.pyo

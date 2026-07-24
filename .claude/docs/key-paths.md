@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-23 -->
+<!-- Last updated: 2026-07-24 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -160,7 +160,50 @@ Launcher mode:
 
 Files: `webui/js/speed.js`, `webui/app.py`, `webutils/function_speed.py`, `launcher/speed_hotkey.py`
 
-## 7. Config Management
+## 7. Rule Editor — File Edit → Smart Ruleset Generation
+
+New workflow (v5.1+): user edits game JSON files directly and generates rules from changes.
+
+```
+User opens rule editor
+  → webui/app.py LCTA_API.open_rule_editor()       spawn second pywebview window
+  → webui/rule-editor.html + js/rule-editor.js      loads
+
+User browses files in sidebar, double-clicks a file
+  → api.get_file_content(path)                      read JSON from game Lang dir
+  → webui/app.py RuleEditorAPI.get_file_content()
+    → webutils/function_rule_editor.py get_file_content()
+
+File content loaded into editable CodeMirror (file-edit tab)
+  → state.currentFile set, fileOriginalContent saved for diff
+
+User edits text in CodeMirror, clicks "比较变更"
+  → diffAndTrackChanges()
+    → getFileEditorDoc()                            get current CodeMirror text
+    → diffJson(originalParsed, parsed)              recursive JSON diff
+    → extractChangesFromDiff()                      convert to [{file, field_path, item_id, old_val, new_val}]
+    → renderChangeList()                            show changes in bottom panel
+
+User clicks "保存到游戏" (optional direct save)
+  → saveEditedFile()
+    → api.save_file_content(path, raw)              writes to game Lang file
+    → webutils/function_rule_editor.py save_file_content()
+
+User clicks "智能生成规则集" (from changes panel or ruleset-edit tab)
+  → generateRulesFromChanges()
+    → state.smartChanges = state.pendingChanges
+    → openSmartGeneration()                         existing smart gen dialog
+      → api.analyze_changes(changes)                LCS grouping + 5-dimension scoring
+      → webutils/function_rule_editor.py analyze_changes()
+      → showSmartGenDialog(groups)                  L1-L4 tiered scope selectors
+    → user selects scope → applySmartGroup()
+      → builds rule → pushes to state.currentRuleset.rules
+      → api.save_ruleset()                          persists to fancy/{name}.json
+```
+
+Key files: `webui/rule-editor.html`, `webui/js/rule-editor.js`, `webui/app.py` (RuleEditorAPI), `webutils/function_rule_editor.py`
+
+## 8. Config Management
 
 ```
 Write: JS form change

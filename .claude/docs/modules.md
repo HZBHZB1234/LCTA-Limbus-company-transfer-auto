@@ -22,7 +22,7 @@
 |------|---------|
 | `app.py` | **Core**: `LCTA_API` class (~1540 lines), bridges all backend features to JS via pywebview. Includes `RuleEditorAPI` class (the rule editor window's bridge), `open_rule_editor()` to spawn a second pywebview window. `get_fancy_rulesets()` now loads user rules from `fancy/` folder via `load_fancy_folder_rules()`. Auto-migrates old `user_fancy` config on startup |
 | `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
-| `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器 (Fancy Rule Editor): sidebar file browser + main rule editor (simple/advanced dual mode) + bottom file content preview panel |
+| `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器 (Fancy Rule Editor): sidebar file browser + two main mode tabs (file-edit / ruleset-edit) + bottom file content preview panel. File-edit tab has editable CodeMirror + change tracking + smart gen from edits. Ruleset-edit tab wraps old simple/advanced modes |
 | `css/base.css` | Base styling |
 | `css/components.css` | Component-specific styles |
 | `css/layout-extras.css` | Layout utilities and extra styles |
@@ -36,7 +36,7 @@
 | `js/cdn.js` | CDN optimization page logic |
 | `js/speed.js` | Game speed control page logic |
 | `js/list-managers.js` | List/tab view management; constructors tolerate missing containers (lazy load compatible); container refs updated by `onSectionLoaded` |
-| `js/rule-editor.js` | Rule editor frontend logic: file browser (grouped by category, search with full-text), file content preview (simple mode structured data cards, advanced mode read-only CodeMirror), simple mode form-driven rule builder, advanced mode editable CodeMirror with template loading and validation, smart generation dialog with L1-L4 tiered scope options |
+| `js/rule-editor.js` | Rule editor frontend logic: two main mode tabs (file-edit / ruleset-edit). File-edit: editable CodeMirror, JSON diff tracking, change list panel, batch replace, smart gen from file edits. Ruleset-edit: file browser (grouped by category, search with full-text), file content preview (structured data cards / read-only CodeMirror), simple mode form-driven rule builder, advanced mode editable CodeMirror with template loading and validation, smart generation dialog with L1-L4 tiered scope options |
 | `sections/preload.js` | Lazy section loader: preloads only dashboard at startup, fetches others on first navigation via `loadSection()`; `onSectionLoaded()` callback re-runs per-section init (toggle funcs, list manager refs, select box values, DOM ref rebuilds) |
 | `sections/*.html` | 18 individual section HTML fragments (dashboard, translate, install, etc.) |
 | `guide/*.md` | 16 in-app user guide pages (one per feature tab) |
@@ -75,7 +75,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `eiderConst.py` | Update constants | Translation pack update lists, dependency chains |
 | `FL2LCTA.py` | Rule converter | Fancy Language → LCTA rule format converter |
 | `Faust_fancy.py` | Faust rules | Faust character-specific fancy text rules |
-| `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`), ruleset CRUD (`get_ruleset_list`, `save_ruleset`, `create_ruleset`, `delete_ruleset`), rule building (`build_rule_from_form`, `validate_rule`), smart change analysis (`analyze_changes` with LCS-based grouping and 5-dimension scoring) |
+| `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`), ruleset CRUD (`get_ruleset_list`, `save_ruleset`, `create_ruleset`, `delete_ruleset`), rule building (`build_rule_from_form`, `validate_rule`), smart change analysis (`analyze_changes` with LCS-based grouping and 5-dimension scoring), file saving (`save_file_content` with JSON validation + backup) |
 | `test.py` | Debug utilities | Internal testing/debug helpers |
 | `debug_environ_test.py` | Environment diag | Environment diagnostics on startup failure |
 

@@ -10,8 +10,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module">
         import {EditorView, basicSetup} from "https://esm.sh/codemirror@6.0.1";
+        import {keymap} from "https://esm.sh/@codemirror/view@6.0.1";
         import {json} from "https://esm.sh/@codemirror/lang-json@6.0.1";
-        window.CodeMirror = {EditorView, basicSetup, json};
+        window.CodeMirror = {EditorView, basicSetup, keymap, json};
     </script>
 </head>
 <body class="theme-light">
@@ -21,10 +22,11 @@
             <h3><i class="fas fa-folder-open"></i> 文件浏览器</h3>
         </div>
         <div class="re-search-bar">
-            <input type="text" id="re-file-search" placeholder="搜索文件内容...">
+            <input type="text" id="re-file-search" placeholder="搜索文件名或内容..." autocomplete="off">
             <label class="re-checkbox"><input type="checkbox" id="re-case-sensitive"> 区分大小写</label>
             <button id="re-search-btn" class="re-btn re-btn-sm"><i class="fas fa-search"></i> 搜索</button>
             <button id="re-search-clear-btn" class="re-btn re-btn-sm"><i class="fas fa-times"></i> 清除</button>
+            <div id="re-search-hint" class="re-search-hint" style="display:none;"></div>
         </div>
         <div class="re-file-tabs">
             <button class="re-tab active" data-tab="file-list">文件列表</button>
@@ -34,67 +36,124 @@
         <div id="re-search-results-container" class="re-search-results" style="display:none;"></div>
     </div>
     <div class="re-main">
-        <div class="re-toolbar">
-            <select id="re-ruleset-select"></select>
-            <button id="re-new-ruleset-btn" class="re-btn"><i class="fas fa-plus"></i> 新建</button>
-            <button id="re-save-ruleset-btn" class="re-btn re-btn-primary"><i class="fas fa-save"></i> 保存</button>
-            <button id="re-delete-ruleset-btn" class="re-btn re-btn-danger"><i class="fas fa-trash"></i> 删除</button>
+        <!-- Main Mode Tabs -->
+        <div class="re-main-tabs">
+            <button class="re-main-tab active" data-maintab="file-edit"><i class="fas fa-pen"></i> 文件编辑</button>
+            <button class="re-main-tab" data-maintab="ruleset-edit"><i class="fas fa-cog"></i> 规则集编辑</button>
         </div>
-        <div class="re-mode-toggle">
-            <button class="re-mode-btn active" data-mode="simple">🔰 简单模式</button>
-            <button class="re-mode-btn" data-mode="advanced">⚙ 高级模式</button>
-        </div>
-        <div id="re-simple-mode" class="re-editor-panel">
-            <div class="re-form-group"><label>文件匹配</label>
-                <select id="re-simple-file"><option value="">-- 选择文件分类 --</option></select>
-                <input type="text" id="re-simple-file-custom" placeholder="或自定义正则..." style="margin-top:4px;">
+
+        <!-- ============ TAB: File Edit ============ -->
+        <div id="re-file-edit-panel" class="re-main-panel">
+            <div class="re-file-edit-toolbar">
+                <button id="re-fe-save-btn" class="re-btn re-btn-primary"><i class="fas fa-save"></i> 保存到游戏</button>
+                <button id="re-fe-revert-btn" class="re-btn"><i class="fas fa-undo"></i> 撤销更改</button>
+                <button id="re-fe-refresh-btn" class="re-btn"><i class="fas fa-sync"></i> 刷新</button>
+                <button id="re-fe-batch-btn" class="re-btn"><i class="fas fa-exchange-alt"></i> 批量替换</button>
+                <button id="re-fe-diff-btn" class="re-btn"><i class="fas fa-search-plus"></i> 比较变更</button>
             </div>
-            <div class="re-form-group"><label>数据条目</label>
-                <div class="re-form-row">
-                    <label class="re-checkbox"><input type="checkbox" id="re-simple-use-id" checked> 按ID定位</label>
-                    <input type="text" id="re-simple-item-id" placeholder="ID（逗号分隔）" style="flex:1;">
-                    <input type="text" id="re-simple-field" placeholder="字段名" style="flex:1;" value="desc">
+            <div class="re-find-bar" id="re-find-bar" style="display:none;">
+                <div class="re-find-row">
+                    <i class="fas fa-search re-find-icon"></i>
+                    <input type="text" id="re-find-input" placeholder="查找" autocomplete="off">
+                    <span id="re-find-count" class="re-find-count">0/0</span>
+                    <button class="re-btn re-btn-sm re-find-nav" id="re-find-prev" title="上一个匹配 (Shift+Enter)"><i class="fas fa-chevron-up"></i></button>
+                    <button class="re-btn re-btn-sm re-find-nav" id="re-find-next" title="下一个匹配 (Enter)"><i class="fas fa-chevron-down"></i></button>
+                    <button class="re-btn re-btn-sm re-find-toggle" id="re-find-replace-toggle" title="切换替换模式"><i class="fas fa-caret-down"></i></button>
+                    <label class="re-find-label re-find-case" title="区分大小写">
+                        <input type="checkbox" id="re-find-case"> Aa
+                    </label>
+                    <button class="re-find-close" id="re-find-close" title="关闭 (Esc)"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="re-find-row re-replace-row" id="re-replace-row" style="display:none;">
+                    <i class="fas fa-exchange-alt re-find-icon"></i>
+                    <input type="text" id="re-replace-input" placeholder="替换为" autocomplete="off">
+                    <button class="re-btn re-btn-sm re-replace-btn" id="re-replace-one">替换</button>
+                    <button class="re-btn re-btn-sm re-replace-btn" id="re-replace-all">全部替换</button>
                 </div>
             </div>
-            <div class="re-form-group"><label>条件触发（可选）</label>
-                <div id="re-simple-conditions"></div>
-                <button class="re-btn re-btn-sm" id="re-add-condition-btn">＋ 添加条件</button>
+            <div id="re-file-editor-container" class="re-file-editor-area">
+                <div class="re-empty-state" id="re-fe-empty">
+                    <i class="fas fa-file-alt"></i>
+                    双击左侧文件以在编辑器中打开
+                </div>
             </div>
-            <div class="re-form-group"><label>操作列表</label>
-                <div id="re-simple-operations">
-                    <div class="re-operation-item">
-                        <input type="text" placeholder="查找" class="re-op-from">
-                        <span>→</span>
-                        <input type="text" placeholder="替换为" class="re-op-to">
-                        <button class="re-btn re-btn-sm re-remove-op-btn">✕</button>
+            <div class="re-changes-panel" id="re-changes-panel" style="display:none;">
+                <div class="re-changes-header">
+                    <span><i class="fas fa-list"></i> 待处理变更</span>
+                    <span id="re-change-count" class="re-change-count">0</span>
+                    <div class="re-changes-actions">
+                        <button class="re-btn re-btn-sm" id="re-clear-changes-btn">清空</button>
+                        <button class="re-btn re-btn-sm re-btn-accent" id="re-gen-from-changes-btn"><i class="fas fa-brain"></i> 智能生成规则集</button>
                     </div>
                 </div>
-                <button class="re-btn re-btn-sm" id="re-add-op-btn">＋ 添加操作</button>
-            </div>
-            <div class="re-form-row" style="margin-top:12px;">
-                <button class="re-btn re-btn-primary" id="re-preview-rule-btn">👁 预览JSON</button>
-                <button class="re-btn re-btn-success" id="re-generate-rule-btn">📋 生成规则JSON</button>
-            </div>
-            <div id="re-simple-preview" style="margin-top:8px; display:none;">
-                <pre id="re-simple-preview-content" style="font-size:12px; background:var(--color-bg-primary); padding:8px; border-radius:6px; overflow:auto; max-height:200px;"></pre>
+                <div id="re-change-list" class="re-change-list"></div>
             </div>
         </div>
-        <div id="re-advanced-mode" class="re-editor-panel" style="display:none;">
-            <div class="re-advanced-toolbar">
-                <select id="re-template-select"><option value="">📋 模板...</option></select>
-                <button class="re-btn re-btn-sm" id="re-format-json-btn">格式化</button>
-                <button class="re-btn re-btn-sm" id="re-validate-btn">验证</button>
+
+        <!-- ============ TAB: Ruleset Edit ============ -->
+        <div id="re-ruleset-edit-panel" class="re-main-panel" style="display:none;">
+            <div class="re-toolbar">
+                <select id="re-ruleset-select"></select>
+                <button id="re-new-ruleset-btn" class="re-btn"><i class="fas fa-plus"></i> 新建</button>
+                <button id="re-save-ruleset-btn" class="re-btn re-btn-primary"><i class="fas fa-save"></i> 保存</button>
+                <button id="re-delete-ruleset-btn" class="re-btn re-btn-danger"><i class="fas fa-trash"></i> 删除</button>
             </div>
-            <div id="re-advanced-editor" style="height:300px; border:1px solid var(--color-border); border-radius:6px;"></div>
-            <div id="re-validation-result" style="margin-top:4px; font-size:12px;"></div>
-        </div>
-        <div class="re-rules-preview">
-            <h4>当前规则集预览</h4>
-            <div id="re-rules-preview-list"></div>
-        </div>
-        <div class="re-action-bar">
-            <button id="re-apply-btn" class="re-btn re-btn-success"><i class="fas fa-play"></i> 应用规则集到游戏</button>
-            <button id="re-smart-gen-btn" class="re-btn re-btn-accent"><i class="fas fa-brain"></i> 智能生成规则集</button>
+            <div class="re-mode-toggle">
+                <button class="re-mode-btn active" data-mode="simple">🔰 简单模式</button>
+                <button class="re-mode-btn" data-mode="advanced">⚙ 高级模式</button>
+            </div>
+            <div id="re-simple-mode" class="re-editor-panel">
+                <div class="re-form-group"><label>文件匹配</label>
+                    <select id="re-simple-file"><option value="">-- 选择文件分类 --</option></select>
+                    <input type="text" id="re-simple-file-custom" placeholder="或自定义正则..." style="margin-top:4px;">
+                </div>
+                <div class="re-form-group"><label>数据条目</label>
+                    <div class="re-form-row">
+                        <label class="re-checkbox"><input type="checkbox" id="re-simple-use-id" checked> 按ID定位</label>
+                        <input type="text" id="re-simple-item-id" placeholder="ID（逗号分隔）" style="flex:1;">
+                        <input type="text" id="re-simple-field" placeholder="字段名" style="flex:1;" value="desc">
+                    </div>
+                </div>
+                <div class="re-form-group"><label>条件触发（可选）</label>
+                    <div id="re-simple-conditions"></div>
+                    <button class="re-btn re-btn-sm" id="re-add-condition-btn">＋ 添加条件</button>
+                </div>
+                <div class="re-form-group"><label>操作列表</label>
+                    <div id="re-simple-operations">
+                        <div class="re-operation-item">
+                            <input type="text" placeholder="查找" class="re-op-from">
+                            <span>→</span>
+                            <input type="text" placeholder="替换为" class="re-op-to">
+                            <button class="re-btn re-btn-sm re-remove-op-btn">✕</button>
+                        </div>
+                    </div>
+                    <button class="re-btn re-btn-sm" id="re-add-op-btn">＋ 添加操作</button>
+                </div>
+                <div class="re-form-row" style="margin-top:12px;">
+                    <button class="re-btn re-btn-primary" id="re-preview-rule-btn">👁 预览JSON</button>
+                    <button class="re-btn re-btn-success" id="re-generate-rule-btn">📋 生成规则JSON</button>
+                </div>
+                <div id="re-simple-preview" style="margin-top:8px; display:none;">
+                    <pre id="re-simple-preview-content" style="font-size:12px; background:var(--color-bg-primary); padding:8px; border-radius:6px; overflow:auto; max-height:200px;"></pre>
+                </div>
+            </div>
+            <div id="re-advanced-mode" class="re-editor-panel" style="display:none;">
+                <div class="re-advanced-toolbar">
+                    <select id="re-template-select"><option value="">📋 模板...</option></select>
+                    <button class="re-btn re-btn-sm" id="re-format-json-btn">格式化</button>
+                    <button class="re-btn re-btn-sm" id="re-validate-btn">验证</button>
+                </div>
+                <div id="re-advanced-editor" style="height:300px; border:1px solid var(--color-border); border-radius:6px;"></div>
+                <div id="re-validation-result" style="margin-top:4px; font-size:12px;"></div>
+            </div>
+            <div class="re-rules-preview">
+                <h4>当前规则集预览</h4>
+                <div id="re-rules-preview-list"></div>
+            </div>
+            <div class="re-action-bar">
+                <button id="re-apply-btn" class="re-btn re-btn-success"><i class="fas fa-play"></i> 应用规则集到游戏</button>
+                <button id="re-smart-gen-btn" class="re-btn re-btn-accent"><i class="fas fa-brain"></i> 智能生成规则集</button>
+            </div>
         </div>
     </div>
 </div>

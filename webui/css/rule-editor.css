@@ -491,6 +491,7 @@ body {
     z-index: 100;
     background: transparent;
     border: none;
+    transition: none !important;    /* 防止 CSS 过渡干扰拖动定位 */
 }
 
 #re-file-edit-panel .cm-search {
@@ -515,6 +516,7 @@ body {
 
 #re-file-edit-panel .cm-search.dragging {
     cursor: grabbing !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
 #re-file-edit-panel .cm-search .cm-textfield {
@@ -891,6 +893,29 @@ body {
     color: var(--color-text-primary, #2c3e50);
     word-break: break-word;
     line-height: 1.5;
+}
+
+.re-rule-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    align-items: center;
+}
+
+.re-edit-rule-btn {
+    padding: 2px 6px;
+    font-size: 12px;
+    border: 1px solid var(--color-border, #d4d4d4);
+    border-radius: 4px;
+    background: var(--color-bg-card, #ffffff);
+    cursor: pointer;
+    color: var(--color-text-secondary, #7f8c8d);
+    transition: all 0.15s;
+    line-height: 1;
+}
+.re-edit-rule-btn:hover {
+    border-color: var(--color-primary, #3498db);
+    color: var(--color-primary, #3498db);
 }
 
 .re-action-bar {
@@ -1545,6 +1570,79 @@ body.re-resizing-bottom {
 .re-legend-dot.staged { color: var(--color-warning, #f39c12); }
 .re-legend-dot.applied { color: var(--color-success, #2ecc71); }
 
+/* ---- 文件状态面板 — 类 VSCode Source Control ---- */
+.re-file-status {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px 8px;
+}
+.re-file-status-summary {
+    padding: 8px 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-primary, #2c3e50);
+    border-bottom: 1px solid var(--color-border-light, #ecf0f1);
+    margin-bottom: 4px;
+}
+.re-file-status-summary-text {
+    display: block;
+}
+.re-file-status-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.re-file-status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+.re-file-status-item:hover {
+    background: var(--color-bg-primary, #f8f9fa);
+}
+.re-file-status-dot {
+    font-size: 10px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+.re-file-status-dot.staged {
+    color: var(--color-warning, #f39c12);
+}
+.re-file-status-dot.applied {
+    color: var(--color-success, #2ecc71);
+}
+.re-file-status-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-primary, #2c3e50);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 11px;
+}
+.re-file-status-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.re-file-status-badge-staged {
+    background: rgba(243, 156, 18, 0.12);
+    color: var(--color-warning, #f39c12);
+}
+.re-file-status-badge-applied {
+    background: rgba(46, 204, 113, 0.12);
+    color: var(--color-success, #2ecc71);
+}
+
 /* ---- File Tab Bar ---- */
 .re-file-tab-bar {
     display: flex;
@@ -1864,6 +1962,28 @@ body.re-resizing-bottom {
     border-bottom: 1px solid var(--color-border-light, #ecf0f1);
     font-size: 13px;
     color: var(--color-text-secondary, #7f8c8d);
+}
+
+.re-v3-summary-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.re-v3-summary-actions .re-btn-xs {
+    padding: 2px 8px;
+    font-size: 11px;
+    border-radius: 4px;
+}
+
+.re-v3-group-toggle {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary, #3498db);
+    cursor: pointer;
+    margin: 0 8px 0 0;
 }
 
 .re-v3-stat {

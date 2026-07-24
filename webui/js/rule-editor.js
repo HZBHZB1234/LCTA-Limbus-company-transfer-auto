@@ -62,6 +62,7 @@
         activeFileTab: null,        // string | null: 当前活动文件路径
         fileTabOrder: [],           // string[]: 有序的打开文件路径
         _lastViewedFile: null,      // 用于标签页切换时判断文件是否变化
+        _editingRuleIndex: null, // 正在编辑的规则索引（非 null 时 generateRule 执行更新而非新增）
     };
 
     // 跨标签搜索状态桥接
@@ -71,7 +72,10 @@
         caseSensitive: false,
         wholeWord: false,
         regexp: false,
-        isOpen: false
+        isOpen: false,
+        panelLeft: null,   // 拖拽后的 left 值（相对 #re-file-edit-panel）
+        panelTop: null,    // 拖拽后的 top 值（相对 #re-file-edit-panel）
+        panelRight: null   // 拖拽后的 right 值
     };
 
     var CATEGORY_FILE_PATTERNS = {
@@ -223,6 +227,8 @@
         renderFileList();
         updateFileEditTabLabel();
         updateStatusBar();
+        // 刷新文件状态面板（如果当前处于活跃状态）
+        if (state.activeTab === 'file-status') renderFileStatusPanel();
     }
 
     async function createFileTab(path) {
@@ -884,7 +890,10 @@
                 '<span class="re-rule-index">#' + (i + 1) + '</span>' +
                 '<span class="re-rule-summary-text">' + escapeHtml(aimFile) + ' → ' + escapeHtml(targetField) +
                 (actionStr ? ' {' + actionStr + '}' : '') + '</span>' +
+                '<div class="re-rule-actions">' +
+                '<button class="re-btn re-btn-sm re-edit-rule-btn" data-idx="' + i + '" title="编辑规则">✏</button>' +
                 '<button class="re-btn re-btn-sm re-btn-danger re-remove-rule-btn" data-idx="' + i + '" title="移除规则">✕</button>' +
+                '</div>' +
                 '</div>';
         }
         container.innerHTML = html;
@@ -1127,6 +1136,59 @@
         }
     }
 
+    // ═══════════════════════════════════════════════════════
+    //  文件状态面板 — 类 VSCode Source Control，显示修改文件
+    // ═══════════════════════════════════════════════════════
+    function renderFileStatusPanel() {
+        var container = $i('re-file-status-container');
+        if (!container) return;
+
+        var stagedCount = 0;
+        var appliedCount = 0;
+        var fileEntries = [];
+
+        state.openFiles.forEach(function (ts, path) {
+            if (ts.editStatus === 'staged') stagedCount++;
+            else if (ts.editStatus === 'applied') appliedCount++;
+            if (ts.editStatus === 'staged' || ts.editStatus === 'applied') {
+                fileEntries.push({ path: path, status: ts.editStatus, ts: ts });
+            }
+        });
+
+        if (!fileEntries.length) {
+            container.innerHTML = '<div class="re-empty-state"><i class="fas fa-check-circle"></i> 无更改</div>';
+            return;
+        }
+
+        var html = '<div class="re-file-status-summary">' +
+            '<span class="re-file-status-summary-text">' + fileEntries.length + ' 个文件已修改' +
+            '（' + stagedCount + ' 暂存, ' + appliedCount + ' 已应用）</span>' +
+            '</div>' +
+            '<div class="re-file-status-list">';
+
+        for (var i = 0; i < fileEntries.length; i++) {
+            var entry = fileEntries[i];
+            var dotCls = entry.status === 'staged' ? 'staged' : 'applied';
+            var statusLabel = entry.status === 'staged' ? '暂存' : '已应用';
+            html += '<div class="re-file-status-item" data-path="' + escapeAttr(entry.path) + '">' +
+                '<span class="re-file-status-dot ' + dotCls + '">●</span>' +
+                '<span class="re-file-status-name">' + escapeHtml(entry.path) + '</span>' +
+                '<span class="re-file-status-badge re-file-status-badge-' + dotCls + '">' + statusLabel + '</span>' +
+                '</div>';
+        }
+
+        html += '</div>';
+        container.innerHTML = html;
+
+        // 绑定点击事件 — 单击打开文件
+        var items = container.querySelectorAll('.re-file-status-item');
+        for (var j = 0; j < items.length; j++) {
+            items[j].addEventListener('click', (function (path) {
+                return async function () { await createFileTab(path); };
+            })(items[j].dataset.path));
+        }
+    }
+
     function prefillEditorSearch(query) {
         if (!query) return;
         var ts = getActiveTabState();
@@ -1185,8 +1247,15 @@
         }
         const fileListC = $i('re-file-list-container');
         const searchC = $i('re-search-results-container');
+        const statusC = $i('re-file-status-container');
         if (fileListC) fileListC.style.display = tab === 'file-list' ? '' : 'none';
+        if (statusC) statusC.style.display = tab === 'file-status' ? '' : 'none';
         if (searchC) searchC.style.display = tab === 'search-results' ? '' : 'none';
+
+        // 切换到文件状态标签时刷新视图
+        if (tab === 'file-status') {
+            renderFileStatusPanel();
+        }
     }
 
     function setMode(mode, skipContentRefresh) {
@@ -1331,7 +1400,9 @@
         const previewList = $i('re-rules-preview-list');
         if (previewList) previewList.addEventListener('click', function (e) {
             const btn = e.target.closest('.re-remove-rule-btn');
-            if (btn) { const idx = parseInt(btn.dataset.idx, 10); if (!isNaN(idx)) removeRule(idx); }
+            if (btn) { const idx = parseInt(btn.dataset.idx, 10); if (!isNaN(idx)) removeRule(idx); return; }
+            const editBtn = e.target.closest('.re-edit-rule-btn');
+            if (editBtn) { const idx = parseInt(editBtn.dataset.idx, 10); if (!isNaN(idx)) editRule(idx); return; }
         });
 
         document.addEventListener('keydown', function (e) {
@@ -1756,19 +1827,39 @@
             return;
         }
         if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
-        state.currentRuleset.rules.push(rule);
-        renderRulesPreview();
-        syncAdvancedFromRuleset();
-        await persistCurrentRuleset();
-        showToast('已添加规则到当前规则集', 'success');
+        // 检查是否处于编辑模式
+        var editIdx = state._editingRuleIndex;
+        if (editIdx != null && editIdx >= 0 && editIdx < state.currentRuleset.rules.length) {
+            state.currentRuleset.rules[editIdx] = rule;
+            state._editingRuleIndex = null;
+            var genBtn = $i('re-generate-rule-btn');
+            if (genBtn) genBtn.textContent = '📋 生成规则JSON';
+            renderRulesPreview();
+            syncAdvancedFromRuleset();
+            await persistCurrentRuleset();
+            showToast('已更新规则 #' + (editIdx + 1), 'success');
+        } else {
+            state.currentRuleset.rules.push(rule);
+            renderRulesPreview();
+            syncAdvancedFromRuleset();
+            await persistCurrentRuleset();
+            showToast('已添加规则到当前规则集', 'success');
+        }
     }
 
     async function persistCurrentRuleset() {
         if (!state.currentRuleset || !state.currentRuleset.name) return;
         const api = getApi();
         if (!api || !api.save_ruleset) return;
-        try { await api.save_ruleset(state.currentRuleset.name, state.currentRuleset); }
-        catch (e) { console.error('[rule-editor] persist failed:', e); }
+        try {
+            var result = await api.save_ruleset(state.currentRuleset.name, state.currentRuleset);
+            if (result && result.success === false) {
+                throw new Error(result.error || '保存失败');
+            }
+        } catch (e) {
+            console.error('[rule-editor] persist failed:', e);
+            throw e; // 重新抛出，让调用方知晓失败
+        }
     }
 
     function removeRule(index) {
@@ -1778,6 +1869,104 @@
         renderRulesPreview();
         syncAdvancedFromRuleset();
         persistCurrentRuleset();
+    }
+
+    function editRule(index) {
+        if (!state.currentRuleset || !Array.isArray(state.currentRuleset.rules)) return;
+        if (index < 0 || index >= state.currentRuleset.rules.length) return;
+        var rule = state.currentRuleset.rules[index];
+        if (!rule) return;
+
+        // 切换到简单模式并填充表单
+        setMode('simple');
+
+        // 填充 aimFile
+        var aimFile = rule.aimFile || '';
+        var fileSelect = $i('re-simple-file');
+        var fileCustom = $i('re-simple-file-custom');
+        // 尝试将 aimFile 与已知分类/前缀匹配
+        var matched = false;
+        if (fileSelect) {
+            for (var ci = 0; ci < FILE_PREFIX_RULES.length; ci++) {
+                var catPattern = categoryToPattern(FILE_PREFIX_RULES[ci][1]);
+                if (catPattern && aimFile.indexOf(catPattern.replace('.*\\.json$', '')) >= 0) {
+                    fileSelect.value = FILE_PREFIX_RULES[ci][1];
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) fileSelect.value = '';
+        }
+        if (fileCustom) {
+            fileCustom.value = (!matched && aimFile !== '.*\\.json$') ? aimFile : '';
+        }
+
+        // 填充 conditions
+        var conditions = rule.conditions || [];
+        var condContainer = $i('re-simple-conditions');
+        if (condContainer) condContainer.innerHTML = '';
+
+        // 填充 dataList fields 和 ID
+        var fields = [];
+        var useIdEl = $i('re-simple-use-id');
+        var idEl = $i('re-simple-item-id');
+        var fieldEl = $i('re-simple-field');
+
+        for (var ci2 = 0; ci2 < conditions.length; ci2++) {
+            var cond = conditions[ci2];
+            var aim = cond.aim || '';
+            var fieldMatch = aim.match(/dataList\.\d+\.(.+)/);
+            if (fieldMatch) fields.push(fieldMatch[1]);
+        }
+
+        if (fieldEl && fields.length) fieldEl.value = fields.join(', ');
+        else if (fieldEl) fieldEl.value = 'desc';
+
+        // 检查是否有 ID-based trigger
+        var useId = false;
+        var idPattern = '';
+        if (conditions.length && conditions[0].trigger && conditions[0].trigger.aim &&
+            conditions[0].trigger.aim.indexOf('dataList.\\\\d+.id') >= 0) {
+            useId = true;
+            idPattern = conditions[0].trigger.re || '';
+        }
+        if (useIdEl) useIdEl.checked = useId;
+        if (idEl && useId && idPattern) {
+            var idMatch = idPattern.match(/^\^\((.+)\)\$$/);
+            if (idMatch) idEl.value = idMatch[1].replace(/\|/g, ', ');
+            else idEl.value = idPattern;
+        } else if (idEl) {
+            idEl.value = '';
+        }
+
+        // 填充操作列表（action）
+        var action = rule.action || [];
+        var opsContainer = $i('re-simple-operations');
+        if (opsContainer) {
+            opsContainer.innerHTML = '';
+            for (var ai = 0; ai < action.length; ai++) {
+                var a = action[ai];
+                addOperationRow();
+                var rows = opsContainer.querySelectorAll('.re-operation-item');
+                var lastRow = rows[rows.length - 1];
+                if (lastRow) {
+                    var fromInp = lastRow.querySelector('.re-op-from');
+                    var toInp = lastRow.querySelector('.re-op-to');
+                    if (fromInp) fromInp.value = a.from || '';
+                    if (toInp) toInp.value = a.to || '';
+                }
+            }
+            if (action.length === 0) addOperationRow();
+        }
+
+        // 记录编辑索引 + 修改按钮文本
+        state._editingRuleIndex = index;
+        var genBtn = $i('re-generate-rule-btn');
+        if (genBtn) genBtn.textContent = '📋 更新规则 (#' + (index + 1) + ')';
+
+        // 切换到规则集编辑标签
+        switchMainTab('ruleset-edit');
+        showToast('已加载规则 #' + (index + 1) + ' 到编辑表单，修改后点击更新即可', 'info');
     }
 
     function addConditionRow() {
@@ -2902,7 +3091,13 @@
         } else if (mergeCandidates.length) {
             html += '<span class="re-v3-stat re-v3-stat-merge">🔄 ' + mergeCandidates.length + ' 组可合并</span>';
         }
-        html += '</div>';
+        // Feature 3: 全部合并到全局 + Feature 4: 全选/取消全选
+        html += '<span class="re-v3-summary-actions">' +
+            '<button class="re-btn re-btn-xs" id="re-v3-select-all-btn" title="全选所有规则">☑ 全选</button>' +
+            '<button class="re-btn re-btn-xs" id="re-v3-deselect-all-btn" title="取消全选">☐ 取消</button>' +
+            '<button class="re-btn re-btn-xs" id="re-v3-expand-all-btn" title="将所有规则的 L1 文件范围提升至「全部文件」">🌐 全部展开至全局</button>' +
+            '</span>' +
+            '</div>';
 
         // 检查 merge candidate 关系，用于在卡片间插入连接器
         var mergeMap = {};  // idx -> [mergeInfo, ...]
@@ -2946,6 +3141,54 @@
         var applyAllBtn = overlay.querySelector('#re-v3-apply-all-btn');
         if (applyAllBtn) applyAllBtn.addEventListener('click', applyAllV3WithDedup);
 
+        // 辅助：更新「全部应用」按钮的计数
+        function _updateApplyAllCount() {
+            var btn = overlay.querySelector('#re-v3-apply-all-btn');
+            if (!btn) return;
+            var toggles = body.querySelectorAll('.re-v3-group-toggle');
+            var checked = 0;
+            for (var t = 0; t < toggles.length; t++) {
+                if (toggles[t].checked) checked++;
+            }
+            btn.textContent = '✅ 全部应用 (' + checked + '条)';
+        }
+
+        // Feature 4: 全选 / 取消全选
+        var selectAllBtn = overlay.querySelector('#re-v3-select-all-btn');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', function () {
+                var toggles = body.querySelectorAll('.re-v3-group-toggle');
+                for (var t = 0; t < toggles.length; t++) toggles[t].checked = true;
+                _updateApplyAllCount();
+            });
+        }
+        var deselectAllBtn = overlay.querySelector('#re-v3-deselect-all-btn');
+        if (deselectAllBtn) {
+            deselectAllBtn.addEventListener('click', function () {
+                var toggles = body.querySelectorAll('.re-v3-group-toggle');
+                for (var t = 0; t < toggles.length; t++) toggles[t].checked = false;
+                _updateApplyAllCount();
+            });
+        }
+
+        // Feature 3: 全部展开至全局
+        var expandAllBtn = overlay.querySelector('#re-v3-expand-all-btn');
+        if (expandAllBtn) {
+            expandAllBtn.addEventListener('click', function () {
+                for (var gi = 0; gi < groups.length; gi++) {
+                    if (groups[gi].l1_options) groups[gi].l1_options.suggested = 'all';
+                    var card = body.querySelector('.re-v3-group-card[data-group-idx="' + gi + '"]');
+                    if (card) {
+                        var radio = card.querySelector('input[name="l1-' + gi + '"][value="all"]');
+                        if (radio) radio.checked = true;
+                        // 更新推广按钮
+                        updatePromoteButtons(card, gi);
+                    }
+                }
+                showToast('已将所有组作用域设为全局', 'success');
+            });
+        }
+
         var previewBtns = body.querySelectorAll('.re-v3-preview-btn');
         for (var pi = 0; pi < previewBtns.length; pi++) {
             previewBtns[pi].addEventListener('click', (function (idx) {
@@ -2962,7 +3205,9 @@
 
         var expandToggles = body.querySelectorAll('.re-v3-group-header');
         for (var ei = 0; ei < expandToggles.length; ei++) {
-            expandToggles[ei].addEventListener('click', function () {
+            expandToggles[ei].addEventListener('click', function (evt) {
+                // 不拦截复选框的点击
+                if (evt.target.tagName === 'INPUT') return;
                 var card = this.closest('.re-v3-group-card');
                 if (!card) return;
                 var controls = card.querySelector('.re-v3-tier-controls');
@@ -2970,6 +3215,12 @@
                 if (controls) controls.classList.toggle('collapsed');
                 if (toggle) toggle.classList.toggle('expanded');
             });
+        }
+
+        // Feature 4: 组切换复选框 — 更新「全部应用」计数
+        var toggleCbs = body.querySelectorAll('.re-v3-group-toggle');
+        for (var tci = 0; tci < toggleCbs.length; tci++) {
+            toggleCbs[tci].addEventListener('change', _updateApplyAllCount);
         }
 
         var mergeBtns = body.querySelectorAll('.re-v3-merge-btn');
@@ -3017,6 +3268,7 @@
 
         var html = '<div class="re-v3-group-card" data-group-idx="' + idx + '">';
         html += '<div class="re-v3-group-header">' +
+            '<input type="checkbox" class="re-v3-group-toggle" data-idx="' + idx + '" checked title="包含此规则到「全部应用」">' +
             '<h4><span>' + tier + '</span> 规则 #' + (idx + 1) +
             ' · <span class="re-score-badge ' + badgeCls + '">' + priority + '分</span>';
         if (group.is_merged) {
@@ -3257,13 +3509,22 @@
         var sel = readSmartSelections(card, idx);
         var rules = buildSmartGroupRules(group, sel);
         if (!rules || !rules.length) { showToast('未能从该组生成规则', 'error'); return; }
-        if (!state.currentRuleset) { showToast('请先选择或新建一个规则集', 'error'); return; }
+        // Feature 5/6: 若无规则集则弹窗创建
+        if (!state.currentRuleset) {
+            var created = await _promptCreateRuleset();
+            if (!created) return;
+        }
         if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
         for (var i = 0; i < rules.length; i++) state.currentRuleset.rules.push(rules[i]);
         renderRulesPreview();
         syncAdvancedFromRuleset();
-        await persistCurrentRuleset();
-        showToast('已添加 ' + rules.length + ' 条规则', 'success');
+        try {
+            await persistCurrentRuleset();
+            showToast('已添加 ' + rules.length + ' 条规则', 'success');
+        } catch (e) {
+            showToast('保存失败: ' + (e && e.message ? e.message : e), 'error');
+            return;
+        }
 
         // 视觉反馈
         card.style.borderColor = 'var(--color-success, #2ecc71)';
@@ -3580,7 +3841,11 @@
     async function applyAllV3WithDedup() {
         var groups = state.smartGenGroups || [];
         if (!groups.length) { showToast('没有可应用的组', 'error'); return; }
-        if (!state.currentRuleset) { showToast('请先选择或新建一个规则集', 'error'); return; }
+        // Feature 5/6: 若无规则集则弹窗创建
+        if (!state.currentRuleset) {
+            var created = await _promptCreateRuleset();
+            if (!created) return;
+        }
 
         var existingRules = state.currentRuleset.rules || [];
         var appliedSigs = {};
@@ -3597,6 +3862,11 @@
             var group = groups[i];
             var card = state.smartGenOverlay ?
                 state.smartGenOverlay.querySelector('.re-v3-group-card[data-group-idx="' + i + '"]') : null;
+            // Feature 4: 跳过未勾选的组
+            if (card) {
+                var toggle = card.querySelector('.re-v3-group-toggle');
+                if (toggle && !toggle.checked) continue;
+            }
             var sel = card ? readSmartSelections(card, i) : {
                 l1: 'category',
                 l1Categories: (group.l1_options && group.l1_options.categories || []).map(function (c) { return c.name; }),
@@ -4007,12 +4277,37 @@
             showToast('没有已暂存或已应用的编辑 — 请先在文件中修改并保存', 'error');
             return;
         }
+        // Feature 6: 未选中规则集时弹窗允许创建
         if (!state.currentRuleset || !state.currentRuleset.name) {
-            switchMainTab('ruleset-edit');
-            showToast('请先选择或新建一个规则集', 'error');
-            return;
+            var created = await _promptCreateRuleset();
+            if (!created) return; // 用户取消
         }
         await openSmartGenerationV3();
+    }
+
+    // Feature 6: 弹窗创建规则集（可复用）
+    async function _promptCreateRuleset() {
+        var name = window.prompt('当前未选择规则集。请输入名称创建新规则集：');
+        if (!name || !name.trim()) return null;
+        var trimmed = name.trim();
+        var api = getApi();
+        if (!api) { warnNoApi(); return null; }
+        try {
+            var res = await api.create_ruleset(trimmed);
+            if (res && res.success === false) {
+                showToast('创建失败: ' + (res.error || ''), 'error');
+                return null;
+            }
+        } catch (e) {
+            showToast('创建异常: ' + (e && e.message ? e.message : e), 'error');
+            return null;
+        }
+        await loadRulesets();
+        var sel = $i('re-ruleset-select');
+        if (sel) sel.value = trimmed;
+        await loadRulesetByName(trimmed);
+        showToast('已创建规则集: ' + trimmed, 'success');
+        return state.currentRuleset;
     }
 
     // ═══════════════════════════════════════════════════════
@@ -4056,6 +4351,10 @@
             closeBtn._closePatched = true;
             closeBtn.addEventListener('mousedown', function () {
                 _searchBridge.isOpen = false;
+                // 清除拖拽位置 — 下次 Ctrl+F 恢复默认位置
+                _searchBridge.panelLeft = null;
+                _searchBridge.panelTop = null;
+                _searchBridge.panelRight = null;
                 if (_searchBridge._restoreTimeout) {
                     clearTimeout(_searchBridge._restoreTimeout);
                     _searchBridge._restoreTimeout = null;
@@ -4134,27 +4433,59 @@
             const startTop = rect.top;
             const panel = document.getElementById('re-file-edit-panel');
             const panelRect = panel ? panel.getBoundingClientRect() : null;
+            var moved = false;
+            var dragState = null; // { rAF }
+            const DEAD_ZONE = 3;   // 3px 死区，区分点击与拖拽
 
+            // 提示 GPU 加速
+            panels.style.willChange = 'left, top';
             searchEl.classList.add('dragging');
-            document.body.style.userSelect = 'none';
+            // 仅在搜索面板元素上禁用文本选中，而非整个 document.body
+            searchEl.style.userSelect = 'none';
 
             function onMove(ev) {
-                let newLeft = startLeft + (ev.clientX - startX);
-                let newTop = startTop + (ev.clientY - startY);
-                if (panelRect) {
-                    newLeft = Math.max(panelRect.left, Math.min(newLeft, panelRect.right - rect.width));
-                    newTop = Math.max(panelRect.top, Math.min(newTop, panelRect.bottom - rect.height));
-                }
-                panels.style.left = (newLeft - (panelRect ? panelRect.left : 0)) + 'px';
-                panels.style.top = (newTop - (panelRect ? panelRect.top : 0)) + 'px';
-                panels.style.right = 'auto';
+                var dx = ev.clientX - startX;
+                var dy = ev.clientY - startY;
+                // 死区：移动 < 3px 不启动拖拽
+                if (!moved && Math.abs(dx) < DEAD_ZONE && Math.abs(dy) < DEAD_ZONE) return;
+                moved = true;
+
+                if (!dragState) dragState = {};
+
+                // 用 requestAnimationFrame 节流，提供 60fps 平滑拖拽
+                if (dragState.rAF) return;
+                dragState.rAF = requestAnimationFrame(function () {
+                    dragState.rAF = null;
+                    var newLeft = startLeft + (ev.clientX - startX);
+                    var newTop = startTop + (ev.clientY - startY);
+                    if (panelRect) {
+                        newLeft = Math.max(panelRect.left, Math.min(newLeft, panelRect.right - rect.width));
+                        newTop = Math.max(panelRect.top, Math.min(newTop, panelRect.bottom - rect.height));
+                    }
+                    panels.style.left = (newLeft - (panelRect ? panelRect.left : 0)) + 'px';
+                    panels.style.top = (newTop - (panelRect ? panelRect.top : 0)) + 'px';
+                    panels.style.right = 'auto';
+                });
             }
 
             function onUp() {
+                // 移除 GPU 加速提示
+                panels.style.willChange = '';
                 searchEl.classList.remove('dragging');
-                document.body.style.userSelect = '';
+                searchEl.style.userSelect = '';
+                if (dragState && dragState.rAF) {
+                    cancelAnimationFrame(dragState.rAF);
+                }
+                dragState = null;
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
+
+                // 保存拖拽位置到跨标签桥接
+                if (panels.style.left) {
+                    _searchBridge.panelLeft = panels.style.left;
+                    _searchBridge.panelTop = panels.style.top || '';
+                    _searchBridge.panelRight = panels.style.right || 'auto';
+                }
             }
 
             document.addEventListener('mousemove', onMove);
@@ -4180,6 +4511,16 @@
             } else {
                 _searchBridge.isOpen = false;
             }
+            // 保存当前面板位置（用于跨标签恢复）
+            var dom = editorView.dom;
+            if (dom) {
+                var panels = dom.querySelector('.cm-panels');
+                if (panels && panels.style.left) {
+                    _searchBridge.panelLeft = panels.style.left;
+                    _searchBridge.panelTop = panels.style.top || '';
+                    _searchBridge.panelRight = panels.style.right || 'auto';
+                }
+            }
             // 关闭旧编辑器的搜索面板，防止切换标签后 DOM 残留
             if (CM.closeSearchPanel) {
                 try { CM.closeSearchPanel(editorView); } catch(e) {}
@@ -4192,7 +4533,23 @@
         if (!CM || !CM.openSearchPanel || !_searchBridge.isOpen) return;
         if (!_searchBridge.query) return;
 
-        // 目标编辑器已有可见搜索面板：仅更新查询，不重复打开
+        // 工具函数：恢复拖拽位置
+        function _applyStoredPosition() {
+            if (!_searchBridge.panelLeft) return; // 从未拖拽过，使用 CSS 默认值
+            var c = container;
+            if (!c) {
+                var wrapper = editorView.dom ? editorView.dom.closest('.re-file-editor-wrapper') : null;
+                c = wrapper || editorView.dom;
+            }
+            if (!c) return;
+            var panels = c.querySelector('.cm-panels');
+            if (!panels) return;
+            panels.style.left = _searchBridge.panelLeft;
+            panels.style.top = _searchBridge.panelTop;
+            panels.style.right = _searchBridge.panelRight || 'auto';
+        }
+
+        // 目标编辑器已有可见搜索面板：仅更新查询 + 位置
         if (container) {
             var existingPanel = container.querySelector('.cm-search');
             if (existingPanel) {
@@ -4209,6 +4566,7 @@
                         });
                     } catch(e) {}
                 }
+                _applyStoredPosition();
                 return;
             }
         }
@@ -4240,6 +4598,8 @@
                     });
                 } catch(e) {}
             }
+            // 恢复拖拽位置
+            _applyStoredPosition();
         }, 80);
     }
 

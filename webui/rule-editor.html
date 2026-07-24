@@ -11,9 +11,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module">
         import {EditorView, basicSetup} from "https://esm.sh/codemirror@6.0.1";
-        import {keymap, ViewPlugin, Decoration} from "https://esm.sh/@codemirror/view@6.0.1";
+        import {keymap} from "https://esm.sh/@codemirror/view@6.0.1";
         import {json} from "https://esm.sh/@codemirror/lang-json@6.0.1";
-        window.CodeMirror = {EditorView, basicSetup, keymap, json, ViewPlugin, Decoration};
+        window.CodeMirror = {EditorView, basicSetup, keymap, json};
     </script>
 </head>
 <body>
@@ -50,26 +50,6 @@
                 <button id="re-fe-revert-btn" class="re-btn"><i class="fas fa-undo"></i> 撤销更改</button>
                 <button id="re-fe-refresh-btn" class="re-btn"><i class="fas fa-sync"></i> 刷新</button>
                 <button id="re-fe-diff-btn" class="re-btn"><i class="fas fa-search-plus"></i> 比较变更</button>
-            </div>
-            <div class="re-find-bar" id="re-find-bar" style="display:none;">
-                <div class="re-find-row">
-                    <i class="fas fa-search re-find-icon"></i>
-                    <input type="text" id="re-find-input" placeholder="查找" autocomplete="off">
-                    <span id="re-find-count" class="re-find-count">0/0</span>
-                    <button class="re-btn re-btn-sm re-find-nav" id="re-find-prev" title="上一个匹配 (Shift+Enter)"><i class="fas fa-chevron-up"></i></button>
-                    <button class="re-btn re-btn-sm re-find-nav" id="re-find-next" title="下一个匹配 (Enter)"><i class="fas fa-chevron-down"></i></button>
-                    <button class="re-btn re-btn-sm re-find-toggle" id="re-find-replace-toggle" title="切换替换模式"><i class="fas fa-caret-down"></i></button>
-                    <label class="re-find-label re-find-case" title="区分大小写">
-                        <input type="checkbox" id="re-find-case"> Aa
-                    </label>
-                    <button class="re-find-close" id="re-find-close" title="关闭 (Esc)"><i class="fas fa-times"></i></button>
-                </div>
-                <div class="re-find-row re-replace-row" id="re-replace-row" style="display:none;">
-                    <i class="fas fa-exchange-alt re-find-icon"></i>
-                    <input type="text" id="re-replace-input" placeholder="替换为" autocomplete="off">
-                    <button class="re-btn re-btn-sm re-replace-btn" id="re-replace-one">替换</button>
-                    <button class="re-btn re-btn-sm re-replace-btn" id="re-replace-all">全部替换</button>
-                </div>
             </div>
             <div id="re-file-editor-container" class="re-file-editor-area">
                 <div class="re-empty-state" id="re-fe-empty">

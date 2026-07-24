@@ -481,184 +481,108 @@ body {
     color: var(--color-accent, #8a2be2);
 }
 
-/* ---- Find Bar (file editor) — VS Code floating style ---- */
-.re-find-bar {
+/* ---- CM6 Search Panel — VSCode floating style ---- */
+#re-file-edit-panel .cm-panels {
     position: absolute;
     top: 48px;
     right: 12px;
     z-index: 100;
-    display: flex;
-    flex-direction: column;
-    padding: 6px 8px;
+    background: transparent;
+    border: none;
+}
+
+#re-file-edit-panel .cm-search {
     background: var(--color-bg-card, #ffffff);
     border: 1px solid var(--color-border, #d4d4d4);
     border-radius: 6px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
-    font-size: 13px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    min-width: 320px;
-    max-width: 480px;
-}
-
-.re-find-row {
-    display: flex;
-    align-items: center;
+    padding: 6px 8px;
     gap: 4px;
-    padding: 2px 0;
+    min-width: 310px;
+    max-width: 460px;
 }
 
-.re-find-icon {
-    width: 24px;
-    text-align: center;
-    font-size: 12px;
-    color: var(--color-text-secondary, #888);
-    flex-shrink: 0;
-}
-
-.re-find-bar input[type="text"] {
-    flex: 1;
-    min-width: 80px;
-    padding: 4px 8px;
+#re-file-edit-panel .cm-search .cm-textfield {
+    padding: 3px 8px;
     font-size: 13px;
     border: 1px solid var(--color-border, #cecece);
     border-radius: 3px;
-    background: var(--color-bg-card, #fff);
+    background: var(--color-bg-input, #fff);
     color: var(--color-text-primary, #333);
     outline: none;
-    transition: border-color 0.1s;
 }
 
-.re-find-bar input[type="text"]:focus {
+#re-file-edit-panel .cm-search .cm-textfield:focus {
     border-color: var(--color-primary, #0078d4);
 }
 
-.re-find-bar input[type="text"]::placeholder {
-    color: var(--color-text-secondary, #aaa);
-}
-
-.re-find-count {
-    font-size: 12px;
-    color: var(--color-text-secondary, #888);
-    min-width: 36px;
-    text-align: center;
-    font-family: "Consolas", "Monaco", monospace;
-    flex-shrink: 0;
-}
-
-.re-find-nav,
-.re-find-toggle {
-    width: 24px;
+#re-file-edit-panel .cm-search .cm-button {
     height: 24px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 0 8px;
+    font-size: 12px;
     border: none;
     border-radius: 3px;
     background: transparent;
     color: var(--color-text-secondary, #666);
     cursor: pointer;
-    font-size: 12px;
-    flex-shrink: 0;
-    transition: background 0.1s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.re-find-nav:hover,
-.re-find-toggle:hover {
+#re-file-edit-panel .cm-search .cm-button:hover {
     background: var(--color-border, #e0e0e0);
 }
 
-.re-find-nav:active,
-.re-find-toggle:active {
+#re-file-edit-panel .cm-search .cm-button:active {
     background: var(--color-border-dark, #ccc);
 }
 
-.re-find-toggle.re-find-toggle-active {
-    background: var(--color-border, #e0e0e0);
-    color: var(--color-primary, #0078d4);
+#re-file-edit-panel .cm-search .cm-button[name="close"] {
+    width: 24px;
+    padding: 0;
 }
 
-.re-find-label {
+#re-file-edit-panel .cm-search label {
     display: inline-flex;
     align-items: center;
     gap: 2px;
     padding: 2px 6px;
-    border-radius: 3px;
-    cursor: pointer;
     font-size: 12px;
-    font-weight: 500;
+    cursor: pointer;
     color: var(--color-text-secondary, #666);
     user-select: none;
-    flex-shrink: 0;
-    transition: background 0.1s;
-}
-
-.re-find-label:hover {
-    background: var(--color-border, #e0e0e0);
-}
-
-.re-find-label input[type="checkbox"] {
-    display: none;
-}
-
-.re-find-label.re-find-case {
-    min-width: 26px;
-    text-align: center;
-    font-style: italic;
-    font-family: "Georgia", serif;
-}
-
-.re-find-label.re-find-case.active {
-    color: var(--color-primary, #0078d4);
-    background: rgba(0, 120, 212, 0.1);
-}
-
-.re-find-close {
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
     border-radius: 3px;
-    background: transparent;
-    color: var(--color-text-secondary, #888);
-    cursor: pointer;
-    font-size: 13px;
-    flex-shrink: 0;
-    transition: color 0.1s, background 0.1s;
 }
 
-.re-find-close:hover {
-    background: var(--color-border, #e0e0e0);
-    color: var(--color-text-primary, #333);
-}
-
-/* Replace row */
-.re-replace-btn {
-    padding: 3px 10px;
-    font-size: 12px;
-    border: 1px solid var(--color-border, #cecece);
-    border-radius: 3px;
-    background: var(--color-bg-secondary, #fff);
-    color: var(--color-text-primary, #333);
-    cursor: pointer;
-    flex-shrink: 0;
-    white-space: nowrap;
-    transition: background 0.1s;
-}
-
-.re-replace-btn:hover {
+#re-file-edit-panel .cm-search label:hover {
     background: var(--color-border, #e0e0e0);
 }
 
-.re-replace-btn:active {
-    background: var(--color-border-dark, #ccc);
+#re-file-edit-panel .cm-search input[type="checkbox"] {
+    margin: 0;
+    width: auto;
 }
 
-.re-replace-row .re-btn-sm {
-    padding: 3px 10px;
+/* Dark theme */
+.theme-dark #re-file-edit-panel .cm-search {
+    background: var(--color-bg-secondary, #2d2d2d);
+    border-color: var(--color-border, #444);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.theme-dark #re-file-edit-panel .cm-search .cm-textfield {
+    background: var(--color-bg-input, #3c3c3c);
+    border-color: var(--color-border, #555);
+    color: var(--color-text-primary, #ccc);
+}
+
+.theme-dark #re-file-edit-panel .cm-search .cm-button {
+    color: var(--color-text-secondary, #999);
+}
+
+.theme-dark #re-file-edit-panel .cm-search .cm-button:hover {
+    background: var(--color-border, #444);
 }
 
 .re-toolbar {
@@ -1447,25 +1371,6 @@ body {
 .re-toast.re-toast-success { background: var(--color-success, #2ecc71); }
 .re-toast.re-toast-info    { background: var(--color-primary, #3498db); }
 
-/* ---- Find Match Highlight Decorations ---- */
-.cm-find-match {
-    background-color: rgba(255, 213, 0, 0.4);
-    border-radius: 2px;
-}
-
-.cm-find-match.cm-find-match-current {
-    background-color: rgba(255, 140, 0, 0.6);
-    border-radius: 2px;
-}
-
-.theme-dark .cm-find-match {
-    background-color: rgba(255, 213, 0, 0.25);
-}
-
-.theme-dark .cm-find-match.cm-find-match-current {
-    background-color: rgba(255, 140, 0, 0.45);
-}
-
 /* ---- Editor Theme Variables ---- */
 .theme-light .re-file-editor-area {
     --cm-bg: #ffffff;
@@ -1477,18 +1382,6 @@ body {
     --cm-bg: #1e1e1e;
     --cm-gutter-bg: #252526;
     --cm-active-line: rgba(255, 255, 255, 0.06);
-}
-
-.theme-dark .re-find-bar {
-    background: var(--color-bg-secondary, #2d2d2d);
-    border-color: var(--color-border, #444);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
-}
-
-.theme-dark .re-find-bar input[type="text"] {
-    background: var(--color-bg-input, #3c3c3c);
-    border-color: var(--color-border, #555);
-    color: var(--color-text-primary, #ccc);
 }
 
 /* ---- Editor Status Bar ---- */

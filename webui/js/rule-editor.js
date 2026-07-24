@@ -54,11 +54,6 @@
         fileOriginalContent: null,
         fileOriginalParsed: null,
         pendingChanges: [],
-        // Find bar state
-        findMatches: [],
-        findCurrent: -1,
-        findKeyword: '',
-        findCaseSensitive: false,
         // Dirty state
         isDirty: false
     };
@@ -299,7 +294,6 @@
         state.fileOriginalParsed = parsed ? JSON.parse(JSON.stringify(parsed)) : null;
         state.isDirty = false;
         clearPendingChanges();
-        hideFindBar();
         updateFileEditTabLabel();
     }
 
@@ -807,51 +801,6 @@
         const genFromChanges = $i('re-gen-from-changes-btn');
         if (genFromChanges) genFromChanges.addEventListener('click', generateRulesFromChanges);
 
-        // Find bar events
-        const findInput = $i('re-find-input');
-        if (findInput) {
-            findInput.addEventListener('input', findInEditor);
-            findInput.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (e.shiftKey) findPrev();
-                    else findNext();
-                }
-                if (e.key === 'Escape') hideFindBar();
-            });
-        }
-        let findPrevBtn = $i('re-find-prev');
-        if (findPrevBtn) findPrevBtn.addEventListener('click', findPrev);
-        let findNextBtn = $i('re-find-next');
-        if (findNextBtn) findNextBtn.addEventListener('click', findNext);
-        let findCase = $i('re-find-case');
-        if (findCase) {
-            findCase.addEventListener('change', function () {
-                toggleFindCase();
-                findInEditor();
-            });
-        }
-        let findClose = $i('re-find-close');
-        if (findClose) findClose.addEventListener('click', hideFindBar);
-
-        // Replace toggle
-        let replaceToggle = $i('re-find-replace-toggle');
-        if (replaceToggle) replaceToggle.addEventListener('click', toggleReplaceRow);
-        let replaceInput = $i('re-replace-input');
-        if (replaceInput) {
-            replaceInput.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (e.shiftKey) replaceOne();
-                    else replaceOne();
-                }
-                if (e.key === 'Escape') hideFindBar();
-            });
-        }
-        let replaceOneBtn = $i('re-replace-one');
-        if (replaceOneBtn) replaceOneBtn.addEventListener('click', replaceOne);
-        let replaceAllBtn = $i('re-replace-all');
-        if (replaceAllBtn) replaceAllBtn.addEventListener('click', replaceAll);
     }
 
     function onContentPanelClick(e) {
@@ -1846,51 +1795,6 @@
     //  File Edit Mode — init, editor, diff, save
     // ═══════════════════════════════════════════════════════
 
-    // ---- Find Highlight Plugin (VSCode-style match decorations) ----
-    function buildFindDecorations(view) {
-        const keyword = state.findKeyword;
-        const current = state.findCurrent;
-        if (!keyword || !state.findMatches.length) return window.CodeMirror.Decoration.none;
-
-        const doc = view.state.doc.toString();
-        const caseSensitive = state.findCaseSensitive || false;
-        const searchText = caseSensitive ? doc : doc.toLowerCase();
-        const searchStr = caseSensitive ? keyword : keyword.toLowerCase();
-
-        // 重新计算所有匹配位置（文档可能已变更）
-        const matches = [];
-        let pos = 0;
-        while (true) {
-            const idx = searchText.indexOf(searchStr, pos);
-            if (idx === -1) break;
-            matches.push(idx);
-            pos = idx + 1;
-        }
-        state.findMatches = matches;
-
-        const CM = window.CodeMirror;
-        const normalMark = CM.Decoration.mark({class: 'cm-find-match'});
-        const currentMark = CM.Decoration.mark({class: 'cm-find-match cm-find-match-current'});
-        const decos = [];
-        for (let i = 0; i < matches.length; i++) {
-            const isCurrent = (i === current);
-            decos.push((isCurrent ? currentMark : normalMark).range(matches[i], matches[i] + keyword.length));
-        }
-        return CM.Decoration.set(decos);
-    }
-
-    const findHighlightPlugin = function () {
-        const CM = window.CodeMirror;
-        return CM.ViewPlugin.fromClass(class {
-            constructor(view) { this.decorations = buildFindDecorations(view); }
-            update(update) {
-                if (update.docChanged || update.viewportChanged || update.selectionSet) {
-                    this.decorations = buildFindDecorations(update.view);
-                }
-            }
-        }, {decorations: function (v) { return v.decorations; }});
-    };
-
     function initFileEditor() {
         if (state.fileEditor) return state.fileEditor;
         const container = $i('re-file-editor-container');
@@ -1903,13 +1807,6 @@
         const empty = container.querySelector('.re-empty-state');
         if (empty) empty.style.display = 'none';
         const CM = window.CodeMirror;
-        // Custom keymap: Ctrl+F / Ctrl+H / F3 / Shift+F3
-        const feKeymap = CM.keymap.of([
-            {key: 'Ctrl-f', run: function () { showFindBar(); return true; }},
-            {key: 'Ctrl-h', run: function () { showFindBar(); toggleReplaceRow(); return true; }},
-            {key: 'F3', run: function () { findNext(); return true; }},
-            {key: 'Shift-F3', run: function () { findPrev(); return true; }},
-        ]);
 
         // Status bar cursor position listener
         const statusListener = CM.EditorView.updateListener.of(function (update) {
@@ -1927,9 +1824,8 @@
         });
 
         const extensions = [
-            feKeymap, CM.basicSetup, CM.json(),
-            statusListener,
-            findHighlightPlugin()
+            CM.basicSetup, CM.json(),
+            statusListener
         ];
 
         try {
@@ -2217,176 +2113,6 @@
         // Feed changes into smart gen dialog
         state.smartChanges = changes;
         await openSmartGeneration();
-    }
-
-    // ═══════════════════════════════════════════════════════
-    //  Find Bar — in-editor search for file-edit mode
-    // ═══════════════════════════════════════════════════════
-
-    function showFindBar() {
-        let bar = $i('re-find-bar');
-        if (!bar) return;
-        bar.style.display = '';
-        let input = $i('re-find-input');
-        if (input) {
-            input.value = '';
-            input.focus();
-        }
-        state.findMatches = [];
-        state.findCurrent = -1;
-        updateFindCount(0, 0);
-    }
-
-    function hideFindBar() {
-        let bar = $i('re-find-bar');
-        if (bar) bar.style.display = 'none';
-        let input = $i('re-find-input');
-        if (input) input.value = '';
-        let replaceInput = $i('re-replace-input');
-        if (replaceInput) replaceInput.value = '';
-        state.findMatches = [];
-        state.findCurrent = -1;
-        updateFindCount(0, 0);
-        // Collapse replace row
-        let replaceRow = $i('re-replace-row');
-        if (replaceRow) replaceRow.style.display = 'none';
-        let toggle = $i('re-find-replace-toggle');
-        if (toggle) toggle.classList.remove('re-find-toggle-active');
-        // Clear editor selection
-        let editor = state.fileEditor;
-        if (editor) {
-            let pos = editor.state.selection.main.head;
-            editor.dispatch({ selection: { anchor: pos, head: pos } });
-        }
-    }
-
-    function updateFindCount(current, total) {
-        let el = $i('re-find-count');
-        if (!el) return;
-        el.textContent = total > 0 ? (current + '/' + total) : '0/0';
-    }
-
-    function toggleFindCase() {
-        let cb = $i('re-find-case');
-        if (!cb) return;
-        let label = cb.closest('.re-find-label');
-        if (label) label.classList.toggle('active', cb.checked);
-        state.findCaseSensitive = cb.checked;
-    }
-
-    function toggleReplaceRow() {
-        let row = $i('re-replace-row');
-        let toggle = $i('re-find-replace-toggle');
-        if (!row) return;
-        let showing = row.style.display !== 'none';
-        row.style.display = showing ? 'none' : '';
-        if (toggle) toggle.classList.toggle('re-find-toggle-active', !showing);
-        if (!showing) {
-            let replaceInput = $i('re-replace-input');
-            if (replaceInput) replaceInput.focus();
-        }
-    }
-
-    function findInEditor() {
-        let input = $i('re-find-input');
-        let keyword = input ? input.value : '';
-        let caseCheck = $i('re-find-case');
-        let caseSensitive = !!(caseCheck && caseCheck.checked);
-        let editor = state.fileEditor;
-        if (!editor || !keyword.trim()) {
-            state.findMatches = [];
-            state.findCurrent = -1;
-            updateFindCount(0, 0);
-            return;
-        }
-        let text = editor.state.doc.toString();
-        let searchStr = caseSensitive ? keyword : keyword.toLowerCase();
-        let searchText = caseSensitive ? text : text.toLowerCase();
-        let matches = [];
-        let pos = 0;
-        while (true) {
-            let idx = searchText.indexOf(searchStr, pos);
-            if (idx === -1) break;
-            matches.push(idx);
-            pos = idx + 1;
-        }
-        state.findKeyword = keyword;
-        state.findMatches = matches;
-        if (matches.length === 0) {
-            state.findCurrent = -1;
-            updateFindCount(0, 0);
-            return;
-        }
-        state.findCurrent = 0;
-        let matchPos = matches[0];
-        editor.dispatch({
-            selection: { anchor: matchPos, head: matchPos + keyword.length },
-            scrollIntoView: true
-        });
-        editor.focus();
-        updateFindCount(1, matches.length);
-    }
-
-    function findNext() {
-        let editor = state.fileEditor;
-        let matches = state.findMatches;
-        let keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
-        if (!editor || !matches.length || !keyword) return;
-        let next = (state.findCurrent + 1) % matches.length;
-        state.findCurrent = next;
-        let matchPos = matches[next];
-        editor.dispatch({
-            selection: { anchor: matchPos, head: matchPos + keyword.length },
-            scrollIntoView: true
-        });
-        editor.focus();
-        updateFindCount(next + 1, matches.length);
-    }
-
-    function findPrev() {
-        let editor = state.fileEditor;
-        let matches = state.findMatches;
-        let keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
-        if (!editor || !matches.length || !keyword) return;
-        let prev = (state.findCurrent - 1 + matches.length) % matches.length;
-        state.findCurrent = prev;
-        let matchPos = matches[prev];
-        editor.dispatch({
-            selection: { anchor: matchPos, head: matchPos + keyword.length },
-            scrollIntoView: true
-        });
-        editor.focus();
-        updateFindCount(prev + 1, matches.length);
-    }
-
-    function replaceOne() {
-        let editor = state.fileEditor;
-        let matches = state.findMatches;
-        let keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
-        let replaceText = $i('re-replace-input') ? $i('re-replace-input').value : '';
-        if (!editor || !matches.length || !keyword || state.findCurrent < 0) return;
-        let matchPos = matches[state.findCurrent];
-        editor.dispatch({
-            changes: { from: matchPos, to: matchPos + keyword.length, insert: replaceText }
-        });
-        // Re-run find to refresh match positions
-        findInEditor();
-    }
-
-    function replaceAll() {
-        let editor = state.fileEditor;
-        let matches = state.findMatches;
-        let keyword = state.findKeyword || ($i('re-find-input') ? $i('re-find-input').value : '');
-        let replaceText = $i('re-replace-input') ? $i('re-replace-input').value : '';
-        if (!editor || !matches.length || !keyword) return;
-        // Replace from end to start to preserve positions
-        let changes = [];
-        for (let i = matches.length - 1; i >= 0; i--) {
-            changes.push({ from: matches[i], to: matches[i] + keyword.length, insert: replaceText });
-        }
-        editor.dispatch({ changes: changes });
-        // Refresh find
-        findInEditor();
     }
 
     document.addEventListener('DOMContentLoaded', init);

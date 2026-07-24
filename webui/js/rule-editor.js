@@ -55,7 +55,12 @@
         fileOriginalParsed: null,
         pendingChanges: [],
         // Dirty state
-        isDirty: false
+        isDirty: false,
+        // 多文件标签页系统
+        openFiles: new Map(),       // Map<string, FileTabState>
+        activeFileTab: null,        // string | null: 当前活动文件路径
+        fileTabOrder: [],           // string[]: 有序的打开文件路径
+        _lastViewedFile: null,      // 用于标签页切换时判断文件是否变化
     };
 
     const CATEGORY_FILE_PATTERNS = {
@@ -115,6 +120,336 @@
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
             .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Multi-File Tab System — Core
+    // ═══════════════════════════════════════════════════════
+
+    function getTabState(path) {
+        return state.openFiles.get(path) || null;
+    }
+
+    function getActiveTabState() {
+        if (!state.activeFileTab) return null;
+        return state.openFiles.get(state.activeFileTab) || null;
+    }
+
+    function syncLegacyState() {
+        var ts = getActiveTabState();
+        if (ts) {
+            state.currentFile = ts.path;
+            state.currentFileRaw = ts.editor.state.doc.toString();
+            state.currentFileParsed = ts.baselineParsed;
+            state.currentFileCategory = ts.category;
+            state.currentFilePrefix = ts.prefix;
+            state.fileEditor = ts.editor;
+            state.fileOriginalContent = ts.baselineContent;
+            state.fileOriginalParsed = ts.baselineParsed;
+            state.isDirty = (ts.editStatus === 'staged');
+            state.pendingChanges = ts.pendingChanges;
+        } else {
+            state.currentFile = null;
+            state.currentFileRaw = null;
+            state.currentFileParsed = null;
+            state.currentFileCategory = null;
+            state.currentFilePrefix = null;
+            state.fileEditor = null;
+            state.fileOriginalContent = null;
+            state.fileOriginalParsed = null;
+            state.isDirty = false;
+            state.pendingChanges = [];
+        }
+    }
+
+    function createEditorForTab(container) {
+        if (!window.CodeMirror || !window.CodeMirror.EditorView) {
+            console.warn('[rule-editor] CodeMirror not loaded');
+            return null;
+        }
+        var CM = window.CodeMirror;
+        var statusListener = CM.EditorView.updateListener.of(function (update) {
+            if (update.selectionSet) {
+                var pos = update.state.selection.main.head;
+                var line = update.state.doc.lineAt(pos);
+                var statusEl = document.getElementById('re-status-cursor');
+                if (statusEl) {
+                    statusEl.textContent = '行 ' + line.number + ', 列 ' + (pos - line.from + 1);
+                }
+            }
+            if (update.docChanged) {
+                var ts = getActiveTabState();
+                if (ts) updateFileEditStatus(ts);
+            }
+        });
+        try {
+            return new CM.EditorView({
+                doc: '',
+                extensions: [CM.basicSetup, CM.json(), statusListener],
+                parent: container
+            });
+        } catch (e) {
+            console.error('[rule-editor] createEditorForTab failed:', e);
+            return null;
+        }
+    }
+
+    function updateFileEditStatus(tabState) {
+        if (!tabState || !tabState.editor) return;
+        var editorContent = tabState.editor.state.doc.toString();
+        var isDifferentFromDisk = (editorContent !== tabState.diskContent);
+        var isDifferentFromBaseline = (tabState.diskContent !== tabState.baselineContent);
+
+        if (isDifferentFromDisk) {
+            tabState.editStatus = 'staged';
+        } else if (isDifferentFromBaseline) {
+            tabState.editStatus = 'applied';
+        } else {
+            tabState.editStatus = 'clean';
+        }
+
+        renderFileTabBar();
+        renderFileList();
+        updateFileEditTabLabel();
+        updateStatusBar();
+    }
+
+    async function createFileTab(path) {
+        if (state.openFiles.has(path)) {
+            activateFileTab(path);
+            return;
+        }
+
+        var api = getApi();
+        if (!api) { warnNoApi(); return; }
+
+        var res;
+        if (state.fileCache.has(path)) {
+            res = state.fileCache.get(path);
+        } else {
+            try {
+                res = await api.get_file_content(path);
+                if (res && res.error) {
+                    showToast('无法打开文件: ' + res.error, 'error');
+                    return;
+                }
+                state.fileCache.set(path, {
+                    raw: res.raw,
+                    parsed: res.parsed,
+                    category: (res.file_classification) || classifyPath(path).category
+                });
+            } catch (e) {
+                console.error('[rule-editor] openFile failed:', e);
+                return;
+            }
+        }
+
+        var raw = res.raw || '';
+        var parsed = res.parsed || null;
+        var category = res.category || classifyPath(path).category;
+        var prefix = classifyPath(path).prefix;
+
+        var tabsContainer = document.getElementById('re-file-editor-tabs-container');
+        if (!tabsContainer) return;
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 're-file-editor-wrapper';
+        wrapper.dataset.path = path;
+
+        var editor = createEditorForTab(wrapper);
+        if (!editor) return;
+
+        var docLen = editor.state.doc.length;
+        editor.dispatch({ changes: { from: 0, to: docLen, insert: raw } });
+
+        var tabState = {
+            path: path,
+            editor: editor,
+            container: wrapper,
+            baselineContent: raw,
+            diskContent: raw,
+            baselineParsed: parsed ? JSON.parse(JSON.stringify(parsed)) : null,
+            category: category,
+            prefix: prefix,
+            editStatus: 'clean',
+            pendingChanges: [],
+            lastSavedAt: null
+        };
+
+        state.openFiles.set(path, tabState);
+        state.fileTabOrder.push(path);
+        tabsContainer.appendChild(wrapper);
+
+        activateFileTab(path);
+    }
+
+    function activateFileTab(path) {
+        if (!path || !state.openFiles.has(path)) return;
+
+        var allWrappers = document.querySelectorAll('.re-file-editor-wrapper');
+        for (var i = 0; i < allWrappers.length; i++) {
+            allWrappers[i].classList.remove('active');
+        }
+
+        var ts = state.openFiles.get(path);
+        if (ts && ts.container) {
+            ts.container.classList.add('active');
+        }
+
+        state.activeFileTab = path;
+        state._lastViewedFile = path;
+
+        syncLegacyState();
+
+        renderFileTabBar();
+        updateFileEditTabLabel();
+        updateStatusBar();
+
+        var empty = document.getElementById('re-fe-empty');
+        if (empty) empty.style.display = 'none';
+    }
+
+    async function closeFileTab(path, force) {
+        if (!path || !state.openFiles.has(path)) return;
+
+        var ts = state.openFiles.get(path);
+
+        if (!force && ts.editStatus === 'staged') {
+            var confirmed = await showConfirmDialog({
+                title: '未保存的更改',
+                message: '文件 ' + path + ' 有未保存的更改，是否保存？',
+                saveLabel: '保存',
+                discardLabel: '不保存',
+                cancelLabel: '取消'
+            });
+            if (confirmed === 'cancel') return;
+            if (confirmed === 'save') {
+                await saveEditedFileForTab(path);
+            }
+        }
+
+        if (ts.editor) {
+            ts.editor.destroy();
+        }
+
+        if (ts.container && ts.container.parentNode) {
+            ts.container.parentNode.removeChild(ts.container);
+        }
+
+        state.openFiles.delete(path);
+        var idx = state.fileTabOrder.indexOf(path);
+        if (idx !== -1) state.fileTabOrder.splice(idx, 1);
+
+        if (state.fileTabOrder.length > 0) {
+            var nextPath = state.fileTabOrder[Math.min(idx, state.fileTabOrder.length - 1)];
+            activateFileTab(nextPath);
+        } else {
+            state.activeFileTab = null;
+            state._lastViewedFile = null;
+            syncLegacyState();
+            var empty = document.getElementById('re-fe-empty');
+            if (empty) empty.style.display = '';
+            updateFileEditTabLabel();
+            updateStatusBar();
+        }
+
+        renderFileTabBar();
+        renderFileList();
+    }
+
+    function renderFileTabBar() {
+        var bar = document.getElementById('re-file-tab-bar');
+        if (!bar) return;
+
+        var html = '';
+        for (var i = 0; i < state.fileTabOrder.length; i++) {
+            var path = state.fileTabOrder[i];
+            var ts = state.openFiles.get(path);
+            if (!ts) continue;
+
+            var isActive = (path === state.activeFileTab);
+            var displayName = path.length > 30 ? '...' + path.slice(-27) : path;
+            var statusClass = ts.editStatus === 'staged' ? 'staged'
+                : ts.editStatus === 'applied' ? 'applied' : '';
+
+            html += '<div class="re-file-tab' + (isActive ? ' active' : '') +
+                '" data-path="' + escapeAttr(path) + '" title="' + escapeAttr(path) + '">' +
+                '<span class="re-tab-status ' + statusClass + '"></span>' +
+                '<span class="re-tab-label">' + escapeHtml(displayName) + '</span>' +
+                '<button class="re-tab-close" data-close="' + escapeAttr(path) + '">&times;</button>' +
+                '</div>';
+        }
+        bar.innerHTML = html;
+
+        var tabs = bar.querySelectorAll('.re-file-tab');
+        for (var i = 0; i < tabs.length; i++) {
+            tabs[i].addEventListener('click', function (e) {
+                if (e.target.closest('.re-tab-close')) return;
+                activateFileTab(this.dataset.path);
+            });
+            tabs[i].addEventListener('mousedown', function (e) {
+                if (e.button === 1) {
+                    e.preventDefault();
+                    closeFileTab(this.dataset.path);
+                }
+            });
+        }
+
+        var closeBtns = bar.querySelectorAll('.re-tab-close');
+        for (var i = 0; i < closeBtns.length; i++) {
+            closeBtns[i].addEventListener('click', function (e) {
+                e.stopPropagation();
+                closeFileTab(this.dataset.close);
+            });
+        }
+    }
+
+    function updateFileEditTabLabel() {
+        var tab = document.querySelector('.re-main-tab[data-maintab="file-edit"]');
+        if (!tab) return;
+        var name = state.activeFileTab;
+        if (!name) {
+            tab.innerHTML = '<i class="fas fa-pen"></i> 文件编辑';
+            return;
+        }
+        var display = name.length > 30 ? '...' + name.slice(-27) : name;
+        var ts = getActiveTabState();
+        var icon = (ts && ts.editStatus === 'staged') ? 'fas fa-circle re-dirty-dot' : 'fas fa-pen';
+        tab.innerHTML = '<i class="' + icon + '"></i> ' + escapeHtml(display);
+    }
+
+    function updateStatusBar() {
+        var statusEl = document.getElementById('re-status-edit-status');
+        var timeEl = document.getElementById('re-status-save-time');
+        var ts = getActiveTabState();
+
+        if (statusEl) {
+            if (!ts) {
+                statusEl.textContent = '';
+            } else if (ts.editStatus === 'clean') {
+                statusEl.textContent = '未修改';
+                statusEl.className = '';
+            } else if (ts.editStatus === 'staged') {
+                statusEl.textContent = '● 修改暂存';
+                statusEl.className = 're-status-staged';
+            } else if (ts.editStatus === 'applied') {
+                statusEl.textContent = '✓ 修改应用';
+                statusEl.className = 're-status-applied';
+            }
+        }
+
+        if (timeEl) {
+            if (ts && ts.lastSavedAt) {
+                var d = new Date(ts.lastSavedAt);
+                timeEl.textContent = '上次保存: ' +
+                    String(d.getHours()).padStart(2, '0') + ':' +
+                    String(d.getMinutes()).padStart(2, '0') + ':' +
+                    String(d.getSeconds()).padStart(2, '0');
+                timeEl.style.display = '';
+            } else {
+                timeEl.style.display = 'none';
+            }
+        }
     }
 
     /** init — bind events, prime UI, then load data once pywebview is ready. */
@@ -226,33 +561,7 @@
 
     async function openFile(relativePath) {
         if (!relativePath) return;
-        // 未保存更改时提示
-        if (state.isDirty && state.currentFile !== relativePath) {
-            if (!window.confirm('当前文件有未保存的更改，是否放弃更改并打开新文件？')) return;
-        }
-        const api = getApi();
-        if (!api) return warnNoApi();
-        if (state.fileCache.has(relativePath)) {
-            const cached = state.fileCache.get(relativePath);
-            applyFileContent(relativePath, cached.raw, cached.parsed, cached.category);
-            return;
-        }
-        try {
-            const res = await api.get_file_content(relativePath);
-            if (res && res.error) {
-                console.warn('[rule-editor] openFile error:', res.error);
-                $i('re-current-file').textContent = relativePath;
-                $i('re-content-simple').innerHTML = '<div class="re-empty-state">⚠️ ' + escapeHtml(res.error) + '</div>';
-                return;
-            }
-            const raw = res ? res.raw : null;
-            const parsed = res ? res.parsed : null;
-            const category = (res && res.file_classification) || classifyPath(relativePath).category;
-            state.fileCache.set(relativePath, { raw: raw, parsed: parsed, category: category });
-            applyFileContent(relativePath, raw, parsed, category);
-        } catch (e) {
-            console.error('[rule-editor] openFile failed:', e);
-        }
+        await createFileTab(relativePath);
     }
 
     function applyFileContent(relativePath, raw, parsed, category) {
@@ -794,16 +1103,14 @@
         }
         
         if (tab === 'file-edit') {
-            // 仅在文件发生变化时才重新加载（保留编辑器内容）
             var currentPath = state.activeFileTab || state.currentFile;
             if (currentPath && prevTab !== 'file-edit') {
-                // 从其他标签切回：检查文件是否变化
                 if (state._lastViewedFile !== currentPath) {
-                    loadFileIntoEditor(currentPath);
+                    activateFileTab(currentPath);
                     state._lastViewedFile = currentPath;
                 }
             } else if (currentPath && !state._lastViewedFile) {
-                loadFileIntoEditor(currentPath);
+                activateFileTab(currentPath);
                 state._lastViewedFile = currentPath;
             }
         } else if (tab === 'ruleset-edit') {
@@ -1913,50 +2220,11 @@
     // ═══════════════════════════════════════════════════════
 
     function initFileEditor() {
-        if (state.fileEditor) return state.fileEditor;
-        const container = $i('re-file-editor-container');
+        var container = document.getElementById('re-file-editor-tabs-container');
         if (!container) return null;
-        if (!window.CodeMirror || !window.CodeMirror.EditorView) {
-            console.warn('[rule-editor] CodeMirror not loaded; file editor disabled');
-            return null;
-        }
-        // Remove empty state placeholder
-        const empty = container.querySelector('.re-empty-state');
-        if (empty) empty.style.display = 'none';
-        const CM = window.CodeMirror;
 
-        // Status bar cursor position listener
-        const statusListener = CM.EditorView.updateListener.of(function (update) {
-            if (update.selectionSet) {
-                const pos = update.state.selection.main.head;
-                const line = update.state.doc.lineAt(pos);
-                const statusEl = document.getElementById('re-status-cursor');
-                if (statusEl) {
-                    statusEl.textContent = '行 ' + line.number + ', 列 ' + (pos - line.from + 1);
-                }
-            }
-            if (update.docChanged) {
-                updateDirtyState();
-            }
-        });
-
-        const extensions = [
-            CM.basicSetup, CM.json(),
-            statusListener
-        ];
-
-        try {
-            state.fileEditor = new CM.EditorView({
-                doc: '',
-                extensions: extensions,
-                parent: container
-            });
-        } catch (e) {
-            console.error('[rule-editor] initFileEditor failed:', e);
-            state.fileEditor = null;
-            return null;
-        }
-        return state.fileEditor;
+        var ts = getActiveTabState();
+        return ts ? ts.editor : null;
     }
 
     function getFileEditorDoc() {
@@ -1974,31 +2242,15 @@
 
     // ---- Dirty State & File Tab Label ----
     function updateDirtyState() {
-        const editor = state.fileEditor;
-        if (!editor) return;
-        const current = editor.state.doc.toString();
-        const isDirty = (state.fileOriginalContent !== null && current !== state.fileOriginalContent);
-        state.isDirty = isDirty;
-        // 更新文件编辑标签页图标
-        const tab = document.querySelector('.re-main-tab[data-maintab="file-edit"]');
-        if (tab) {
-            const icon = tab.querySelector('i');
-            if (icon) {
-                icon.className = isDirty ? 'fas fa-circle re-dirty-dot' : 'fas fa-pen';
-            }
-        }
-        // 更新窗口标题
-        document.title = (isDirty ? '● ' : '') + 'LCTA - 美化规则编辑器';
-    }
+        var ts = getActiveTabState();
+        if (!ts) return;
+        updateFileEditStatus(ts);
 
-    function updateFileEditTabLabel() {
-        const tab = document.querySelector('.re-main-tab[data-maintab="file-edit"]');
-        if (!tab) return;
-        const name = state.currentFile;
-        const display = name
-            ? (name.length > 30 ? '...' + name.slice(-27) : name)
-            : '未打开文件';
-        tab.innerHTML = '<i class="fas fa-pen"></i> ' + escapeHtml(display);
+        var hasDirty = false;
+        state.openFiles.forEach(function (t) {
+            if (t.editStatus === 'staged') hasDirty = true;
+        });
+        document.title = (hasDirty ? '● ' : '') + 'LCTA - 美化规则编辑器';
     }
 
     /** Recursive JSON diff returning [(path_string, old_val, new_val)] */
@@ -2080,34 +2332,37 @@
     }
 
     function diffAndTrackChanges() {
-        if (!state.currentFile) {
+        var ts = getActiveTabState();
+        if (!ts) {
             showToast('请先打开一个文件', 'error');
             return;
         }
-        let raw = getFileEditorDoc();
+        var raw = ts.editor.state.doc.toString();
         if (!raw.trim()) {
             showToast('编辑器内容为空', 'error');
             return;
         }
-        let parsed;
+        var parsed;
         try {
             parsed = JSON.parse(raw);
         } catch (e) {
             showToast('JSON 解析错误: ' + e.message, 'error');
             return;
         }
-        let originalParsed = state.fileOriginalParsed;
+        var originalParsed = ts.baselineParsed;
         if (!originalParsed) {
             showToast('没有原始内容可比较（请先加载文件）', 'error');
             return;
         }
-        let diffs = diffJson(originalParsed, parsed, '');
+        var diffs = diffJson(originalParsed, parsed, '');
         if (!diffs.length) {
             showToast('未检测到变更', 'info');
-            clearPendingChanges();
+            ts.pendingChanges = [];
+            renderChangeList();
             return;
         }
-        let changes = extractChangesFromDiff(diffs, state.currentFile, originalParsed);
+        var changes = extractChangesFromDiff(diffs, ts.path, originalParsed);
+        ts.pendingChanges = changes;
         state.pendingChanges = changes;
         renderChangeList();
         showToast('检测到 ' + changes.length + ' 处文本变更', 'success');
@@ -2147,11 +2402,13 @@
     }
 
     async function saveEditedFile() {
-        if (!state.currentFile) {
+        var ts = getActiveTabState();
+        if (!ts) {
             showToast('没有打开的文件', 'error');
             return;
         }
-        let raw = getFileEditorDoc();
+        var path = ts.path;
+        var raw = ts.editor.state.doc.toString();
         if (!raw.trim()) {
             showToast('编辑器内容为空', 'error');
             return;
@@ -2162,22 +2419,29 @@
             showToast('JSON 格式无效，无法保存: ' + e.message, 'error');
             return;
         }
-        let api = getApi();
+        var api = getApi();
         if (!api || !api.save_file_content) return warnNoApi();
         try {
-            let res = await api.save_file_content(state.currentFile, raw);
+            var res = await api.save_file_content(path, raw);
             if (res && res.success) {
-                // Update cache and original
-                state.fileOriginalContent = raw;
-                state.isDirty = false;
-                try { state.fileOriginalParsed = JSON.parse(raw); } catch (e) { void e; }
-                if (state.fileCache.has(state.currentFile)) {
-                    let cached = state.fileCache.get(state.currentFile);
+                ts.diskContent = raw;
+                ts.baselineContent = raw;
+                try { ts.baselineParsed = JSON.parse(raw); } catch (e) { void e; }
+                ts.lastSavedAt = Date.now();
+                ts.pendingChanges = [];
+                updateFileEditStatus(ts);
+
+                if (state.fileCache.has(path)) {
+                    var cached = state.fileCache.get(path);
                     cached.raw = raw;
                     try { cached.parsed = JSON.parse(raw); } catch (e) { void e; }
                 }
-                updateDirtyState();
-                showToast('文件已保存到游戏: ' + state.currentFile, 'success');
+
+                renderFileTabBar();
+                renderFileList();
+                updateFileEditTabLabel();
+                document.title = 'LCTA - 美化规则编辑器';
+                showToast('文件已保存到游戏: ' + path, 'success');
             } else {
                 showToast('保存失败: ' + ((res && res.error) || ''), 'error');
             }
@@ -2186,32 +2450,50 @@
         }
     }
 
-    function revertEditedFile() {
-        if (state.fileOriginalContent != null) {
-            setFileEditorDoc(state.fileOriginalContent);
-            state.isDirty = false;
-            clearPendingChanges();
-            updateDirtyState();
-            showToast('已撤销所有更改', 'info');
-        } else {
-            showToast('没有可撤销的版本', 'error');
+    async function saveEditedFileForTab(path) {
+        var prevActive = state.activeFileTab;
+        activateFileTab(path);
+        await saveEditedFile();
+        if (prevActive && prevActive !== path) {
+            activateFileTab(prevActive);
         }
     }
 
-    function refreshEditedFile() {
-        let path = state.currentFile;
-        if (!path) { showToast('没有打开的文件', 'error'); return; }
-        // Reload from cache or backend
-        if (state.fileCache.has(path)) {
-            let cached = state.fileCache.get(path);
-            state.currentFileRaw = cached.raw;
-            state.currentFileParsed = cached.parsed;
-            loadRawIntoEditor(cached.raw, cached.parsed);
-            showToast('已刷新', 'info');
-        } else {
-            // Use openFile which will fetch from backend
-            openFile(path);
+    function revertEditedFile() {
+        var ts = getActiveTabState();
+        if (!ts) {
+            showToast('没有打开的文件', 'error');
+            return;
         }
+        var editor = ts.editor;
+        var docLen = editor.state.doc.length;
+        editor.dispatch({ changes: { from: 0, to: docLen, insert: ts.diskContent } });
+        ts.pendingChanges = [];
+        updateFileEditStatus(ts);
+        renderFileTabBar();
+        renderFileList();
+        updateFileEditTabLabel();
+        showToast('已撤销所有更改', 'info');
+    }
+
+    async function refreshEditedFile() {
+        var ts = getActiveTabState();
+        if (!ts) { showToast('没有打开的文件', 'error'); return; }
+        var path = ts.path;
+
+        if (state.fileCache.has(path)) {
+            state.fileCache.delete(path);
+        }
+        state.openFiles.delete(path);
+        var idx = state.fileTabOrder.indexOf(path);
+        if (idx !== -1) state.fileTabOrder.splice(idx, 1);
+        if (ts.editor) ts.editor.destroy();
+        if (ts.container && ts.container.parentNode) {
+            ts.container.parentNode.removeChild(ts.container);
+        }
+
+        await createFileTab(path);
+        showToast('已刷新', 'info');
     }
 
     async function generateRulesFromChanges() {
@@ -2456,6 +2738,63 @@
         } catch (e) {
             // localStorage 不可用时静默忽略
         }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Confirm Dialog
+    // ═══════════════════════════════════════════════════════
+
+    function showConfirmDialog(opts) {
+        return new Promise(function (resolve) {
+            var overlay = document.createElement('div');
+            overlay.className = 're-overlay';
+
+            var title = opts.title || '确认';
+            var message = opts.message || '';
+            var saveLabel = opts.saveLabel || '保存';
+            var discardLabel = opts.discardLabel || '不保存';
+            var cancelLabel = opts.cancelLabel || '取消';
+
+            overlay.innerHTML =
+                '<div class="re-confirm-dialog">' +
+                '<div class="re-confirm-header">' +
+                '<h4><i class="fas fa-exclamation-triangle"></i> ' + escapeHtml(title) + '</h4>' +
+                '</div>' +
+                '<div class="re-confirm-body">' +
+                '<p>' + escapeHtml(message) + '</p>' +
+                '</div>' +
+                '<div class="re-confirm-actions">' +
+                '<button class="re-btn re-btn-primary re-confirm-save-btn">' + escapeHtml(saveLabel) + '</button>' +
+                '<button class="re-btn re-confirm-discard-btn">' + escapeHtml(discardLabel) + '</button>' +
+                '<button class="re-btn re-confirm-cancel-btn">' + escapeHtml(cancelLabel) + '</button>' +
+                '</div>' +
+                '</div>';
+
+            document.body.appendChild(overlay);
+
+            function cleanup() {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            }
+
+            overlay.querySelector('.re-confirm-save-btn').addEventListener('click', function () {
+                cleanup(); resolve('save');
+            });
+            overlay.querySelector('.re-confirm-discard-btn').addEventListener('click', function () {
+                cleanup(); resolve('discard');
+            });
+            overlay.querySelector('.re-confirm-cancel-btn').addEventListener('click', function () {
+                cleanup(); resolve('cancel');
+            });
+            overlay.addEventListener('click', function (e) {
+                if (e.target === overlay) { cleanup(); resolve('cancel'); }
+            });
+            document.addEventListener('keydown', function onKey(e) {
+                if (e.key === 'Escape') {
+                    cleanup(); resolve('cancel');
+                    document.removeEventListener('keydown', onKey);
+                }
+            });
+        });
     }
 
     document.addEventListener('DOMContentLoaded', init);

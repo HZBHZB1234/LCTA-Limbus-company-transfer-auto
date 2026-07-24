@@ -52,15 +52,25 @@
                 <button id="re-fe-refresh-btn" class="re-btn"><i class="fas fa-sync"></i> 刷新</button>
                 <button id="re-fe-diff-btn" class="re-btn"><i class="fas fa-search-plus"></i> 比较变更</button>
             </div>
+            <!-- 新增：文件标签栏 -->
+            <div class="re-file-tab-bar" id="re-file-tab-bar"></div>
+            <!-- 修改：编辑器容器支持多个标签页 -->
             <div id="re-file-editor-container" class="re-file-editor-area">
+                <div class="re-file-editor-tabs-container" id="re-file-editor-tabs-container">
+                    <!-- 动态创建 per-file .re-file-editor-wrapper -->
+                </div>
                 <div class="re-empty-state" id="re-fe-empty">
                     <i class="fas fa-file-alt"></i>
                     双击左侧文件以在编辑器中打开
                 </div>
             </div>
             <div class="re-editor-statusbar" id="re-editor-statusbar">
+                <span id="re-status-edit-status">未修改</span>
+                <span class="re-status-separator">|</span>
                 <span id="re-status-cursor">行 1, 列 1</span>
                 <span class="re-status-spacer"></span>
+                <span id="re-status-save-time" style="display:none;"></span>
+                <span class="re-status-separator">|</span>
                 <span id="re-status-lang">JSON</span>
                 <span id="re-status-encoding">UTF-8</span>
             </div>

@@ -1484,3 +1484,197 @@ body.re-resizing-bottom {
     user-select: none !important;
     cursor: row-resize;
 }
+
+/* ---- File Tab Bar ---- */
+.re-file-tab-bar {
+    display: flex;
+    gap: 0;
+    background: var(--color-bg-primary, #f8f9fa);
+    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    overflow-x: auto;
+    overflow-y: hidden;
+    min-height: 35px;
+    flex-shrink: 0;
+}
+
+.re-file-tab-bar::-webkit-scrollbar {
+    height: 3px;
+}
+
+.re-file-tab-bar::-webkit-scrollbar-thumb {
+    background: var(--color-border-dark, #bdc3c7);
+    border-radius: 2px;
+}
+
+.re-file-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    border-right: 1px solid var(--color-border-light, #ecf0f1);
+    background: var(--color-bg-primary, #f8f9fa);
+    white-space: nowrap;
+    user-select: none;
+    flex-shrink: 0;
+    min-width: 0;
+    transition: background 0.1s;
+}
+
+.re-file-tab:hover {
+    background: var(--color-bg-secondary, #ffffff);
+}
+
+.re-file-tab.active {
+    background: var(--color-bg-secondary, #ffffff);
+    border-bottom: 2px solid var(--color-primary, #3498db);
+    margin-bottom: -1px;
+}
+
+.re-file-tab .re-tab-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.re-file-tab .re-tab-status.staged {
+    background: var(--color-warning, #f39c12);
+}
+
+.re-file-tab .re-tab-status.applied {
+    background: var(--color-success, #2ecc71);
+}
+
+.re-file-tab .re-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+    color: var(--color-text-primary, #2c3e50);
+}
+
+.re-file-tab.active .re-tab-label {
+    color: var(--color-primary, #3498db);
+    font-weight: 500;
+}
+
+.re-file-tab .re-tab-close {
+    cursor: pointer;
+    opacity: 0;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--color-text-secondary, #7f8c8d);
+    background: transparent;
+    border: none;
+    transition: opacity 0.1s, background 0.1s;
+}
+
+.re-file-tab:hover .re-tab-close,
+.re-file-tab.active .re-tab-close {
+    opacity: 1;
+}
+
+.re-file-tab .re-tab-close:hover {
+    background: var(--color-border, #e0e0e0);
+    color: var(--color-text-primary, #2c3e50);
+}
+
+/* ---- Editor Tabs Container ---- */
+.re-file-editor-tabs-container {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.re-file-editor-wrapper {
+    position: absolute;
+    inset: 0;
+    display: none;
+}
+
+.re-file-editor-wrapper.active {
+    display: flex;
+    flex-direction: column;
+}
+
+.re-file-editor-wrapper .cm-editor {
+    height: 100%;
+    max-height: 100%;
+    flex: 1;
+}
+
+.re-file-editor-wrapper .cm-editor .cm-scroller {
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 13px;
+}
+
+/* ---- Confirm Dialog ---- */
+.re-confirm-dialog {
+    width: min(420px, 90vw);
+    background: var(--color-bg-secondary, #ffffff);
+    border: 1px solid var(--color-border, #e0e0e0);
+    border-radius: var(--radius-lg, 16px);
+    box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.2));
+    overflow: hidden;
+}
+
+.re-confirm-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border-light, #ecf0f1);
+}
+
+.re-confirm-header h4 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-primary, #2c3e50);
+}
+
+.re-confirm-header h4 i {
+    color: var(--color-warning, #f39c12);
+}
+
+.re-confirm-body {
+    padding: 16px 20px;
+}
+
+.re-confirm-body p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-secondary, #7f8c8d);
+    line-height: 1.5;
+    word-break: break-all;
+}
+
+.re-confirm-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 12px 20px;
+    border-top: 1px solid var(--color-border-light, #ecf0f1);
+}
+
+/* ---- Status Bar Enhancements ---- */
+#re-status-edit-status {
+    font-weight: 500;
+}
+
+#re-status-edit-status.re-status-staged {
+    color: var(--color-warning, #f39c12);
+}
+
+#re-status-edit-status.re-status-applied {
+    color: var(--color-success, #2ecc71);
+}
+
+.re-status-separator {
+    color: var(--color-border, #e0e0e0);
+    margin: 0 2px;
+}

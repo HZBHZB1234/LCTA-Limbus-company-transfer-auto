@@ -774,23 +774,41 @@
     }
 
     function switchMainTab(tab) {
+        var prevTab = state.activeMainTab;
         state.activeMainTab = tab;
-        const tabs = document.querySelectorAll('.re-main-tab');
-        for (let i = 0; i < tabs.length; i++) {
+        
+        var tabs = document.querySelectorAll('.re-main-tab');
+        for (var i = 0; i < tabs.length; i++) {
             tabs[i].classList.toggle('active', tabs[i].dataset.maintab === tab);
         }
-        const fePanel = $i('re-file-edit-panel');
-        const rePanel = $i('re-ruleset-edit-panel');
+        
+        var fePanel = $i('re-file-edit-panel');
+        var rePanel = $i('re-ruleset-edit-panel');
         if (fePanel) fePanel.style.display = tab === 'file-edit' ? '' : 'none';
         if (rePanel) rePanel.style.display = tab === 'ruleset-edit' ? '' : 'none';
+        
         // Hide bottom preview panel in file-edit mode
-        const bottomPanel = document.querySelector('.re-bottom-panel');
+        var bottomPanel = document.querySelector('.re-bottom-panel');
         if (bottomPanel) {
             bottomPanel.style.display = tab === 'file-edit' ? 'none' : '';
         }
-        if (tab === 'file-edit' && state.currentFile) {
-            loadFileIntoEditor(state.currentFile);
+        
+        if (tab === 'file-edit') {
+            // 仅在文件发生变化时才重新加载（保留编辑器内容）
+            var currentPath = state.activeFileTab || state.currentFile;
+            if (currentPath && prevTab !== 'file-edit') {
+                // 从其他标签切回：检查文件是否变化
+                if (state._lastViewedFile !== currentPath) {
+                    loadFileIntoEditor(currentPath);
+                    state._lastViewedFile = currentPath;
+                }
+            } else if (currentPath && !state._lastViewedFile) {
+                loadFileIntoEditor(currentPath);
+                state._lastViewedFile = currentPath;
+            }
         } else if (tab === 'ruleset-edit') {
+            // 记录当前正在查看的文件
+            state._lastViewedFile = state.activeFileTab || state.currentFile;
             refreshContentPanel();
         }
     }

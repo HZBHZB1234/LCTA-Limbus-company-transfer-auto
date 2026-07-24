@@ -626,8 +626,22 @@
                 ' <span class="re-file-group-count">(' + files.length + ')</span></div>';
             for (let fi = 0; fi < files.length; fi++) {
                 const f = files[fi];
-                html += '<div class="re-file-item" data-path="' + escapeAttr(f) +
-                    '" title="双击打开: ' + escapeAttr(f) + '">' + escapeHtml(f) + '</div>';
+                var ts = state.openFiles.get(f);
+                var statusDot = '';
+                var dirtyClass = '';
+                if (ts) {
+                    if (ts.editStatus === 'staged') {
+                        statusDot = '<span class="re-file-dirty-dot staged" title="修改暂存（未保存）">●</span>';
+                        dirtyClass = ' is-dirty-staged';
+                    } else if (ts.editStatus === 'applied') {
+                        statusDot = '<span class="re-file-dirty-dot applied" title="修改应用（已保存）">●</span>';
+                        dirtyClass = ' is-dirty-applied';
+                    }
+                }
+                html += '<div class="re-file-item' + dirtyClass +
+                    '" data-path="' + escapeAttr(f) +
+                    '" title="双击打开: ' + escapeAttr(f) + '">' +
+                    statusDot + escapeHtml(f) + '</div>';
             }
             html += '</div>';
         }
@@ -638,6 +652,19 @@
                 return function () { openFile(el.dataset.path); };
             })(items[i]));
         }
+        updateFileListTabBadge();
+    }
+
+    function updateFileListTabBadge() {
+        var tab = document.querySelector('.re-tab[data-tab="file-list"]');
+        if (!tab) return;
+        var dirtyCount = 0;
+        state.openFiles.forEach(function (ts) {
+            if (ts.editStatus === 'staged' || ts.editStatus === 'applied') {
+                dirtyCount++;
+            }
+        });
+        tab.innerHTML = '文件列表' + (dirtyCount > 0 ? ' (' + dirtyCount + ')' : '');
     }
 
     function populateSimpleFileSelect() {
@@ -934,9 +961,21 @@
                 ' <span class="re-file-group-count">(' + groupFiles.length + ')</span></div>';
             for (var fi = 0; fi < groupFiles.length; fi++) {
                 var f = groupFiles[fi];
-                html += '<div class="re-file-item' + (isHighlighted ? ' re-file-item-highlighted' : '') +
+                var ts = state.openFiles.get(f);
+                var statusDot = '';
+                var dirtyClass = '';
+                if (ts) {
+                    if (ts.editStatus === 'staged') {
+                        statusDot = '<span class="re-file-dirty-dot staged" title="修改暂存（未保存）">●</span>';
+                        dirtyClass = ' is-dirty-staged';
+                    } else if (ts.editStatus === 'applied') {
+                        statusDot = '<span class="re-file-dirty-dot applied" title="修改应用（已保存）">●</span>';
+                        dirtyClass = ' is-dirty-applied';
+                    }
+                }
+                html += '<div class="re-file-item' + dirtyClass + (isHighlighted ? ' re-file-item-highlighted' : '') +
                     '" data-path="' + escapeAttr(f) + '" title="双击打开: ' + escapeAttr(f) + '">' +
-                    escapeHtml(f) + '</div>';
+                    statusDot + escapeHtml(f) + '</div>';
             }
             html += '</div>';
         }

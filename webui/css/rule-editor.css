@@ -1485,6 +1485,57 @@ body.re-resizing-bottom {
     cursor: row-resize;
 }
 
+/* ---- File Dirty Indicators (Sidebar) ---- */
+.re-file-dirty-dot {
+    font-size: 14px;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-right: 2px;
+}
+
+.re-file-dirty-dot.staged {
+    color: var(--color-warning, #f39c12);
+}
+
+.re-file-dirty-dot.applied {
+    color: var(--color-success, #2ecc71);
+}
+
+.re-file-item.is-dirty-staged {
+    background: rgba(243, 156, 18, 0.06);
+}
+
+.re-file-item.is-dirty-applied {
+    background: rgba(46, 204, 113, 0.06);
+}
+
+/* ---- Sidebar Legend ---- */
+.re-sidebar-legend {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border-top: 1px solid var(--color-border-light, #ecf0f1);
+    font-size: 11px;
+    color: var(--color-text-secondary, #7f8c8d);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.re-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+}
+
+.re-legend-dot {
+    font-size: 12px;
+    line-height: 1;
+}
+
+.re-legend-dot.staged { color: var(--color-warning, #f39c12); }
+.re-legend-dot.applied { color: var(--color-success, #2ecc71); }
+
 /* ---- File Tab Bar ---- */
 .re-file-tab-bar {
     display: flex;

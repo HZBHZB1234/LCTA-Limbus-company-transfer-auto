@@ -1729,3 +1729,114 @@ body.re-resizing-bottom {
     color: var(--color-border, #e0e0e0);
     margin: 0 2px;
 }
+
+/* Bias-based Smart Gen V2 */
+.re-bias-selector {
+    margin: 12px 0;
+    padding: 10px 14px;
+    background: var(--color-bg-secondary, #f8f9fa);
+    border-radius: 8px;
+    border: 1px solid var(--color-border-light, #ecf0f1);
+}
+
+.re-bias-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 20px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.re-bias-option:hover {
+    background: var(--color-bg-hover, rgba(0,0,0,0.04));
+}
+
+.re-bias-option input[type="radio"] {
+    accent-color: var(--color-primary, #3498db);
+}
+
+.re-bias-option .re-bias-label {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.re-bias-option .re-bias-desc {
+    font-size: 11px;
+    color: var(--color-text-secondary, #7f8c8d);
+    margin-left: 4px;
+}
+
+.re-bias-summary {
+    font-size: 12px;
+    color: var(--color-text-secondary, #7f8c8d);
+    margin-bottom: 10px;
+    padding: 6px 0;
+}
+
+.re-bias-results {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.re-bias-group-card {
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: var(--color-bg-primary, #fff);
+}
+
+.re-bias-group-card .re-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.re-bias-group-card .re-group-header h4 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.re-bias-group-card .re-group-meta {
+    font-size: 11px;
+    color: var(--color-text-secondary, #7f8c8d);
+}
+
+.re-bias-group-card .re-group-intersection {
+    margin: 6px 0;
+    padding: 6px 10px;
+    background: rgba(52, 152, 219, 0.06);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--color-text-secondary, #7f8c8d);
+}
+
+.re-bias-merge-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    background: rgba(243, 156, 18, 0.12);
+    color: var(--color-warning, #f39c12);
+}
+
+.re-bias-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 10px;
+}
+
+.re-bias-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border-light, #ecf0f1);
+}

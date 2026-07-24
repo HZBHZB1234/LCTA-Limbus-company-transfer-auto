@@ -47,6 +47,7 @@
         smartChanges: [],
         smartGenOverlay: null,
         smartGenGroups: null,
+        smartGenV2Bias: 'conservative',
         templates: [],
         lastPreviewRule: null,
         // File editing mode state
@@ -2250,6 +2251,304 @@
         state.smartGenGroups = null;
     }
 
+    // ═══════════════════════════════════════════════════════
+    //  V2 偏向式智能生成（保守/进取）+ 交集逻辑
+    // ═══════════════════════════════════════════════════════
+
+    function collectChangesForSmartGen() {
+        var changes = [];
+        state.openFiles.forEach(function (ts) {
+            if (ts.editStatus === 'staged' || ts.editStatus === 'applied') {
+                var parsed;
+                try { parsed = JSON.parse(ts.editor.state.doc.toString()); } catch (e) { return; }
+                if (!parsed || !parsed.dataList) return;
+                var baseline = ts.baselineParsed;
+                if (!baseline) return;
+                var diffs = diffJson(baseline, parsed, '');
+                var extracted = extractChangesFromDiff(diffs, ts.path, baseline);
+                for (var i = 0; i < extracted.length; i++) {
+                    changes.push(extracted[i]);
+                }
+            }
+        });
+        return changes;
+    }
+
+    function getChangeCounts() {
+        var staged = 0;
+        var applied = 0;
+        state.openFiles.forEach(function (ts) {
+            if (ts.editStatus === 'staged') staged++;
+            else if (ts.editStatus === 'applied') applied++;
+        });
+        return { staged: staged, applied: applied };
+    }
+
+    async function openSmartGenerationV2() {
+        var changes = collectChangesForSmartGen();
+        var counts = getChangeCounts();
+        closeSmartGenDialogV2();
+
+        var overlay = document.createElement('div');
+        overlay.className = 're-overlay';
+        state.smartGenOverlay = overlay;
+        state.smartGenGroups = null;
+
+        overlay.innerHTML =
+            '<div class="re-smart-gen-dialog">' +
+            '<div class="re-smart-gen-header"><h3><i class="fas fa-brain"></i> 智能生成规则集 (V2)</h3>' +
+            '<button class="re-btn re-btn-sm" id="re-v2-close-btn">✕</button></div>' +
+            '<div class="re-smart-gen-body">' +
+            '<div class="re-bias-selector">' +
+            '<label class="re-bias-option"><input type="radio" name="re-bias-mode" value="conservative" checked>' +
+            '<span class="re-bias-label">保守模式</span><span class="re-bias-desc">— 仅对 3+ 文件中共有的变更生成规则</span></label>' +
+            '<label class="re-bias-option"><input type="radio" name="re-bias-mode" value="aggressive">' +
+            '<span class="re-bias-label">进取模式</span><span class="re-bias-desc">— 对所有变更生成，建议合并低出现项</span></label>' +
+            '</div>' +
+            '<div class="re-bias-summary">共收集到 ' + changes.length + ' 处变更（暂存: ' + counts.staged + ' 文件, 已应用: ' + counts.applied + ' 文件）</div>' +
+            '<div id="re-bias-results" class="re-bias-results"></div>' +
+            '<div class="re-bias-footer">' +
+            '<button class="re-btn re-btn-primary" id="re-bias-analyze-btn">开始分析</button>' +
+            '<button class="re-btn" id="re-v2-close-footer-btn">关闭</button>' +
+            '</div>' +
+            '</div>' +
+            '</div>';
+
+        document.body.appendChild(overlay);
+
+        var closeBtn = overlay.querySelector('#re-v2-close-btn');
+        if (closeBtn) closeBtn.addEventListener('click', closeSmartGenDialogV2);
+        var closeFooterBtn = overlay.querySelector('#re-v2-close-footer-btn');
+        if (closeFooterBtn) closeFooterBtn.addEventListener('click', closeSmartGenDialogV2);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) closeSmartGenDialogV2(); });
+
+        var analyzeBtn = overlay.querySelector('#re-bias-analyze-btn');
+        if (analyzeBtn) analyzeBtn.addEventListener('click', loadBiasResults);
+    }
+
+    function closeSmartGenDialogV2() {
+        if (state.smartGenOverlay && state.smartGenOverlay.parentNode) {
+            state.smartGenOverlay.parentNode.removeChild(state.smartGenOverlay);
+        }
+        state.smartGenOverlay = null;
+        state.smartGenGroups = null;
+        state.smartGenV2Bias = 'conservative';
+    }
+
+    async function loadBiasResults() {
+        var overlay = state.smartGenOverlay;
+        if (!overlay) return;
+
+        var radios = overlay.querySelectorAll('input[name="re-bias-mode"]');
+        var mode = 'conservative';
+        for (var i = 0; i < radios.length; i++) {
+            if (radios[i].checked) { mode = radios[i].value; break; }
+        }
+        state.smartGenV2Bias = mode;
+
+        var changes = collectChangesForSmartGen();
+        if (!changes.length) {
+            showToast('没有收集到变更', 'error');
+            return;
+        }
+
+        var result = null;
+        var api = getApi();
+        if (api && api.analyze_changes_v2) {
+            try {
+                var res = await api.analyze_changes_v2(changes, mode);
+                if (res && Array.isArray(res.groups)) result = res;
+            } catch (e) {
+                console.warn('[rule-editor] analyze_changes_v2 failed', e);
+                result = null;
+            }
+        }
+        if (!result) result = analyzeChangesLocallyV2(changes, mode);
+
+        state.smartGenGroups = result.groups || [];
+        renderBiasResultSummary(result);
+    }
+
+    function renderBiasResultSummary(result) {
+        var container = document.getElementById('re-bias-results');
+        if (!container) return;
+
+        var groups = (result && result.groups) || [];
+        var mergeSuggestions = (result && result.merge_suggestions) || [];
+
+        if (!groups.length) {
+            container.innerHTML = '<div class="re-empty-state"><i class="fas fa-info-circle"></i> 未生成任何规则组</div>';
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < groups.length; i++) {
+            var g = groups[i];
+            var score = g.score || {};
+            var priority = score.priority || 0;
+
+            var files = g.l1_options && g.l1_options.exact_files ? g.l1_options.exact_files : [];
+            var categories = g.l1_options && g.l1_options.categories ? g.l1_options.categories : [];
+            var intersectionHtml = '';
+            if (files.length > 0) {
+                intersectionHtml += '<div class="re-group-intersection"><strong>交集文件:</strong> ' +
+                    escapeHtml(files.slice(0, 5).join(', ')) +
+                    (files.length > 5 ? ' (+' + (files.length - 5) + ')' : '') + '</div>';
+            }
+            if (categories.length > 0) {
+                var catNames = [];
+                for (var k = 0; k < categories.length; k++) catNames.push(categories[k].name);
+                intersectionHtml += '<div class="re-group-intersection"><strong>交集分类:</strong> ' +
+                    escapeHtml(catNames.join(', ')) + '</div>';
+            }
+
+            var mergeBadge = (g.merge_suggestion) ? '<span class="re-bias-merge-badge">建议合并</span>' : '';
+
+            html += '<div class="re-bias-group-card" data-group-idx="' + i + '">' +
+                '<div class="re-group-header">' +
+                '<h4>组 #' + (i + 1) + ' — ' + priority + '分 ' + mergeBadge + '</h4>' +
+                '<div class="re-group-meta">文件: ' + (g.file_count || files.length) +
+                ' | 条目: ' + (g.item_count || 0) +
+                ' | 出现: ' + (g.occurrence_count || 0) + '</div>' +
+                '</div>';
+            if (g.summary) html += '<div style="margin-bottom:6px;font-size:13px;">💡 ' + escapeHtml(g.summary) + '</div>';
+            if (g.action_preview && g.action_preview.length) {
+                html += '<div class="re-group-patterns">';
+                for (var j = 0; j < g.action_preview.length; j++) {
+                    var ap = g.action_preview[j];
+                    html += '<span class="re-pattern-pair">' + escapeHtml(String(ap.from || '')) +
+                        ' → ' + escapeHtml(String(ap.to || '')) + '</span>';
+                }
+                html += '</div>';
+            }
+            html += intersectionHtml;
+            html += '<div class="re-bias-actions">' +
+                '<button class="re-btn re-btn-sm re-bias-preview-btn" data-idx="' + i + '">📋 预览JSON</button>' +
+                '<button class="re-btn re-btn-sm re-btn-success re-bias-apply-btn" data-idx="' + i + '">✅ 生成此规则</button>' +
+                '</div>' +
+                '<pre class="re-bias-preview-out" style="display:none;margin-top:6px;font-size:12px;background:var(--color-bg-primary);padding:8px;border-radius:6px;overflow:auto;max-height:200px;white-space:pre-wrap;"></pre>' +
+                '</div>';
+        }
+
+        if (mergeSuggestions.length) {
+            html += '<div style="margin-top:10px;padding:8px 12px;background:rgba(243,156,18,0.06);border-radius:6px;">';
+            html += '<strong style="font-size:12px;">合并建议 (' + mergeSuggestions.length + ')</strong>';
+            for (var m = 0; m < mergeSuggestions.length; m++) {
+                html += '<div style="font-size:11px;margin:4px 0;color:var(--color-text-secondary);">' +
+                    escapeHtml(String(mergeSuggestions[m])) + '</div>';
+            }
+            html += '</div>';
+        }
+
+        container.innerHTML = html;
+
+        var previewBtns = container.querySelectorAll('.re-bias-preview-btn');
+        for (var pi = 0; pi < previewBtns.length; pi++) {
+            previewBtns[pi].addEventListener('click', (function (idx) {
+                return function () { previewBiasResult(groups[idx]); };
+            })(parseInt(previewBtns[pi].dataset.idx, 10)));
+        }
+        var applyBtns = container.querySelectorAll('.re-bias-apply-btn');
+        for (var ai = 0; ai < applyBtns.length; ai++) {
+            applyBtns[ai].addEventListener('click', (function (idx) {
+                return function () { applyBiasResult(groups[idx]); };
+            })(parseInt(applyBtns[ai].dataset.idx, 10)));
+        }
+    }
+
+    function previewBiasResult(group) {
+        var idx = group && state.smartGenGroups ? state.smartGenGroups.indexOf(group) : -1;
+        if (idx < 0 || !state.smartGenOverlay) return;
+        var card = state.smartGenOverlay.querySelector('.re-bias-group-card[data-group-idx="' + idx + '"]');
+        if (!card) return;
+        var sel = readSmartSelections(card, idx);
+        var rules = buildSmartGroupRules(group, sel);
+        var out = card.querySelector('.re-bias-preview-out');
+        if (!out) return;
+        out.textContent = JSON.stringify(rules, null, 2);
+        out.style.display = '';
+    }
+
+    async function applyBiasResult(group) {
+        if (!group) return;
+        var idx = state.smartGenGroups ? state.smartGenGroups.indexOf(group) : -1;
+        if (idx < 0) { showToast('找不到该组', 'error'); return; }
+        if (!state.smartGenOverlay) return;
+        var card = state.smartGenOverlay.querySelector('.re-bias-group-card[data-group-idx="' + idx + '"]');
+        if (!card) { showToast('找不到组的 DOM', 'error'); return; }
+        var sel = readSmartSelections(card, idx);
+        var rules = buildSmartGroupRules(group, sel);
+        if (!rules || !rules.length) { showToast('未能从该组生成规则', 'error'); return; }
+        if (!state.currentRuleset) { showToast('请先选择或新建一个规则集', 'error'); return; }
+        if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
+        for (var i = 0; i < rules.length; i++) state.currentRuleset.rules.push(rules[i]);
+        renderRulesPreview();
+        syncAdvancedFromRuleset();
+        await persistCurrentRuleset();
+        showToast('已添加 ' + rules.length + ' 条规则', 'success');
+    }
+
+    function analyzeChangesLocallyV2(changes, bias) {
+        if (!changes || !changes.length) return { groups: [], merge_suggestions: [] };
+
+        var buckets = {};
+        var order = [];
+        for (var i = 0; i < changes.length; i++) {
+            var c = changes[i];
+            var key = String(c.old_val) + '::' + String(c.new_val);
+            if (!buckets[key]) { buckets[key] = []; order.push(key); }
+            buckets[key].push(c);
+        }
+
+        var groups = [];
+        var mergeSuggestions = [];
+
+        for (var oi = 0; oi < order.length; oi++) {
+            var items = buckets[order[oi]];
+            var first = items[0];
+            var files = uniqArr(items.map(function (c) { return c.file; }));
+            var itemIds = uniqArr(items.map(function (c) { return c.item_id; }).filter(function (v) { return v != null && v !== ''; }));
+            var fieldPaths = uniqArr(items.map(function (c) { return c.field_path; }));
+            var cats = {};
+            for (var j = 0; j < files.length; j++) {
+                var cc = classifyPath(files[j]).category;
+                cats[cc] = (cats[cc] || 0) + 1;
+            }
+            var catList = Object.keys(cats).map(function (k) { return { name: k, count: cats[k], selected: true }; });
+
+            if (bias === 'conservative') {
+                if (files.length < 3) continue;
+            }
+
+            var priority = Math.min(80, 30 + items.length * 5);
+            var mergeSuggestion = false;
+            if (bias === 'aggressive' && files.length < 3) {
+                mergeSuggestion = true;
+                mergeSuggestions.push('组 "' + first.old_val + ' → ' + first.new_val + '" 出现于 ' + files.length + ' 个文件，建议合并到其他组');
+            }
+
+            groups.push({
+                change_type: 'PURE_REPLACE',
+                summary: '检测到 ' + items.length + ' 处相同替换 (' + first.old_val + ' → ' + first.new_val + ')',
+                suggestions: [],
+                action_preview: [{ from: first.old_val, to: first.new_val }],
+                file_count: files.length,
+                item_count: itemIds.length,
+                occurrence_count: items.length,
+                l1_options: { suggested: catList.length <= 2 ? 'category' : 'multi_category', categories: catList, exact_files: files },
+                l2_options: { suggested: itemIds.length ? 'id' : 'full_text', item_ids: itemIds },
+                l3_options: { suggested: fieldPaths.length === 1 ? 'restricted' : 'all_text', fields: fieldPaths },
+                l4_options: { suggested: 'exact' },
+                score: { priority: priority },
+                merge_suggestion: mergeSuggestion
+            });
+        }
+
+        groups.sort(function (a, b) { return (b.score.priority || 0) - (a.score.priority || 0); });
+
+        return { groups: groups, merge_suggestions: mergeSuggestions };
+    }
+
     function analyzeChangesLocally(changes) {
         if (!changes || !changes.length) return [];
         const buckets = {};
@@ -2597,21 +2896,20 @@
     }
 
     async function generateRulesFromChanges() {
-        let changes = state.pendingChanges;
-        if (!changes || !changes.length) {
-            showToast('没有待处理的变更 — 请先在文件编辑中修改内容并点击「比较变更」', 'error');
+        var hasEdits = false;
+        state.openFiles.forEach(function (ts) {
+            if (ts.editStatus === 'staged' || ts.editStatus === 'applied') hasEdits = true;
+        });
+        if (!hasEdits) {
+            showToast('没有已暂存或已应用的编辑 — 请先在文件中修改并保存', 'error');
             return;
         }
-        // Only proceed if a ruleset is selected
         if (!state.currentRuleset || !state.currentRuleset.name) {
-            // Switch to ruleset tab and prompt
             switchMainTab('ruleset-edit');
             showToast('请先选择或新建一个规则集', 'error');
             return;
         }
-        // Feed changes into smart gen dialog
-        state.smartChanges = changes;
-        await openSmartGeneration();
+        await openSmartGenerationV2();
     }
 
     // ═══════════════════════════════════════════════════════

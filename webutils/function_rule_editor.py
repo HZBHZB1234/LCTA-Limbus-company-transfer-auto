@@ -454,6 +454,82 @@ def analyze_changes(changes: list) -> dict:
     return {"groups": result_groups, "merge_suggestions": []}
 
 
+def analyze_changes_v2(changes: list, bias: str = 'conservative') -> dict:
+    if not changes:
+        return {"groups": [], "merge_suggestions": []}
+    groups = _cluster_changes(changes)
+    result_groups = []
+    merge_suggestions = []
+    for group in groups:
+        files = list(set(c["file"] for c in group))
+        field_paths = list(set(c["field_path"] for c in group))
+        item_ids = list(set(c.get("item_id") for c in group if c.get("item_id")))
+        first = group[0]
+        score = _score_group(group)
+
+        if bias == 'conservative' and len(files) < 3:
+            continue
+
+        if first["change_type"] == "PURE_REPLACE" and len(group) >= 3:
+            if all(c["new_val"] in "><≥≤" for c in group):
+                summary = "你似乎在对数学比较符号做统一替换"
+            else:
+                summary = f"检测到 {len(group)} 处相同的文本替换"
+        elif first["change_type"] in ("PURE_WRAP", "REPLACE_WRAP"):
+            colors = set()
+            for part in [first["prefix_added"], first["suffix_added"]]:
+                for m in re.finditer(r'color=#([0-9a-fA-F]{6})', part):
+                    colors.add(m.group(1))
+            if colors:
+                summary = f"你似乎在对词汇做统一着色（颜色: #{list(colors)[0]}）"
+            else:
+                summary = f"检测到 {len(group)} 处文本格式化"
+        else:
+            summary = f"检测到 {len(group)} 处相同修改"
+
+        suggestions = []
+        if first["change_type"] == "PURE_REPLACE":
+            compare_terms = [c["core_old"] for c in group]
+            known = {"大于": ">", "小于": "<", "不低于": "≥", "不高于": "≤"}
+            for term, sym in known.items():
+                if term not in compare_terms:
+                    suggestions.append(f"你也可以添加: {term} → {sym}")
+
+        done_cores = set()
+        action_preview = []
+        for c in group:
+            key = (c["core_old"], c["core_new"])
+            if key not in done_cores:
+                action_preview.append({"from": c["core_old"], "to": c["core_new"]})
+                done_cores.add(key)
+
+        merge_suggestion = False
+        if bias == 'aggressive' and len(files) < 3:
+            merge_suggestion = True
+            merge_suggestions.append(
+                f'组 "{first["core_old"]} → {first["core_new"]}" 出现于 {len(files)} 个文件，建议合并到其他组'
+            )
+
+        result_groups.append({
+            "change_type": first["change_type"],
+            "summary": summary,
+            "suggestions": suggestions,
+            "action_preview": action_preview[:5],
+            "file_count": len(files), "item_count": len(item_ids),
+            "occurrence_count": len(group),
+            "l1_options": _infer_file_scope(files),
+            "l2_options": {"suggested": "id" if item_ids else "full_text", "item_ids": item_ids},
+            "l3_options": {"suggested": "restricted" if len(field_paths) == 1 else "all_text",
+                           "fields": field_paths},
+            "l4_options": {"suggested": "exact" if first["change_type"] == "PURE_REPLACE" else "none"},
+            "score": score,
+            "merge_suggestion": merge_suggestion
+        })
+
+    result_groups.sort(key=lambda g: g["score"]["priority"], reverse=True)
+    return {"groups": result_groups, "merge_suggestions": merge_suggestions}
+
+
 def save_file_content(relative_path: str, content: str) -> dict:
     """Save edited file content back to the game Lang directory.
     Validates JSON, creates a .bak backup, and writes the file.

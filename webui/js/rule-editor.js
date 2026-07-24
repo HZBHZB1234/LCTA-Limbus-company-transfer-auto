@@ -517,19 +517,82 @@
             renderFileList(state.langFiles);
             return;
         }
-        let kw = keyword.toLowerCase();
-        let filtered = [];
-        for (let i = 0; i < state.langFiles.length; i++) {
-            if (state.langFiles[i].toLowerCase().indexOf(kw) !== -1) {
-                filtered.push(state.langFiles[i]);
+        var kw = keyword.toLowerCase();
+        
+        // 1. 匹配分类名：找出 keyword 命中的分类
+        var matchedCategories = {};
+        for (var i = 0; i < FILE_PREFIX_RULES.length; i++) {
+            var catName = FILE_PREFIX_RULES[i][1];
+            if (catName.toLowerCase().indexOf(kw) !== -1) {
+                matchedCategories[catName] = true;
             }
         }
-        renderFileList(filtered);
-        let hint = $i('re-search-hint');
+        var hasCategoryMatch = Object.keys(matchedCategories).length > 0;
+        
+        // 2. 按文件名筛选
+        var filenameMatches = [];
+        var categoryFileSets = {};  // category -> files[]
+        for (var i = 0; i < state.langFiles.length; i++) {
+            var f = state.langFiles[i];
+            var info = classifyPath(f);
+            // 收集分类命中的文件
+            if (matchedCategories[info.category]) {
+                if (!categoryFileSets[info.category]) categoryFileSets[info.category] = [];
+                categoryFileSets[info.category].push(f);
+            }
+            // 文件名匹配
+            if (f.toLowerCase().indexOf(kw) !== -1) {
+                filenameMatches.push(f);
+            }
+        }
+        
+        // 3. 合并结果：分类命中置顶
+        var resultFiles = [];
+        var seen = {};
+        
+        // 先添加分类命中的文件（按 CATEGORY_ORDER 顺序）
+        if (hasCategoryMatch) {
+            for (var ci = 0; ci < CATEGORY_ORDER.length; ci++) {
+                var cat = CATEGORY_ORDER[ci];
+                var catFiles = categoryFileSets[cat];
+                if (catFiles) {
+                    for (var fi = 0; fi < catFiles.length; fi++) {
+                        if (!seen[catFiles[fi]]) {
+                            seen[catFiles[fi]] = true;
+                            resultFiles.push(catFiles[fi]);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 再添加仅文件名匹配的文件（去重）
+        for (var i = 0; i < filenameMatches.length; i++) {
+            if (!seen[filenameMatches[i]]) {
+                seen[filenameMatches[i]] = true;
+                resultFiles.push(filenameMatches[i]);
+            }
+        }
+        
+        // 4. 渲染
+        if (hasCategoryMatch) {
+            // 使用带高亮的渲染（分类名匹配的组高亮显示）
+            renderFileListWithHighlight(resultFiles, matchedCategories);
+        } else {
+            renderFileList(resultFiles);
+        }
+        
+        // 5. 更新搜索提示
+        var hint = $i('re-search-hint');
         if (hint) {
-            if (filtered.length) {
+            if (resultFiles.length) {
                 hint.className = 're-search-hint re-search-hint-file';
-                hint.textContent = '🔍 文件名匹配: ' + filtered.length + ' 个文件';
+                var msg = '🔍 ';
+                if (hasCategoryMatch) {
+                    msg += '分类匹配: ' + Object.keys(matchedCategories).join(', ') + ' — ';
+                }
+                msg += resultFiles.length + ' 个文件';
+                hint.textContent = msg;
                 hint.style.display = '';
             } else {
                 hint.className = 're-search-hint';
@@ -537,7 +600,43 @@
                 hint.style.display = '';
             }
         }
-        return filtered;
+        
+        return resultFiles;
+    }
+
+    // 新增：带高亮分类的渲染函数
+    function renderFileListWithHighlight(files, highlightedCategories) {
+        var container = $i('re-file-list-container');
+        if (!container) return;
+        if (!files.length) {
+            container.innerHTML = '<div class="re-empty-state">未找到匹配的文件</div>';
+            return;
+        }
+        var groups = groupFilesByCategory(files);
+        var html = '';
+        for (var ci = 0; ci < CATEGORY_ORDER.length; ci++) {
+            var category = CATEGORY_ORDER[ci];
+            var groupFiles = groups[category];
+            if (!groupFiles || !groupFiles.length) continue;
+            var isHighlighted = !!highlightedCategories[category];
+            html += '<div class="re-file-group' + (isHighlighted ? ' re-file-group-highlighted' : '') + '">';
+            html += '<div class="re-file-group-title">' + escapeHtml(category) +
+                ' <span class="re-file-group-count">(' + groupFiles.length + ')</span></div>';
+            for (var fi = 0; fi < groupFiles.length; fi++) {
+                var f = groupFiles[fi];
+                html += '<div class="re-file-item' + (isHighlighted ? ' re-file-item-highlighted' : '') +
+                    '" data-path="' + escapeAttr(f) + '" title="双击打开: ' + escapeAttr(f) + '">' +
+                    escapeHtml(f) + '</div>';
+            }
+            html += '</div>';
+        }
+        container.innerHTML = html;
+        var items = container.querySelectorAll('.re-file-item');
+        for (var i = 0; i < items.length; i++) {
+            items[i].addEventListener('dblclick', (function (el) {
+                return function () { openFile(el.dataset.path); };
+            })(items[i]));
+        }
     }
 
     async function performSearch() {

@@ -1436,3 +1436,15 @@ body {
         min-height: 120px;
     }
 }
+
+/* 搜索分类高亮 */
+.re-file-group-highlighted {
+    background: rgba(52, 152, 219, 0.06);
+    border-left: 3px solid var(--color-primary, #3498db);
+    border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0;
+    padding-left: 4px;
+}
+
+.re-file-item-highlighted {
+    background: rgba(52, 152, 219, 0.04);
+}

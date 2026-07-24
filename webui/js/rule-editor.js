@@ -1276,7 +1276,36 @@
         });
 
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && state.smartGenOverlay) closeSmartGenDialog();
+            if (e.key === 'Escape' && state.smartGenOverlay) { closeSmartGenDialog(); return; }
+
+            var ctrl = e.ctrlKey || e.metaKey;
+            if (ctrl && e.key === 's') {
+                e.preventDefault();
+                saveEditedFile();
+                return;
+            }
+            if (ctrl && e.key === 'w') {
+                e.preventDefault();
+                var ts = getActiveTabState();
+                if (ts && ts.filePath) closeFileTab(ts.filePath);
+                return;
+            }
+            if (ctrl && e.shiftKey && e.key === 'F') {
+                e.preventDefault();
+                var searchInput = $i('re-file-search');
+                if (searchInput) { searchInput.focus(); searchInput.select(); }
+                return;
+            }
+            if (ctrl && e.key === 'f') {
+                // Allow default browser/editor search
+                var ts = getActiveTabState();
+                if (ts && ts.editor) {
+                    e.preventDefault();
+                    var CM = window.CodeMirror;
+                    if (CM && CM.openSearchPanel) CM.openSearchPanel(ts.editor);
+                }
+                return;
+            }
         });
 
         const simpleContent = $i('re-content-simple');

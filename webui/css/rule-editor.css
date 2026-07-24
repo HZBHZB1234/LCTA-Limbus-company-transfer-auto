@@ -500,6 +500,12 @@ body {
     gap: 4px;
     min-width: 310px;
     max-width: 460px;
+    cursor: grab;
+    user-select: none;
+}
+
+#re-file-edit-panel .cm-search.dragging {
+    cursor: grabbing !important;
 }
 
 #re-file-edit-panel .cm-search .cm-textfield {

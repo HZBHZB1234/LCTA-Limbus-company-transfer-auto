@@ -123,6 +123,7 @@
         populateSimpleFileSelect();
         switchTab('file-list');
         switchMainTab('file-edit');
+        initSearchPanelDrag();
         // 检查 pywebview API 是否已可用（防竞态）
         if (getApi()) {
             onApiReady();
@@ -2113,6 +2114,130 @@
         // Feed changes into smart gen dialog
         state.smartChanges = changes;
         await openSmartGeneration();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Search Panel Drag — make CM6 search panel draggable
+    // ═══════════════════════════════════════════════════════
+
+    function initSearchPanelDrag() {
+        const container = $i('re-file-editor-container');
+        if (!container) return;
+
+        const observer = new MutationObserver(function (mutations) {
+            for (let i = 0; i < mutations.length; i++) {
+                const m = mutations[i];
+                for (let j = 0; j < m.addedNodes.length; j++) {
+                    const node = m.addedNodes[j];
+                    if (node.nodeType !== 1) continue;
+                    const search = node.classList && node.classList.contains('cm-search')
+                        ? node : (node.querySelector && node.querySelector('.cm-search'));
+                    if (search) {
+                        localizeSearchPanel(search);
+                        attachDrag(search);
+                    }
+                }
+            }
+        });
+        observer.observe(container, { childList: true, subtree: true });
+    }
+
+    function localizeSearchPanel(searchEl) {
+        if (searchEl._localized) return;
+        searchEl._localized = true;
+
+        // 翻译字典：英文 → 中文
+        const T = {
+            "Find": "查找", "Replace": "替换",
+            "next": "下一个", "previous": "上一个", "all": "全部",
+            "match case": "区分大小写", "regexp": "正则",
+            "replace": "替换", "replace all": "全部替换", "close": "关闭"
+        };
+
+        // 翻译 placeholder
+        const inputs = searchEl.querySelectorAll('input[type="text"]');
+        for (let i = 0; i < inputs.length; i++) {
+            const ph = inputs[i].placeholder;
+            if (ph && T[ph]) inputs[i].placeholder = T[ph];
+        }
+
+        // 翻译 button title / textContent
+        const buttons = searchEl.querySelectorAll('button');
+        for (let i = 0; i < buttons.length; i++) {
+            const btn = buttons[i];
+            const title = btn.getAttribute('title');
+            if (title && T[title]) btn.setAttribute('title', T[title]);
+            const name = btn.getAttribute('name');
+            if (name && T[name]) btn.setAttribute('title', T[name]);
+            // 替换按钮文字（如 "replace all" → "全部替换"）
+            if (btn.textContent && T[btn.textContent.trim()]) {
+                btn.textContent = T[btn.textContent.trim()];
+            }
+        }
+
+        // 翻译 checkbox label 文字
+        const labels = searchEl.querySelectorAll('label');
+        for (let i = 0; i < labels.length; i++) {
+            const lbl = labels[i];
+            const title = lbl.getAttribute('title');
+            if (title && T[title]) lbl.setAttribute('title', T[title]);
+            // 替换 label 内的文本节点（如 "match case" → "区分大小写"）
+            for (let k = 0; k < lbl.childNodes.length; k++) {
+                const cn = lbl.childNodes[k];
+                if (cn.nodeType === 3 && T[cn.textContent.trim()]) { // TEXT_NODE
+                    cn.textContent = T[cn.textContent.trim()];
+                }
+            }
+        }
+    }
+
+    function attachDrag(searchEl) {
+        if (searchEl._dragBound) return;
+        searchEl._dragBound = true;
+
+        searchEl.addEventListener('mousedown', function (e) {
+            // 仅在点击背景区域时启动拖动（排除交互控件）
+            const target = e.target;
+            if (target.tagName === 'INPUT' || target.tagName === 'BUTTON' ||
+                target.tagName === 'LABEL' || target.closest('button') ||
+                target.closest('label')) return;
+
+            const panels = searchEl.parentElement; // .cm-panels
+            if (!panels) return;
+
+            const rect = panels.getBoundingClientRect();
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startLeft = rect.left;
+            const startTop = rect.top;
+            const panel = document.getElementById('re-file-edit-panel');
+            const panelRect = panel ? panel.getBoundingClientRect() : null;
+
+            searchEl.classList.add('dragging');
+            document.body.style.userSelect = 'none';
+
+            function onMove(ev) {
+                let newLeft = startLeft + (ev.clientX - startX);
+                let newTop = startTop + (ev.clientY - startY);
+                if (panelRect) {
+                    newLeft = Math.max(panelRect.left, Math.min(newLeft, panelRect.right - rect.width));
+                    newTop = Math.max(panelRect.top, Math.min(newTop, panelRect.bottom - rect.height));
+                }
+                panels.style.left = (newLeft - (panelRect ? panelRect.left : 0)) + 'px';
+                panels.style.top = (newTop - (panelRect ? panelRect.top : 0)) + 'px';
+                panels.style.right = 'auto';
+            }
+
+            function onUp() {
+                searchEl.classList.remove('dragging');
+                document.body.style.userSelect = '';
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            }
+
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
     }
 
     document.addEventListener('DOMContentLoaded', init);

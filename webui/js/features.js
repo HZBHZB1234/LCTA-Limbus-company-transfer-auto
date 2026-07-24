@@ -1388,6 +1388,11 @@ class DragDropManager {
     }
 }
 
+// 打开规则编辑器独立窗口
+function openRuleEditor() {
+    pywebview.api.open_rule_editor();
+}
+
 // 设置拖拽文件回调函数（可根据需要自定义）
 function setupDragDropCallback() {
     if (!dragDropManager) return;

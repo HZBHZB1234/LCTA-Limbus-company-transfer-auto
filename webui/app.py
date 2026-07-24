@@ -1477,6 +1477,94 @@ class LCTA_API():
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
+    def open_rule_editor(self):
+        html_path = os.path.join(os.getenv('path_'), "webui/rule-editor.html")
+        window = webview.create_window(
+            "LCTA - 美化规则编辑器", url=html_path,
+            width=1200, height=800, resizable=True, text_select=True,
+            js_api=RuleEditorAPI()
+        )
+        if not hasattr(self, '_rule_editor_windows'):
+            self._rule_editor_windows = []
+        self._rule_editor_windows.append(window)
+
+
+class RuleEditorAPI:
+    def __init__(self):
+        from webutils.function_rule_editor import (
+            get_lang_files, get_file_content, search_files,
+            get_ruleset_list, get_ruleset, save_ruleset,
+            create_ruleset, delete_ruleset,
+            build_rule_from_form, validate_rule, analyze_changes,
+            CATEGORY_FILE_PATTERNS
+        )
+        self.get_lang_files = get_lang_files
+        self.get_file_content = get_file_content
+        self.search_files = search_files
+        self.get_ruleset_list = get_ruleset_list
+        self.get_ruleset = get_ruleset
+        self.save_ruleset = save_ruleset
+        self.create_ruleset = create_ruleset
+        self.delete_ruleset = delete_ruleset
+        self.build_rule_from_form = build_rule_from_form
+        self.validate_rule = validate_rule
+        self.analyze_changes = analyze_changes
+
+    def apply_ruleset(self, name: str) -> dict:
+        from webutils.function_fancy import fancy_main
+        from pathlib import Path
+        try:
+            game_path = ConfigManager().get('game_path')
+            lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
+            config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
+            from webutils.function_rule_editor import get_ruleset
+            ruleset = get_ruleset(name)
+            if 'error' in ruleset:
+                return {"success": False, "message": ruleset['error']}
+            fancy_main(game_path, config_lang, [ruleset])
+            return {"success": True, "message": f"已应用"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    def get_autocomplete_data(self) -> dict:
+        from webutils.function_rule_editor import CATEGORY_FILE_PATTERNS
+        return {
+            "file_patterns": [{"label": k, "value": v} for k, v in CATEGORY_FILE_PATTERNS.items()],
+            "common_replacements": [
+                {"from": "大于", "to": ">"}, {"from": "小于", "to": "<"},
+                {"from": "不低于", "to": "≥"}, {"from": "不高于", "to": "≤"},
+                {"from": "自身", "to": "<u><color=#7C5738>自身</color></u>"},
+                {"from": "目标", "to": "<u><color=#7C5738>目标</color></u>"},
+                {"from": "护盾", "to": "<u><color=#81BBE8>护盾</color></u>"},
+                {"from": "理智值", "to": "<u><color=#81BBE8>理智值</color></u>"},
+                {"from": "体力", "to": "<u><color=#61DA61>体力</color></u>"},
+            ]
+        }
+
+    def get_templates(self) -> list:
+        return [
+            {"name": "空规则集", "template": {"name": "", "desc": "", "rules": []}},
+            {"name": "简单文本替换", "template": {
+                "name": "", "desc": "",
+                "rules": [{"aimFile": "Skill.*\\.json$",
+                           "conditions": [{"aim": "dataList\\.\\d+\\.desc"}],
+                           "action": [{"from": "查找", "to": "替换"}]}]
+            }},
+            {"name": "按ID定位替换", "template": {
+                "name": "", "desc": "",
+                "rules": [{"aimFile": "Skill.*\\.json$",
+                           "conditions": [{"trigger": {"aim": "dataList\\.\\d+\\.id", "re": "^10001$"},
+                                           "aim": "[back].desc"}],
+                           "action": [{"from": "查找", "to": "替换"}]}]
+            }},
+            {"name": "颜色渐变", "template": {
+                "name": "", "desc": "",
+                "rules": [{"aimFile": "BattleSpeechBubbleDlg.*\\.json$",
+                           "conditions": [{"aim": "dataList\\.\\d+\\.dlg"}],
+                           "action": [{"rate": 0.4}]}]
+            }},
+        ]
+
 def main():
     # 获取HTML文件的绝对路径
     html_path = os.path.join(os.getenv('path_'), "webui\\index.html")

@@ -127,8 +127,9 @@ class UpdateBase(ABC):
             gamePath = ConfigManager().get('game_path')
             lang_path = Path(gamePath) / 'LimbusCompany_Data' / 'lang'
             config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
+            from webutils.function_fancy import load_fancy_folder_rules
             config_list = builtinFancyConfig
-            config_list.extend(json.loads(ConfigManager().get('user_fancy', '[]')))
+            config_list.extend(load_fancy_folder_rules())
             enableMap = json.loads(ConfigManager().get('fancy_allow', '[]'))
             fancy_main(gamePath, config_lang, [i for i in config_list if enableMap.get(i.get('name', ''), False)])
         return True

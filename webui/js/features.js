@@ -252,7 +252,10 @@ class FancyManager {
         // 移除 builtin 字段后再发送
         const userData = userRulesets.map(({ builtin, ...rest }) => rest);
 
-        configManager.updateConfigValue('fancy-user', JSON.stringify(userData));
+        // 将用户规则集逐个写入 fancy/ 文件夹
+        for (const rs of userData) {
+            await pywebview.api.save_ruleset(rs.name, rs);
+        }
         configManager.updateConfigValue('fancy-allow', JSON.stringify(this.enabledMap));
         configManager.flushPendingUpdates();
     }

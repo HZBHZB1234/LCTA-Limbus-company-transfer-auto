@@ -76,6 +76,12 @@ class LCTA_API():
         self.relyList = relyList
         self.set_function()
         self.init_config()
+        from webutils.function_fancy import migrate_user_fancy_to_folder
+        try:
+            migrate_user_fancy_to_folder()
+        except Exception as e:
+            import logging
+            logging.getLogger('fancy').warning(f"自动迁移 user_fancy → fancy/ 失败: {e}")
 
     def set_function(self):
         self.find_lcb = load_util.find_lcb
@@ -695,9 +701,10 @@ class LCTA_API():
             return {"success": False, "message": str(e)}
 
     def get_fancy_rulesets(self):
+        from webutils.function_fancy import load_fancy_folder_rules
         return {'success': True, 'data': {
             'builtin': builtinFancyConfig,
-            'user': json.loads(ConfigManager().get('user_fancy', [])),
+            'user': load_fancy_folder_rules(),
             'enabled': json.loads(ConfigManager().get('fancy_allow',
                  "{\"技能文本美化(FL Like)\": true,\"气泡文本渐变(FL Like)\": true,\"EGO文本渐变(FL Like)\": true}"))
         }}

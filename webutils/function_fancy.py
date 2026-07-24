@@ -225,3 +225,92 @@ def fancy_main(game_path: str, package_name: str, config: list):
             except Exception as e:
                 logger.exception(f"处理文件 {file} 时出错: {e}")
                 _log_manager.log_error(e)
+
+def _get_fancy_folder() -> Path:
+    """获取 fancy/ 文件夹路径（位于项目根目录）"""
+    project_root = Path(__file__).parent.parent
+    return project_root / 'fancy'
+
+def _sanitize_filename(name: str) -> str:
+    """过滤文件名中的非法字符"""
+    illegal_chars = r'\/:*?"<>|'
+    for char in illegal_chars:
+        name = name.replace(char, '_')
+    return name.strip()
+
+def load_fancy_folder_rules(fancy_dir: str = None) -> list:
+    """从 fancy/ 文件夹加载所有用户规则集"""
+    if fancy_dir:
+        folder = Path(fancy_dir)
+    else:
+        folder = _get_fancy_folder()
+    if not folder.exists():
+        return []
+    rulesets = []
+    for f in sorted(folder.glob('*.json')):
+        try:
+            content = f.read_text(encoding='utf-8')
+            data = json.loads(content)
+            if isinstance(data, dict) and 'name' in data and 'rules' in data:
+                rulesets.append(data)
+            else:
+                logger.warning(f"跳过无效规则集文件（缺少 name/rules）: {f.name}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"跳过无效 JSON 文件: {f.name} — {e}")
+        except Exception as e:
+            logger.warning(f"跳过文件读取失败: {f.name} — {e}")
+    return rulesets
+
+def save_ruleset_to_folder(name: str, data: dict) -> Path:
+    """保存规则集到 fancy/{name}.json，返回保存路径"""
+    folder = _get_fancy_folder()
+    folder.mkdir(parents=True, exist_ok=True)
+    filename = _sanitize_filename(name) + '.json'
+    filepath = folder / filename
+    filepath.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding='utf-8'
+    )
+    return filepath
+
+def delete_ruleset_from_folder(name: str) -> bool:
+    """删除规则集文件，返回是否成功"""
+    folder = _get_fancy_folder()
+    filename = _sanitize_filename(name) + '.json'
+    filepath = folder / filename
+    if filepath.exists():
+        filepath.unlink()
+        return True
+    return False
+
+def migrate_user_fancy_to_folder() -> int:
+    """将 ConfigManager.user_fancy 中的旧数据迁移到 fancy/ 文件夹。
+    返回迁移的规则集数量。迁移后清除 ConfigManager 中的旧字段。"""
+    from globalManagers.ConfigManager import ConfigManager
+    config = ConfigManager()
+    old_data_str = config.get('user_fancy', None)
+    if old_data_str is None:
+        return 0
+    try:
+        old_rulesets = json.loads(old_data_str)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("旧 user_fancy 数据无效，跳过迁移")
+        config.set('user_fancy', None)
+        config.save()
+        return 0
+    if not isinstance(old_rulesets, list) or len(old_rulesets) == 0:
+        config.set('user_fancy', None)
+        config.save()
+        return 0
+    count = 0
+    for ruleset in old_rulesets:
+        if isinstance(ruleset, dict) and 'name' in ruleset:
+            try:
+                save_ruleset_to_folder(ruleset['name'], ruleset)
+                count += 1
+            except Exception as e:
+                logger.error(f"迁移规则集 {ruleset.get('name', '?')} 失败: {e}")
+    config.set('user_fancy', None)
+    config.save()
+    logger.info(f"已迁移 {count} 个规则集到 fancy/ 文件夹")
+    return count

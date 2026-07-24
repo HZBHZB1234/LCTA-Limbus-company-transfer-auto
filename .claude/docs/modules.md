@@ -1,31 +1,34 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-23 -->
+<!-- Last updated: 2026-07-24 -->
 
 ## Directory Overview
 
 | Directory | Role | Key Files |
 |-----------|------|-----------|
-| `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 12 + sections |
-| `webutils/` | Business logic layer (one file per feature) | 24 |
+| `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 15 + sections |
+| `webutils/` | Business logic layer (one file per feature) | 25 |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
 | `globalManagers/` | Cross-cutting singletons | 2 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
-| `tests/` | Pytest test suite | ~6 |
+| `fancy/` | User rule sets (one JSON file per ruleset) | auto-created |
+| `tests/` | Pytest test suite | ~7 |
 
 ## webui/ — Frontend Application
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core**: `LCTA_API` class (~1528 lines), bridges all backend features to JS via pywebview. Includes `get_startup_data()` to batch-initialize frontend in a single bridge call, `perform_update_from_file()` for manual local package updates and redesigned drag-drop flow |
+| `app.py` | **Core**: `LCTA_API` class (~1540 lines), bridges all backend features to JS via pywebview. Includes `RuleEditorAPI` class (the rule editor window's bridge), `open_rule_editor()` to spawn a second pywebview window. `get_fancy_rulesets()` now loads user rules from `fancy/` folder via `load_fancy_folder_rules()`. Auto-migrates old `user_fancy` config on startup |
 | `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
+| `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器 (Fancy Rule Editor): sidebar file browser + main rule editor (simple/advanced dual mode) + bottom file content preview panel |
 | `css/base.css` | Base styling |
 | `css/components.css` | Component-specific styles |
 | `css/layout-extras.css` | Layout utilities and extra styles |
+| `css/rule-editor.css` | Rule editor specific styles: sidebar+main+bottom panel layout, data cards, smart-gen dialog, tiered scope options |
 | `js/core.js` | Core framework: API binding, event system, navigation |
-| `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip, FancyManager (`updateEditorUI` fully null-guarded for lazy section loading) |
+| `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip, FancyManager (saveAll now persists to `fancy/` folder via `pywebview.api.save_ruleset()`), `openRuleEditor()` global function |
 | `js/init.js` | Initialization and bootstrap: uses single `get_startup_data()` call; welcome content deferred via `_pendingWelcomeContent` for lazy section loading compatibility |
 | `js/utils.js` | Navigation, encryption, sidebar search; `initNavigation` async handler with `await loadSection()`, `goAndShow` async for lazy section loading |
 | `js/modals.js` | Modal dialog management, markdown content loader with `_loadedMarkdowns` cache, toggle functions (all null-guarded for lazy section loading safety) |
@@ -33,6 +36,7 @@
 | `js/cdn.js` | CDN optimization page logic |
 | `js/speed.js` | Game speed control page logic |
 | `js/list-managers.js` | List/tab view management; constructors tolerate missing containers (lazy load compatible); container refs updated by `onSectionLoaded` |
+| `js/rule-editor.js` | Rule editor frontend logic: file browser (grouped by category, search with full-text), file content preview (simple mode structured data cards, advanced mode read-only CodeMirror), simple mode form-driven rule builder, advanced mode editable CodeMirror with template loading and validation, smart generation dialog with L1-L4 tiered scope options |
 | `sections/preload.js` | Lazy section loader: preloads only dashboard at startup, fetches others on first navigation via `loadSection()`; `onSectionLoaded()` callback re-runs per-section init (toggle funcs, list manager refs, select box values, DOM ref rebuilds) |
 | `sections/*.html` | 18 individual section HTML fragments (dashboard, translate, install, etc.) |
 | `guide/*.md` | 16 in-app user guide pages (one per feature tab) |
@@ -61,7 +65,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `function_manage.py` | Package management | Installed packages, mod management, symlink operations |
 | `function_clean.py` | Cache cleaner | Clean game cache files |
 | `function_fetch.py` | Proper noun scrape | Fetch proper nouns from remote sources |
-| `function_fancy.py` | Text effects | FL-Like visual text enhancements |
+| `function_fancy.py` | Text effects | FL-Like visual text enhancements. Supports `conditions` array (multi-condition AND) with backward-compatible `trigger`/`aim` normalization via `_normalize_rule()`. User rulesets now loaded from `fancy/` folder via `load_fancy_folder_rules()`; legacy `ConfigManager.user_fancy` auto-migrated by `migrate_user_fancy_to_folder()` |
 | `function_translate.py` | Translation orchestration | Connects webui to translateFunc pipeline |
 | `function_drop.py` | Drag-and-drop | Drag-and-drop file installation with zip/7z extraction, mod installation, update package handling via Updater |
 | `function_cdn.py` | CDN optimization | Cloudflare + CloudFront CDN speed testing and optimization |
@@ -71,6 +75,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `eiderConst.py` | Update constants | Translation pack update lists, dependency chains |
 | `FL2LCTA.py` | Rule converter | Fancy Language → LCTA rule format converter |
 | `Faust_fancy.py` | Faust rules | Faust character-specific fancy text rules |
+| `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`), ruleset CRUD (`get_ruleset_list`, `save_ruleset`, `create_ruleset`, `delete_ruleset`), rule building (`build_rule_from_form`, `validate_rule`), smart change analysis (`analyze_changes` with LCS-based grouping and 5-dimension scoring) |
 | `test.py` | Debug utilities | Internal testing/debug helpers |
 | `debug_environ_test.py` | Environment diag | Environment diagnostics on startup failure |
 
@@ -151,6 +156,15 @@ webui/app.py
     → translateFunc/ (translation pipeline)
     → webFunc/ (GitHub downloads, file transfer)
   → globalManagers/ (ConfigManager, LogManager)
+  → webutils/function_rule_editor.py (RuleEditorAPI: file browser, rules CRUD)
+  → webutils/function_fancy.py (load_fancy_folder_rules, fancy_main)
+
+webutils/function_rule_editor.py
+  → webutils/function_fancy.py (load_fancy_folder_rules, save_ruleset_to_folder, etc.)
+  → globalManagers/ConfigManager.py (_get_lang_dir)
+
+launcher/updates.py
+  → webutils/function_fancy.py (load_fancy_folder_rules) — now reads user rules from fancy/ folder
 
 launcher/main.py
   → launcher/gui_progress.py (if gui_mode enabled: WinForms progress window)

@@ -124,6 +124,7 @@
         switchTab('file-list');
         switchMainTab('file-edit');
         initSearchPanelDrag();
+        initResizeHandles();
         // 检查 pywebview API 是否已可用（防竞态）
         if (getApi()) {
             onApiReady();
@@ -2335,6 +2336,108 @@
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
         });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Panel Resize — 拖拽调整侧边栏和底部面板大小
+    // ═══════════════════════════════════════════════════════
+
+    var RESIZE_MIN_SIDEBAR = 180;
+    var RESIZE_MAX_SIDEBAR = 500;
+    var RESIZE_MIN_BOTTOM = 100;
+    var RESIZE_MAX_BOTTOM = 500;
+
+    function initResizeHandles() {
+        var sidebarHandle = document.getElementById('re-resize-sidebar');
+        var bottomHandle = document.getElementById('re-resize-bottom');
+        
+        if (sidebarHandle) {
+            sidebarHandle.addEventListener('mousedown', function (e) {
+                startResize(e, 'sidebar');
+            });
+        }
+        if (bottomHandle) {
+            bottomHandle.addEventListener('mousedown', function (e) {
+                startResize(e, 'bottom');
+            });
+        }
+        
+        loadResizeSizes();
+    }
+
+    function startResize(e, type) {
+        e.preventDefault();
+        var sidebar = document.querySelector('.re-sidebar');
+        var bottomPanel = document.querySelector('.re-bottom-panel');
+        var handle = type === 'sidebar'
+            ? document.getElementById('re-resize-sidebar')
+            : document.getElementById('re-resize-bottom');
+        
+        var startX = e.clientX;
+        var startY = e.clientY;
+        var startWidth = sidebar ? sidebar.offsetWidth : 280;
+        var startHeight = bottomPanel ? bottomPanel.offsetHeight : 0;
+        
+        if (handle) handle.classList.add('dragging');
+        document.body.classList.add(type === 'sidebar' ? 're-resizing' : 're-resizing-bottom');
+        
+        function onMove(ev) {
+            if (type === 'sidebar') {
+                var newWidth = startWidth + (ev.clientX - startX);
+                newWidth = Math.max(RESIZE_MIN_SIDEBAR, Math.min(RESIZE_MAX_SIDEBAR, newWidth));
+                if (sidebar) sidebar.style.width = newWidth + 'px';
+            } else {
+                var newHeight = startHeight - (ev.clientY - startY);
+                newHeight = Math.max(RESIZE_MIN_BOTTOM, Math.min(RESIZE_MAX_BOTTOM, newHeight));
+                if (bottomPanel) bottomPanel.style.height = newHeight + 'px';
+            }
+        }
+        
+        function onUp() {
+            if (handle) handle.classList.remove('dragging');
+            document.body.classList.remove('re-resizing', 're-resizing-bottom');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            saveResizeSizes();
+        }
+        
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }
+
+    function loadResizeSizes() {
+        try {
+            var saved = localStorage.getItem('lcta_rule_editor_sizes');
+            if (saved) {
+                var sizes = JSON.parse(saved);
+                var sidebar = document.querySelector('.re-sidebar');
+                var bottomPanel = document.querySelector('.re-bottom-panel');
+                if (sizes.sidebar && sidebar) {
+                    sidebar.style.width = Math.max(RESIZE_MIN_SIDEBAR,
+                        Math.min(RESIZE_MAX_SIDEBAR, sizes.sidebar)) + 'px';
+                }
+                if (sizes.bottom && bottomPanel) {
+                    bottomPanel.style.height = Math.max(RESIZE_MIN_BOTTOM,
+                        Math.min(RESIZE_MAX_BOTTOM, sizes.bottom)) + 'px';
+                }
+            }
+        } catch (e) {
+            // localStorage 不可用时静默忽略
+        }
+    }
+
+    function saveResizeSizes() {
+        try {
+            var sidebar = document.querySelector('.re-sidebar');
+            var bottomPanel = document.querySelector('.re-bottom-panel');
+            var sizes = {
+                sidebar: sidebar ? sidebar.offsetWidth : 280,
+                bottom: bottomPanel ? bottomPanel.offsetHeight : undefined
+            };
+            localStorage.setItem('lcta_rule_editor_sizes', JSON.stringify(sizes));
+        } catch (e) {
+            // localStorage 不可用时静默忽略
+        }
     }
 
     document.addEventListener('DOMContentLoaded', init);

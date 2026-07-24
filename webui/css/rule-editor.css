@@ -1448,3 +1448,39 @@ body {
 .re-file-item-highlighted {
     background: rgba(52, 152, 219, 0.04);
 }
+
+/* ---- Resize Handles ---- */
+.re-resize-handle {
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    background: transparent;
+}
+
+.re-resize-handle:hover,
+.re-resize-handle.dragging {
+    background: var(--color-primary, #3498db);
+    opacity: 0.3;
+}
+
+.re-resize-sidebar {
+    width: 5px;
+    cursor: col-resize;
+}
+
+.re-resize-bottom {
+    height: 5px;
+    cursor: row-resize;
+}
+
+/* 拖拽时禁止文本选中 */
+body.re-resizing {
+    user-select: none !important;
+    cursor: col-resize;
+}
+
+body.re-resizing-bottom {
+    user-select: none !important;
+    cursor: row-resize;
+}

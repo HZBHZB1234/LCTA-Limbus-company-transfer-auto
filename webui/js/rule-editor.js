@@ -1071,12 +1071,44 @@
             html += '</div>';
         }
         container.innerHTML = html;
+        var currentKeyword = document.getElementById('re-file-search');
+        var kw = currentKeyword ? currentKeyword.value : '';
         const items = container.querySelectorAll('.re-search-item');
         for (let i = 0; i < items.length; i++) {
-            items[i].addEventListener('dblclick', (function (el) {
-                return function () { openFile(el.dataset.path); };
-            })(items[i]));
+            items[i].addEventListener('dblclick', (function (el, keyword) {
+                return async function () {
+                    await createFileTab(el.dataset.path);
+                    if (keyword) {
+                        prefillEditorSearch(keyword);
+                    }
+                };
+            })(items[i], kw));
         }
+    }
+
+    function prefillEditorSearch(query) {
+        if (!query) return;
+        var ts = getActiveTabState();
+        if (!ts || !ts.editor) return;
+
+        var CM = window.CodeMirror;
+        if (CM && CM.openSearchPanel) {
+            CM.openSearchPanel(ts.editor);
+        }
+
+        setTimeout(function () {
+            var container = ts.container;
+            if (!container) return;
+            var searchInput = container.querySelector('.cm-search input[type="text"]');
+            if (searchInput) {
+                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                nativeInputValueSetter.call(searchInput, query);
+                searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                searchInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }, 100);
     }
 
     function clearSearch() {

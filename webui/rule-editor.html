@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LCTA - 美化规则编辑器</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/rule-editor.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module">
+        import {EditorView, basicSetup} from "https://esm.sh/codemirror@6.0.1";
+        import {json} from "https://esm.sh/@codemirror/lang-json@6.0.1";
+        window.CodeMirror = {EditorView, basicSetup, json};
+    </script>
+</head>
+<body class="theme-light">
+<div class="rule-editor-container">
+    <div class="re-sidebar">
+        <div class="re-sidebar-header">
+            <h3><i class="fas fa-folder-open"></i> 文件浏览器</h3>
+        </div>
+        <div class="re-search-bar">
+            <input type="text" id="re-file-search" placeholder="搜索文件内容...">
+            <label class="re-checkbox"><input type="checkbox" id="re-case-sensitive"> 区分大小写</label>
+            <button id="re-search-btn" class="re-btn re-btn-sm"><i class="fas fa-search"></i> 搜索</button>
+            <button id="re-search-clear-btn" class="re-btn re-btn-sm"><i class="fas fa-times"></i> 清除</button>
+        </div>
+        <div class="re-file-tabs">
+            <button class="re-tab active" data-tab="file-list">文件列表</button>
+            <button class="re-tab" data-tab="search-results">搜索结果</button>
+        </div>
+        <div id="re-file-list-container" class="re-file-list"></div>
+        <div id="re-search-results-container" class="re-search-results" style="display:none;"></div>
+    </div>
+    <div class="re-main">
+        <div class="re-toolbar">
+            <select id="re-ruleset-select"></select>
+            <button id="re-new-ruleset-btn" class="re-btn"><i class="fas fa-plus"></i> 新建</button>
+            <button id="re-save-ruleset-btn" class="re-btn re-btn-primary"><i class="fas fa-save"></i> 保存</button>
+            <button id="re-delete-ruleset-btn" class="re-btn re-btn-danger"><i class="fas fa-trash"></i> 删除</button>
+        </div>
+        <div class="re-mode-toggle">
+            <button class="re-mode-btn active" data-mode="simple">🔰 简单模式</button>
+            <button class="re-mode-btn" data-mode="advanced">⚙ 高级模式</button>
+        </div>
+        <div id="re-simple-mode" class="re-editor-panel">
+            <div class="re-form-group"><label>文件匹配</label>
+                <select id="re-simple-file"><option value="">-- 选择文件分类 --</option></select>
+                <input type="text" id="re-simple-file-custom" placeholder="或自定义正则..." style="margin-top:4px;">
+            </div>
+            <div class="re-form-group"><label>数据条目</label>
+                <div class="re-form-row">
+                    <label class="re-checkbox"><input type="checkbox" id="re-simple-use-id" checked> 按ID定位</label>
+                    <input type="text" id="re-simple-item-id" placeholder="ID（逗号分隔）" style="flex:1;">
+                    <input type="text" id="re-simple-field" placeholder="字段名" style="flex:1;" value="desc">
+                </div>
+            </div>
+            <div class="re-form-group"><label>条件触发（可选）</label>
+                <div id="re-simple-conditions"></div>
+                <button class="re-btn re-btn-sm" id="re-add-condition-btn">＋ 添加条件</button>
+            </div>
+            <div class="re-form-group"><label>操作列表</label>
+                <div id="re-simple-operations">
+                    <div class="re-operation-item">
+                        <input type="text" placeholder="查找" class="re-op-from">
+                        <span>→</span>
+                        <input type="text" placeholder="替换为" class="re-op-to">
+                        <button class="re-btn re-btn-sm re-remove-op-btn">✕</button>
+                    </div>
+                </div>
+                <button class="re-btn re-btn-sm" id="re-add-op-btn">＋ 添加操作</button>
+            </div>
+            <div class="re-form-row" style="margin-top:12px;">
+                <button class="re-btn re-btn-primary" id="re-preview-rule-btn">👁 预览JSON</button>
+                <button class="re-btn re-btn-success" id="re-generate-rule-btn">📋 生成规则JSON</button>
+            </div>
+            <div id="re-simple-preview" style="margin-top:8px; display:none;">
+                <pre id="re-simple-preview-content" style="font-size:12px; background:var(--color-bg-primary); padding:8px; border-radius:6px; overflow:auto; max-height:200px;"></pre>
+            </div>
+        </div>
+        <div id="re-advanced-mode" class="re-editor-panel" style="display:none;">
+            <div class="re-advanced-toolbar">
+                <select id="re-template-select"><option value="">📋 模板...</option></select>
+                <button class="re-btn re-btn-sm" id="re-format-json-btn">格式化</button>
+                <button class="re-btn re-btn-sm" id="re-validate-btn">验证</button>
+            </div>
+            <div id="re-advanced-editor" style="height:300px; border:1px solid var(--color-border); border-radius:6px;"></div>
+            <div id="re-validation-result" style="margin-top:4px; font-size:12px;"></div>
+        </div>
+        <div class="re-rules-preview">
+            <h4>当前规则集预览</h4>
+            <div id="re-rules-preview-list"></div>
+        </div>
+        <div class="re-action-bar">
+            <button id="re-apply-btn" class="re-btn re-btn-success"><i class="fas fa-play"></i> 应用规则集到游戏</button>
+            <button id="re-smart-gen-btn" class="re-btn re-btn-accent"><i class="fas fa-brain"></i> 智能生成规则集</button>
+        </div>
+    </div>
+</div>
+<div class="re-bottom-panel">
+    <div class="re-bottom-header">
+        <h4><i class="fas fa-file-alt"></i> 文件内容预览</h4>
+        <span id="re-current-file">未选择文件</span>
+    </div>
+    <div id="re-content-simple" class="re-content-panel"></div>
+    <div id="re-content-advanced" class="re-content-panel" style="display:none;"></div>
+</div>
+<script src="js/rule-editor.js"></script>
+</body>
+</html>

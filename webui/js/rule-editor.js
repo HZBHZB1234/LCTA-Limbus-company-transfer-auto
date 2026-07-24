@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const FILE_PREFIX_RULES = [
+    var FILE_PREFIX_RULES = [
         ['BattleSpeechBubbleDlg', '战斗气泡'], ['BattleResultHint', '战斗结果提示'],
         ['BattleKeywords', '战斗关键词'], ['BattlePass', '通行证'],
         ['BattleUIText', '战斗UI'], ['BossRaidUI', '战斗映射UI'],
@@ -22,7 +22,7 @@
         ['Skill', '技能'], ['Stage', '舞台'],
         ['Story', '故事'], ['Event', '活动'], ['Bufs', '通用Buff'],
     ];
-    const CATEGORY_ORDER = FILE_PREFIX_RULES.map(function (r) { return r[1]; }).concat(['Other']);
+    var CATEGORY_ORDER = FILE_PREFIX_RULES.map(function (r) { return r[1]; }).concat(['Other']);
 
     const state = {
         langFiles: [],
@@ -64,7 +64,7 @@
         _lastViewedFile: null,      // 用于标签页切换时判断文件是否变化
     };
 
-    const CATEGORY_FILE_PATTERNS = {
+    var CATEGORY_FILE_PATTERNS = {
         'Skill': 'Skill.*\\.json$', 'Bufs': 'Bufs.*\\.json$',
         'BattleSpeechBubbleDlg': 'BattleSpeechBubbleDlg.*\\.json$',
         'Egos': '(Skills_Ego_Personality|Egos).*\\.json$',
@@ -483,9 +483,26 @@
         setMode('simple', true);
         initAdvancedMode();
         initFileEditor();
-        await Promise.all([loadLangFiles(), loadRulesets(), initSimpleFileSelect(), loadTemplates()]);
+        await Promise.all([loadEditorConstants(), loadLangFiles(), loadRulesets(), initSimpleFileSelect(), loadTemplates()]);
         syncAdvancedFromRuleset();
         syncThemeFromMain();
+    }
+
+    async function loadEditorConstants() {
+        var api = getApi();
+        if (!api || !api.get_editor_constants) return;
+        try {
+            var data = await api.get_editor_constants();
+            if (data && Array.isArray(data.file_prefix_rules) && data.file_prefix_rules.length) {
+                FILE_PREFIX_RULES = data.file_prefix_rules;
+                CATEGORY_ORDER = FILE_PREFIX_RULES.map(function (r) { return r[1]; }).concat(['Other']);
+            }
+            if (data && data.category_file_patterns) {
+                CATEGORY_FILE_PATTERNS = data.category_file_patterns;
+            }
+        } catch (e) {
+            console.warn('[rule-editor] loadEditorConstants failed, using built-in defaults', e);
+        }
     }
 
     async function syncThemeFromMain() {
@@ -1168,10 +1185,15 @@
         if (fePanel) fePanel.style.display = tab === 'file-edit' ? '' : 'none';
         if (rePanel) rePanel.style.display = tab === 'ruleset-edit' ? '' : 'none';
         
-        // Hide bottom preview panel in file-edit mode
+        // Hide bottom preview panel + resize handle in file-edit mode
         var bottomPanel = document.querySelector('.re-bottom-panel');
-        if (bottomPanel) {
-            bottomPanel.style.display = tab === 'file-edit' ? 'none' : '';
+        var bottomHandle = document.getElementById('re-resize-bottom');
+        if (tab === 'file-edit') {
+            if (bottomPanel) bottomPanel.style.display = 'none';
+            if (bottomHandle) bottomHandle.style.display = 'none';
+        } else {
+            if (bottomPanel) bottomPanel.style.display = '';
+            if (bottomHandle) bottomHandle.style.display = '';
         }
         
         if (tab === 'file-edit') {
@@ -1288,7 +1310,7 @@
             if (ctrl && e.key === 'w') {
                 e.preventDefault();
                 var ts = getActiveTabState();
-                if (ts && ts.filePath) closeFileTab(ts.filePath);
+                if (ts && ts.path) closeFileTab(ts.path);
                 return;
             }
             if (ctrl && e.shiftKey && e.key === 'F') {
@@ -2828,7 +2850,9 @@
                 try { ts.baselineParsed = JSON.parse(raw); } catch (e) { void e; }
                 ts.lastSavedAt = Date.now();
                 ts.pendingChanges = [];
+                state.pendingChanges = [];
                 updateFileEditStatus(ts);
+                renderChangeList();
 
                 if (state.fileCache.has(path)) {
                     var cached = state.fileCache.get(path);
@@ -2920,6 +2944,10 @@
         const container = $i('re-file-editor-container');
         if (!container) return;
 
+        if (container._searchObserver) {
+            container._searchObserver.disconnect();
+        }
+
         const observer = new MutationObserver(function (mutations) {
             for (let i = 0; i < mutations.length; i++) {
                 const m = mutations[i];
@@ -2936,6 +2964,7 @@
             }
         });
         observer.observe(container, { childList: true, subtree: true });
+        container._searchObserver = observer;
     }
 
     function localizeSearchPanel(searchEl) {

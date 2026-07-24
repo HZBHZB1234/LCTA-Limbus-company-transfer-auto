@@ -1467,12 +1467,12 @@ body {
 }
 
 .re-resize-sidebar {
-    width: 5px;
+    width: 8px;
     cursor: col-resize;
 }
 
 .re-resize-bottom {
-    height: 5px;
+    height: 8px;
     cursor: row-resize;
 }
 

@@ -1525,7 +1525,7 @@ class RuleEditorAPI:
             create_ruleset, delete_ruleset,
             build_rule_from_form, validate_rule, analyze_changes,
             analyze_changes_v2,
-            save_file_content, CATEGORY_FILE_PATTERNS
+            save_file_content,
         )
         self.get_lang_files = get_lang_files
         self.get_file_content = get_file_content
@@ -1562,43 +1562,24 @@ class RuleEditorAPI:
             return {"success": False, "message": str(e)}
 
     def get_autocomplete_data(self) -> dict:
-        from webutils.function_rule_editor import CATEGORY_FILE_PATTERNS
+        from webutils.rule_editor_constants import CATEGORY_FILE_PATTERNS, COMMON_REPLACEMENTS
         return {
             "file_patterns": [{"label": k, "value": v} for k, v in CATEGORY_FILE_PATTERNS.items()],
-            "common_replacements": [
-                {"from": "大于", "to": ">"}, {"from": "小于", "to": "<"},
-                {"from": "不低于", "to": "≥"}, {"from": "不高于", "to": "≤"},
-                {"from": "自身", "to": "<u><color=#7C5738>自身</color></u>"},
-                {"from": "目标", "to": "<u><color=#7C5738>目标</color></u>"},
-                {"from": "护盾", "to": "<u><color=#81BBE8>护盾</color></u>"},
-                {"from": "理智值", "to": "<u><color=#81BBE8>理智值</color></u>"},
-                {"from": "体力", "to": "<u><color=#61DA61>体力</color></u>"},
-            ]
+            "common_replacements": COMMON_REPLACEMENTS,
         }
 
     def get_templates(self) -> list:
-        return [
-            {"name": "空规则集", "template": {"name": "", "desc": "", "rules": []}},
-            {"name": "简单文本替换", "template": {
-                "name": "", "desc": "",
-                "rules": [{"aimFile": "Skill.*\\.json$",
-                           "conditions": [{"aim": "dataList\\.\\d+\\.desc"}],
-                           "action": [{"from": "查找", "to": "替换"}]}]
-            }},
-            {"name": "按ID定位替换", "template": {
-                "name": "", "desc": "",
-                "rules": [{"aimFile": "Skill.*\\.json$",
-                           "conditions": [{"trigger": {"aim": "dataList\\.\\d+\\.id", "re": "^10001$"},
-                                           "aim": "[back].desc"}],
-                           "action": [{"from": "查找", "to": "替换"}]}]
-            }},
-            {"name": "颜色渐变", "template": {
-                "name": "", "desc": "",
-                "rules": [{"aimFile": "BattleSpeechBubbleDlg.*\\.json$",
-                           "conditions": [{"aim": "dataList\\.\\d+\\.dlg"}],
-                           "action": [{"rate": 0.4}]}]
-            }},
-        ]
+        from webutils.rule_editor_constants import TEMPLATES
+        return TEMPLATES
+
+    def get_editor_constants(self) -> dict:
+        from webutils.rule_editor_constants import FILE_PREFIX_RULES, CATEGORY_FILE_PATTERNS, COMMON_REPLACEMENTS, TEMPLATES
+        return {
+            "file_prefix_rules": FILE_PREFIX_RULES,
+            "category_file_patterns": {k: v for k, v in CATEGORY_FILE_PATTERNS.items()},
+            "common_replacements": COMMON_REPLACEMENTS,
+            "templates": TEMPLATES,
+        }
 
 def main():
     # 获取HTML文件的绝对路径

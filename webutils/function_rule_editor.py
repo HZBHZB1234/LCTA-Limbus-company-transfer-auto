@@ -13,47 +13,17 @@ from webutils.function_fancy import (
     load_fancy_folder_rules, save_ruleset_to_folder,
     delete_ruleset_from_folder, _get_fancy_folder, _sanitize_filename
 )
+from webutils.rule_editor_constants import FILE_PREFIX_RULES, CATEGORY_FILE_PATTERNS
 
 logger = logging.getLogger('rule_editor')
 
-FILE_PREFIX_RULES = [
-    ('BattleSpeechBubbleDlg', '战斗气泡'), ('BattleResultHint', '战斗结果提示'),
-    ('BattleKeywords', '战斗关键词'), ('BattlePass', '通行证'),
-    ('BattleUIText', '战斗UI'), ('BossRaidUI', '战斗映射UI'),
-    ('BattleHint', '战斗提示'), ('BuffAbilities', '战斗Buff'),
-    ('Bufs_Mirror', '镜牢Buff'), ('MirrorDungeon', '镜牢'),
-    ('DailyLoginEvent', '签到'), ('CultivationEvent', '惜春养成'),
-    ('CouponUIText', '兑换码UI'), ('ChoiceEvent', '事件选择'),
-    ('DanteAbility', '但丁能力'), ('ActionEvents', '镜牢事件'),
-    ('AbEventsResultLog', '事件效果'), ('AbnormalityGuides', '异想体线索/提示'),
-    ('AttributeText', '七大罪'), ('AbEvents', '异想体事件'),
-    ('AbDlg', '事件判定'), ('Announcer', '播报相关内容'),
-    ('Assist', '援助相关'), ('ErrorCodeMsg', '错误代码'),
-    ('UnitKeyword', '关键词'), ('Personalities', '人格'),
-    ('Characters', '角色'), ('EGOgift', 'EGO饰品'),
-    ('Dungeon', '地牢'), ('Enemies', '敌人'),
-    ('PanicInfo', '效果'), ('Passives', '被动'),
-    ('Railway', '轨道线'), ('Egos', '角色EGO'),
-    ('Skill', '技能'), ('Stage', '舞台'),
-    ('Story', '故事'), ('Event', '活动'), ('Bufs', '通用Buff'),
-]
 
-CATEGORY_FILE_PATTERNS = {
-    'Skill': r'Skill.*\.json$', 'Bufs': r'Bufs.*\.json$',
-    'BattleSpeechBubbleDlg': r'BattleSpeechBubbleDlg.*\.json$',
-    'Egos': r'(Skills_Ego_Personality|Egos).*\.json$',
-    'Passives': r'Passives.*\.json$', 'Personalities': r'Personalities.*\.json$',
-    'Enemies': r'Enemies.*\.json$', 'EGOgift': r'EGOgift.*\.json$',
-    'Railway': r'Railway.*\.json$', 'MirrorDungeon': r'MirrorDungeon.*\.json$',
-    'Dungeon': r'Dungeon.*\.json$', 'Stage': r'Stage.*\.json$',
-    'Story': r'Story.*\.json$', 'Event': r'Event.*\.json$',
-    'BattleUIText': r'BattleUIText.*\.json$', 'BattleKeywords': r'BattleKeywords.*\.json$',
-    'AbEvents': r'AbEvents.*\.json$', 'Announcer': r'Announcer.*\.json$',
-    'UnitKeyword': r'UnitKeyword.*\.json$',
-}
-
+_lang_dir_cache = None
 
 def _get_lang_dir() -> Optional[Path]:
+    global _lang_dir_cache
+    if _lang_dir_cache is not None:
+        return _lang_dir_cache
     config = ConfigManager()
     game_path = config.get('game_path', '')
     if not game_path:
@@ -66,7 +36,8 @@ def _get_lang_dir() -> Optional[Path]:
             lang_path = lang_path / lang_name
     except Exception:
         pass
-    return lang_path if lang_path.exists() else None
+    _lang_dir_cache = lang_path if lang_path.exists() else None
+    return _lang_dir_cache
 
 def get_lang_files() -> list:
     lang_dir = _get_lang_dir()

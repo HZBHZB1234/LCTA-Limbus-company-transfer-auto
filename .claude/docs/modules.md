@@ -76,6 +76,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `FL2LCTA.py` | Rule converter | Fancy Language → LCTA rule format converter |
 | `Faust_fancy.py` | Faust rules | Faust character-specific fancy text rules |
 | `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`), ruleset CRUD (`get_ruleset_list`, `save_ruleset`, `create_ruleset`, `delete_ruleset`), rule building (`build_rule_from_form`, `validate_rule`), smart change analysis (`analyze_changes` with LCS-based grouping and 5-dimension scoring), file saving (`save_file_content` with JSON validation + backup) |
+| `rule_editor_constants.py` | Rule editor shared data | Single-source-of-truth for `FILE_PREFIX_RULES`, `CATEGORY_FILE_PATTERNS`, `COMMON_REPLACEMENTS`, `TEMPLATES`. Imported by `function_rule_editor.py` and `app.py` (RuleEditorAPI). JS fetches via `get_editor_constants()` API with hardcoded fallback. |
 | `test.py` | Debug utilities | Internal testing/debug helpers |
 | `debug_environ_test.py` | Environment diag | Environment diagnostics on startup failure |
 

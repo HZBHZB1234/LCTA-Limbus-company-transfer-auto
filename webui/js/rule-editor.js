@@ -63,6 +63,7 @@
         fileTabOrder: [],           // string[]: 有序的打开文件路径
         _lastViewedFile: null,      // 用于标签页切换时判断文件是否变化
         _editingRuleIndex: null, // 正在编辑的规则索引（非 null 时 generateRule 执行更新而非新增）
+        _rulesetDirty: false,    // 规则集是否有未保存的修改
     };
 
     // 跨标签搜索状态桥接
@@ -437,15 +438,10 @@
     function updateFileEditTabLabel() {
         var tab = document.querySelector('.re-main-tab[data-maintab="file-edit"]');
         if (!tab) return;
-        var name = state.activeFileTab;
-        if (!name) {
-            tab.innerHTML = '<i class="fas fa-pen"></i> 文件编辑';
-            return;
-        }
-        var display = name.length > 30 ? '...' + name.slice(-27) : name;
+        // 始终保持 "文件编辑" 标签不变，仅切换 dirty 状态图标
         var ts = getActiveTabState();
         var icon = (ts && ts.editStatus === 'staged') ? 'fas fa-circle re-dirty-dot' : 'fas fa-pen';
-        tab.innerHTML = '<i class="' + icon + '"></i> ' + escapeHtml(display);
+        tab.innerHTML = '<i class="' + icon + '"></i> 文件编辑';
     }
 
     function updateStatusBar() {
@@ -861,6 +857,11 @@
         sel.innerHTML = opts.join('');
     }
 
+    function refreshRulesetUI() {
+        renderRulesPreview();
+        syncAdvancedFromRuleset();
+    }
+
     function renderRulesPreview() {
         const container = $i('re-rules-preview-list');
         if (!container) return;
@@ -891,7 +892,7 @@
                 '<span class="re-rule-summary-text">' + escapeHtml(aimFile) + ' → ' + escapeHtml(targetField) +
                 (actionStr ? ' {' + actionStr + '}' : '') + '</span>' +
                 '<div class="re-rule-actions">' +
-                '<button class="re-btn re-btn-sm re-edit-rule-btn" data-idx="' + i + '" title="编辑规则">✏</button>' +
+                '<button class="re-edit-rule-btn" data-idx="' + i + '" title="编辑规则">✏</button>' +
                 '<button class="re-btn re-btn-sm re-btn-danger re-remove-rule-btn" data-idx="' + i + '" title="移除规则">✕</button>' +
                 '</div>' +
                 '</div>';
@@ -1162,9 +1163,14 @@
 
         var html = '<div class="re-file-status-summary">' +
             '<span class="re-file-status-summary-text">' + fileEntries.length + ' 个文件已修改' +
-            '（' + stagedCount + ' 暂存, ' + appliedCount + ' 已应用）</span>' +
-            '</div>' +
-            '<div class="re-file-status-list">';
+            '（' + stagedCount + ' 暂存, ' + appliedCount + ' 已应用）</span>';
+        // Feature 6: 应用规则集到暂存文件按钮
+        if (stagedCount > 0 && state.currentRuleset && state.currentRuleset.name) {
+            html += '<button class="re-btn re-btn-sm re-file-status-apply-btn" id="re-apply-to-staged-btn" style="margin-left:12px;">' +
+                '<i class="fas fa-play"></i> 应用规则集到暂存文件</button>';
+        }
+        html += '</div>' +
+            '<div class="re-file-status-list" id="re-file-status-list">';
 
         for (var i = 0; i < fileEntries.length; i++) {
             var entry = fileEntries[i];
@@ -1174,18 +1180,55 @@
                 '<span class="re-file-status-dot ' + dotCls + '">●</span>' +
                 '<span class="re-file-status-name">' + escapeHtml(entry.path) + '</span>' +
                 '<span class="re-file-status-badge re-file-status-badge-' + dotCls + '">' + statusLabel + '</span>' +
-                '</div>';
+                '<span class="re-file-status-actions">';
+            if (entry.status === 'applied') {
+                html += '<button class="re-file-status-action-btn re-fsa-revert-applied" data-path="' + escapeAttr(entry.path) + '" title="还原到暂存">↩</button>';
+            } else if (entry.status === 'staged') {
+                html += '<button class="re-file-status-action-btn re-fsa-discard" data-path="' + escapeAttr(entry.path) + '" title="放弃更改">↩</button>' +
+                    '<button class="re-file-status-action-btn re-fsa-apply" data-path="' + escapeAttr(entry.path) + '" title="保存为应用">✓</button>';
+            }
+            html += '</span></div>';
         }
 
         html += '</div>';
         container.innerHTML = html;
 
-        // 绑定点击事件 — 单击打开文件
-        var items = container.querySelectorAll('.re-file-status-item');
-        for (var j = 0; j < items.length; j++) {
-            items[j].addEventListener('click', (function (path) {
-                return async function () { await createFileTab(path); };
-            })(items[j].dataset.path));
+        // 事件委托：处理操作按钮点击（防止冒泡到文件项）
+        var list = container.querySelector('#re-file-status-list');
+        if (list) {
+            list.addEventListener('click', async function (e) {
+                var btn = e.target.closest('button');
+                if (!btn) {
+                    // 点击文件项（非按钮区）→ 打开文件
+                    var item = e.target.closest('.re-file-status-item');
+                    if (item) {
+                        var path = item.dataset.path;
+                        if (path) await createFileTab(path);
+                    }
+                    return;
+                }
+                e.stopPropagation();
+                var path = btn.dataset.path;
+                if (!path) return;
+                var ts = state.openFiles.get(path);
+                if (!ts) return;
+                if (btn.classList.contains('re-fsa-revert-applied')) {
+                    await revertAppliedToStaged(ts);
+                } else if (btn.classList.contains('re-fsa-discard')) {
+                    revertStagedToOriginal(ts);
+                } else if (btn.classList.contains('re-fsa-apply')) {
+                    await saveStagedAsApplied(ts);
+                }
+            });
+        }
+
+        // Feature 6: 应用规则集到暂存文件按钮
+        var applyBtn = container.querySelector('#re-apply-to-staged-btn');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                await applyRulesetToStagedFiles();
+            });
         }
     }
 
@@ -1278,6 +1321,10 @@
 
     function switchMainTab(tab) {
         var prevTab = state.activeMainTab;
+        // Feature 3: 离开规则集编辑 tab 时自动保存
+        if (prevTab === 'ruleset-edit' && tab !== 'ruleset-edit') {
+            _autoPersistRuleset();
+        }
         state.activeMainTab = tab;
         
         var tabs = document.querySelectorAll('.re-main-tab');
@@ -1526,8 +1573,18 @@
         if (!api || !api.save_ruleset) return warnNoApi();
         try {
             const res = await api.save_ruleset(state.currentRuleset.name, state.currentRuleset);
-            if (res && res.success === false) showToast('保存失败: ' + (res.error || ''), 'error');
-            else showToast('规则集已保存', 'success');
+            if (res && res.success === false) {
+                showToast('保存失败: ' + (res.error || ''), 'error');
+            } else {
+                state._rulesetDirty = false;
+                showToast('规则集已保存', 'success');
+                // 保存按钮脉冲动画
+                var saveBtn = $i('re-save-ruleset-btn');
+                if (saveBtn) {
+                    saveBtn.classList.add('re-btn-saved');
+                    setTimeout(function () { saveBtn.classList.remove('re-btn-saved'); }, 500);
+                }
+            }
         } catch (e) {
             showToast('保存异常: ' + (e && e.message ? e.message : e), 'error');
         }
@@ -1547,8 +1604,7 @@
             showToast('规则集已删除', 'success');
             state.currentRuleset = null;
             await loadRulesets();
-            renderRulesPreview();
-            syncAdvancedFromRuleset();
+            refreshRulesetUI();
         } catch (e) {
             showToast('删除异常: ' + (e && e.message ? e.message : e), 'error');
         }
@@ -1568,6 +1624,53 @@
         } catch (e) {
             showToast('应用异常: ' + (e && e.message ? e.message : e), 'error');
         }
+    }
+
+    /** Feature 6: 将当前规则集应用到所有暂存文件（仅内存修改，不写硬盘） */
+    async function applyRulesetToStagedFiles() {
+        if (!state.currentRuleset || !state.currentRuleset.name) {
+            showToast('请先选择一个规则集', 'error');
+            return;
+        }
+        var stagedFiles = [];
+        state.openFiles.forEach(function (ts, path) {
+            if (ts.editStatus === 'staged') stagedFiles.push({ path: path, ts: ts });
+        });
+        if (!stagedFiles.length) {
+            showToast('没有暂存文件可应用', 'info');
+            return;
+        }
+        var api = getApi();
+        if (!api || !api.apply_ruleset_to_content) { warnNoApi(); return; }
+        var appliedCount = 0;
+        var skippedCount = 0;
+        for (var i = 0; i < stagedFiles.length; i++) {
+            var sf = stagedFiles[i];
+            var content = sf.ts.editor.state.doc.toString();
+            try {
+                var res = await api.apply_ruleset_to_content(state.currentRuleset.name, sf.path, content);
+                if (res && res.success && res.rules_applied > 0) {
+                    var editor = sf.ts.editor;
+                    var docLen = editor.state.doc.length;
+                    editor.dispatch({ changes: { from: 0, to: docLen, insert: res.modified_content } });
+                    appliedCount++;
+                } else if (res && res.success && res.rules_applied === 0) {
+                    skippedCount++;
+                }
+            } catch (e) {
+                console.error('[rule-editor] apply to staged failed for', sf.path, e);
+            }
+        }
+        // 刷新所有受影响文件的 UI
+        for (var j = 0; j < stagedFiles.length; j++) {
+            updateFileEditStatus(stagedFiles[j].ts);
+        }
+        renderFileTabBar();
+        updateFileEditTabLabel();
+        if (state.activeTab === 'file-status') renderFileStatusPanel();
+        var msg = '已对 ' + appliedCount + ' 个文件应用规则集';
+        if (skippedCount > 0) msg += '（' + skippedCount + ' 个无匹配规则）';
+        showToast(msg, 'success');
     }
 
     /** selectField — store user's field selection into state and fill the simple-mode form targeting inputs. */
@@ -1832,16 +1935,16 @@
         if (editIdx != null && editIdx >= 0 && editIdx < state.currentRuleset.rules.length) {
             state.currentRuleset.rules[editIdx] = rule;
             state._editingRuleIndex = null;
+            state._rulesetDirty = true;
             var genBtn = $i('re-generate-rule-btn');
             if (genBtn) genBtn.textContent = '📋 生成规则JSON';
-            renderRulesPreview();
-            syncAdvancedFromRuleset();
+            refreshRulesetUI();
             await persistCurrentRuleset();
             showToast('已更新规则 #' + (editIdx + 1), 'success');
         } else {
             state.currentRuleset.rules.push(rule);
-            renderRulesPreview();
-            syncAdvancedFromRuleset();
+            state._rulesetDirty = true;
+            refreshRulesetUI();
             await persistCurrentRuleset();
             showToast('已添加规则到当前规则集', 'success');
         }
@@ -1856,9 +1959,21 @@
             if (result && result.success === false) {
                 throw new Error(result.error || '保存失败');
             }
+            state._rulesetDirty = false;
         } catch (e) {
             console.error('[rule-editor] persist failed:', e);
             throw e; // 重新抛出，让调用方知晓失败
+        }
+    }
+
+    async function _autoPersistRuleset() {
+        if (!state._rulesetDirty) return;
+        if (!state.currentRuleset || !state.currentRuleset.name) return;
+        try {
+            await persistCurrentRuleset();
+            state._rulesetDirty = false;
+        } catch (e) {
+            console.error('[rule-editor] auto-persist failed:', e);
         }
     }
 
@@ -1866,8 +1981,8 @@
         if (!state.currentRuleset || !Array.isArray(state.currentRuleset.rules)) return;
         if (index < 0 || index >= state.currentRuleset.rules.length) return;
         state.currentRuleset.rules.splice(index, 1);
-        renderRulesPreview();
-        syncAdvancedFromRuleset();
+        state._rulesetDirty = true;
+        refreshRulesetUI();
         persistCurrentRuleset();
     }
 
@@ -2369,8 +2484,8 @@
         if (!state.currentRuleset) { showToast('请先选择或新建一个规则集', 'error'); return; }
         if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
         for (let i = 0; i < rules.length; i++) state.currentRuleset.rules.push(rules[i]);
-        renderRulesPreview();
-        syncAdvancedFromRuleset();
+        state._rulesetDirty = true;
+        refreshRulesetUI();
         await persistCurrentRuleset();
         showToast('已添加 ' + rules.length + ' 条规则', 'success');
     }
@@ -2747,8 +2862,8 @@
         if (!state.currentRuleset) { showToast('请先选择或新建一个规则集', 'error'); return; }
         if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
         for (var i = 0; i < rules.length; i++) state.currentRuleset.rules.push(rules[i]);
-        renderRulesPreview();
-        syncAdvancedFromRuleset();
+        state._rulesetDirty = true;
+        refreshRulesetUI();
         await persistCurrentRuleset();
         showToast('已添加 ' + rules.length + ' 条规则', 'success');
     }
@@ -3008,6 +3123,8 @@
     }
 
     async function openSmartGenerationV3() {
+        // Feature 3: 打开智能生成前自动保存规则集
+        _autoPersistRuleset();
         var changes = collectChangesForSmartGen();
         var counts = getChangeCounts();
         closeSmartGenDialogV3();
@@ -3516,10 +3633,11 @@
         }
         if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
         for (var i = 0; i < rules.length; i++) state.currentRuleset.rules.push(rules[i]);
-        renderRulesPreview();
-        syncAdvancedFromRuleset();
+        state._rulesetDirty = true;
+        refreshRulesetUI();
         try {
             await persistCurrentRuleset();
+            switchMainTab('ruleset-edit');
             showToast('已添加 ' + rules.length + ' 条规则', 'success');
         } catch (e) {
             showToast('保存失败: ' + (e && e.message ? e.message : e), 'error');
@@ -3897,11 +4015,12 @@
 
         if (!Array.isArray(state.currentRuleset.rules)) state.currentRuleset.rules = [];
         state.currentRuleset.rules = existingRules;
+        state._rulesetDirty = true;
 
-        renderRulesPreview();
-        syncAdvancedFromRuleset();
+        refreshRulesetUI();
         await persistCurrentRuleset();
         closeSmartGenDialogV3();
+        switchMainTab('ruleset-edit');
         showToast('已应用 ' + appliedCount + ' 条规则' +
             (skippedCount > 0 ? '（跳过 ' + skippedCount + ' 条重复）' : ''), 'success');
     }
@@ -4246,6 +4365,80 @@
         renderFileList();
         updateFileEditTabLabel();
         showToast('已撤销所有更改', 'info');
+    }
+
+    // Feature 1: 三向状态转换函数
+
+    /** applied → staged: 将磁盘内容还原为基线，保留编辑器修改 */
+    async function revertAppliedToStaged(ts) {
+        if (!ts || ts.editStatus !== 'applied') return;
+        var api = getApi();
+        if (!api || !api.save_file_content) { warnNoApi(); return; }
+        try {
+            var res = await api.save_file_content(ts.path, ts.baselineContent);
+            if (res && res.success) {
+                ts.diskContent = ts.baselineContent;
+                updateFileEditStatus(ts);
+                renderFileTabBar();
+                updateFileEditTabLabel();
+                if (state.activeTab === 'file-status') renderFileStatusPanel();
+                showToast('已还原到暂存状态: ' + ts.path, 'info');
+            } else {
+                showToast('还原失败: ' + ((res && res.error) || ''), 'error');
+            }
+        } catch (e) {
+            showToast('还原异常: ' + (e && e.message ? e.message : e), 'error');
+        }
+    }
+
+    /** staged → clean: 放弃编辑器更改，恢复到硬盘内容 */
+    function revertStagedToOriginal(ts) {
+        if (!ts || ts.editStatus !== 'staged') return;
+        var editor = ts.editor;
+        if (!editor) return;
+        var docLen = editor.state.doc.length;
+        editor.dispatch({ changes: { from: 0, to: docLen, insert: ts.diskContent } });
+        ts.pendingChanges = [];
+        updateFileEditStatus(ts);
+        renderFileTabBar();
+        updateFileEditTabLabel();
+        if (state.activeTab === 'file-status') renderFileStatusPanel();
+        showToast('已放弃更改: ' + ts.path, 'info');
+    }
+
+    /** staged → applied: 保存编辑器内容到硬盘但不更新基线 */
+    async function saveStagedAsApplied(ts) {
+        if (!ts || ts.editStatus !== 'staged') return;
+        var path = ts.path;
+        var raw = ts.editor.state.doc.toString();
+        if (!raw.trim()) { showToast('编辑器内容为空', 'error'); return; }
+        try { JSON.parse(raw); }
+        catch (e) { showToast('JSON 格式无效: ' + e.message, 'error'); return; }
+        var api = getApi();
+        if (!api || !api.save_file_content) { warnNoApi(); return; }
+        try {
+            var res = await api.save_file_content(path, raw);
+            if (res && res.success) {
+                ts.diskContent = raw; // 更新 disk，不更新 baseline
+                try { ts.baselineParsed = JSON.parse(raw); } catch (e) { void e; }
+                ts.lastSavedAt = Date.now();
+                ts.pendingChanges = [];
+                if (state.fileCache.has(path)) {
+                    var cached = state.fileCache.get(path);
+                    cached.raw = raw;
+                    try { cached.parsed = JSON.parse(raw); } catch (e) { void e; }
+                }
+                updateFileEditStatus(ts);
+                renderFileTabBar();
+                updateFileEditTabLabel();
+                if (state.activeTab === 'file-status') renderFileStatusPanel();
+                showToast('已保存为应用状态: ' + path, 'success');
+            } else {
+                showToast('保存失败: ' + ((res && res.error) || ''), 'error');
+            }
+        } catch (e) {
+            showToast('保存异常: ' + (e && e.message ? e.message : e), 'error');
+        }
     }
 
     async function refreshEditedFile() {
@@ -4761,6 +4954,10 @@
             });
         });
     }
+
+    window.addEventListener('beforeunload', function () {
+        _autoPersistRuleset();
+    });
 
     document.addEventListener('DOMContentLoaded', init);
 })();

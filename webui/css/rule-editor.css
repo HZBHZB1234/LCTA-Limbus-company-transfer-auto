@@ -640,6 +640,16 @@ body {
     transform: translateY(1px);
 }
 
+/* Feature 3: 保存成功脉冲动画 */
+@keyframes re-saved-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.5); }
+    50% { box-shadow: 0 0 0 6px rgba(46, 204, 113, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+}
+.re-btn-saved {
+    animation: re-saved-pulse 0.5s ease-out;
+}
+
 .re-btn-sm {
     padding: 5px 10px;
     font-size: 12px;
@@ -903,19 +913,26 @@ body {
 }
 
 .re-edit-rule-btn {
-    padding: 2px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 3px 7px;
     font-size: 12px;
+    line-height: 1;
     border: 1px solid var(--color-border, #d4d4d4);
     border-radius: 4px;
     background: var(--color-bg-card, #ffffff);
-    cursor: pointer;
     color: var(--color-text-secondary, #7f8c8d);
+    cursor: pointer;
     transition: all 0.15s;
-    line-height: 1;
+    flex-shrink: 0;
+    font-family: inherit;
 }
 .re-edit-rule-btn:hover {
     border-color: var(--color-primary, #3498db);
     color: var(--color-primary, #3498db);
+    background: var(--color-bg-card, #ffffff);
 }
 
 .re-action-bar {
@@ -1640,6 +1657,43 @@ body.re-resizing-bottom {
 }
 .re-file-status-badge-applied {
     background: rgba(46, 204, 113, 0.12);
+    color: var(--color-success, #2ecc71);
+}
+
+/* Feature 1: 文件状态操作按钮 */
+.re-file-status-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+.re-file-status-item:hover .re-file-status-actions {
+    opacity: 1;
+}
+.re-file-status-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1;
+    border: 1px solid var(--color-border, #d4d4d4);
+    border-radius: 3px;
+    background: var(--color-bg-card, #ffffff);
+    color: var(--color-text-secondary, #7f8c8d);
+    cursor: pointer;
+    transition: all 0.12s;
+    flex-shrink: 0;
+}
+.re-file-status-action-btn:hover {
+    border-color: var(--color-primary, #3498db);
+    color: var(--color-primary, #3498db);
+}
+.re-file-status-action-btn.re-fsa-apply:hover {
+    border-color: var(--color-success, #2ecc71);
     color: var(--color-success, #2ecc71);
 }
 

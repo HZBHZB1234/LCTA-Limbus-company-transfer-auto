@@ -11,7 +11,8 @@ from typing import Optional
 from globalManagers.ConfigManager import ConfigManager
 from webutils.function_fancy import (
     load_fancy_folder_rules, save_ruleset_to_folder,
-    delete_ruleset_from_folder, _get_fancy_folder, _sanitize_filename
+    delete_ruleset_from_folder, _get_fancy_folder, _sanitize_filename,
+    exec_json
 )
 from webutils.rule_editor_constants import FILE_PREFIX_RULES, CATEGORY_FILE_PATTERNS
 
@@ -760,3 +761,38 @@ def save_file_content(relative_path: str, content: str) -> dict:
         return {"success": True, "path": str(full_path)}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def apply_ruleset_to_content(ruleset_name: str, file_path: str, content: str) -> dict:
+    """将规则集应用到单个文件的内存内容，返回修改后的内容（不写磁盘）"""
+    rulesets = load_fancy_folder_rules()
+    ruleset = None
+    for r in rulesets:
+        if r.get('name') == ruleset_name:
+            ruleset = r
+            break
+    if not ruleset:
+        return {"success": False, "error": "规则集不存在"}
+
+    rules = ruleset.get('rules', [])
+    matching_rules = []
+    for rule in rules:
+        aim_file = rule.get('aimFile', '')
+        if aim_file and re.search(aim_file, file_path):
+            matching_rules.append(rule)
+
+    if not matching_rules:
+        return {"success": True, "modified_content": content, "rules_applied": 0}
+
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"JSON 格式错误: {e}"}
+
+    try:
+        data = exec_json(data, matching_rules)
+    except Exception as e:
+        return {"success": False, "error": f"规则执行异常: {e}"}
+
+    modified = json.dumps(data, ensure_ascii=False, indent=4)
+    return {"success": True, "modified_content": modified, "rules_applied": len(matching_rules)}

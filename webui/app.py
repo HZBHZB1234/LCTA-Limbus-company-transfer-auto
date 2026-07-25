@@ -1525,7 +1525,7 @@ class RuleEditorAPI:
             create_ruleset, delete_ruleset,
             build_rule_from_form, validate_rule, analyze_changes,
             analyze_changes_v2, analyze_changes_v3,
-            save_file_content,
+            save_file_content, apply_ruleset_to_content,
         )
         self.get_lang_files = get_lang_files
         self.get_file_content = get_file_content
@@ -1541,6 +1541,7 @@ class RuleEditorAPI:
         self.analyze_changes_v2 = analyze_changes_v2
         self.analyze_changes_v3 = analyze_changes_v3
         self.save_file_content = save_file_content
+        self.apply_ruleset_to_content = apply_ruleset_to_content
 
     def get_config_value(self, key_path, default_value=None):
         """规则编辑器查询主应用配置（如 theme）"""

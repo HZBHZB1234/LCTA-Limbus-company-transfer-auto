@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-24 -->
+<!-- Last updated: 2026-07-25 -->
 
 ## Directory Overview
 
@@ -20,13 +20,15 @@
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core**: `LCTA_API` class (~1570 lines), bridges all backend features to JS via pywebview. Includes `RuleEditorAPI` class (the rule editor window's bridge with `get_config_value` for cross-window config queries), `open_rule_editor()` to spawn a second pywebview window with theme injection, `sync_theme_to_rule_editor()` for live theme push. `get_fancy_rulesets()` now loads user rules from `fancy/` folder via `load_fancy_folder_rules()`. Auto-migrates old `user_fancy` config on startup |
+| `app.py` | **Core**: `LCTA_API` class (~1570 lines), bridges all backend features to JS via pywebview. Includes `RuleEditorAPI` and `QuickEditorAPI` classes (editor windows' bridges with `get_config_value` for cross-window config queries), `open_rule_editor()` and `open_quick_editor()` to spawn secondary pywebview windows with theme injection, `sync_theme_to_rule_editor()` / `sync_theme_to_quick_editor()` for live theme push. `get_fancy_rulesets()` now loads user rules from `fancy/` folder via `load_fancy_folder_rules()`. Auto-migrates old `user_fancy` config on startup |
 | `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
 | `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器. Sidebar file browser + two main mode tabs (file-edit / ruleset-edit). File-edit tab: VSCode-style CodeMirror 6 editor with find/replace (Ctrl+F/H), match highlighting, dirty state indicator, status bar, change tracking, smart ruleset generation (V3: auto-merge + instant analysis, replaces 保守/进取 mode selection). Ruleset-edit tab: simple form + advanced JSON editors for ruleset CRUD. Theme syncs with main app window (light/dark/purple) |
+| `quick-editor.html` | Standalone pywebview page for the 简易翻译编辑器. Simpler than rule-editor: sidebar file browser (categorized, searchable) + CodeMirror 6 JSON editor + bottom change list panel. Changes recorded as `{file, path, old, new}` path-patch format, saved to fixed `fancy/_quick_edits.json`. No ruleset management or regex patterns — designed for lightweight users who just want to edit translations directly |
 | `css/base.css` | Base styling with 3 theme definitions (light/dark/purple) and CSS custom properties |
 | `css/components.css` | Component-specific styles: cards, buttons, forms, progress bars, modals |
 | `css/layout-extras.css` | Layout utilities, modals, drawers, scrollbars, responsive breakpoints. Now also loaded by rule-editor.html |
 | `css/rule-editor.css` | Rule editor styles: sidebar+main+bottom panel layout, VSCode-style find bar, data cards, smart-gen dialog (V1/V2/V3 with merge connectors), tiered scope options, editor status bar, match highlight decorations, toast notifications, per-theme editor colors |
+| `css/quick-editor.css` | Quick editor styles: 3-panel flex layout (sidebar+main+changes), category groups with collapsible headers, file item active/hover states, toolbar buttons, change list cards with old→new diff display, resize handles, batch replace dialog, per-theme color variables |
 | `js/core.js` | Core framework: API binding, event system, navigation |
 | `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip, FancyManager (saveAll now persists to `fancy/` folder via `pywebview.api.save_ruleset()`), `openRuleEditor()` global function |
 | `js/init.js` | Initialization and bootstrap: uses single `get_startup_data()` call; welcome content deferred via `_pendingWelcomeContent` for lazy section loading compatibility |
@@ -37,6 +39,7 @@
 | `js/speed.js` | Game speed control page logic |
 | `js/list-managers.js` | List/tab view management; constructors tolerate missing containers (lazy load compatible); container refs updated by `onSectionLoaded` |
 | `js/rule-editor.js` | Rule editor frontend logic: two main mode tabs (file-edit / ruleset-edit). File-edit: editable CodeMirror, JSON diff tracking, change list panel, batch replace, smart gen from file edits. Ruleset-edit: file browser (grouped by category, search with full-text), file content preview (structured data cards / read-only CodeMirror), simple mode form-driven rule builder, advanced mode editable CodeMirror with template loading and validation, smart generation dialog with L1-L4 tiered scope options |
+| `js/quick-editor.js` | Quick editor frontend logic (~800 lines): file browser with category grouping, CodeMirror 6 JSON editing, `diff_json`-based change tracking (`recordChanges()`), edit list rendering with per-item delete, search across files by keyword with drill-down, batch replace dialog, resize handle drag, theme sync with main window, Ctrl+S to record changes |
 | `sections/preload.js` | Lazy section loader: preloads only dashboard at startup, fetches others on first navigation via `loadSection()`; `onSectionLoaded()` callback re-runs per-section init (toggle funcs, list manager refs, select box values, DOM ref rebuilds) |
 | `sections/*.html` | 18 individual section HTML fragments (dashboard, translate, install, etc.) |
 | `guide/*.md` | 16 in-app user guide pages (one per feature tab) |
@@ -77,6 +80,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `Faust_fancy.py` | Faust rules | Faust character-specific fancy text rules |
 | `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`), ruleset CRUD (`get_ruleset_list`, `save_ruleset`, `create_ruleset`, `delete_ruleset`), rule building (`build_rule_from_form`, `validate_rule`), smart change analysis V1/V2/V3 (`analyze_changes`, `analyze_changes_v2`, `analyze_changes_v3` — V3 adds auto-merge by (old_val,new_val,field_path) key + merge candidate detection), 5-dimension scoring (`_score_group`), file saving (`save_file_content` with JSON validation + backup) |
 | `rule_editor_constants.py` | Rule editor shared data | Single-source-of-truth for `FILE_PREFIX_RULES`, `CATEGORY_FILE_PATTERNS`, `COMMON_REPLACEMENTS`, `TEMPLATES`. Imported by `function_rule_editor.py` and `app.py` (RuleEditorAPI). JS fetches via `get_editor_constants()` API with hardcoded fallback. |
+| `function_quick_editor.py` | Quick editor backend | Path-patch edit tracking and application. `diff_json()` (deep JSON diff → `{path, old, new}` list), `_set_value_by_path()` (dot-separated JSON path navigation), `load/save/apply_quick_edits()` (persist to `fancy/_quick_edits.json`, apply edits to game files without .bak). Reuses `_get_lang_dir`, `get_lang_files`, `search_files`, etc. from `function_rule_editor.py` |
 | `test.py` | Debug utilities | Internal testing/debug helpers |
 | `debug_environ_test.py` | Environment diag | Environment diagnostics on startup failure |
 

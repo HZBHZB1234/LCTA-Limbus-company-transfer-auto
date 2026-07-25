@@ -1,0 +1,660 @@
+/* 简易翻译编辑器样式 */
+/* 使用 base.css 中定义的 CSS 自定义属性，支持 light/dark/purple 三种主题 */
+
+/* ──── 整体布局 ──── */
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    display: flex;
+    flex-direction: column;
+}
+
+.qe-container {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+/* ──── 侧边栏 ──── */
+.qe-sidebar {
+    width: 280px;
+    min-width: 200px;
+    max-width: 450px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-bg-secondary);
+    border-right: 1px solid var(--color-border);
+}
+
+.qe-sidebar-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.qe-sidebar-header h3 {
+    margin: 0;
+    font-size: 14px;
+    color: var(--color-text-primary);
+}
+
+.qe-sidebar-header h3 i {
+    margin-right: 6px;
+    color: var(--color-primary);
+}
+
+/* ──── 通用按钮 ──── */
+.qe-btn {
+    padding: 5px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg-input);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.qe-btn:hover {
+    background: var(--color-bg-primary);
+    border-color: var(--color-border-dark);
+}
+
+.qe-btn i {
+    margin-right: 4px;
+}
+
+.qe-btn-primary {
+    background: var(--color-primary) !important;
+    border-color: var(--color-primary) !important;
+    color: #fff !important;
+}
+
+.qe-btn-primary:hover {
+    background: var(--color-primary-dark) !important;
+    border-color: var(--color-primary-dark) !important;
+}
+
+.qe-btn-success {
+    background: var(--color-success) !important;
+    border-color: var(--color-success) !important;
+    color: #fff !important;
+}
+
+.qe-btn-danger {
+    background: var(--color-danger) !important;
+    border-color: var(--color-danger) !important;
+    color: #fff !important;
+}
+
+.qe-btn-accent {
+    background: var(--color-warning) !important;
+    border-color: var(--color-warning) !important;
+    color: #fff !important;
+}
+
+/* 搜索栏中的按钮 */
+.qe-search-bar .qe-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+/* ──── 搜索栏 ──── */
+.qe-search-bar {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.qe-search-bar input[type="text"] {
+    flex: 1 1 100%;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg-input);
+    color: var(--color-text-primary);
+    font-size: 12px;
+    outline: none;
+}
+
+.qe-search-bar input[type="text"]:focus {
+    border-color: var(--color-primary);
+}
+
+.qe-search-hint {
+    flex: 1 1 100%;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+/* 标签栏 */
+.qe-file-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0 4px;
+    background: var(--color-bg-primary);
+}
+
+.qe-tab {
+    flex: 1;
+    padding: 8px 4px;
+    border: none;
+    background: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    text-align: center;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.qe-tab:hover {
+    color: var(--color-text-primary);
+}
+
+.qe-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 600;
+}
+
+/* 文件列表 */
+.qe-file-list,
+.qe-search-results {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.qe-file-list::-webkit-scrollbar,
+.qe-search-results::-webkit-scrollbar {
+    width: 6px;
+}
+
+.qe-file-list::-webkit-scrollbar-thumb,
+.qe-search-results::-webkit-scrollbar-thumb {
+    background: var(--color-border-dark);
+    border-radius: 3px;
+}
+
+/* 分类组 */
+.qe-category-group {
+    margin-bottom: 2px;
+}
+
+.qe-category-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    user-select: none;
+    transition: background 0.1s;
+}
+
+.qe-category-header:hover {
+    background: var(--color-bg-primary);
+}
+
+.qe-category-header .qe-category-icon {
+    margin-right: 6px;
+    font-size: 10px;
+    transition: transform 0.15s;
+}
+
+.qe-category-header .qe-category-icon.collapsed {
+    transform: rotate(-90deg);
+}
+
+.qe-category-header .qe-category-count {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    opacity: 0.7;
+}
+
+.qe-category-files {
+    overflow: hidden;
+}
+
+.qe-category-files.collapsed {
+    display: none;
+}
+
+/* 文件项 */
+.qe-file-item {
+    display: flex;
+    align-items: center;
+    padding: 5px 12px 5px 28px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--color-text-primary);
+    transition: background 0.1s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.qe-file-item:hover {
+    background: var(--color-bg-primary);
+}
+
+.qe-file-item.active {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.qe-file-item .qe-file-icon {
+    margin-right: 6px;
+    font-size: 11px;
+    flex-shrink: 0;
+    color: var(--color-primary);
+}
+
+.qe-file-item.active .qe-file-icon {
+    color: #fff;
+}
+
+.qe-file-item .qe-file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 搜索结果 */
+.qe-search-result-category {
+    margin-bottom: 2px;
+}
+
+.qe-search-result-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.qe-search-result-header:hover {
+    background: var(--color-bg-primary);
+}
+
+.qe-search-result-file {
+    padding: 5px 12px 5px 28px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.qe-search-result-file:hover {
+    background: var(--color-bg-primary);
+}
+
+.qe-search-result-match-count {
+    font-size: 11px;
+    color: var(--color-primary);
+    margin-left: 4px;
+}
+
+/* ──── 拖拽手柄 ──── */
+.qe-resize-handle {
+    flex-shrink: 0;
+    background: transparent;
+    transition: background 0.15s;
+    z-index: 10;
+}
+
+.qe-resize-sidebar {
+    width: 4px;
+    cursor: col-resize;
+}
+
+.qe-resize-sidebar:hover,
+.qe-resize-sidebar.active {
+    background: var(--color-primary);
+}
+
+.qe-resize-bottom {
+    height: 4px;
+    cursor: row-resize;
+}
+
+.qe-resize-bottom:hover,
+.qe-resize-bottom.active {
+    background: var(--color-primary);
+}
+
+/* ──── 主区域 ──── */
+.qe-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 工具栏 */
+.qe-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+}
+
+/* 编辑器区域 */
+.qe-editor-area {
+    flex: 1;
+    min-height: 0;
+    border-bottom: 1px solid var(--color-border);
+    overflow: hidden;
+}
+
+/* CodeMirror 6 容器 */
+.qe-editor-area .cm-editor {
+    height: 100%;
+}
+
+.qe-editor-area .cm-editor .cm-scroller {
+    overflow: auto;
+}
+
+/* 空状态 */
+.qe-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    user-select: none;
+}
+
+.qe-empty-state i {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.3;
+}
+
+/* 状态栏 */
+.qe-statusbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 10px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-secondary);
+    border-top: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.qe-status-separator {
+    color: var(--color-border-dark);
+}
+
+.qe-status-spacer {
+    flex: 1;
+}
+
+.qe-status-modified {
+    color: var(--color-warning);
+    font-weight: 600;
+}
+
+.qe-status-saved {
+    color: var(--color-success);
+}
+
+/* ──── 变更面板 ──── */
+.qe-changes-panel {
+    border-top: 2px solid var(--color-border-dark);
+    background: var(--color-bg-secondary);
+    max-height: 200px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.qe-changes-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.qe-changes-header i {
+    color: var(--color-primary);
+}
+
+.qe-change-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.qe-change-count:empty {
+    display: none;
+}
+
+.qe-changes-header .qe-spacer {
+    flex: 1;
+}
+
+.qe-changes-header .qe-btn-sm {
+    padding: 2px 8px;
+    font-size: 11px;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    background: var(--color-bg-input);
+    color: var(--color-text-primary);
+    cursor: pointer;
+}
+
+.qe-changes-header .qe-btn-sm:hover {
+    background: var(--color-bg-primary);
+}
+
+.qe-change-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.qe-change-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--color-border-light);
+    font-size: 12px;
+}
+
+.qe-change-item:hover {
+    background: var(--color-bg-primary);
+}
+
+.qe-change-index {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--color-bg-primary);
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.qe-change-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.qe-change-file {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    word-break: break-all;
+}
+
+.qe-change-path {
+    color: var(--color-primary);
+    font-size: 11px;
+    font-family: "Consolas", "Courier New", monospace;
+    word-break: break-all;
+    margin-top: 1px;
+}
+
+.qe-change-values {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 11px;
+}
+
+.qe-change-old {
+    color: var(--color-danger);
+    text-decoration: line-through;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+.qe-change-new {
+    color: var(--color-success);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+.qe-change-arrow {
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+}
+
+.qe-change-delete {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 14px;
+    transition: color 0.1s, background 0.1s;
+}
+
+.qe-change-delete:hover {
+    color: var(--color-danger);
+    background: var(--color-bg-primary);
+}
+
+/* ──── 搜索对话框 ──── */
+.qe-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.qe-dialog {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 20px;
+    min-width: 400px;
+    max-width: 600px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.qe-dialog h3 {
+    margin: 0 0 12px;
+    font-size: 15px;
+}
+
+.qe-dialog label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+.qe-dialog input[type="text"],
+.qe-dialog textarea {
+    width: 100%;
+    padding: 6px 8px;
+    margin-bottom: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg-input);
+    color: var(--color-text-primary);
+    font-size: 12px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.qe-dialog textarea {
+    height: 150px;
+    resize: vertical;
+    font-family: "Consolas", "Courier New", monospace;
+}
+
+.qe-dialog .qe-dialog-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
+.qe-dialog .qe-dialog-buttons button {
+    padding: 6px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    background: var(--color-bg-input);
+    color: var(--color-text-primary);
+}
+
+.qe-dialog .qe-dialog-buttons button.qe-btn-primary {
+    border-color: var(--color-primary);
+}

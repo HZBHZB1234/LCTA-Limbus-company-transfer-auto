@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LCTA - 简易翻译编辑器</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/quick-editor.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module">
+        import {EditorView, basicSetup} from "https://esm.sh/codemirror@6.0.1";
+        import {keymap} from "https://esm.sh/@codemirror/view@6.0.1";
+        import {json} from "https://esm.sh/@codemirror/lang-json@6.0.1";
+        import {openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery, SearchQuery} from "https://esm.sh/@codemirror/search@6.0.1";
+        window.CodeMirror = {EditorView, basicSetup, keymap, json, openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery, SearchQuery};
+    </script>
+</head>
+<body>
+<div class="qe-container">
+    <!-- ==== 侧边栏 ==== -->
+    <div class="qe-sidebar" id="qe-sidebar">
+        <div class="qe-sidebar-header">
+            <h3><i class="fas fa-folder-open"></i> 文件浏览器</h3>
+        </div>
+        <div class="qe-search-bar">
+            <input type="text" id="qe-file-search" placeholder="搜索文件名或内容..." autocomplete="off">
+            <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--color-text-secondary);">
+                <input type="checkbox" id="qe-case-sensitive"> 区分大小写
+            </label>
+            <button id="qe-search-btn" class="qe-btn" style="padding:4px 8px;font-size:11px;">
+                <i class="fas fa-search"></i> 搜索
+            </button>
+            <button id="qe-search-clear-btn" class="qe-btn" style="padding:4px 8px;font-size:11px;">
+                <i class="fas fa-times"></i> 清除
+            </button>
+            <div class="qe-search-hint" id="qe-search-hint" style="display:none;"></div>
+        </div>
+        <div class="qe-file-tabs">
+            <button class="qe-tab active" data-tab="file-list">文件列表</button>
+            <button class="qe-tab" data-tab="search-results">搜索结果</button>
+        </div>
+        <div class="qe-file-list" id="qe-file-list">
+            <div class="qe-empty-state" style="font-size:12px;padding:20px;">
+                <i class="fas fa-spinner fa-pulse"></i>
+                加载中...
+            </div>
+        </div>
+        <div class="qe-search-results" id="qe-search-results" style="display:none;"></div>
+    </div>
+
+    <!-- ==== 拖拽手柄 ==== -->
+    <div class="qe-resize-handle qe-resize-sidebar" id="qe-resize-sidebar"></div>
+
+    <!-- ==== 主区域 ==== -->
+    <div class="qe-main">
+        <!-- 工具栏 -->
+        <div class="qe-toolbar">
+            <button id="qe-record-btn" class="qe-btn qe-btn-primary" title="记录当前修改到规则集">
+                <i class="fas fa-save"></i> 记录修改
+            </button>
+            <button id="qe-apply-btn" class="qe-btn qe-btn-success" title="应用所有变更到游戏文件">
+                <i class="fas fa-play"></i> 应用到游戏
+            </button>
+            <button id="qe-revert-btn" class="qe-btn" title="撤销当前文件的所有更改">
+                <i class="fas fa-undo"></i> 撤销
+            </button>
+            <button id="qe-refresh-btn" class="qe-btn" title="刷新文件列表">
+                <i class="fas fa-sync"></i> 刷新
+            </button>
+            <button id="qe-format-btn" class="qe-btn" title="格式化 JSON">
+                <i class="fas fa-indent"></i> 格式化
+            </button>
+            <button id="qe-replace-btn" class="qe-btn" title="批量查找替换">
+                <i class="fas fa-exchange-alt"></i> 批量替换
+            </button>
+            <span style="flex:1;"></span>
+            <span id="qe-current-file-label" style="font-size:11px;color:var(--color-text-secondary);align-self:center;"></span>
+        </div>
+
+        <!-- 编辑器 -->
+        <div class="qe-editor-area" id="qe-editor-area">
+            <div class="qe-empty-state" id="qe-empty-state">
+                <i class="fas fa-file-alt"></i>
+                双击左侧文件以在编辑器中打开
+            </div>
+        </div>
+
+        <!-- 状态栏 -->
+        <div class="qe-statusbar">
+            <span id="qe-status-edit">未修改</span>
+            <span class="qe-status-separator">|</span>
+            <span id="qe-status-cursor">行 1, 列 1</span>
+            <span class="qe-status-spacer"></span>
+            <span id="qe-status-file"></span>
+            <span class="qe-status-separator">|</span>
+            <span>UTF-8</span>
+        </div>
+    </div>
+</div>
+
+<!-- ==== 拖拽手柄（底部） ==== -->
+<div class="qe-resize-handle qe-resize-bottom" id="qe-resize-bottom"></div>
+
+<!-- ==== 变更面板 ==== -->
+<div class="qe-changes-panel" id="qe-changes-panel">
+    <div class="qe-changes-header">
+        <i class="fas fa-list"></i> 待处理变更
+        <span class="qe-change-count" id="qe-change-count">0</span>
+        <span class="qe-spacer"></span>
+        <button class="qe-btn-sm qe-btn-success" id="qe-changes-apply-btn">
+            <i class="fas fa-play"></i> 应用
+        </button>
+        <button class="qe-btn-sm qe-btn-danger" id="qe-changes-clear-btn">
+            <i class="fas fa-trash"></i> 清空
+        </button>
+    </div>
+    <div class="qe-change-list" id="qe-change-list">
+        <div style="padding:16px;text-align:center;color:var(--color-text-secondary);font-size:12px;">
+            暂无变更记录
+        </div>
+    </div>
+</div>
+
+<script src="js/quick-editor.js"></script>
+</body>
+</html>

@@ -1515,6 +1515,46 @@ class LCTA_API():
                 """)
             except Exception:
                 pass
+        # 同时同步到简易编辑器窗口
+        self.sync_theme_to_quick_editor(theme)
+
+    def open_quick_editor(self):
+        """打开简易翻译编辑器窗口"""
+        html_path = os.path.join(os.getenv('path_'), "webui/quick-editor.html")
+        current_theme = ConfigManager().get('theme', 'light')
+        window = webview.create_window(
+            "LCTA - 简易翻译编辑器", url=html_path,
+            width=1100, height=700, resizable=True, text_select=True,
+            js_api=QuickEditorAPI()
+        )
+        try:
+            window.evaluate_js(f"""
+                (function() {{
+                    if (document.body) {{
+                        document.body.className = 'theme-{current_theme}';
+                        document.body.setAttribute('data-injected-theme', '{current_theme}');
+                    }}
+                }})();
+            """)
+        except Exception:
+            pass
+        if not hasattr(self, '_quick_editor_windows'):
+            self._quick_editor_windows = []
+        self._quick_editor_windows.append(window)
+
+    def sync_theme_to_quick_editor(self, theme):
+        """推送主题变更到所有打开的简易编辑器窗口"""
+        if not hasattr(self, '_quick_editor_windows'):
+            return
+        for w in self._quick_editor_windows:
+            try:
+                w.evaluate_js(f"""
+                    if (typeof applyTheme === 'function') {{
+                        applyTheme('{theme}');
+                    }}
+                """)
+            except Exception:
+                pass
 
 
 class RuleEditorAPI:
@@ -1582,6 +1622,34 @@ class RuleEditorAPI:
             "common_replacements": COMMON_REPLACEMENTS,
             "templates": TEMPLATES,
         }
+
+
+class QuickEditorAPI:
+    """简易翻译编辑器的 JS-API 桥接"""
+
+    def __init__(self):
+        from webutils.function_rule_editor import (
+            get_lang_files, get_file_content, search_files,
+            save_file_content, get_category,
+        )
+        from webutils.function_quick_editor import (
+            diff_json, load_quick_edits, save_quick_edits,
+            apply_quick_edits,
+        )
+        self.get_lang_files = get_lang_files
+        self.get_file_content = get_file_content
+        self.search_files = search_files
+        self.save_file_content = save_file_content
+        self.get_category = get_category
+        self.diff_json = diff_json
+        self.load_quick_edits = load_quick_edits
+        self.save_quick_edits = save_quick_edits
+        self.apply_quick_edits = apply_quick_edits
+
+    def get_config_value(self, key_path, default_value=None):
+        """查询主应用配置（如 theme）"""
+        return ConfigManager().get(key_path, default_value)
+
 
 def main():
     # 获取HTML文件的绝对路径

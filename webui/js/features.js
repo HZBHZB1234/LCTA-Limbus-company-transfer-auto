@@ -1404,6 +1404,11 @@ function openRuleEditor() {
     pywebview.api.open_rule_editor();
 }
 
+// 打开简易翻译编辑器独立窗口
+function openQuickEditor() {
+    pywebview.api.open_quick_editor();
+}
+
 // 设置拖拽文件回调函数（可根据需要自定义）
 function setupDragDropCallback() {
     if (!dragDropManager) return;

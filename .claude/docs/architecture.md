@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-07-24 -->
+<!-- Last updated: 2026-07-25 -->
 
 ## Project Purpose
 
@@ -79,8 +79,9 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 
 | Interface | File | Role |
 |-----------|------|------|
-| `LCTA_API` | `webui/app.py` | Central hub: ~1570 lines, bridges all backend features to JS frontend. Includes `get_startup_data()` for consolidated frontend init, `open_rule_editor()` to spawn the rule editor window with theme injection, `sync_theme_to_rule_editor()` for live cross-window theme sync, and redesigned drag-drop file handling |
+| `LCTA_API` | `webui/app.py` | Central hub: ~1570 lines, bridges all backend features to JS frontend. Includes `get_startup_data()` for consolidated frontend init, `open_rule_editor()` / `open_quick_editor()` to spawn editor windows with theme injection, `sync_theme_to_rule_editor()` for live cross-window theme sync, and redesigned drag-drop file handling |
 | `RuleEditorAPI` | `webui/app.py` | Secondary pywebview bridge for the rule editor window: wraps `webutils/function_rule_editor.py` methods (file browser, rules CRUD, rule building, validation, smart analysis), plus `get_config_value()` for cross-window config queries (e.g. theme). Instantiated as `js_api=RuleEditorAPI()` in a separate `webview.create_window()` call |
+| `QuickEditorAPI` | `webui/app.py` | Pywebview bridge for the quick editor window: wraps `webutils/function_quick_editor.py` methods (diff_json, load/save/apply_quick_edits) plus shared methods from `function_rule_editor.py` (file browser, search). Instantiated as `js_api=QuickEditorAPI()` in `open_quick_editor()` |
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |
 | `TranslationPipeline` | `translateFunc/pipeline.py` | Orchestrates the 6-stage LLM translation pipeline |
 | `LogManager` | `globalManagers/LogManager.py` | Singleton logger: file rotation, console, webview modal callbacks |

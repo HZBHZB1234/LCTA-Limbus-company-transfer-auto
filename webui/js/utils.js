@@ -532,7 +532,7 @@ async function goAndShow(name) {
     const targetButton = document.getElementById(`${name}-btn`);
     if (!targetButton) return;
     await loadSection(name);
-    targetButton.style.display = 'block';
+    targetButton.style.display = '';
     targetButton.click();
     // 如果切换到首页，刷新仪表盘
     if (name === 'dashboard') {

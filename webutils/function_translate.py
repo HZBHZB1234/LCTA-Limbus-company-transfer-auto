@@ -46,6 +46,10 @@ def translate_main(
             dump_dir = Path(os.getcwd()) / "logs" / "translation_dump"
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             config.dump_path = dump_dir / f"{ts}.jsonl"
+            _log_manager.log(
+                f"翻译诊断 dump 已启用，将记录完整提示词、AI 响应和异常详情: "
+                f"{config.dump_path}"
+            )
 
         # 3. 解析翻译器 API 设置
         translator_text = config.translator_name
@@ -88,8 +92,8 @@ def translate_main(
             if log_src.exists():
                 _shutil.copy2(log_src, log_dst)
                 _log_manager.log_modal_process(f"处理日志已保存: {log_dst.name}", modal_id)
-        except Exception:
-            pass  # 日志持久化失败不应中断主流程
+        except Exception as exc:
+            _log_manager.log_error(exc)
 
         # 8b. 上报结果
         _log_manager.log_modal_process(

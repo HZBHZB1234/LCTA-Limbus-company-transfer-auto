@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-24 -->
+<!-- Last updated: 2026-07-27 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -71,6 +71,21 @@ Each JSONL line contains: `timestamp`, `file_name`, `text_blocks` (actual input)
 Log simplification: verbose data (raw LLM responses) is removed from `logs/app.log` and stored only in the dump JSONL file.
 
 Files involved: `webutils/function_translate.py`, `translateFunc/recorder.py`, `translateFunc/pipeline.py`, `translateFunc/processor.py`, `translateFunc/config.py`
+
+### 3c. Translation Diagnostic Viewer
+
+```
+Translation page: user clicks "查看翻译日志"
+  → webui/app.py                           open_translation_log_viewer()
+  → webui/translation-log-viewer.html      standalone pywebview window
+  → user chooses one .jsonl in native file dialog
+  → webui/js/translation-log-viewer.js     filters, pagination, detail, export
+  → webui/app.py                           TranslationLogViewerAPI
+  → webutils/function_translation_logs.py  v2 JSONL index/query/read/export
+  → selected JSONL file                    read-only source
+```
+
+The viewer does not scan directories or provide content search. It only accepts the file explicitly selected by the user and requires current `schema_version: 2` JSONL records. Lists use cached summaries and byte offsets; full prompts, AI responses, HTTP details, and exception chains are loaded only when a record is opened.
 
 ---
 

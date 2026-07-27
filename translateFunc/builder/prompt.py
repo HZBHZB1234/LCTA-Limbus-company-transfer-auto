@@ -41,6 +41,9 @@ class PromptTag(Enum):
 class PromptFactory:
     """构建分阶段提示词，使用 XML 标签，按 FileType 动态组装。"""
 
+    def __init__(self):
+        self._last_parse_errors: list[dict] = []
+
     # ---- v2 提示词架构：数据驱动的规则 + 结构分离 ----
 
     _BASE_ROLE = (
@@ -641,11 +644,23 @@ class PromptFactory:
         Returns:
             解析后的 dict 列表；所有尝试失败返回空列表
         """
+        self._last_parse_errors = []
         if prompt_format in ("xml_json", "json_json"):
             data = self._try_parse_json(text)
             if data is None:
                 data = self._repair_json_response(text)
             if data is None:
+                import json as _json
+                try:
+                    _json.loads(text)
+                except _json.JSONDecodeError as exc:
+                    self._last_parse_errors.append({
+                        "type": type(exc).__name__,
+                        "message": exc.msg,
+                        "line": exc.lineno,
+                        "column": exc.colno,
+                        "position": exc.pos,
+                    })
                 import logging
                 _logger.warning(
                     f"parse_response JSON 全部修复失败 "
@@ -653,18 +668,34 @@ class PromptFactory:
                     f"原始文本 (截断500字符): {text[:500]}"
                 )
                 return []
-            if stage == 0:
-                return data.get("disambiguations", [])
-            elif stage == 1:
-                return data.get("translations", [])
-            elif stage == 2:
-                return data.get("checked_translations", [])
-            return []
+            expected_keys = {
+                0: "disambiguations",
+                1: "translations",
+                2: "checked_translations",
+            }
+            expected_key = expected_keys.get(stage)
+            result = data.get(expected_key, []) if expected_key else []
+            if expected_key and not result:
+                self._last_parse_errors.append({
+                    "type": "MissingOrEmptyField",
+                    "message": f"响应缺少或清空了字段 {expected_key}",
+                    "available_keys": list(data.keys()) if isinstance(data, dict) else [],
+                })
+            return result
         elif prompt_format == "xml_xml":
             results = self._try_parse_xml(text, stage)
             if results is None:
                 results = self._repair_xml_response(text, stage)
             if results is None:
+                import xml.etree.ElementTree as _et
+                try:
+                    _et.fromstring(text)
+                except _et.ParseError as exc:
+                    self._last_parse_errors.append({
+                        "type": type(exc).__name__,
+                        "message": str(exc),
+                        "position": getattr(exc, "position", None),
+                    })
                 import logging
                 _logger.warning(
                     f"parse_response XML 全部修复失败 "
@@ -673,7 +704,17 @@ class PromptFactory:
                 )
                 return []
             return results
+        self._last_parse_errors.append({
+            "type": "UnsupportedPromptFormat",
+            "message": f"不支持的响应格式: {prompt_format}",
+        })
         return []
+
+    def consume_parse_errors(self) -> list[dict]:
+        """返回并清空最近一次 parse_response 产生的解析诊断。"""
+        errors = list(self._last_parse_errors)
+        self._last_parse_errors = []
+        return errors
 
     # ========== 解析辅助：直接尝试 ==========
 

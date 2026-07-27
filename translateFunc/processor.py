@@ -8,9 +8,11 @@ from copy import deepcopy
 import json
 import logging
 import shutil
+import sys
 import threading
 import time
 import traceback
+import uuid
 
 _logger = logging.getLogger("LCTA")  # 与 LogManager 一致的 logger，确保日志正确路由
 
@@ -23,9 +25,15 @@ from translateFunc.builder.stages import StageStrategy
 from translateFunc.proper import flatten_dict_enhanced, update_dict_with_flattened
 from translateFunc.validator import RuleBasedValidator
 from translateFunc.recorder import TranslationRecorder
+from translateFunc.diagnostics import (
+    HttpResponseObserver,
+    safe_json_value,
+    serialize_exception,
+)
 
 EMPTY_DATA = [{"dataList": []}, {}, []]
 EMPTY_DATA_LIST = [[], [{}]]
+SUCCESS_CALL_STATUSES = {"success", "recovered"}
 
 # 保护 processing_log.jsonl 的并发写入
 _processing_log_lock = threading.Lock()
@@ -55,6 +63,8 @@ class FileProcessor:
         self._api_calls: list[dict] = []
         self._input_text_blocks: list[dict] = []
         self._input_reference: dict = {}
+        self._last_failed_call: dict | None = None
+        self._http_observer = HttpResponseObserver(translator)
 
         # 内部状态（在 process() 中填充）
         self.kr_json: dict = {}
@@ -203,29 +213,47 @@ class FileProcessor:
             return outcome
         finally:
             if self._recorder is not None:
-                self._recorder.write_record({
-                    "timestamp": datetime.now().isoformat(),
-                    "file_name": self.file_name,
-                    "text_blocks": self._input_text_blocks,
-                    "reference": self._input_reference,
-                    "api_calls": self._api_calls,
-                    "outcome": outcome.result.name if outcome else "INTERNAL_ERROR",
-                    "elapsed_seconds": round(time.perf_counter() - start_time, 3),
-                })
+                active_exception = sys.exc_info()[1]
+                try:
+                    self._recorder.write_record({
+                        "schema_version": 2,
+                        "timestamp": datetime.now().isoformat(),
+                        "file_name": self.file_name,
+                        "text_blocks": self._input_text_blocks,
+                        "reference": self._input_reference,
+                        "api_calls": self._api_calls,
+                        "outcome": outcome.result.name if outcome else "INTERNAL_ERROR",
+                        "outcome_extra": outcome.extra if outcome else None,
+                        "exception": serialize_exception(active_exception),
+                        "call_summary": {
+                            "total": len(self._api_calls),
+                            "failed": sum(
+                                1 for call in self._api_calls
+                                if call.get("status") not in SUCCESS_CALL_STATUSES
+                            ),
+                        },
+                        "elapsed_seconds": round(time.perf_counter() - start_time, 3),
+                    })
+                except Exception:
+                    _logger.exception(
+                        f"[{self.file_name}] 翻译 dump 写入失败: {self._recorder.file_path}"
+                    )
 
     def _write_processing_log(self, outcome: ProcessOutcome, start_time: float) -> None:
         """将单文件处理结果追加写入 JSONL 日志文件。"""
         try:
             elapsed = time.perf_counter() - start_time
-            extra = outcome.extra or {}
+            extra = dict(outcome.extra or {})
             extra["elapsed_seconds"] = round(elapsed, 3)
+            if self._last_failed_call is not None:
+                extra.setdefault("last_failed_call", self._last_failed_call)
             outcome.extra = extra
 
             log_entry = {
                 "file_name": outcome.file_name,
                 "result": outcome.result.name,
                 "elapsed_seconds": extra["elapsed_seconds"],
-                "extra": {k: v for k, v in extra.items() if k != "traceback"},  # traceback 不写入 JSONL
+                "extra": safe_json_value(extra),
             }
             log_dir = self.path_config._PathConfig.target_path
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -235,7 +263,233 @@ class FileProcessor:
                 with open(log_path, "a", encoding="utf-8") as f:
                     f.write(line)
         except Exception:
-            _logger.warning(f"处理日志写入失败 ({outcome.file_name})，但不影响主流程")
+            _logger.exception(f"处理日志写入失败 ({outcome.file_name})，但不影响主流程")
+
+    def _call_ai(
+        self,
+        *,
+        stage: str,
+        system_prompt: str,
+        user_prompt: str,
+        response_format: str,
+        timeout: int,
+        parser=None,
+        parse_error_provider=None,
+        prompt_format: str = "",
+        part: int | None = None,
+        attempt: int | None = None,
+        metadata: dict | None = None,
+    ) -> tuple[object, object, dict]:
+        """执行一次 AI 调用，并完整记录请求、响应、HTTP 尝试和异常链。"""
+        started_at = datetime.now()
+        started_perf = time.perf_counter()
+        record = {
+            "call_id": uuid.uuid4().hex[:16],
+            "stage": stage,
+            "part": part,
+            "attempt": attempt,
+            "format": prompt_format,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "response_format": response_format,
+            "timeout": timeout,
+            "raw_response": None,
+            "parsed_response": None,
+            "parse_errors": [],
+            "validation_errors": [],
+            "http_attempts": [],
+            "exception": None,
+            "status": "internal_error",
+            "failure_kind": None,
+            "metadata": metadata or {},
+            "started_at": started_at.isoformat(),
+        }
+        raw_response = None
+        parsed_response = None
+        caught_exception = None
+        self._http_observer.begin()
+
+        try:
+            raw_response = self._translator.translate(user_prompt, timeout=timeout)
+            record["raw_response"] = str(raw_response)
+            parsed_response = parser(raw_response) if parser is not None else raw_response
+            record["parsed_response"] = parsed_response
+            if parser is not None and not parsed_response:
+                record["status"] = "parse_error"
+                record["failure_kind"] = "empty_parsed_response"
+                parse_errors = (
+                    parse_error_provider()
+                    if parse_error_provider is not None else []
+                )
+                record["parse_errors"] = parse_errors or [{
+                    "type": "EmptyParseResult",
+                    "message": "解析结果为空或响应格式无效",
+                }]
+            else:
+                record["status"] = "success"
+            return raw_response, parsed_response, record
+        except Exception as exc:
+            caught_exception = exc
+            record["exception"] = serialize_exception(exc)
+            if raw_response is None:
+                record["status"] = "api_error"
+                record["failure_kind"] = "translator_exception"
+            else:
+                record["status"] = "parse_error"
+                record["failure_kind"] = "parser_exception"
+                parse_errors = (
+                    parse_error_provider()
+                    if parse_error_provider is not None else []
+                )
+                record["parse_errors"] = parse_errors or [{
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                }]
+            raise
+        finally:
+            record["http_attempts"] = self._http_observer.finish()
+            record["finished_at"] = datetime.now().isoformat()
+            record["elapsed_seconds"] = round(time.perf_counter() - started_perf, 3)
+            if self._recorder is not None:
+                self._api_calls.append(record)
+            if record["status"] not in SUCCESS_CALL_STATUSES:
+                self._remember_failed_call(record)
+                self._log_call_failure(record, caught_exception)
+
+    def _remember_failed_call(self, record: dict) -> None:
+        """保存适合 processing_log 的最近失败调用摘要。"""
+        http_attempts = record.get("http_attempts") or []
+        last_http = http_attempts[-1] if http_attempts else {}
+        raw_response = record.get("raw_response") or last_http.get("body") or ""
+        self._last_failed_call = safe_json_value({
+            "call_id": record.get("call_id"),
+            "stage": record.get("stage"),
+            "part": record.get("part"),
+            "attempt": record.get("attempt"),
+            "format": record.get("format"),
+            "status": record.get("status"),
+            "failure_kind": record.get("failure_kind"),
+            "http_status": last_http.get("status_code"),
+            "response_excerpt": str(raw_response)[:2000],
+            "parse_errors": record.get("parse_errors", []),
+            "validation_errors": record.get("validation_errors", []),
+            "exception": record.get("exception"),
+        })
+
+    def _log_call_failure(self, record: dict, exc: Exception | None = None) -> None:
+        """将可读错误摘要写入 app.log；完整内容保存在 dump。"""
+        http_attempts = record.get("http_attempts") or []
+        last_http = http_attempts[-1] if http_attempts else {}
+        response = record.get("raw_response") or last_http.get("body") or ""
+        response_excerpt = str(response)[:2000]
+        message = (
+            f"[{self.file_name}] AI 调用失败 "
+            f"call_id={record.get('call_id')} stage={record.get('stage')} "
+            f"part={record.get('part')} attempt={record.get('attempt')} "
+            f"format={record.get('format')} status={record.get('status')} "
+            f"failure={record.get('failure_kind')} "
+            f"http_status={last_http.get('status_code')} "
+            f"response_excerpt={response_excerpt!r}"
+        )
+        if exc is not None:
+            _logger.error(
+                message,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+        else:
+            _logger.warning(message)
+
+    def _mark_call_failure(
+        self,
+        record: dict,
+        *,
+        status: str,
+        failure_kind: str,
+        validation_errors: list | None = None,
+        parse_errors: list | None = None,
+    ) -> None:
+        """在调用成功但后续校验失败时更新诊断状态。"""
+        record["status"] = status
+        record["failure_kind"] = failure_kind
+        if validation_errors is not None:
+            record.setdefault("validation_errors", []).extend(validation_errors)
+        if parse_errors is not None:
+            record.setdefault("parse_errors", []).extend(parse_errors)
+        self._remember_failed_call(record)
+        self._log_call_failure(record)
+
+    def _mark_call_recovered(
+        self,
+        record: dict | None,
+        *,
+        recovery_kind: str,
+        recovered_by: dict | None = None,
+    ) -> None:
+        """将已被后续步骤完整恢复的调用从失败状态改为 recovered。"""
+        if not record or record.get("status") in SUCCESS_CALL_STATUSES:
+            return
+
+        metadata = record.setdefault("metadata", {})
+        metadata.setdefault("recovered_status", record.get("status"))
+        metadata.setdefault("recovered_failure_kind", record.get("failure_kind"))
+        metadata["recovery_kind"] = recovery_kind
+        if recovered_by is not None:
+            metadata["recovered_by_call_id"] = recovered_by.get("call_id")
+        record["status"] = "recovered"
+        record["failure_kind"] = None
+        self._refresh_last_failed_call()
+
+    def _refresh_last_failed_call(self) -> None:
+        """重新计算最近一个尚未恢复的失败调用。"""
+        self._last_failed_call = None
+        for call in reversed(self._api_calls):
+            if call.get("status") not in SUCCESS_CALL_STATUSES:
+                self._remember_failed_call(call)
+                return
+
+    def _record_diagnostic_event(
+        self,
+        *,
+        stage: str,
+        status: str,
+        failure_kind: str | None = None,
+        prompt_format: str = "",
+        part: int | None = None,
+        parsed_response=None,
+        validation_errors: list | None = None,
+        exc: Exception | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
+        """记录不直接发起 HTTP 请求的管线诊断事件。"""
+        now = datetime.now().isoformat()
+        record = {
+            "call_id": uuid.uuid4().hex[:16],
+            "stage": stage,
+            "part": part,
+            "attempt": None,
+            "format": prompt_format,
+            "system_prompt": "",
+            "user_prompt": "",
+            "response_format": "",
+            "timeout": 0,
+            "raw_response": None,
+            "parsed_response": parsed_response,
+            "parse_errors": [],
+            "validation_errors": validation_errors or [],
+            "http_attempts": [],
+            "exception": serialize_exception(exc),
+            "status": status,
+            "failure_kind": failure_kind,
+            "metadata": metadata or {},
+            "started_at": now,
+            "finished_at": now,
+            "elapsed_seconds": 0,
+        }
+        if self._recorder is not None:
+            self._api_calls.append(record)
+        if status not in SUCCESS_CALL_STATUSES:
+            self._remember_failed_call(record)
+        return record
 
     # ========== 翻译执行 ==========
 
@@ -270,6 +524,7 @@ class FileProcessor:
                 _logger.debug(f"[{self.file_name}] 阶段 0: 术语消歧 (mode={self._config.disambiguation_mode})")
                 ambiguous_terms = self._collect_ambiguous_terms(builder)
                 if ambiguous_terms:
+                    s0_call_started = False
                     try:
                         s0_system = stage_strategy.build_stage_0_prompt(prompt_format=user_format)
                         self._update_translator_prompt(s0_system, self._format_to_response_format(user_format))
@@ -281,21 +536,20 @@ class FileProcessor:
                             prompt_format=user_format,
                         )
 
-                        raw_response = self._translator.translate(s0_user, timeout=60)
-                        disambiguated = stage_strategy.parse_stage_0_result(raw_response, prompt_format=user_format)
-
-                        if self._recorder is not None:
-                            self._api_calls.append({
-                                "stage": "stage_0",
-                                "format": user_format,
-                                "system_prompt": s0_system,
-                                "user_prompt": s0_user,
-                                "response_format": self._format_to_response_format(user_format),
-                                "timeout": 60,
-                                "raw_response": str(raw_response),
-                                "parsed": disambiguated if disambiguated else [],
-                                "status": "success" if disambiguated else "parse_failed",
-                            })
+                        s0_call_started = True
+                        _, disambiguated, _ = self._call_ai(
+                            stage="stage_0",
+                            system_prompt=s0_system,
+                            user_prompt=s0_user,
+                            response_format=self._format_to_response_format(user_format),
+                            timeout=60,
+                            parser=lambda response: stage_strategy.parse_stage_0_result(
+                                response, prompt_format=user_format,
+                            ),
+                            parse_error_provider=stage_strategy.consume_parse_errors,
+                            prompt_format=user_format,
+                            attempt=1,
+                        )
 
                         if disambiguated:
                             _logger.debug(f"[{self.file_name}] 阶段 0 消歧：{len(disambiguated)} 个术语被评估")
@@ -303,6 +557,14 @@ class FileProcessor:
                         else:
                             _logger.debug(f"[{self.file_name}] 阶段 0 消歧：解析结果为空，使用原始术语表")
                     except Exception as e:
+                        if not s0_call_started:
+                            self._record_diagnostic_event(
+                                stage="stage_0",
+                                status="internal_error",
+                                failure_kind="prompt_or_config_error",
+                                prompt_format=user_format,
+                                exc=e,
+                            )
                         _logger.exception(f"[{self.file_name}] 阶段 0 消歧异常 ({e})，使用原始术语表继续")
 
             # 确定格式回退链
@@ -327,8 +589,12 @@ class FileProcessor:
 
                 part_result = None
                 tried_formats: list[str] = []
+                retry_indices: list[int] = []
+                selected_call_record: dict | None = None
+                failed_format_calls: list[dict] = []
 
                 for fmt_idx, fmt in enumerate(formats_chain):
+                    call_record = None
                     tried_formats.append(fmt)
                     # 按当前格式构建 system prompt
                     system_prompt = stage_strategy.build_stage_1_prompt(
@@ -362,7 +628,18 @@ class FileProcessor:
 
                     # 更新线程本地 translator 的 system_prompt 和 response_format
                     # 放在 try 外：配置更新失败不应被当作解析失败
-                    self._update_translator_prompt(system_prompt, self._format_to_response_format(fmt))
+                    try:
+                        self._update_translator_prompt(system_prompt, self._format_to_response_format(fmt))
+                    except Exception as exc:
+                        self._record_diagnostic_event(
+                            stage="stage_1",
+                            status="internal_error",
+                            failure_kind="translator_config_error",
+                            prompt_format=fmt,
+                            part=i + 1,
+                            exc=exc,
+                        )
+                        raise
 
                     # 仅在 xml_json ↔ xml_xml 回退时清除缓存
                     # （两者共用 _make_xml_user_prompt 产生相同 user_text，
@@ -372,25 +649,26 @@ class FileProcessor:
                         self._translator.clear_cache()
 
                     try:
-                        # 调用 LLM
-                        raw_response = self._translator.translate(user_text, timeout=timeout)
-
-                        # 解析
-                        parsed = stage_strategy.parse_stage_1_result(raw_response, prompt_format=fmt)
-
-                        if self._recorder is not None:
-                            self._api_calls.append({
-                                "stage": "stage_1",
-                                "part": i + 1,
-                                "format": fmt,
-                                "system_prompt": system_prompt,
-                                "user_prompt": user_text,
-                                "response_format": self._format_to_response_format(fmt),
-                                "timeout": timeout,
-                                "raw_response": str(raw_response),
-                                "parsed": parsed if parsed else [],
-                                "status": "success" if parsed else "parse_failed",
-                            })
+                        _, parsed, call_record = self._call_ai(
+                            stage="stage_1",
+                            system_prompt=system_prompt,
+                            user_prompt=user_text,
+                            response_format=self._format_to_response_format(fmt),
+                            timeout=timeout,
+                            parser=lambda response, current_format=fmt: (
+                                stage_strategy.parse_stage_1_result(
+                                    response, prompt_format=current_format,
+                                )
+                            ),
+                            parse_error_provider=stage_strategy.consume_parse_errors,
+                            prompt_format=fmt,
+                            part=i + 1,
+                            attempt=fmt_idx + 1,
+                            metadata={
+                                "rendered_length": _rendered_len,
+                                "text_blocks": len(text_blocks_for_part),
+                            },
+                        )
 
                         if not parsed:
                             raise ValueError(f"{fmt}: 解析结果为空")
@@ -414,6 +692,7 @@ class FileProcessor:
                         _CONFIDENCE_ORDER = {"low": 0, "medium": 1, "high": 2}
                         threshold = _CONFIDENCE_ORDER.get(self._config.min_confidence, 1)
                         low_conf_count = 0
+                        low_confidence_ids: list[int] = []
                         missing_ids: list[int] = []
 
                         # 按 text_block 顺序（1-based id）提取翻译
@@ -438,6 +717,7 @@ class FileProcessor:
                                         f"confidence={conf}, reasoning={reasoning[:200]}"
                                     )
                                     low_conf_count += 1
+                                    low_confidence_ids.append(expected_id)
                                     translation = block.get("kr", "")
                                 part_result.append(translation)
                             else:
@@ -447,40 +727,65 @@ class FileProcessor:
                         # P1-1: 缺失条目时若还有剩余格式则尝试下一格式
                         if missing_ids:
                             if fmt_idx + 1 < len(formats_chain):
+                                self._mark_call_failure(
+                                    call_record,
+                                    status="validation_error",
+                                    failure_kind="missing_translation_ids",
+                                    validation_errors=[{
+                                        "missing_ids": missing_ids,
+                                        "expected_count": expected_count,
+                                        "action": "try_next_format",
+                                    }],
+                                )
                                 _logger.warning(
                                     f"[{self.file_name}] [{fmt}] {len(missing_ids)} 个文本块缺失翻译 "
                                     f"(id: {missing_ids[:10]}...)，尝试下一格式"
                                 )
+                                failed_format_calls.append(call_record)
                                 continue
+                            self._mark_call_failure(
+                                call_record,
+                                status="fallback",
+                                failure_kind="missing_translation_ids",
+                                validation_errors=[{
+                                    "missing_ids": missing_ids,
+                                    "expected_count": expected_count,
+                                    "action": "fallback_to_source",
+                                }],
+                            )
                             _logger.warning(
                                 f"[{self.file_name}] [{fmt}] {len(missing_ids)} 个文本块缺失翻译 "
                                 f"(id: {missing_ids[:10]}...)，已回退为 KR 原文"
                             )
                         if low_conf_count > 0:
+                            self._mark_call_failure(
+                                call_record,
+                                status="fallback",
+                                failure_kind="low_confidence",
+                                validation_errors=[{
+                                    "count": low_conf_count,
+                                    "ids": low_confidence_ids,
+                                    "minimum_confidence": self._config.min_confidence,
+                                }],
+                            )
                             _logger.info(
                                 f"[{self.file_name}] [{fmt}] {low_conf_count} 条翻译因低置信度"
                                 f" (min={self._config.min_confidence}) 回退为 KR 原文"
                             )
 
+                        retry_indices = sorted({
+                            *(expected_id - 1 for expected_id in missing_ids),
+                            *(expected_id - 1 for expected_id in low_confidence_ids),
+                        })
+                        selected_call_record = call_record
                         break  # 翻译完整，退出格式回退循环
 
                     except (json.JSONDecodeError, ValueError) as e:
+                        if call_record is not None:
+                            failed_format_calls.append(call_record)
                         _logger.warning(
                             f"[{self.file_name}] [{fmt}] 解析失败 ({e})"
                         )
-                        if self._recorder is not None and isinstance(e, json.JSONDecodeError):
-                            self._api_calls.append({
-                                "stage": "stage_1",
-                                "part": i + 1,
-                                "format": fmt,
-                                "system_prompt": system_prompt,
-                                "user_prompt": user_text,
-                                "response_format": self._format_to_response_format(fmt),
-                                "timeout": timeout,
-                                "raw_response": str(raw_response) if "raw_response" in locals() else "",
-                                "parsed": [],
-                                "status": "parse_failed",
-                            })
                         continue
 
                 if part_result is None:
@@ -495,17 +800,31 @@ class FileProcessor:
                 else:
                     # P1-2: 部分格式成功但存在缺失条目 → 补充翻译重试
                     text_blocks = part_data.get("text_blocks", [])
-                    kr_fallback_indices: list[int] = [
-                        idx for idx, (block, trans) in enumerate(zip(text_blocks, part_result))
-                        if trans == block.get("kr", "")
-                    ]
-                    if kr_fallback_indices and len(kr_fallback_indices) < len(text_blocks):
+                    unresolved_count = len(retry_indices)
+                    supplemental_call = None
+                    if retry_indices and len(retry_indices) < len(text_blocks):
                         fixed = self._retry_missing_entries(
                             builder, stage_strategy, part_data, part_result,
-                            kr_fallback_indices, tried_formats, i,
+                            retry_indices, tried_formats, i,
                         )
-                        if fixed > 0:
-                            had_fallback = True
+                        supplemental_call = self._api_calls[-1] if self._api_calls else None
+                        unresolved_count -= fixed
+
+                    if unresolved_count > 0:
+                        had_fallback = True
+                    else:
+                        self._mark_call_recovered(
+                            selected_call_record,
+                            recovery_kind="supplemental_translation",
+                            recovered_by=supplemental_call,
+                        )
+
+                    for failed_call in failed_format_calls:
+                        self._mark_call_recovered(
+                            failed_call,
+                            recovery_kind="format_fallback",
+                            recovered_by=selected_call_record,
+                        )
 
                 result.extend(part_result)
 
@@ -546,28 +865,37 @@ class FileProcessor:
                                     f"{v.rule}: {v.message} (block #{v.block_id})"
                                 )
 
-                        # 记录到 API 调用历史
-                        if self._recorder is not None:
-                            self._api_calls.append({
-                                "stage": "rule_validation",
-                                "format": user_format,
-                                "system_prompt": "",
-                                "user_prompt": "",
-                                "response_format": "",
-                                "timeout": 0,
-                                "raw_response": "",
-                                "parsed": [
-                                    {
-                                        "rule": v.rule,
-                                        "severity": v.severity,
-                                        "message": v.message,
-                                        "auto_fixable": v.auto_fixable,
-                                    }
-                                    for v in report.violations
-                                ],
-                                "status": "success" if error_count == 0 else "fixed" if report.auto_fixes_applied > 0 else "warnings",
-                            })
+                        violations = [
+                            {
+                                "rule": v.rule,
+                                "severity": v.severity,
+                                "message": v.message,
+                                "block_id": v.block_id,
+                                "auto_fixable": v.auto_fixable,
+                            }
+                            for v in report.violations
+                        ]
+                        unresolved = [v for v in violations if not v["auto_fixable"]]
+                        self._record_diagnostic_event(
+                            stage="rule_validation",
+                            status="validation_error" if unresolved else "success",
+                            failure_kind="rule_validation" if unresolved else None,
+                            prompt_format=user_format,
+                            parsed_response=violations,
+                            validation_errors=unresolved,
+                            metadata={
+                                "auto_fixes_applied": report.auto_fixes_applied,
+                                "warnings_remaining": report.warnings_remaining,
+                            },
+                        )
                 except Exception as e:
+                    self._record_diagnostic_event(
+                        stage="rule_validation",
+                        status="internal_error",
+                        failure_kind="validator_exception",
+                        prompt_format=user_format,
+                        exc=e,
+                    )
                     _logger.exception(
                         f"[{self.file_name}] 规则化校验异常 ({e})，使用未校验的翻译结果"
                     )
@@ -575,6 +903,7 @@ class FileProcessor:
             # ====== 阶段 2：自校验（仅主格式，阶段 1 全部成功时执行） ======
             if stage_strategy.needs_self_check() and not had_fallback:
                 _logger.debug(f"[{self.file_name}] 阶段 2: 自校验")
+                s2_call_started = False
                 try:
                     # 收集原文块（从 builder.unified_request 中）
                     original_blocks = builder.unified_request.get("text_blocks", [])
@@ -596,27 +925,34 @@ class FileProcessor:
                         prompt_format=user_format,
                         reference=builder.unified_request.get("reference"),
                     )
-                    raw_response = self._translator.translate(s2_user, timeout=120)
-                    checked = stage_strategy.parse_stage_2_result(raw_response, prompt_format=user_format)
-
-                    if self._recorder is not None:
-                        self._api_calls.append({
-                            "stage": "stage_2",
-                            "format": user_format,
-                            "system_prompt": s2_system,
-                            "user_prompt": s2_user,
-                            "response_format": self._format_to_response_format(user_format),
-                            "timeout": 120,
-                            "raw_response": str(raw_response),
-                            "parsed": checked if checked else [],
-                            "status": "success" if checked else "parse_failed",
-                        })
+                    s2_call_started = True
+                    _, checked, _ = self._call_ai(
+                        stage="stage_2",
+                        system_prompt=s2_system,
+                        user_prompt=s2_user,
+                        response_format=self._format_to_response_format(user_format),
+                        timeout=120,
+                        parser=lambda response: stage_strategy.parse_stage_2_result(
+                            response, prompt_format=user_format,
+                        ),
+                        parse_error_provider=stage_strategy.consume_parse_errors,
+                        prompt_format=user_format,
+                        attempt=1,
+                    )
 
                     if checked:
                         result = self._apply_corrections(result, checked)
                     else:
                         _logger.debug(f"[{self.file_name}] 阶段 2 自校验：解析结果为空，保留阶段 1 翻译")
                 except Exception as e:
+                    if not s2_call_started:
+                        self._record_diagnostic_event(
+                            stage="stage_2",
+                            status="internal_error",
+                            failure_kind="prompt_or_config_error",
+                            prompt_format=user_format,
+                            exc=e,
+                        )
                     _logger.exception(
                         f"[{self.file_name}] 阶段 2 自校验异常 ({e})，使用未校验的翻译结果"
                     )
@@ -688,32 +1024,34 @@ class FileProcessor:
         system_prompt = stage_strategy.build_stage_1_prompt(
             self.file_type, prompt_format=primary_format,
         )
-        self._update_translator_prompt(
-            system_prompt, self._format_to_response_format(primary_format),
-        )
 
+        supp_call_started = False
         try:
+            self._update_translator_prompt(
+                system_prompt, self._format_to_response_format(primary_format),
+            )
             timeout = max(len(supp_user_text) * 3 // 400 + 40, 60)
-            supp_raw = self._translator.translate(supp_user_text, timeout=timeout)
-            supp_parsed = stage_strategy.parse_stage_1_result(
-                supp_raw, prompt_format=primary_format,
+            supp_call_started = True
+            _, supp_parsed, call_record = self._call_ai(
+                stage="p1_2",
+                system_prompt=system_prompt,
+                user_prompt=supp_user_text,
+                response_format=self._format_to_response_format(primary_format),
+                timeout=timeout,
+                parser=lambda response: stage_strategy.parse_stage_1_result(
+                    response, prompt_format=primary_format,
+                ),
+                parse_error_provider=stage_strategy.consume_parse_errors,
+                prompt_format=primary_format,
+                part=part_idx + 1,
+                attempt=1,
+                metadata={
+                    "missing_source_ids": [idx + 1 for idx in kr_fallback_indices],
+                },
             )
 
             if not supp_parsed:
                 _logger.info(f"[{self.file_name}] P1-2 补充翻译：解析结果为空，保留 KR 原文")
-                if self._recorder is not None:
-                    self._api_calls.append({
-                        "stage": "p1_2",
-                        "part": part_idx + 1,
-                        "format": primary_format,
-                        "system_prompt": system_prompt,
-                        "user_prompt": supp_user_text,
-                        "response_format": self._format_to_response_format(primary_format),
-                        "timeout": timeout,
-                        "raw_response": str(supp_raw),
-                        "parsed": [],
-                        "status": "parse_failed",
-                    })
                 return 0
 
             supp_by_id: dict[int, dict] = {}
@@ -727,28 +1065,51 @@ class FileProcessor:
                         continue
 
             fixed = 0
+            confidence_order = {"low": 0, "medium": 1, "high": 2}
+            confidence_threshold = confidence_order.get(self._config.min_confidence, 1)
             for local_idx, src_idx in enumerate(kr_fallback_indices):
                 expected_id = local_idx + 1
                 st = supp_by_id.get(expected_id)
                 if st is not None and isinstance(st, dict):
                     trans = st.get("translation", "") or ""
-                    if trans and trans != text_blocks[src_idx].get("kr", ""):
+                    confidence = str(st.get("confidence", "medium")).lower()
+                    if trans and confidence_order.get(confidence, 1) >= confidence_threshold:
                         part_result[src_idx] = trans
                         fixed += 1
 
-            if fixed > 0:
+            requested = len(kr_fallback_indices)
+            if fixed == requested:
                 _logger.info(
                     f"[{self.file_name}] P1-2 补充翻译完成: "
-                    f"修复 {fixed}/{len(kr_fallback_indices)} 条缺失"
+                    f"修复 {fixed}/{requested} 条缺失"
                 )
             else:
-                _logger.info(
-                    f"[{self.file_name}] P1-2 补充翻译：{len(kr_fallback_indices)} 条皆未修复，保留 KR 原文"
+                self._mark_call_failure(
+                    call_record,
+                    status="fallback",
+                    failure_kind="supplemental_translation_unresolved",
+                    validation_errors=[{
+                        "requested": requested,
+                        "fixed": fixed,
+                    }],
+                )
+                _logger.warning(
+                    f"[{self.file_name}] P1-2 补充翻译：仍有 "
+                    f"{requested - fixed}/{requested} 条未修复，保留 KR 原文"
                 )
             return fixed
 
         except Exception as e:
-            _logger.warning(
+            if not supp_call_started:
+                self._record_diagnostic_event(
+                    stage="p1_2",
+                    status="internal_error",
+                    failure_kind="prompt_or_config_error",
+                    prompt_format=primary_format,
+                    part=part_idx + 1,
+                    exc=e,
+                )
+            _logger.exception(
                 f"[{self.file_name}] P1-2 补充翻译异常 ({e})，保留 KR 原文"
             )
             return 0

@@ -217,11 +217,10 @@ class RuleBasedValidator:
     def validate_effect_refs(
         self, text_blocks: list[dict], translations: list[str],
     ) -> list[ValidationViolation]:
-        """校验源语言中的特殊效果引用在译文中是否完整保留。
+        """校验源语言中的特殊效果引用在译文中是否完整表达。
 
-        检查两项：
-        1. KR/JP/EN 原文中的 [EffectID] 在 CN 译文中是否存在
-        2. AC 自动机匹配到的 affect_refs 对应的 CN 名称是否出现在译文中
+        已知效果允许保留原始 [EffectID]，也允许使用术语表中的中文名称；
+        未知 ID 无法进行语义映射，因此必须原样保留。
 
         此类违规无法可靠自动修复，标记为 warning。
 
@@ -249,40 +248,35 @@ class RuleBasedValidator:
             for m in self._EFFECT_ID_RE.finditer(cn_text):
                 cn_ids.add(m.group(1))
 
-            # 3. 检测缺失的 ID
-            missing_ids = source_ids - cn_ids
-            for mid in sorted(missing_ids):
-                cn_name = self._affect_id_to_cn.get(mid, mid)
+            # 3. 合并原文显式 ID 与 AC 自动机识别出的效果引用
+            affect_refs = block.get("affect_refs", [])
+            for ref in affect_refs:
+                aff_id = ref.strip("[]").strip()
+                if aff_id:
+                    source_ids.add(aff_id)
+
+            # 4. 每个效果只检查一次：原 ID 或对应中文名任一存在即可
+            for effect_id in sorted(source_ids):
+                cn_name = self._affect_id_to_cn.get(effect_id, "")
+                if effect_id in cn_ids or (cn_name and cn_name in cn_text):
+                    continue
+
+                if cn_name:
+                    message = (
+                        f"源语言中的特殊效果引用 [{effect_id}]（{cn_name}）"
+                        "未在译文中以原 ID 或中文名称表达"
+                    )
+                else:
+                    message = f"源语言中的未知引用 [{effect_id}] 在译文中缺失"
+
                 violations.append(ValidationViolation(
                     block_id=block_idx + 1,
                     rule="effect_ref",
                     severity="warning",
-                    message=(
-                        f"源语言中的特殊效果引用 [{mid}]"
-                        f"（{cn_name}）在译文中缺失"
-                    ),
+                    message=message,
                     auto_fixable=False,
                     fix_fn=None,
                     fix_params=None,
                 ))
-
-            # 4. 检查 affect_refs 对应的 CN 名称是否出现
-            affect_refs = block.get("affect_refs", [])
-            for ref in affect_refs:
-                aff_id = ref.strip("[]")
-                cn_name = self._affect_id_to_cn.get(aff_id, "")
-                if cn_name and cn_name not in cn_text:
-                    violations.append(ValidationViolation(
-                        block_id=block_idx + 1,
-                        rule="effect_ref",
-                        severity="warning",
-                        message=(
-                            f"KR原文中检测到特殊效果 '{cn_name}'"
-                            f" ([{aff_id}])，但译文中未找到对应中文名称"
-                        ),
-                        auto_fixable=False,
-                        fix_fn=None,
-                        fix_params=None,
-                    ))
 
         return violations

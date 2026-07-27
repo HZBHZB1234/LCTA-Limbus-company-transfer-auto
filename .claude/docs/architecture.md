@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-07-25 -->
+<!-- Last updated: 2026-07-27 -->
 
 ## Project Purpose
 
@@ -12,8 +12,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 |----------|-------|-------|
 | Python 3.9.6+ | Backend (primary) | Business logic, translation engine, webview bridge |
 | C (MinGW-w64) | Native launcher | `launcher.c` → compiled to .exe as PE entry point for packaged releases |
-| JavaScript | Frontend | 10 modules in `webui/js/`, bridges to Python via `pywebview.api` |
-| HTML/CSS | Frontend | SPA in `webui/index.html` with 18 section fragments in `webui/sections/` loaded dynamically + standalone `webui/rule-editor.html` window with theme sync, 4 CSS files |
+| JavaScript | Frontend | SPA modules plus standalone editor and translation-log viewer scripts, bridged to Python via `pywebview.api` |
+| HTML/CSS | Frontend | SPA in `webui/index.html` with lazy section fragments plus standalone rule editor, quick editor, and translation diagnostic viewer windows with theme sync |
 | PowerShell | Build system | `build.ps1` (617 lines), 6-step build pipeline |
 | YAML | CI/CD | GitHub Actions: `release.yml`, `check.yml` |
 

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LCTA - 翻译诊断日志</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/translation-log-viewer.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="theme-light">
+<div class="tlv-app">
+    <header class="tlv-toolbar">
+        <div class="tlv-title">
+            <i class="fas fa-file-waveform"></i>
+            <div><h1>翻译诊断日志</h1><p>通过文件浏览器打开当前版本 schema_version 2 JSONL Dump</p></div>
+        </div>
+        <div class="tlv-toolbar-actions">
+            <button id="tlv-choose-dump" class="tlv-btn tlv-btn-primary"><i class="fas fa-file-circle-plus"></i> 打开 Dump</button>
+            <button id="tlv-open-folder" class="tlv-btn" disabled><i class="fas fa-folder-open"></i> 所在目录</button>
+            <button id="tlv-refresh" class="tlv-btn" disabled><i class="fas fa-rotate"></i> 重新读取</button>
+            <button id="tlv-export" class="tlv-btn tlv-btn-primary" disabled><i class="fas fa-file-export"></i> 导出筛选结果</button>
+        </div>
+    </header>
+
+    <main class="tlv-layout">
+        <section class="tlv-records-panel">
+            <div class="tlv-selected-file">
+                <i class="fas fa-file-lines"></i>
+                <span id="tlv-selected-file">尚未选择 Dump 文件</span>
+            </div>
+            <div class="tlv-filters">
+                <label class="tlv-filter"><span>结果</span><select id="tlv-outcome"><option value="">全部</option></select></label>
+                <label class="tlv-filter"><span>阶段</span><select id="tlv-stage"><option value="">全部</option></select></label>
+                <label class="tlv-filter"><span>调用状态</span><select id="tlv-call-status"><option value="">全部</option></select></label>
+                <label class="tlv-filter"><span>失败类型</span><select id="tlv-failure-kind"><option value="">全部</option></select></label>
+                <label class="tlv-filter"><span>异常</span><select id="tlv-has-exception"><option value="">全部</option><option value="true">仅有异常</option><option value="false">仅无异常</option></select></label>
+                <div class="tlv-filter-actions">
+                    <button id="tlv-apply-filter" class="tlv-btn tlv-btn-primary"><i class="fas fa-filter"></i> 筛选</button>
+                    <button id="tlv-clear-filter" class="tlv-btn"><i class="fas fa-eraser"></i> 清空</button>
+                </div>
+            </div>
+
+            <div class="tlv-list-summary">
+                <span id="tlv-result-summary">请选择诊断文件</span>
+                <label>每页 <select id="tlv-page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select></label>
+            </div>
+            <div class="tlv-table-wrap">
+                <table class="tlv-table">
+                    <thead><tr><th>时间</th><th>翻译文件</th><th>结果</th><th>耗时</th><th>AI 调用</th><th>失败</th><th>异常摘要</th></tr></thead>
+                    <tbody id="tlv-record-list"><tr><td colspan="7" class="tlv-empty">请点击“打开 Dump”选择文件</td></tr></tbody>
+                </table>
+            </div>
+            <div class="tlv-pagination">
+                <button id="tlv-prev-page" class="tlv-btn" disabled><i class="fas fa-chevron-left"></i></button>
+                <span id="tlv-page-label">第 1 / 1 页</span>
+                <button id="tlv-next-page" class="tlv-btn" disabled><i class="fas fa-chevron-right"></i></button>
+            </div>
+        </section>
+
+        <aside class="tlv-detail-panel">
+            <div class="tlv-panel-heading">
+                <span>记录详情</span>
+                <button id="tlv-copy-record" class="tlv-icon-btn" title="复制完整记录" disabled><i class="fas fa-copy"></i></button>
+            </div>
+            <div id="tlv-detail" class="tlv-detail">
+                <div class="tlv-empty tlv-detail-empty"><i class="fas fa-arrow-pointer"></i><span>选择一条记录查看提示词、AI 响应和异常详情</span></div>
+            </div>
+        </aside>
+    </main>
+</div>
+<div id="tlv-toast" class="tlv-toast"></div>
+<script src="js/translation-log-viewer.js"></script>
+</body>
+</html>

@@ -1504,9 +1504,7 @@ class LCTA_API():
 
     def sync_theme_to_rule_editor(self, theme):
         """推送主题变更到所有打开的规则编辑器窗口"""
-        if not hasattr(self, '_rule_editor_windows'):
-            return
-        for w in self._rule_editor_windows:
+        for w in getattr(self, '_rule_editor_windows', []):
             try:
                 w.evaluate_js(f"""
                     if (typeof applyTheme === 'function') {{
@@ -1517,6 +1515,7 @@ class LCTA_API():
                 pass
         # 同时同步到简易编辑器窗口
         self.sync_theme_to_quick_editor(theme)
+        self.sync_theme_to_translation_log_viewer(theme)
 
     def open_quick_editor(self):
         """打开简易翻译编辑器窗口"""
@@ -1555,6 +1554,60 @@ class LCTA_API():
                 """)
             except Exception:
                 pass
+
+    def open_translation_log_viewer(self):
+        """打开翻译诊断日志查看器。"""
+        existing = getattr(self, '_translation_log_window', None)
+        if existing is not None:
+            try:
+                existing.restore()
+                existing.show()
+                return {"success": True, "message": "日志查看器已打开"}
+            except Exception:
+                self._translation_log_window = None
+
+        html_path = os.path.join(os.getenv('path_'), "webui/translation-log-viewer.html")
+        current_theme = ConfigManager().get('theme', 'light')
+        api = TranslationLogViewerAPI()
+        window = webview.create_window(
+            "LCTA - 翻译诊断日志", url=html_path,
+            width=1400, height=850, resizable=True, text_select=True,
+            js_api=api,
+        )
+        api.set_window(window)
+        self._translation_log_window = window
+
+        def clear_window_reference(*_args):
+            if getattr(self, '_translation_log_window', None) is window:
+                self._translation_log_window = None
+
+        window.events.closed += clear_window_reference
+        try:
+            window.evaluate_js(f"""
+                (function() {{
+                    if (document.body) {{
+                        document.body.className = 'theme-{current_theme}';
+                        document.body.setAttribute('data-injected-theme', '{current_theme}');
+                    }}
+                }})();
+            """)
+        except Exception:
+            pass
+        return {"success": True, "message": "日志查看器已打开"}
+
+    def sync_theme_to_translation_log_viewer(self, theme):
+        """推送主题变更到翻译诊断日志查看器。"""
+        window = getattr(self, '_translation_log_window', None)
+        if window is None:
+            return
+        try:
+            window.evaluate_js(f"""
+                if (typeof applyTheme === 'function') {{
+                    applyTheme('{theme}');
+                }}
+            """)
+        except Exception:
+            self._translation_log_window = None
 
 
 class RuleEditorAPI:
@@ -1649,6 +1702,109 @@ class QuickEditorAPI:
     def get_config_value(self, key_path, default_value=None):
         """查询主应用配置（如 theme）"""
         return ConfigManager().get(key_path, default_value)
+
+
+class TranslationLogViewerAPI:
+    """翻译诊断日志查看器的只读 JS-API 桥接。"""
+
+    def __init__(self):
+        from webutils.function_translation_logs import TranslationLogService
+
+        self._service_class = TranslationLogService
+        self._service = None
+        self._file_id = None
+        self._window = None
+
+    def set_window(self, window):
+        self._window = window
+
+    def get_config_value(self, key_path, default_value=None):
+        return ConfigManager().get(key_path, default_value)
+
+    def choose_dump(self):
+        if self._window is None:
+            return {"success": False, "message": "日志窗口尚未初始化"}
+        try:
+            default_dir = Path.cwd() / "logs" / "translation_dump"
+            if not default_dir.is_dir():
+                default_dir = Path.cwd()
+            selected = self._window.create_file_dialog(
+                webview.FileDialog.OPEN,
+                directory=str(default_dir),
+                allow_multiple=False,
+                file_types=("Translation Dump (*.jsonl)",),
+            )
+            if not selected:
+                return {"success": False, "cancelled": True, "message": "已取消选择"}
+            path = Path(selected[0]).resolve()
+            service = self._service_class(path.parent)
+            data = service.get_file_info(path.name, force_refresh=True)
+            self._service = service
+            self._file_id = path.name
+            return {"success": True, "data": data}
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    def query_records(self, filters=None, page=1, page_size=50, force_refresh=False):
+        if self._service is None or self._file_id is None:
+            return {"success": False, "message": "请先选择要打开的 Dump 文件"}
+        try:
+            data = self._service.query_records(
+                self._file_id,
+                filters or {},
+                page,
+                page_size,
+                bool(force_refresh),
+            )
+            return {"success": True, "data": data}
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    def get_record(self, line_number):
+        if self._service is None or self._file_id is None:
+            return {"success": False, "message": "请先选择要打开的 Dump 文件"}
+        try:
+            return {
+                "success": True,
+                "data": self._service.get_record(self._file_id, line_number),
+            }
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    def export_filtered(self, filters=None):
+        if self._window is None:
+            return {"success": False, "message": "日志窗口尚未初始化"}
+        if self._service is None or self._file_id is None:
+            return {"success": False, "message": "请先选择要打开的 Dump 文件"}
+        try:
+            from datetime import datetime
+
+            stem = Path(self._file_id).stem
+            default_name = f"{stem}_filtered_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+            selected = self._window.create_file_dialog(
+                webview.FileDialog.SAVE,
+                directory=str(Path.cwd()),
+                save_filename=default_name,
+                file_types=("JSON Lines (*.jsonl)",),
+            )
+            if not selected:
+                return {"success": False, "cancelled": True, "message": "已取消导出"}
+            destination = selected[0]
+            if Path(destination).suffix.lower() != ".jsonl":
+                destination = f"{destination}.jsonl"
+            data = self._service.export_filtered(self._file_id, filters or {}, destination)
+            return {"success": True, "data": data}
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    def open_selected_folder(self):
+        if self._service is None:
+            return {"success": False, "message": "请先选择要打开的 Dump 文件"}
+        try:
+            open_explorer(self._service.log_dir)
+            return {"success": True}
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
 
 
 def main():

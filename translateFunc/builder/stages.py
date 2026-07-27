@@ -195,3 +195,7 @@ class StageStrategy:
     def parse_stage_2_result(self, result_text: str, prompt_format: str = "xml_json") -> list[dict]:
         """解析自校验结果。"""
         return self._prompt_factory.parse_response(result_text, stage=2, prompt_format=prompt_format)
+
+    def consume_parse_errors(self) -> list[dict]:
+        """取得最近一次阶段响应解析失败的结构化原因。"""
+        return self._prompt_factory.consume_parse_errors()

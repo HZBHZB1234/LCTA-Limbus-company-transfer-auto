@@ -149,16 +149,24 @@ class TestEffectRefs:
         violations = v.validate_effect_refs(blocks, translations)
         assert len(violations) == 0
 
-    def test_missing_effect_id(self):
+    def test_localized_effect_name_is_accepted(self):
         v = RuleBasedValidator(SAMPLE_AFFECTS)
         blocks = [{"kr": "[Combustion] 위력", "jp": "", "en": "[Combustion] Power"}]
-        translations = ["燃烧 强度"]  # 缺少 [Combustion]
+        translations = ["燃烧 强度"]
+        violations = v.validate_effect_refs(blocks, translations)
+        assert len(violations) == 0
+
+    def test_known_effect_missing_id_and_cn_name(self):
+        v = RuleBasedValidator(SAMPLE_AFFECTS)
+        blocks = [{"kr": "[Combustion] 위력", "jp": "", "en": "[Combustion] Power"}]
+        translations = ["火焰 强度"]
         violations = v.validate_effect_refs(blocks, translations)
         v_found = [x for x in violations if x.rule == "effect_ref"]
-        assert len(v_found) >= 1
+        assert len(v_found) == 1
         assert v_found[0].severity == "warning"
         assert v_found[0].auto_fixable is False
         assert "Combustion" in v_found[0].message
+        assert "燃烧" in v_found[0].message
 
     def test_multiple_source_ids(self):
         v = RuleBasedValidator(SAMPLE_AFFECTS)
@@ -192,6 +200,13 @@ class TestEffectRefs:
         v_found = [x for x in violations if x.rule == "effect_ref"]
         assert len(v_found) == 0
 
+    def test_affect_ref_original_id_is_accepted_without_cn_name(self):
+        v = RuleBasedValidator(SAMPLE_AFFECTS)
+        blocks = [{"kr": "화상", "jp": "", "en": "", "affect_refs": ["[Combustion]"]}]
+        translations = ["[Combustion]"]
+        violations = v.validate_effect_refs(blocks, translations)
+        assert len(violations) == 0
+
     def test_affect_refs_cn_name_missing(self):
         v = RuleBasedValidator(SAMPLE_AFFECTS)
         blocks = [{"kr": "화상", "jp": "", "en": "", "affect_refs": ["[Combustion]"]}]
@@ -200,6 +215,14 @@ class TestEffectRefs:
         v_found = [x for x in violations if x.rule == "effect_ref"]
         assert len(v_found) >= 1
         assert "燃烧" in v_found[0].message
+
+    def test_unknown_effect_id_must_be_preserved(self):
+        v = RuleBasedValidator(SAMPLE_AFFECTS)
+        blocks = [{"kr": "[CustomEffect] 발동", "jp": "", "en": ""}]
+        translations = ["触发特殊效果"]
+        violations = v.validate_effect_refs(blocks, translations)
+        assert len(violations) == 1
+        assert "CustomEffect" in violations[0].message
 
 
 # ========== 自动修复 ==========
@@ -283,7 +306,7 @@ class TestRunAllChecks:
             "en": "[Burst] Power +4. [Combustion]",
             "affect_refs": ["[Burst]", "[Combustion]"],
         }]
-        translations = ["[Burst ] 增加4级破裂 强度。燃烧 "]  # [Burst ] 有空格 + 缺 [Combustion] ID
+        translations = ["[Burst ] 增加4级破裂 强度。火焰 "]
         report = v.run_all_checks(blocks, translations)
 
         # buff_spacing 错误可修复，effect_ref 警告不可修复

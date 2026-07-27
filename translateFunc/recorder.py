@@ -7,6 +7,8 @@ import json
 import threading
 from pathlib import Path
 
+from translateFunc.diagnostics import safe_json_value
+
 
 class TranslationRecorder:
     """单次翻译运行写入一个 JSONL 文件，每行一条文件翻译记录。"""
@@ -16,9 +18,13 @@ class TranslationRecorder:
         self._file_path = file_path
         self._lock = threading.Lock()
 
+    @property
+    def file_path(self) -> Path:
+        return self._file_path
+
     def write_record(self, record: dict) -> None:
         """追加一条翻译记录到 JSONL 文件。线程安全。"""
-        line = json.dumps(record, ensure_ascii=False) + "\n"
+        line = json.dumps(safe_json_value(record), ensure_ascii=False) + "\n"
         with self._lock:
             with open(self._file_path, "a", encoding="utf-8") as f:
                 f.write(line)

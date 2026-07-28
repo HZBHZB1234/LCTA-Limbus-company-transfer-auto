@@ -43,15 +43,15 @@ JS: user configures & clicks translate
     Stage 3: translateFunc/processor.py      process priority files first
     Stage 4: translateFunc/workers.py        WorkerPool concurrent translation
       → translateFunc/builder/prompt.py      construct LLM prompts
-      → translateFunc/builder/request.py     build API requests; split by both rendered
-                                              input length and estimated output-token budget
+      → translateFunc/builder/request.py     build API requests; split by rendered
+                                               input length
       → translateFunc/translate_request.py   call LLM API, parse response
       → translateFunc/validator.py           rule-based post-processing (skill files only,
                                               controlled by enable_rule_validation config):
                                               validate [ID] bracket spacing → auto-fix
                                               validate effect refs from source → warning
-      → translateFunc/processor.py           run Stage 2 self-check per Stage 1 part so
-                                              checked output cannot recombine into one oversized response
+      → translateFunc/processor.py           run Stage 2 self-check on the combined
+                                               translation result
     Stage 5: translateFunc/matcher/engine.py post-translation proper matching
     Stage 6: translateFunc/pipeline.py       aggregate results → PipelineSummary
   → webutils/function_translate.py  write output files

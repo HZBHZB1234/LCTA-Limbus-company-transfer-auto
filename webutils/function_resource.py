@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 import tempfile
 import UnityPy
+import UnityPy.config
+UnityPy.config.FALLBACK_UNITY_VERSION = "6000.3.12f1"
 from copy import deepcopy
 import logging
 from UnityPy.enums import ClassIDType

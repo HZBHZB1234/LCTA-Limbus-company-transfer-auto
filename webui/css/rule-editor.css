@@ -56,7 +56,8 @@ body {
     border-bottom: 1px solid var(--color-border-light, #ecf0f1);
 }
 
-.re-search-bar input[type="text"] {
+.re-search-bar input[type="text"],
+.re-search-bar input[type="search"] {
     flex: 1;
     min-width: 120px;
     width: auto;
@@ -486,8 +487,8 @@ body {
 /* ---- CM6 Search Panel — VSCode floating style ---- */
 #re-file-edit-panel .cm-panels {
     position: absolute !important;  /* 覆盖 CM6 默认 sticky */
-    top: 84px;                      /* 移除 !important，允许拖动覆盖 */
-    right: 12px;                    /* 移除 !important，允许拖动覆盖 */
+    top: 8px;
+    right: 8px;
     z-index: 100;
     background: transparent;
     border: none;
@@ -505,6 +506,7 @@ body {
     max-width: 460px;
     cursor: grab;
     user-select: none;
+    touch-action: none;
 }
 
 #re-file-edit-panel .cm-search input,
@@ -512,6 +514,7 @@ body {
 #re-file-edit-panel .cm-search label {
     cursor: auto;
     user-select: auto;
+    touch-action: auto;
 }
 
 #re-file-edit-panel .cm-search.dragging {

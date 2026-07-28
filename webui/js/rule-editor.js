@@ -38,6 +38,7 @@
         activeMainTab: 'file-edit',
         searchResults: null,
         searchTotal: 0,
+        searchRequestId: 0,
         fileCache: new Map(),
         advancedContentView: null,
         selectedFieldPath: null,
@@ -980,7 +981,7 @@
                 hint.style.display = '';
             } else {
                 hint.className = 're-search-hint';
-                hint.textContent = '未找到文件名匹配，点击「搜索」查找文件内容';
+                hint.textContent = '未找到文件名匹配；按 Enter 或点击「搜索」查找内容';
                 hint.style.display = '';
             }
         }
@@ -1042,17 +1043,14 @@
         let cb = $i('re-case-sensitive');
         let caseSensitive = !!(cb && cb.checked);
         if (!keyword.trim()) { clearSearch(); return; }
-        // First try filename filter
-        let filtered = filterFilesByKeyword(keyword);
-        if (filtered.length) {
-            switchTab('file-list');
-            return;
-        }
-        // No filename matches, do full-text content search
         if (!api) return warnNoApi();
+        const requestId = ++state.searchRequestId;
+        const searchBtn = $i('re-search-btn');
+        if (searchBtn) searchBtn.disabled = true;
         setSearchHint('content', '正在搜索文件内容...');
         try {
             let res = await api.search_files(keyword, caseSensitive);
+            if (requestId !== state.searchRequestId) return;
             if (res && res.results_by_category) {
                 state.searchResults = res.results_by_category;
                 state.searchTotal = res.total_matches || 0;
@@ -1061,10 +1059,14 @@
                 state.searchTotal = 0;
             }
         } catch (e) {
+            if (requestId !== state.searchRequestId) return;
             console.error('[rule-editor] performSearch failed:', e);
             state.searchResults = {};
             state.searchTotal = 0;
+        } finally {
+            if (requestId === state.searchRequestId && searchBtn) searchBtn.disabled = false;
         }
+        if (requestId !== state.searchRequestId) return;
         renderSearchCategories();
         if (state.searchTotal > 0) {
             let hint = $i('re-search-hint');
@@ -1267,8 +1269,11 @@
     }
 
     function clearSearch() {
+        state.searchRequestId++;
         state.searchResults = null;
         state.searchTotal = 0;
+        const searchBtn = $i('re-search-btn');
+        if (searchBtn) searchBtn.disabled = false;
         const input = $i('re-file-search');
         if (input) input.value = '';
         renderSearchCategories();
@@ -1375,6 +1380,14 @@
             searchInput.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
+                    performSearch();
+                }
+            });
+        }
+        const caseSensitive = $i('re-case-sensitive');
+        if (caseSensitive) {
+            caseSensitive.addEventListener('change', function () {
+                if (state.activeTab === 'search-results' && searchInput && searchInput.value.trim()) {
                     performSearch();
                 }
             });
@@ -4611,84 +4624,107 @@
         }
     }
 
+    function setSearchPanelPosition(panels, left, top) {
+        if (!panels) return;
+        var bounds = panels.offsetParent;
+        if (!bounds) return;
+        var boundsRect = bounds.getBoundingClientRect();
+        var panelRect = panels.getBoundingClientRect();
+        var margin = 8;
+        var maxLeft = Math.max(margin, boundsRect.width - panelRect.width - margin);
+        var maxTop = Math.max(margin, boundsRect.height - panelRect.height - margin);
+        var clampedLeft = Math.max(margin, Math.min(left, maxLeft));
+        var clampedTop = Math.max(margin, Math.min(top, maxTop));
+        panels.style.left = clampedLeft + 'px';
+        panels.style.top = clampedTop + 'px';
+        panels.style.right = 'auto';
+        panels.style.bottom = 'auto';
+    }
+
     function attachDrag(searchEl) {
         if (searchEl._dragBound) return;
         searchEl._dragBound = true;
 
-        searchEl.addEventListener('mousedown', function (e) {
+        searchEl.addEventListener('pointerdown', function (e) {
             // 仅在点击背景区域时启动拖动（排除交互控件）
             const target = e.target;
+            if (e.button !== 0) return;
             if (target.tagName === 'INPUT' || target.tagName === 'BUTTON' ||
                 target.tagName === 'LABEL' || target.closest('button') ||
                 target.closest('label')) return;
 
             const panels = searchEl.parentElement; // .cm-panels
-            if (!panels) return;
+            const bounds = panels ? panels.offsetParent : null;
+            if (!panels || !bounds) return;
 
             const rect = panels.getBoundingClientRect();
+            const boundsRect = bounds.getBoundingClientRect();
             const startX = e.clientX;
             const startY = e.clientY;
-            const startLeft = rect.left;
-            const startTop = rect.top;
-            const panel = document.getElementById('re-file-edit-panel');
-            const panelRect = panel ? panel.getBoundingClientRect() : null;
+            const startLeft = rect.left - boundsRect.left;
+            const startTop = rect.top - boundsRect.top;
             var moved = false;
-            var dragState = null; // { rAF }
+            var frameId = null;
+            var pendingX = startX;
+            var pendingY = startY;
             const DEAD_ZONE = 3;   // 3px 死区，区分点击与拖拽
 
-            // 提示 GPU 加速
-            panels.style.willChange = 'left, top';
-            searchEl.classList.add('dragging');
-            // 仅在搜索面板元素上禁用文本选中，而非整个 document.body
-            searchEl.style.userSelect = 'none';
+            searchEl.setPointerCapture(e.pointerId);
 
             function onMove(ev) {
+                if (ev.pointerId !== e.pointerId) return;
                 var dx = ev.clientX - startX;
                 var dy = ev.clientY - startY;
                 // 死区：移动 < 3px 不启动拖拽
                 if (!moved && Math.abs(dx) < DEAD_ZONE && Math.abs(dy) < DEAD_ZONE) return;
-                moved = true;
-
-                if (!dragState) dragState = {};
-
-                // 用 requestAnimationFrame 节流，提供 60fps 平滑拖拽
-                if (dragState.rAF) return;
-                dragState.rAF = requestAnimationFrame(function () {
-                    dragState.rAF = null;
-                    var newLeft = startLeft + (ev.clientX - startX);
-                    var newTop = startTop + (ev.clientY - startY);
-                    if (panelRect) {
-                        newLeft = Math.max(panelRect.left, Math.min(newLeft, panelRect.right - rect.width));
-                        newTop = Math.max(panelRect.top, Math.min(newTop, panelRect.bottom - rect.height));
-                    }
-                    panels.style.left = (newLeft - (panelRect ? panelRect.left : 0)) + 'px';
-                    panels.style.top = (newTop - (panelRect ? panelRect.top : 0)) + 'px';
-                    panels.style.right = 'auto';
+                if (!moved) {
+                    moved = true;
+                    panels.style.willChange = 'transform';
+                    searchEl.classList.add('dragging');
+                    searchEl.style.userSelect = 'none';
+                }
+                pendingX = ev.clientX;
+                pendingY = ev.clientY;
+                if (frameId) return;
+                frameId = requestAnimationFrame(function () {
+                    frameId = null;
+                    panels.style.transform = 'translate3d(' +
+                        (pendingX - startX) + 'px,' + (pendingY - startY) + 'px,0)';
                 });
             }
 
-            function onUp() {
-                // 移除 GPU 加速提示
+            function onUp(ev) {
+                if (ev.pointerId !== e.pointerId) return;
+                if (frameId) {
+                    cancelAnimationFrame(frameId);
+                    frameId = null;
+                }
+                panels.style.transform = '';
                 panels.style.willChange = '';
                 searchEl.classList.remove('dragging');
                 searchEl.style.userSelect = '';
-                if (dragState && dragState.rAF) {
-                    cancelAnimationFrame(dragState.rAF);
+                if (searchEl.hasPointerCapture(e.pointerId)) {
+                    searchEl.releasePointerCapture(e.pointerId);
                 }
-                dragState = null;
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
+                searchEl.removeEventListener('pointermove', onMove);
+                searchEl.removeEventListener('pointerup', onUp);
+                searchEl.removeEventListener('pointercancel', onUp);
 
-                // 保存拖拽位置到跨标签桥接
-                if (panels.style.left) {
+                if (moved) {
+                    setSearchPanelPosition(
+                        panels,
+                        startLeft + (pendingX - startX),
+                        startTop + (pendingY - startY)
+                    );
                     _searchBridge.panelLeft = panels.style.left;
                     _searchBridge.panelTop = panels.style.top || '';
                     _searchBridge.panelRight = panels.style.right || 'auto';
                 }
             }
 
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
+            searchEl.addEventListener('pointermove', onMove);
+            searchEl.addEventListener('pointerup', onUp);
+            searchEl.addEventListener('pointercancel', onUp);
         });
     }
 
@@ -4743,9 +4779,11 @@
             if (!c) return;
             var panels = c.querySelector('.cm-panels');
             if (!panels) return;
-            panels.style.left = _searchBridge.panelLeft;
-            panels.style.top = _searchBridge.panelTop;
-            panels.style.right = _searchBridge.panelRight || 'auto';
+            setSearchPanelPosition(
+                panels,
+                parseFloat(_searchBridge.panelLeft) || 8,
+                parseFloat(_searchBridge.panelTop) || 8
+            );
         }
 
         // 目标编辑器已有可见搜索面板：仅更新查询 + 位置

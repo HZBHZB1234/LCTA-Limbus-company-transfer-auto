@@ -762,7 +762,7 @@ class LCTA_API():
         except Exception as e:
             self.log_manager.log_error(e)
             raise RuntimeError('获取当前安装汉化包失败')
-        fancy_main(gamePath, config_lang, [i for i in config_list if enableMap.get(i.get('name', ''), False)])
+        fancy_main(gamePath, config_lang, config_list, enableMap)
 
     def fetch_proper_nouns(self, modal_id= "false"):
         """获取专有词汇"""

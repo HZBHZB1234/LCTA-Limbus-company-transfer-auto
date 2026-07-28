@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import webutils.function_rule_editor as rule_editor
 from webutils.builtinFancyFunc import SkillColorHandler
 from webutils.function_fancy import fancy_main
 from webutils.function_rule_editor import (
@@ -89,6 +90,71 @@ def test_fancy_main_writes_changed_files(tmp_path):
     assert stats.values_changed == 1
 
 
+def test_fancy_main_only_prepares_skill_cache_for_enabled_rulesets(monkeypatch, tmp_path):
+    package_dir = tmp_path / "LimbusCompany_Data" / "lang" / "LLC_zh-CN"
+    package_dir.mkdir(parents=True)
+    skill_ruleset = {
+        "version": 2,
+        "name": "skill-cache",
+        "rules": [{
+            "files": ["Skill*.json"],
+            "scope": "dataList[*]",
+            "targets": ["name"],
+            "where": [],
+            "actions": [{"type": "skill_color", "idPath": "id"}],
+        }],
+    }
+    plain_ruleset = make_ruleset({
+        "files": ["*.json"],
+        "scope": "dataList[*]",
+        "targets": ["desc"],
+        "where": [],
+        "actions": [{"type": "replace", "mode": "literal", "from": "a", "to": "b"}],
+    })
+    plain_ruleset["name"] = "plain"
+    calls = {"count": 0}
+
+    def prepare():
+        calls["count"] += 1
+        return True
+
+    monkeypatch.setattr("webutils.builtinFancyFunc.skillColorHandler.prepare", prepare)
+
+    fancy_main(
+        str(tmp_path),
+        "LLC_zh-CN",
+        [skill_ruleset, plain_ruleset],
+        {"skill-cache": False, "plain": True},
+    )
+    assert calls["count"] == 0
+
+    fancy_main(
+        str(tmp_path),
+        "LLC_zh-CN",
+        [skill_ruleset, plain_ruleset],
+        {"skill-cache": True, "plain": False},
+    )
+    assert calls["count"] == 1
+
+
+def test_rule_editor_searches_bom_and_unparseable_file_content(monkeypatch, tmp_path):
+    (tmp_path / "Skills_BOM.json").write_text(
+        '{"dataList":[{"desc":"目标目标"}]}',
+        encoding="utf-8-sig",
+    )
+    (tmp_path / "Story_raw.json").write_text(
+        'not valid json, but contains 目标',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(rule_editor, "_get_lang_dir", lambda: tmp_path)
+
+    result = rule_editor.search_files("目标")
+
+    assert result["total_matches"] == 3
+    assert result["results_by_category"]["技能"] == [("Skills_BOM.json", 2)]
+    assert result["results_by_category"]["故事"] == [("Story_raw.json", 1)]
+
+
 def test_skill_color_fingerprint_cache(monkeypatch, tmp_path):
     resource_file = tmp_path / "__data"
     resource_file.write_bytes(b"resource")
@@ -133,4 +199,3 @@ def test_skill_color_failure_is_not_retried(monkeypatch):
     assert not handler.prepare()
     assert not handler.prepare()
     assert calls["count"] == 1
-

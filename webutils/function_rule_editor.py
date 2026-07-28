@@ -80,25 +80,11 @@ def get_file_content(relative_path: str) -> dict:
 
 def search_files(keyword: str, case_sensitive: bool = False) -> dict:
     lang_dir = _get_lang_dir()
-    if not lang_dir:
+    if not lang_dir or not isinstance(keyword, str) or not keyword:
         return {"results_by_category": {}, "total_matches": 0}
     results_by_category = {}
     total_matches = 0
     search_keyword = keyword if case_sensitive else keyword.lower()
-
-    def count_matches(obj):
-        count = 0
-        if isinstance(obj, str):
-            target = obj if case_sensitive else obj.lower()
-            if search_keyword in target:
-                count += 1
-        elif isinstance(obj, dict):
-            for k, v in obj.items():
-                count += count_matches(k) + count_matches(v)
-        elif isinstance(obj, list):
-            for item in obj:
-                count += count_matches(item)
-        return count
 
     for root, dirs, files in os.walk(lang_dir):
         for f in files:
@@ -110,16 +96,17 @@ def search_files(keyword: str, case_sensitive: bool = False) -> dict:
             except ValueError:
                 rel_path = str(full_path)
             try:
-                data = json.loads(full_path.read_text(encoding='utf-8'))
-                matches = count_matches(data)
+                content = full_path.read_text(encoding='utf-8-sig')
+                searchable_content = content if case_sensitive else content.lower()
+                matches = searchable_content.count(search_keyword)
                 if matches > 0:
                     category = get_category(rel_path)
                     if category not in results_by_category:
                         results_by_category[category] = []
                     results_by_category[category].append((rel_path, matches))
                     total_matches += matches
-            except Exception:
-                pass
+            except (OSError, UnicodeError) as exc:
+                logger.debug("搜索文件内容失败 %s: %s", full_path, exc)
     return {"results_by_category": results_by_category, "total_matches": total_matches}
 
 def get_ruleset_list() -> list:

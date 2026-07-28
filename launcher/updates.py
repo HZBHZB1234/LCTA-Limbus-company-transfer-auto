@@ -129,8 +129,8 @@ class UpdateBase(ABC):
             config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
             from webutils.function_fancy import load_fancy_folder_rules
             config_list = [*builtinFancyConfig, *load_fancy_folder_rules()]
-            enableMap = json.loads(ConfigManager().get('fancy_allow', '[]'))
-            fancy_main(gamePath, config_lang, [i for i in config_list if enableMap.get(i.get('name', ''), False)])
+            enableMap = json.loads(ConfigManager().get('fancy_allow', '{}'))
+            fancy_main(gamePath, config_lang, config_list, enableMap)
         return True
 
     def special_run(self) -> bool:

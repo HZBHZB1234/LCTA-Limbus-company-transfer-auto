@@ -3,8 +3,10 @@ import logging
 import os
 import tempfile
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from globalManagers.LogManager import LogManager
 from webutils.fancy_engine import ApplyResult, CompiledRules, apply_rules, compile_rulesets
@@ -49,13 +51,32 @@ def _write_json_atomic(file: Path, data: dict) -> None:
             temp_path.unlink()
 
 
-def fancy_main(game_path: str, package_name: str, config: list) -> FancyRunStats:
+def _select_enabled_rulesets(config: list, enable_map: Optional[Mapping] = None) -> list:
+    if enable_map is None:
+        return list(config)
+    if not isinstance(enable_map, Mapping):
+        logger.warning('美化启用配置格式无效，跳过全部规则集')
+        return []
+    return [
+        ruleset for ruleset in config
+        if enable_map.get(ruleset.get('name', ''), False)
+    ]
+
+
+def fancy_main(
+    game_path: str,
+    package_name: str,
+    config: list,
+    enable_map: Optional[Mapping] = None,
+) -> FancyRunStats:
     """
     处理语言包下的所有 JSON 文件。
     config: 规则集列表，每个元素包含 "rules" 列表。
+    enable_map: 可选的规则集启用状态；传入时仅编译和执行明确启用的规则集。
     """
     started_at = time.perf_counter()
-    compiled = compile_rulesets(config)
+    enabled_rulesets = _select_enabled_rulesets(config, enable_map)
+    compiled = compile_rulesets(enabled_rulesets)
     resource_cache_hit = False
     if compiled.requires_skill_color:
         from webutils.builtinFancyFunc import skillColorHandler

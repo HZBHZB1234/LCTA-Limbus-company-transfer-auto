@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-27 -->
+<!-- Last updated: 2026-07-28 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -189,8 +189,21 @@ User browses files in sidebar, double-clicks a file
   → webui/app.py RuleEditorAPI.get_file_content()
     → webutils/function_rule_editor.py get_file_content()
 
+User types in sidebar search input
+  → filterFilesByKeyword(keyword)                    local filename/category filter only
+User presses Enter or clicks "搜索"
+  → performSearch()                                  increments searchRequestId; disables button
+    → api.search_files(keyword, caseSensitive)
+      → function_rule_editor.py search_files()       raw UTF-8-SIG text occurrence count
+                                                     (BOM and invalid JSON remain searchable)
+    → ignore response if a newer search/clear occurred
+    → renderSearchCategories()                       grouped content-search results
+
 File content loaded into editable CodeMirror (file-edit tab)
   → state.currentFile set, fileOriginalContent saved for diff
+  → Ctrl+F/H opens CodeMirror search panel
+    → pointer-capture drag + requestAnimationFrame transform
+    → setSearchPanelPosition() clamps panel inside editor and restores position across tabs
 
 User edits text in CodeMirror, clicks "比较变更"
   → diffAndTrackChanges()
@@ -218,7 +231,39 @@ User clicks "智能生成规则集" (from changes panel or ruleset-edit tab)
 
 Key files: `webui/rule-editor.html`, `webui/js/rule-editor.js`, `webui/app.py` (RuleEditorAPI), `webutils/function_rule_editor.py`
 
-## 8. Config Management
+## 8. Text Beautification — Compile and Apply Rules
+
+```
+WebUI user applies text beautification
+  → webui/js/features.js FancyManager              collects built-in/user rules + enable map
+  → pywebview.api.fancy_main(configList, enableMap)
+  → webui/app.py LCTA_API.fancy_main()
+
+Launcher finishes an enabled translation update
+  → launcher/updates.py UpdateBase.run()
+    → load_fancy_folder_rules()                     append user v2 rulesets
+    → read config fancy_allow                       default {}
+
+Both paths
+  → webutils/function_fancy.py fancy_main(gamePath, package, rulesets, enableMap)
+    → _select_enabled_rulesets()                    discard disabled rules before compilation
+    → webutils/fancy_engine.py compile_rulesets()
+      → validate/compile file globs, paths, regexes, conditions, actions
+      → CompiledRules.requires_skill_color
+        → builtinFancyFunc.SkillColorHandler.prepare() only when an enabled rule needs it
+          → function_resource.py load_text_assets()
+          → fingerprinted tmp/fancy/skill-colors.json cache
+    → scan language-package *.json files
+      → CompiledRules.for_file(relativePath)         skip files with no matching rules
+      → read UTF-8-SIG JSON
+      → apply_rules()                                return changed JSON paths
+      → atomic replace only when changed_count > 0
+    → FancyRunStats                                  scanned/matched/changed/value/time/cache data
+```
+
+Key files: `webui/js/features.js`, `webui/app.py`, `launcher/updates.py`, `webutils/function_fancy.py`, `webutils/fancy_engine.py`, `webutils/builtinFancyFunc.py`, `webutils/function_resource.py`
+
+## 9. Config Management
 
 ```
 Write: JS form change
@@ -240,7 +285,7 @@ Validate: config_check.json         JSON schema mapping keys → types ("str", "
 
 Files: `globalManagers/ConfigManager.py`, `config.json`, `config_default.json`, `config_check.json`, `webui/app.py`, `webutils/load.py`
 
-## 8. Auto-Update
+## 10. Auto-Update
 
 ```
 JS: user clicks "check for updates" or auto-check on startup
@@ -253,7 +298,7 @@ JS: user clicks "check for updates" or auto-check on startup
 
 Files: `webui/app.py`, `webutils/update.py`, `webFunc/GithubDownload.py`
 
-## 9. Manual Update from Local Package
+## 11. Manual Update from Local Package
 
 ```
 JS: user clicks "从本地更新包手动更新" in debug settings
@@ -269,7 +314,7 @@ JS: user clicks "从本地更新包手动更新" in debug settings
 
 Files: `webui/js/features.js`, `webui/app.py`, `webutils/update.py`
 
-## 10. Drag-and-Drop File Installation
+## 12. Drag-and-Drop File Installation
 
 ```
 JS: user drags files onto window
@@ -293,7 +338,7 @@ JS: user drags files onto window
 
 Files: `webui/js/features.js`, `webui/app.py`, `webutils/function_drop.py`, `webutils/update.py`
 
-## 11. WebUI Startup Bootstrap
+## 13. WebUI Startup Bootstrap
 
 ```
 start_webui.py main()

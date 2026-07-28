@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-07-23 -->
+<!-- Last updated: 2026-07-28 -->
 
 ## How to Run
 
@@ -38,9 +38,12 @@ pytest tests/
 
 # Run specific test file
 pytest tests/test_config.py
+
+# Run text-beautification engine coverage
+pytest tests/test_fancy_conditions.py tests/test_fancy_v2.py tests/test_fancy_performance.py
 ```
 
-Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`
+Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`
 
 ## Project Conventions
 
@@ -49,7 +52,17 @@ Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_w
 - **Logging**: Use `LogManager` singleton, not `print()` or root `logging`
 - **Bridge pattern**: New JS-accessible methods go in `webui/app.py` `LCTA_API` class; JS calls via `pywebview.api.<method>()`
 - **Public API**: New webutils functions must be exported in `webutils/__init__.py`
-- **GPL boundary**: `launcher/` and main app share NO imports — only config.json and CLI invocation
+- **Launcher license scope**: `launcher/` is GPL-3.0-licensed, but its Python modules currently reuse shared `webutils/`, `webFunc/`, and `globalManagers/` code; do not assume import isolation
+- **Knowledge-base maintenance**: Significant features, files, entry points, dependencies, or structural changes must update the relevant `.claude/docs/*.md` file and its `Last updated` date
+- **Agent instruction source**: Edit `CLAUDE.md`, then synchronize the identical content to `AGENTS.md`
+
+### Enabling Instruction Synchronization
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The repository-local pre-commit hook copies `CLAUDE.md` to `AGENTS.md` and stages the result when they differ. `.github/workflows/check-sync.yml` independently verifies the same invariant on pull requests that change either file and can also be run manually.
 
 ## Common Development Patterns
 
@@ -90,6 +103,7 @@ Follow existing modal pattern in `webui/app.py`: Python method starts operation 
 |----------|------|---------|
 | Build & Release | `.github/workflows/release.yml` | Push to `main`, git tag `v*` |
 | Scheduled Check | `.github/workflows/check.yml` | Scheduled cron |
+| Instruction Sync | `.github/workflows/check-sync.yml` | Pull requests changing `CLAUDE.md`/`AGENTS.md`, manual dispatch |
 
 Release workflow: windows-latest runner, MSYS2/MinGW-w64 for C compilation, mirrors `build.ps1` logic.
 
@@ -99,5 +113,6 @@ Release workflow: windows-latest runner, MSYS2/MinGW-w64 for C compilation, mirr
 - **Windows only** — uses Win32 API, pywebview, MSYS2
 - **`build.ps1` MUST be UTF-8 with BOM** (PowerShell requirement for Chinese text)
 - **Build/release sync** — changes to gcc flags or C structure must update BOTH `build.ps1` AND `.github/workflows/release.yml`
+- **Instruction-file sync** — `CLAUDE.md` and `AGENTS.md` must remain byte-for-byte identical; use the repository hook or copy manually before commit
 - **etcpak==0.9.8 pinned** — version 0.9.9 crashes
-- **GPL-3.0 isolation** — `launcher/` is import-isolated from MIT-licensed main code
+- **GPL-3.0 launcher scope** — treat `launcher/` as separately licensed even though its Python implementation imports shared root modules

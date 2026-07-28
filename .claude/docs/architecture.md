@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-07-27 -->
+<!-- Last updated: 2026-07-28 -->
 
 ## Project Purpose
 
@@ -15,7 +15,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | JavaScript | Frontend | SPA modules plus standalone editor and translation-log viewer scripts, bridged to Python via `pywebview.api` |
 | HTML/CSS | Frontend | SPA in `webui/index.html` with lazy section fragments plus standalone rule editor, quick editor, and translation diagnostic viewer windows with theme sync |
 | PowerShell | Build system | `build.ps1` (617 lines), 6-step build pipeline |
-| YAML | CI/CD | GitHub Actions: `release.yml`, `check.yml` |
+| YAML | CI/CD | GitHub Actions: `release.yml`, `check.yml`, `check-sync.yml` |
 
 ## Layered Architecture
 
@@ -29,7 +29,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 ├─────────────────────────────────────────────────────┤
 │                  BUSINESS LOGIC                      │
 │  webutils/__init__.py    public API aggregation      │
-│  webutils/function_*.py  feature modules (24 files)  │
+│  webutils/function_*.py  feature modules             │
 │  webutils/update.py      self-update via GitHub API  │
 │  webutils/load.py        config loading/validation   │
 ├─────────────────────────────────────────────────────┤
@@ -41,6 +41,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │    workers.py             concurrency                │
 │    builder/               prompt & request building  │
 │    matcher/               proper noun AC matching    │
+│  webutils/fancy_engine.py compiled v2 rule engine    │
+│  webutils/function_fancy.py file orchestration/stats │
 ├─────────────────────────────────────────────────────┤
 │                INFRASTRUCTURE                        │
 │  webFunc/                 GitHub API, file upload,   │
@@ -71,6 +73,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Singleton** | `globalManagers/` | `ConfigManager` — thread-safe, lazy-init, dotted-path access. `LogManager` — async UI callbacks via thread pool |
 | **Bridge** | `webui/app.py` ↔ JS | `LCTA_API` class exposes Python methods to JS via `pywebview.api`; JS calls like `pywebview.api.install_llc()` |
 | **Pipeline** | `translateFunc/pipeline.py` | `TranslationPipeline` orchestrates: fetch proper nouns → build matcher → priority files → WorkerPool → aggregate |
+| **Compile/Apply** | `webutils/fancy_engine.py` | Text beautification validates and compiles v2 rules once, selects rules per file, then applies structured-path conditions/actions without repeatedly reparsing paths or regexes |
 | **Factory** | `launcher/updates.py` | Update objects for LLC, OurPlay, Machine translation — each implements a common interface |
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |
 | **Pipeline** | `launcher/pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline (init→check_update→cdn→prepare_mod→launch→running→exit). Modules register callbacks per phase via `on(phase, callback)`; `cancel_event` supports GUI-initiated shutdown.
@@ -84,6 +87,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `QuickEditorAPI` | `webui/app.py` | Pywebview bridge for the quick editor window: wraps `webutils/function_quick_editor.py` methods (diff_json, load/save/apply_quick_edits) plus shared methods from `function_rule_editor.py` (file browser, search). Instantiated as `js_api=QuickEditorAPI()` in `open_quick_editor()` |
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |
 | `TranslationPipeline` | `translateFunc/pipeline.py` | Orchestrates the 6-stage LLM translation pipeline |
+| `CompiledRules` / `ApplyResult` | `webutils/fancy_engine.py` | Immutable compiled beautification rules plus per-file changed-path results; exposes `requires_skill_color` so resource extraction is prepared only when an enabled rule needs it |
+| `FancyRunStats` | `webutils/function_fancy.py` | Reports scanned, matched and changed files/values, elapsed time, and skill-color resource cache hits; files are rewritten atomically only when content changes |
 | `LogManager` | `globalManagers/LogManager.py` | Singleton logger: file rotation, console, webview modal callbacks |
 
 ## Polyglot Boundaries

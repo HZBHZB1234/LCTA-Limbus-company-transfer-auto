@@ -1,20 +1,31 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-27 -->
+<!-- Last updated: 2026-07-28 -->
 
 ## Directory Overview
 
 | Directory | Role | Key Files |
 |-----------|------|-----------|
 | `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 15 + sections |
-| `webutils/` | Business logic layer (one file per feature) | 25 |
+| `webutils/` | Business logic layer (feature modules + beautification engine) | 32 Python files |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
 | `globalManagers/` | Cross-cutting singletons | 2 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
 | `fancy/` | User rule sets (one JSON file per ruleset) | auto-created |
-| `tests/` | Pytest test suite | ~7 |
+| `tests/` | Pytest test suite | 13 Python files |
+| `.githooks/` | Repository-local Git hooks | `pre-commit` |
+| `.github/workflows/` | CI/CD and repository consistency checks | `release.yml`, `check.yml`, `check-sync.yml` |
+
+## Repository Guidance & Automation
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Source project instructions and AI-first knowledge-base index |
+| `AGENTS.md` | Cross-tool copy of `CLAUDE.md`; kept byte-for-byte synchronized for other coding agents |
+| `.githooks/pre-commit` | Optional local hook (`git config core.hooksPath .githooks`) that copies `CLAUDE.md` to `AGENTS.md` and stages the synchronized file before commit |
+| `.github/workflows/check-sync.yml` | Pull-request/manual CI guard that fails when `CLAUDE.md` and `AGENTS.md` differ |
 
 ## webui/ — Frontend Application
 
@@ -22,13 +33,13 @@
 |------|---------|
 | `app.py` | **Core** pywebview bridge. Includes the main `LCTA_API` plus `RuleEditorAPI`, `QuickEditorAPI`, and read-only `TranslationLogViewerAPI`; spawns secondary windows and synchronizes light/dark/purple themes |
 | `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
-| `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器. Sidebar file browser + two main mode tabs (file-edit / ruleset-edit). File-edit tab: VSCode-style CodeMirror 6 editor with find/replace (Ctrl+F/H), match highlighting, dirty state indicator, status bar, change tracking, smart ruleset generation (V3: auto-merge + instant analysis, replaces 保守/进取 mode selection). Ruleset-edit tab: simple form + advanced JSON editors for ruleset CRUD. Theme syncs with main app window (light/dark/purple) |
+| `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器. Sidebar search input filters filenames/categories while typing and runs full-content search on Enter or the search button. File-edit tab: VSCode-style CodeMirror 6 editor with find/replace (Ctrl+F/H), match highlighting, dirty state indicator, status bar, change tracking, and smart ruleset generation. Ruleset-edit tab: simple form + advanced JSON editors for ruleset CRUD. Theme syncs with main app window (light/dark/purple) |
 | `quick-editor.html` | Standalone pywebview page for the 简易翻译编辑器. Simpler than rule-editor: sidebar file browser (categorized, searchable) + CodeMirror 6 JSON editor + bottom change list panel. Changes recorded as `{file, path, old, new}` path-patch format, saved to fixed `fancy/_quick_edits.json`. No ruleset management or regex patterns — designed for lightweight users who just want to edit translations directly |
 | `translation-log-viewer.html` | Standalone read-only translation diagnostic viewer. Opens one user-selected current `schema_version: 2` JSONL dump and provides structured filters, pagination, lazy full-record details, copy, refresh, and filtered export |
 | `css/base.css` | Base styling with 3 theme definitions (light/dark/purple) and CSS custom properties |
 | `css/components.css` | Component-specific styles: cards, buttons, forms, progress bars, modals |
 | `css/layout-extras.css` | Layout utilities, modals, drawers, scrollbars, responsive breakpoints. Now also loaded by rule-editor.html |
-| `css/rule-editor.css` | Rule editor styles: sidebar+main+bottom panel layout, VSCode-style find bar, data cards, smart-gen dialog (V1/V2/V3 with merge connectors), tiered scope options, editor status bar, match highlight decorations, toast notifications, per-theme editor colors |
+| `css/rule-editor.css` | Rule editor styles: sidebar+main+bottom panel layout, VSCode-style find bar, bounded pointer-drag search panel with touch handling, data cards, smart-gen dialog (V1/V2/V3 with merge connectors), tiered scope options, editor status bar, match highlights, toasts, per-theme colors |
 | `css/quick-editor.css` | Quick editor styles: 3-panel flex layout (sidebar+main+changes), category groups with collapsible headers, file item active/hover states, toolbar buttons, change list cards with old→new diff display, resize handles, batch replace dialog, per-theme color variables |
 | `css/translation-log-viewer.css` | Three-column diagnostic viewer layout, filters, record table, collapsible detail cards, responsive detail panel, and theme-aware status styling |
 | `js/core.js` | Core framework: API binding, event system, navigation |
@@ -40,7 +51,7 @@
 | `js/cdn.js` | CDN optimization page logic |
 | `js/speed.js` | Game speed control page logic |
 | `js/list-managers.js` | List/tab view management; constructors tolerate missing containers (lazy load compatible); container refs updated by `onSectionLoaded` |
-| `js/rule-editor.js` | Rule editor frontend logic: two main mode tabs (file-edit / ruleset-edit). File-edit: editable CodeMirror, JSON diff tracking, change list panel, batch replace, smart gen from file edits. Ruleset-edit: file browser (grouped by category, search with full-text), file content preview (structured data cards / read-only CodeMirror), simple mode form-driven rule builder, advanced mode editable CodeMirror with template loading and validation, smart generation dialog with L1-L4 tiered scope options |
+| `js/rule-editor.js` | Rule editor frontend logic: two main mode tabs (file-edit / ruleset-edit). Sidebar typing performs local filename/category filtering; explicit search performs asynchronous full-content search with request IDs so stale results cannot overwrite newer searches. CodeMirror find panels use pointer capture, animation-frame transforms, boundary clamping, and cross-tab position restoration. File editing, JSON diff tracking, batch replace, ruleset CRUD, templates, validation, and V1/V2/V3 smart generation remain in this module |
 | `js/quick-editor.js` | Quick editor frontend logic (~800 lines): file browser with category grouping, CodeMirror 6 JSON editing, `diff_json`-based change tracking (`recordChanges()`), edit list rendering with per-item delete, search across files by keyword with drill-down, batch replace dialog, resize handle drag, theme sync with main window, Ctrl+S to record changes |
 | `js/translation-log-viewer.js` | Translation dump viewer frontend: native file selection, manual reread, structured filters, pagination, lazy detail rendering, clipboard copy, and filtered JSONL export; no directory scan or content search |
 | `sections/preload.js` | Lazy section loader: preloads only dashboard at startup, fetches others on first navigation via `loadSection()`; `onSectionLoaded()` callback re-runs per-section init (toggle funcs, list manager refs, select box values, DOM ref rebuilds) |
@@ -71,18 +82,20 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `function_manage.py` | Package management | Installed packages, mod management, symlink operations |
 | `function_clean.py` | Cache cleaner | Clean game cache files |
 | `function_fetch.py` | Proper noun scrape | Fetch proper nouns from remote sources |
-| `function_fancy.py` | Text effects | FL-Like visual text enhancements. Supports `conditions` array (multi-condition AND) with backward-compatible `trigger`/`aim` normalization via `_normalize_rule()`. User rulesets now loaded from `fancy/` folder via `load_fancy_folder_rules()`; legacy `ConfigManager.user_fancy` auto-migrated by `migrate_user_fancy_to_folder()` |
+| `function_fancy.py` | Text effects orchestration | Selects enabled built-in/user v2 rulesets before compilation, prepares skill-color resources only when required, scans matching language JSON files with UTF-8 BOM support, applies compiled rules, atomically rewrites changed files only, and returns `FancyRunStats`. Also owns validated `fancy/` ruleset load/save/delete helpers |
+| `fancy_engine.py` | Compiled v2 beautification engine | Validates and compiles file globs, structured JSON paths, AND conditions (`equals`, `in`, `contains`, `regex`) and typed actions (`replace`, `wrap`, `gradient`, `skill_color`); filters rules per file and returns exact changed paths through `ApplyResult` |
 | `function_translate.py` | Translation orchestration | Connects webui to translateFunc pipeline |
 | `function_translation_logs.py` | Translation diagnostics viewer backend | Reads only the user-selected `.jsonl` within its selected parent directory; v2-only indexing, cached summaries/byte offsets, filtering, pagination, lazy record reads, and filtered JSONL export |
 | `function_drop.py` | Drag-and-drop | Drag-and-drop file installation with zip/7z extraction, mod installation, update package handling via Updater |
 | `function_cdn.py` | CDN optimization | Cloudflare + CloudFront CDN speed testing and optimization |
 | `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection; `is_injected()` checks self-tracked injection state |
 | `builtinFancy.py` | Built-in text rules | Built-in text beautification rules |
-| `builtinFancyFunc.py` | Fancy rule functions | Fancy rule processing functions |
+| `builtinFancyFunc.py` | Fancy skill-color resources | `SkillColorHandler` lazily extracts skill attributes from Unity resources, fingerprints source files, caches color mappings in `tmp/fancy/skill-colors.json`, records cache hits, and suppresses repeated retries after an initialization failure |
+| `function_resource.py` | Unity resource reader | Locates Limbus resource files and extracts text assets in batches through UnityPy; sets fallback Unity version `6000.3.12f1` for resources without usable version metadata |
 | `eiderConst.py` | Update constants | Translation pack update lists, dependency chains |
 | `FL2LCTA.py` | Rule converter | Fancy Language → LCTA rule format converter |
 | `Faust_fancy.py` | Faust rules | Faust character-specific fancy text rules |
-| `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`), ruleset CRUD (`get_ruleset_list`, `save_ruleset`, `create_ruleset`, `delete_ruleset`), rule building (`build_rule_from_form`, `validate_rule`), smart change analysis V1/V2/V3 (`analyze_changes`, `analyze_changes_v2`, `analyze_changes_v3` — V3 adds auto-merge by (old_val,new_val,field_path) key + merge candidate detection), 5-dimension scoring (`_score_group`), file saving (`save_file_content` with JSON validation + backup) |
+| `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`); content search counts raw text occurrences with `utf-8-sig`, so BOM and temporarily invalid JSON files remain searchable. Also provides ruleset CRUD, v2 rule validation/building, V1/V2/V3 smart analysis, 5-dimension scoring, and JSON-validated file saving with backup |
 | `rule_editor_constants.py` | Rule editor shared data | Single-source-of-truth for `FILE_PREFIX_RULES`, `CATEGORY_FILE_PATTERNS`, `COMMON_REPLACEMENTS`, `TEMPLATES`. Imported by `function_rule_editor.py` and `app.py` (RuleEditorAPI). JS fetches via `get_editor_constants()` API with hardcoded fallback. |
 | `function_quick_editor.py` | Quick editor backend | Path-patch edit tracking and application. `diff_json()` (deep JSON diff → `{path, old, new}` list), `_set_value_by_path()` (dot-separated JSON path navigation), `load/save/apply_quick_edits()` (persist to `fancy/_quick_edits.json`, apply edits to game files without .bak). Reuses `_get_lang_dir`, `get_lang_files`, `search_files`, etc. from `function_rule_editor.py` |
 | `test.py` | Debug utilities | Internal testing/debug helpers |
@@ -146,7 +159,7 @@ Standalone library with own `__init__.py` public API.
 |------|---------|
 | `main.py` | Entry point: pipeline orchestration — creates `LaunchPipeline`, registers handlers for mod/speed-hotkey, optionally creates GUI window, then emits pipeline phases in order. Uses `subprocess.Popen` (not `subprocess.call`) for game launch to support cancel-flow from GUI |
 | `game_launch.py` | Game launch phases: `prepare_mod()` (mod patching pre-game), `cleanup_mod_assets()` (post-game restore), `start_speed_hotkey()` / `stop_speed_hotkey()` (lifecycle wrappers). Game process launch moved to `main.py` pipeline |
-| `updates.py` | Translation pack update system (Factory pattern for LLC/OurPlay/Machine) |
+| `updates.py` | Translation pack update system (Factory pattern for LLC/OurPlay/Machine). Optional post-update beautification passes all built-in/user rules plus the enable map to `fancy_main()`, allowing disabled skill-color rules to avoid resource preparation |
 | `cdn.py` | CDN optimization for launcher mode with cache TTL to avoid redundant speed tests |
 | `patch.py` | Unity asset patching for mods |
 | `modfolder.py` | Mod folder management and detection |
@@ -170,19 +183,24 @@ webui/app.py
 
 webutils/function_rule_editor.py
   → webutils/function_fancy.py (load_fancy_folder_rules, save_ruleset_to_folder, etc.)
+  → webutils/fancy_engine.py (shared v2 validation)
   → globalManagers/ConfigManager.py (_get_lang_dir)
 
+webutils/function_fancy.py
+  → webutils/fancy_engine.py (compile_rulesets, apply_rules)
+  → webutils/builtinFancyFunc.py (lazy skill-color preparation when required)
+    → webutils/function_resource.py (Unity text asset extraction)
+
 launcher/updates.py
-  → webutils/function_fancy.py (load_fancy_folder_rules) — now reads user rules from fancy/ folder
+  → webutils/function_fancy.py (loads folder rules and executes only rulesets enabled by fancy_allow)
 
 launcher/main.py
   → launcher/gui_progress.py (if gui_mode enabled: WinForms progress window)
-  → launcher/updates.py (standalone, no import from webutils/)
+  → launcher/updates.py (reuses shared webutils/webFunc install, download and beautification helpers)
   → launcher/game_launch.py
   → launcher/cdn.py
 
-Note: launcher/ and main app are IMPORT-ISOLATED (GPL boundary).
-They share only config.json and command-line invocation.
+Note: `launcher/` is separately GPL-3.0-licensed, but the current Python implementation is not import-isolated: launcher modules directly reuse `webutils/`, `webFunc/`, and `globalManagers/`.
 ```
 
 ## Key External Libraries
@@ -191,7 +209,7 @@ They share only config.json and command-line invocation.
 |---------|---------|---------|
 | `pywebview` | `webui/app.py` | Native desktop webview window |
 | `translatekit` | `webutils/`, `translateFunc/` | Multi-provider translation API (Baidu, Google, DeepL, LLM) |
-| `UnityPy` | `launcher/patch.py` | Unity asset extraction and patching |
+| `UnityPy` | `launcher/patch.py`, `webutils/function_resource.py` | Unity asset patching plus batched text-asset extraction for skill-color beautification |
 | `openspeedy` | `webutils/function_speed.py`, `launcher/speed_hotkey.py` | DLL injection for game speed |
 | `keyboard` | `launcher/speed_hotkey.py` | Global hotkey registration |
 | `requests` | `webFunc/GithubDownload.py` | HTTP client with proxy support |

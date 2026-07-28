@@ -122,7 +122,7 @@ Standalone library with own `__init__.py` public API.
 | `pipeline.py` | `TranslationPipeline` — end-to-end orchestration |
 | `config.py` | `TranslateConfig` dataclass, `PipelineSummary`, `ProcessOutcome` |
 | `enums.py` | `ProcessResult`, `FileType`, `MatchConfidence` enums |
-| `processor.py` | `FileProcessor` — per-file translation logic |
+| `processor.py` | `FileProcessor` — per-file translation logic; Stage 2 self-check reuses Stage 1 request parts instead of recombining the full file |
 | `workers.py` | `WorkerPool` — concurrent translation execution |
 | `translate_request.py` | LLM API request construction and response parsing |
 | `translate_doc.py` | Translation documentation/help |
@@ -137,10 +137,10 @@ Standalone library with own `__init__.py` public API.
 | Path | Purpose |
 |------|---------|
 | `builder/prompt.py` | LLM prompt construction: `PromptFactory` with XML/JSON format-aware escape rules, response parsing with repair fallbacks. v1 prompt_version removed; only v2 (priority-tagged rules, reasoning-first) remains. Supports file-type-conditional rules via `_FILETYPE_RULES` (SKILL/STORY/UI) |
-| `builder/request.py` | API request building |
+| `builder/request.py` | API request building with format-aware input limits, output-token estimation, greedy part splitting, and per-part reference trimming |
 | `builder/stages.py` | Pipeline stage definitions |
 | `builder/examples.py` | Example translations for few-shot prompting |
-| `matcher/engine.py` | `MatcherEngine` — proper noun matching orchestration |
+| `matcher/engine.py` | `MatcherEngine` — proper noun/effect matching orchestration; Korean effect-name hits are cross-checked against JP/EN BattleKeywords names when references are available |
 | `matcher/ac_automaton.py` | Aho-Corasick automaton for fast multi-pattern matching |
 | `matcher/proper.py` | `ProperAnalyzer` — proper noun analysis |
 | `proper/analyze.py` | Proper noun analysis utilities |

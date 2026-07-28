@@ -283,27 +283,58 @@ class TranslationPipeline:
             self._on_log(f"加载角色信息失败: {e}")
 
     def _update_affects(self, keyword_file: Path, base_pc: PathConfig, has_prefix: bool) -> None:
-        """从 BattleKeywords 更新 MatcherEngine 中的状态效果数据。"""
+        """从 KR/JP/EN/CN BattleKeywords 更新状态效果多语言数据。"""
         try:
+            def load_data_list(path: Path) -> list[dict]:
+                if not path.exists():
+                    return []
+                data = json.loads(path.read_text(encoding="utf-8-sig"))
+                if isinstance(data, dict):
+                    return data.get("dataList", [])
+                return data if isinstance(data, list) else []
+
+            file_pc = FilePathConfig(
+                KR_path=keyword_file,
+                _PathConfig=base_pc,
+                has_prefix=has_prefix,
+            )
             kr_data = json.loads(keyword_file.read_text(encoding="utf-8-sig"))
-            target = FilePathConfig(KR_path=keyword_file, _PathConfig=base_pc, has_prefix=has_prefix).target_file
+            target = file_pc.target_file
             cn_data = json.loads(target.read_text(encoding="utf-8-sig")) if target.exists() else kr_data
             kr_list = kr_data.get("dataList", kr_data if isinstance(kr_data, list) else [])
             cn_list = cn_data.get("dataList", cn_data if isinstance(cn_data, list) else [])
+            jp_list = load_data_list(file_pc.JP_path)
+            en_list = load_data_list(file_pc.EN_path)
 
-            if len(kr_list) != len(cn_list):
+            available_lengths = [len(kr_list), len(cn_list)]
+            available_lengths.extend(
+                len(items) for items in (jp_list, en_list) if items
+            )
+            if len(set(available_lengths)) > 1:
                 _logger.warning(
-                    f"状态效果数据 KR/CN 列表长度不匹配: KR={len(kr_list)}, CN={len(cn_list)}，"
-                    f"将按较短列表配对"
+                    "状态效果数据列表长度不匹配: "
+                    f"KR={len(kr_list)}, JP={len(jp_list)}, "
+                    f"EN={len(en_list)}, CN={len(cn_list)}，将按 ID 配对"
                 )
 
+            cn_by_id = {item.get("id", ""): item for item in cn_list}
+            jp_by_id = {item.get("id", ""): item for item in jp_list}
+            en_by_id = {item.get("id", ""): item for item in en_list}
             affects = []
-            for k, c in zip_longest(kr_list, cn_list):
-                if k is None or c is None:
+            for kr_item in kr_list:
+                affect_id = kr_item.get("id", "")
+                if not affect_id:
                     continue
+                cn_item = cn_by_id.get(affect_id, kr_item)
+                jp_item = jp_by_id.get(affect_id, {})
+                en_item = en_by_id.get(affect_id, {})
                 affects.append({
-                    "id": k["id"], "kr": k["name"], "cn": c["name"],
-                    "desc": c.get("desc", ""),
+                    "id": affect_id,
+                    "kr": kr_item.get("name", ""),
+                    "jp": jp_item.get("name", ""),
+                    "en": en_item.get("name", ""),
+                    "cn": cn_item.get("name", kr_item.get("name", "")),
+                    "desc": cn_item.get("desc", ""),
                 })
             self._engine.build_affects(affects)
             self._on_log(f"已加载 {len(affects)} 个状态效果")

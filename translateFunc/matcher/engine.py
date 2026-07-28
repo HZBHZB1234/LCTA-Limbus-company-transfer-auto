@@ -66,7 +66,7 @@ class MatcherEngine:
         self._role_ac.build()
 
     def build_affects(self, affect_items: list[dict]) -> None:
-        """从 [{id, kr, cn, desc}, ...] 构建状态效果 ID 和名称 AC 自动机。"""
+        """从 [{id, kr, jp, en, cn, desc}, ...] 构建状态效果匹配器。"""
         self._affect_data = affect_items
         self._affect_id_ac = AcAutomaton()
         self._affect_name_ac = AcAutomaton()
@@ -82,14 +82,46 @@ class MatcherEngine:
 
     # ----- 匹配 -----
 
-    def match_all(self, text: str) -> MatchResult:
-        """对文本运行全部四个匹配器。"""
+    def match_all(
+        self,
+        text: str,
+        *,
+        jp_text: str = "",
+        en_text: str = "",
+    ) -> MatchResult:
+        """对文本运行全部匹配器，并用 JP/EN 参考过滤韩文名称误匹配。"""
+        affect_name_matches = [
+            match for match in self._affect_name_ac.search(text)
+            if self._is_affect_name_supported(match.data, text, jp_text, en_text)
+        ]
         return MatchResult(
             proper_matches=self._proper_ac.search(text),
             role_matches=self._role_ac.search(text),
             affect_id_matches=self._affect_id_ac.search(text),
-            affect_name_matches=self._affect_name_ac.search(text),
+            affect_name_matches=affect_name_matches,
         )
+
+    @staticmethod
+    def _is_affect_name_supported(
+        affect_data: object,
+        kr_text: str,
+        jp_text: str,
+        en_text: str,
+    ) -> bool:
+        """有可用 JP/EN 对照时，要求至少一种语言同时出现对应效果名。"""
+        if not isinstance(affect_data, dict):
+            return True
+
+        comparisons: list[bool] = []
+        jp_name = str(affect_data.get("jp", "") or "").strip()
+        if jp_name and jp_text and jp_text != kr_text:
+            comparisons.append(jp_name in jp_text)
+
+        en_name = str(affect_data.get("en", "") or "").strip()
+        if en_name and en_text and en_text != kr_text:
+            comparisons.append(en_name.casefold() in en_text.casefold())
+
+        return any(comparisons) if comparisons else True
 
     def match_proper(self, text: str) -> list[ACPattern]:
         """仅匹配专有名词。"""

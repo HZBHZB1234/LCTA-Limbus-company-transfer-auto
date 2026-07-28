@@ -38,15 +38,20 @@ JS: user configures & clicks translate
   → translateFunc/pipeline.py      TranslationPipeline.run()
     Stage 1: translateFunc/get_proper.py     fetch proper nouns from remote
     Stage 2: translateFunc/matcher/engine.py build AC automaton matcher
+                                              load KR/JP/EN/CN effect names and use
+                                              JP/EN entries to reject Korean substring false positives
     Stage 3: translateFunc/processor.py      process priority files first
     Stage 4: translateFunc/workers.py        WorkerPool concurrent translation
       → translateFunc/builder/prompt.py      construct LLM prompts
-      → translateFunc/builder/request.py     build API requests
+      → translateFunc/builder/request.py     build API requests; split by both rendered
+                                              input length and estimated output-token budget
       → translateFunc/translate_request.py   call LLM API, parse response
       → translateFunc/validator.py           rule-based post-processing (skill files only,
                                               controlled by enable_rule_validation config):
                                               validate [ID] bracket spacing → auto-fix
                                               validate effect refs from source → warning
+      → translateFunc/processor.py           run Stage 2 self-check per Stage 1 part so
+                                              checked output cannot recombine into one oversized response
     Stage 5: translateFunc/matcher/engine.py post-translation proper matching
     Stage 6: translateFunc/pipeline.py       aggregate results → PipelineSummary
   → webutils/function_translate.py  write output files

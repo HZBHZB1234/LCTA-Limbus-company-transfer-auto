@@ -129,6 +129,55 @@ class TestFilePathConfig:
 class TestPipelineBugFixes:
     """Tests for B3, B4, B5 bug fixes."""
 
+    def test_update_affects_loads_jp_en_names_by_id(self, tmp_path):
+        kr_base = tmp_path / "kr"
+        jp_base = tmp_path / "jp"
+        en_base = tmp_path / "en"
+        target_base = tmp_path / "out"
+        for path in (kr_base, jp_base, en_base, target_base):
+            path.mkdir()
+
+        def write_keywords(path, items):
+            path.write_text(
+                json.dumps({"dataList": items}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+        kr_file = kr_base / "KR_BattleKeywords.json"
+        write_keywords(kr_file, [{"id": "Charge", "name": "충전"}])
+        write_keywords(jp_base / "JP_BattleKeywords.json", [
+            {"id": "Charge", "name": "充電"},
+        ])
+        write_keywords(en_base / "EN_BattleKeywords.json", [
+            {"id": "Charge", "name": "Charge"},
+        ])
+        write_keywords(target_base / "BattleKeywords.json", [
+            {"id": "Charge", "name": "充能", "desc": "状态效果"},
+        ])
+
+        base = PathConfig(
+            target_path=target_base,
+            llc_base_path=tmp_path / "llc",
+            KR_base_path=kr_base,
+            JP_base_path=jp_base,
+            EN_base_path=en_base,
+        )
+        pipeline = TranslationPipeline.__new__(TranslationPipeline)
+        pipeline._engine = MagicMock()
+        pipeline._on_log = MagicMock()
+
+        pipeline._update_affects(kr_file, base, has_prefix=True)
+
+        affects = pipeline._engine.build_affects.call_args.args[0]
+        assert affects == [{
+            "id": "Charge",
+            "kr": "충전",
+            "jp": "充電",
+            "en": "Charge",
+            "cn": "充能",
+            "desc": "状态效果",
+        }]
+
     def test_zip_longest_prevents_truncation(self):
         """B5: zip_longest 在列表长度不匹配时不截断。"""
         from itertools import zip_longest

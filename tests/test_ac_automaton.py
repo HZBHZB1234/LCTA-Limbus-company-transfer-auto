@@ -1,6 +1,7 @@
 """AC 自动机单元测试 —— 纯算法测试，零外部依赖。"""
 import pytest
 from translateFunc.matcher.ac_automaton import AcAutomaton, ACPattern
+from translateFunc.matcher.engine import MatcherEngine
 
 
 class TestAcAutomaton:
@@ -115,3 +116,48 @@ class TestAcAutomaton:
         assert ac.pattern_count == 3
         ac.build()
         assert ac.pattern_count == 3
+
+
+class TestMultilingualAffectMatching:
+    """状态效果韩文名称匹配需要 JP/EN 翻译交叉确认。"""
+
+    @staticmethod
+    def _build_engine() -> MatcherEngine:
+        engine = MatcherEngine()
+        engine.build_proper([])
+        engine.build_affects([{
+            "id": "Charge",
+            "kr": "충전",
+            "jp": "充電",
+            "en": "Charge",
+            "cn": "充能",
+            "desc": "",
+        }])
+        return engine
+
+    def test_korean_substring_without_jp_en_support_is_rejected(self):
+        engine = self._build_engine()
+        result = engine.match_all(
+            "충전식 창 사용 ",
+            jp_text="蓄電式の槍を使用",
+            en_text="Use Battery Spear",
+        )
+        assert result.affect_name_matches == []
+
+    def test_jp_or_en_support_keeps_affect_name_match(self):
+        engine = self._build_engine()
+        result = engine.match_all(
+            "충전 획득 ",
+            jp_text="充電を獲得",
+            en_text="Gain energy",
+        )
+        assert [match.data["id"] for match in result.affect_name_matches] == ["Charge"]
+
+    def test_explicit_effect_id_does_not_require_language_support(self):
+        engine = self._build_engine()
+        result = engine.match_all(
+            "[Charge] 획득",
+            jp_text="別名を獲得",
+            en_text="Gain another effect",
+        )
+        assert [match.data["id"] for match in result.affect_id_matches] == ["Charge"]

@@ -54,7 +54,7 @@ class TestBuffSpacing:
         assert v_buff[0].auto_fixable is True
         assert v_buff[0].fix_fn == "replace"
         assert v_buff[0].fix_params["old"] == "[震颤 ]"
-        assert v_buff[0].fix_params["new"] == "[震颤]"
+        assert v_buff[0].fix_params["new"] == "震颤 "
 
     def test_leading_space_in_brackets(self):
         """[ 震颤] — 前导空格应被检测。"""
@@ -65,7 +65,7 @@ class TestBuffSpacing:
         v_buff = [x for x in violations if x.rule == "buff_spacing"]
         assert len(v_buff) >= 1
         assert v_buff[0].fix_params["old"] == "[ 震颤]"
-        assert v_buff[0].fix_params["new"] == "[震颤]"
+        assert v_buff[0].fix_params["new"] == "震颤 "
 
     def test_both_spaces_in_brackets(self):
         """[ 震颤 ] — 前后空格都应被修复。"""
@@ -75,7 +75,7 @@ class TestBuffSpacing:
         ])
         v_buff = [x for x in violations if x.rule == "buff_spacing"]
         assert len(v_buff) >= 1
-        assert v_buff[0].fix_params["new"] == "[震颤]"
+        assert v_buff[0].fix_params["new"] == "震颤 "
 
     def test_multiple_bracket_refs(self):
         v = RuleBasedValidator(SAMPLE_AFFECTS)
@@ -101,7 +101,7 @@ class TestBuffSpacing:
         v_buff = [x for x in violations if x.rule == "buff_spacing"]
         assert len(v_buff) >= 1
         assert "[破裂 ]" in v_buff[0].fix_params["old"]
-        assert v_buff[0].fix_params["new"] == "[破裂]"
+        assert v_buff[0].fix_params["new"] == "破裂 "
 
     def test_no_bracket_refs_returns_empty(self):
         v = RuleBasedValidator(SAMPLE_AFFECTS)
@@ -235,29 +235,29 @@ class TestApplyAutoFixes:
         translations = ["[震颤 ]"]
         violations = v.validate_buff_spacing(translations)
         fixed = v.apply_auto_fixes(translations, violations)
-        assert fixed[0] == "[震颤]"
+        assert fixed[0] == "震颤 "
 
     def test_fix_leading_space_in_brackets(self):
         v = RuleBasedValidator(SAMPLE_AFFECTS)
         translations = ["[ 震颤]"]
         violations = v.validate_buff_spacing(translations)
         fixed = v.apply_auto_fixes(translations, violations)
-        assert fixed[0] == "[震颤]"
+        assert fixed[0] == "震颤 "
 
     def test_fix_both_spaces(self):
         v = RuleBasedValidator(SAMPLE_AFFECTS)
         translations = ["[ 震颤 ]"]
         violations = v.validate_buff_spacing(translations)
         fixed = v.apply_auto_fixes(translations, violations)
-        assert fixed[0] == "[震颤]"
+        assert fixed[0] == "震颤 "
 
     def test_fix_multiple_in_same_text(self):
         v = RuleBasedValidator(SAMPLE_AFFECTS)
         translations = ["[ 震颤 ] 和 [破裂 ]"]
         violations = v.validate_buff_spacing(translations)
         fixed = v.apply_auto_fixes(translations, violations)
-        assert "[震颤]" in fixed[0]
-        assert "[破裂]" in fixed[0]
+        assert "震颤 " in fixed[0]
+        assert "破裂 " in fixed[0]
         assert "[ 震颤 ]" not in fixed[0]
         assert "[破裂 ]" not in fixed[0]
 
@@ -266,7 +266,7 @@ class TestApplyAutoFixes:
         translations = ["使目标增加4级[破裂 ]强度"]
         violations = v.validate_buff_spacing(translations)
         fixed = v.apply_auto_fixes(translations, violations)
-        assert "[破裂]" in fixed[0]
+        assert "破裂 " in fixed[0]
         assert "[破裂 ]" not in fixed[0]
 
     def test_no_fix_when_correct(self):
@@ -289,7 +289,7 @@ class TestApplyAutoFixes:
         translations = ["[Combustion ] 强度增加"]
         violations = v.validate_buff_spacing(translations)
         fixed = v.apply_auto_fixes(translations, violations)
-        assert "[Combustion]" in fixed[0]
+        assert "Combustion " in fixed[0]
         assert "[Combustion ]" not in fixed[0]
 
 

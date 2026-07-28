@@ -164,9 +164,9 @@ class RuleBasedValidator:
 
         规则：中括号内的 ID 引用不应包含多余空格。
         - ❌ 错误：`[震颤 ]`、`[ 震颤]`、`[ 震颤 ]`
-        - ✅ 正确：`[震颤]`、`[Combustion]`
+        - ✅ 正确：`震颤 `、`[Combustion]`
 
-        检测 [ ] 内部内容的前导空格和尾部空格，自动修复为无空格版本。
+        检测 [ ] 内部内容的前导空格和尾部空格，自动修复为尾缀空格版本。
 
         Returns:
             违规列表，误用空格的标记为可自动修复。
@@ -190,7 +190,7 @@ class RuleBasedValidator:
                     continue  # 空括号 []，跳过
 
                 # 构建修正后的版本
-                fixed = f"[{stripped}]"
+                fixed = f"{stripped} "
                 abs_pos = m.start()
                 snippet = cn_text[max(0, abs_pos - 5):min(len(cn_text), m.end() + 5)]
 

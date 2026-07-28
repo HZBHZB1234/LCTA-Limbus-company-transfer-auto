@@ -193,7 +193,7 @@ class RuleBasedValidator:
                     continue  # 空括号 []，跳过
 
                 # 构建修正后的版本：ID 类保留括号，中文类去掉括号
-                if self._ID_LIKE_RE.match(stripped):
+                if self._ID_LIKE_RE.match(stripped) or stripped in self._affect_id_to_cn:
                     fixed = f"[{stripped}]"
                 else:
                     fixed = f"{stripped} "

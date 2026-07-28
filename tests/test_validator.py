@@ -126,6 +126,7 @@ class TestBuffSpacing:
         v_buff = [x for x in violations if x.rule == "buff_spacing"]
         assert len(v_buff) >= 1
         assert v_buff[0].fix_params["old"] == "[Combustion ]"
+        assert v_buff[0].fix_params["new"] == "[Combustion]"
 
     def test_on_skill_event_bracket(self):
         """事件括号如 [OnSucceedAttack] 也不应有空格。"""
@@ -289,7 +290,7 @@ class TestApplyAutoFixes:
         translations = ["[Combustion ] 强度增加"]
         violations = v.validate_buff_spacing(translations)
         fixed = v.apply_auto_fixes(translations, violations)
-        assert "Combustion " in fixed[0]
+        assert "[Combustion]" in fixed[0]
         assert "[Combustion ]" not in fixed[0]
 
 

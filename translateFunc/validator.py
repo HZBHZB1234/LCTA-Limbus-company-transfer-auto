@@ -50,6 +50,9 @@ class RuleBasedValidator:
     # 匹配 [Alphanumeric_ID] 格式的特殊效果引用
     _EFFECT_ID_RE = re.compile(r'\[([A-Za-z][A-Za-z0-9_]*)\]')
 
+    # 匹配 Effect ID 内组模式（不含括号），用于区分 ID 与中文内容
+    _ID_LIKE_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
+
     def __init__(self, affects_data: list[dict]):
         """初始化校验器。
 
@@ -189,8 +192,11 @@ class RuleBasedValidator:
                 if not stripped:
                     continue  # 空括号 []，跳过
 
-                # 构建修正后的版本
-                fixed = f"{stripped} "
+                # 构建修正后的版本：ID 类保留括号，中文类去掉括号
+                if self._ID_LIKE_RE.match(stripped):
+                    fixed = f"[{stripped}]"
+                else:
+                    fixed = f"{stripped} "
                 abs_pos = m.start()
                 snippet = cn_text[max(0, abs_pos - 5):min(len(cn_text), m.end() + 5)]
 

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Pre-commit hook: sync CLAUDE.md -> AGENTS.md
+# 确保两个文件内容始终一致
+# Enable with: git config core.hooksPath .githooks
+
+CLAUDE="CLAUDE.md"
+AGENTS="AGENTS.md"
+
+if [ ! -f "$CLAUDE" ]; then
+    exit 0
+fi
+
+if ! cmp -s "$CLAUDE" "$AGENTS" 2>/dev/null; then
+    cp "$CLAUDE" "$AGENTS"
+    git add "$AGENTS"
+    echo "  ✅ Synced $AGENTS with $CLAUDE"
+fi

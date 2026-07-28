@@ -1,0 +1,22 @@
+name: Check Config File Sync
+
+on:
+  pull_request:
+    paths:
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+  workflow_dispatch:
+
+jobs:
+  check-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify AGENTS.md matches CLAUDE.md
+        run: |
+          if ! cmp -s CLAUDE.md AGENTS.md; then
+            echo "::error::AGENTS.md is out of sync with CLAUDE.md"
+            echo "Run: cp CLAUDE.md AGENTS.md"
+            exit 1
+          fi
+          echo "::notice::Files are in sync"

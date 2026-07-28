@@ -76,12 +76,6 @@ class LCTA_API():
         self.relyList = relyList
         self.set_function()
         self.init_config()
-        from webutils.function_fancy import migrate_user_fancy_to_folder
-        try:
-            migrate_user_fancy_to_folder()
-        except Exception as e:
-            import logging
-            logging.getLogger('fancy').warning(f"自动迁移 user_fancy → fancy/ 失败: {e}")
 
     def set_function(self):
         self.find_lcb = load_util.find_lcb

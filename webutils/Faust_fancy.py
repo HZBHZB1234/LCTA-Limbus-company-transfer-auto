@@ -1,5 +1,8 @@
 import re
-from typing import List, Dict, Tuple
+from typing import List, Tuple
+
+TAG_PATTERN = re.compile(r'(<[^>]+>)')
+COLOR_PATTERN = re.compile(r'<color=#([a-fA-F0-9]{3,6})>(.*?)</color>', re.DOTALL)
 
 def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
     """将十六进制颜色转换为RGB值"""
@@ -32,29 +35,28 @@ def is_white_color(rgb: Tuple[int, int, int]) -> bool:
     """检查颜色是否为白色"""
     return rgb == (255, 255, 255)
 
-def extract_text_and_tags(text: str) -> List[Dict]:
+def extract_text_and_tags(text: str) -> List[Tuple[str, str]]:
     """提取文本和标签，将文本字符和HTML标签分开处理"""
     # 匹配HTML标签的正则表达式
-    tag_pattern = r'(<[^>]+>)'
     parts = []
     
     # 分割文本和标签
-    segments = re.split(tag_pattern, text)
+    segments = TAG_PATTERN.split(text)
     
     for segment in segments:
         if not segment:
             continue
         if segment.startswith('<') and segment.endswith('>'):
             # 这是HTML标签
-            parts.append({'type': 'tag', 'content': segment})
+            parts.append(('tag', segment))
         else:
             # 这是文本内容，需要区分普通字符和特殊字符
             for char in segment:
                 # 检查是否为特殊字符（换行符、制表符、回车符等）
                 if char in ['\n', '\t', '\r']:
-                    parts.append({'type': 'special', 'content': char})
+                    parts.append(('special', char))
                 else:
-                    parts.append({'type': 'char', 'content': char})
+                    parts.append(('char', char))
     
     return parts
 
@@ -73,7 +75,7 @@ def apply_color_gradient_custom(text: str, start_color: str, end_color: str, gra
     parts = extract_text_and_tags(text)
     
     # 计算需要渐变的字符数量（不包括标签和特殊字符）
-    char_count = sum(1 for part in parts if part['type'] == 'char')
+    char_count = sum(1 for part_type, _ in parts if part_type == 'char')
     
     if char_count == 0:
         return f"<color={start_color}>{text}</color>"
@@ -86,10 +88,10 @@ def apply_color_gradient_custom(text: str, start_color: str, end_color: str, gra
     result_parts = []
     char_index = 0
     
-    for part in parts:
-        if part['type'] == 'tag' or part['type'] == 'special':
+    for part_type, content in parts:
+        if part_type == 'tag' or part_type == 'special':
             # 直接添加标签和特殊字符
-            result_parts.append(part['content'])
+            result_parts.append(content)
         else:
             # 对普通字符应用渐变
             if char_count > 1:
@@ -105,7 +107,7 @@ def apply_color_gradient_custom(text: str, start_color: str, end_color: str, gra
             current_color = rgb_to_hex(current_rgb)
             
             # 为每个字符单独包装颜色标签
-            result_parts.append(f"<color={current_color}>{part['content']}</color>")
+            result_parts.append(f"<color={current_color}>{content}</color>")
             char_index += 1
     
     # 合并所有部分
@@ -127,8 +129,7 @@ def process_dlg_text(dlg_text: str, gradient_rate: float = 2.0) -> str:
         gradient_rate: 渐变度，越大渐变越快（默认2.0）
     """
     # 匹配颜色标签 - 使用re.DOTALL标志来支持跨行匹配
-    color_pattern = r'<color=#([a-fA-F0-9]{3,6})>(.*?)</color>'
-    match = re.search(color_pattern, dlg_text, re.DOTALL)  # 添加re.DOTALL标志
+    match = COLOR_PATTERN.search(dlg_text)
     
     if not match:
         return dlg_text  # 没有颜色标签，直接返回
@@ -140,4 +141,4 @@ def process_dlg_text(dlg_text: str, gradient_rate: float = 2.0) -> str:
     processed_text = apply_color_gradient(text_content, color_code, gradient_rate)
     
     # 替换原始文本中的对应部分
-    return dlg_text.replace(match.group(0), processed_text)
+    return f"{dlg_text[:match.start()]}{processed_text}{dlg_text[match.end():]}"

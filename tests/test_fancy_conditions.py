@@ -1,47 +1,10 @@
-import json
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+import copy
 
-from webutils.function_fancy import _normalize_rule
+import pytest
 
-def test_normalize_old_trigger_format():
-    rule = {
-        "trigger": {"aim": r"dataList\.\d+\.id", "re": "^10001$"},
-        "aim": "[back].name",
-        "action": [{"from": "大于", "to": ">"}]
-    }
-    result = _normalize_rule(rule)
-    assert "conditions" in result
-    assert len(result["conditions"]) == 1
-    assert result["conditions"][0]["trigger"]["re"] == "^10001$"
-    assert result["conditions"][0]["aim"] == "[back].name"
-    assert "trigger" not in result
+from webutils.fancy_engine import RuleValidationError, apply_rules, compile_rulesets
+from webutils.function_fancy import exec_json
 
-def test_normalize_old_aim_only_format():
-    rule = {
-        "aim": r"dataList\.\d+\.desc",
-        "action": [{"from": "大于", "to": ">"}]
-    }
-    result = _normalize_rule(rule)
-    assert len(result["conditions"]) == 1
-    assert result["conditions"][0]["aim"] == r"dataList\.\d+\.desc"
-    assert "trigger" not in result["conditions"][0]
-
-def test_normalize_new_format_passthrough():
-    rule = {
-        "conditions": [
-            {"trigger": {"aim": r"dataList\.\d+\.id", "re": "^10001$"}, "aim": "[back].name"},
-        ],
-        "action": [{"from": "大于", "to": ">"}]
-    }
-    result = _normalize_rule(rule)
-    assert len(result["conditions"]) == 1
-    assert result == rule
-
-def make_flat_data(data):
-    from webutils.function_fancy import flatten_dict_enhanced
-    return flatten_dict_enhanced(data)
 
 def create_test_skill_data():
     return {
@@ -52,44 +15,158 @@ def create_test_skill_data():
         ]
     }
 
-def test_exec_json_single_condition():
-    from webutils.function_fancy import exec_json
+
+def test_v2_single_condition_and_literal_replace():
     data = create_test_skill_data()
-    config = [{
-        "aimFile": "Skill.*\\.json$",
-        "conditions": [{
-            "trigger": {"aim": r"dataList\.\d+\.id", "re": "^10001$"},
-            "aim": "[back].name"
-        }],
-        "action": [{"from": "^(.*)$", "to": "[\\1]"}]
+    rules = [{
+        "files": ["Skill*.json"],
+        "scope": "dataList[*]",
+        "targets": ["name"],
+        "where": [{"path": "id", "operator": "equals", "value": 10001}],
+        "actions": [{"type": "wrap", "prefix": "[", "suffix": "]"}],
     }]
-    result = exec_json(data, config)
+
+    result = exec_json(data, rules)
+
     assert result["dataList"][0]["name"] == "[强烈斩击]"
     assert result["dataList"][1]["name"] == "精准穿刺"
 
-def test_exec_json_multi_condition_and():
-    from webutils.function_fancy import exec_json
-    data = create_test_skill_data()
-    config = [{
-        "aimFile": "Skill.*\\.json$",
-        "conditions": [
-            {"trigger": {"aim": r"dataList\.\d+\.id", "re": "^10002$"}, "aim": "[back].name"},
-            {"trigger": {"aim": r"dataList\.\d+\.desc", "re": "指定"}, "aim": "[back].name"}
-        ],
-        "action": [{"from": "^(.*)$", "to": "★\\1★"}]
-    }]
-    result = exec_json(data, config)
-    assert result["dataList"][1]["name"] == "★精准穿刺★"
-    assert result["dataList"][0]["name"] == "强烈斩击"
 
-def test_exec_json_old_format_still_works():
-    from webutils.function_fancy import exec_json
+def test_v2_multi_condition_and_uses_same_scope():
     data = create_test_skill_data()
-    config = [{
-        "trigger": {"aim": r"dataList\.\d+\.id", "re": "^10001$"},
-        "aim": "[back].name",
-        "action": [{"from": "^(.*)$", "to": "OLD"}]
+    rules = [{
+        "files": ["Skill*.json"],
+        "scope": "dataList[*]",
+        "targets": ["name"],
+        "where": [
+            {"path": "id", "operator": "in", "value": [10002, 10003]},
+            {"path": "desc", "operator": "contains", "value": "指定"},
+        ],
+        "actions": [{"type": "wrap", "prefix": "★", "suffix": "★"}],
     }]
-    result = exec_json(data, config)
-    assert result["dataList"][0]["name"] == "OLD"
-    assert result["dataList"][1]["name"] == "精准穿刺"
+
+    result = exec_json(data, rules)
+
+    assert result["dataList"][1]["name"] == "★精准穿刺★"
+    assert result["dataList"][2]["name"] == "横扫"
+
+
+def test_nested_scope_and_fixed_index_targets():
+    data = {
+        "dataList": [{
+            "id": 1,
+            "levelList": [
+                {"desc": "指定", "name": "第一层"},
+                {"desc": "普通", "name": "第二层"},
+            ],
+        }]
+    }
+    rules = [{
+        "files": ["*.json"],
+        "scope": "dataList[*].levelList[*]",
+        "targets": ["name"],
+        "where": [{"path": "desc", "operator": "contains", "value": "指定"}],
+        "actions": [{"type": "replace", "mode": "literal", "from": "层", "to": "级"}],
+    }, {
+        "files": ["*.json"],
+        "scope": "dataList[*]",
+        "targets": ["levelList[1].name"],
+        "where": [],
+        "actions": [{"type": "wrap", "prefix": "<", "suffix": ">"}],
+    }]
+
+    result = exec_json(data, rules)
+
+    assert result["dataList"][0]["levelList"][0]["name"] == "第一级"
+    assert result["dataList"][0]["levelList"][1]["name"] == "<第二层>"
+
+
+def test_actions_run_in_order_and_later_rules_see_changes():
+    data = {"dataList": [{"name": "目标"}]}
+    rules = [{
+        "files": ["*.json"],
+        "scope": "dataList[*]",
+        "targets": ["name"],
+        "where": [],
+        "actions": [
+            {"type": "replace", "mode": "literal", "from": "目标", "to": "单位"},
+            {"type": "wrap", "prefix": "[", "suffix": "]"},
+        ],
+    }, {
+        "files": ["*.json"],
+        "scope": "dataList[*]",
+        "targets": ["name"],
+        "where": [],
+        "actions": [{"type": "replace", "mode": "literal", "from": "单位", "to": "敌人"}],
+    }]
+
+    result = apply_rules(data, compile_rulesets(rules))
+
+    assert result.data["dataList"][0]["name"] == "[敌人]"
+    assert result.changed_count == 1
+
+
+def test_file_glob_matching():
+    compiled = compile_rulesets([{
+        "files": ["StoryData/*.json", "Skill*.json"],
+        "scope": "dataList[*]",
+        "targets": ["desc"],
+        "where": [],
+        "actions": [{"type": "replace", "mode": "literal", "from": "a", "to": "b"}],
+    }])
+
+    assert compiled.for_file("StoryData/E001.json").rules
+    assert compiled.for_file("Skills.json").rules
+    assert not compiled.for_file("Passives.json").rules
+
+
+def test_invalid_rule_rejected_before_execution():
+    invalid = [{
+        "files": ["*.json"],
+        "scope": "dataList[*]",
+        "targets": ["desc"],
+        "where": [{"path": "id", "operator": "regex", "value": "("}],
+        "actions": [{"type": "replace", "mode": "literal", "from": "a", "to": "b"}],
+    }]
+
+    with pytest.raises(RuleValidationError):
+        compile_rulesets(invalid)
+
+
+def test_apply_does_not_change_source_shape():
+    data = create_test_skill_data()
+    original = copy.deepcopy(data)
+    rules = [{
+        "files": ["*.json"],
+        "scope": "dataList[*]",
+        "targets": ["missing"],
+        "where": [],
+        "actions": [{"type": "wrap", "prefix": "[", "suffix": "]"}],
+    }]
+
+    result = apply_rules(data, compile_rulesets(rules))
+
+    assert result.changed_count == 0
+    assert data == original
+
+
+def test_change_reverted_by_later_rule_is_not_reported():
+    data = {"dataList": [{"name": "原值"}]}
+    rules = [{
+        "files": ["*.json"],
+        "scope": "dataList[*]",
+        "targets": ["name"],
+        "where": [],
+        "actions": [{"type": "replace", "mode": "literal", "from": "原值", "to": "临时值"}],
+    }, {
+        "files": ["*.json"],
+        "scope": "dataList[*]",
+        "targets": ["name"],
+        "where": [],
+        "actions": [{"type": "replace", "mode": "literal", "from": "临时值", "to": "原值"}],
+    }]
+
+    result = apply_rules(data, compile_rulesets(rules))
+
+    assert result.changed_count == 0
+    assert data["dataList"][0]["name"] == "原值"

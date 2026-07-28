@@ -12,8 +12,8 @@ from globalManagers.ConfigManager import ConfigManager
 from webutils.function_fancy import (
     load_fancy_folder_rules, save_ruleset_to_folder,
     delete_ruleset_from_folder, _get_fancy_folder, _sanitize_filename,
-    exec_json
 )
+from webutils.fancy_engine import RuleValidationError, apply_rules, compile_rulesets
 from webutils.rule_editor_constants import FILE_PREFIX_RULES, CATEGORY_FILE_PATTERNS
 
 logger = logging.getLogger('rule_editor')
@@ -144,13 +144,17 @@ def save_ruleset(name: str, data: dict) -> dict:
     try:
         if 'name' not in data:
             data['name'] = name
+        data['version'] = 2
+        errors = validate_rule(json.dumps(data, ensure_ascii=False)).get('errors', [])
+        if errors:
+            return {"success": False, "error": "; ".join(errors)}
         filepath = save_ruleset_to_folder(name, data)
         return {"success": True, "path": str(filepath)}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 def create_ruleset(name: str) -> dict:
-    template = {"name": name, "desc": "", "rules": []}
+    template = {"version": 2, "name": name, "desc": "", "rules": []}
     return save_ruleset(name, template)
 
 def delete_ruleset(name: str) -> dict:
@@ -162,69 +166,70 @@ def delete_ruleset(name: str) -> dict:
 def _file_pattern_from_selection(selection: str) -> str:
     if selection in CATEGORY_FILE_PATTERNS:
         return CATEGORY_FILE_PATTERNS[selection]
-    if any(c in selection for c in '.*+?^${}[]|()\\'):
-        return selection
-    return f"{re.escape(selection)}.*\\.json$"
+    return selection or '*.json'
 
 def build_rule_from_form(form_data: dict) -> dict:
     aim_file = _file_pattern_from_selection(form_data.get("file_pattern", ""))
     item_ids = form_data.get("item_ids", [])
-    field_path = form_data.get("field_path", "desc")
+    scope = form_data.get("scope", "dataList[*]")
+    target_paths = form_data.get("target_paths") or [form_data.get("field_path", "desc")]
     operations = form_data.get("operations", [])
     extra_conditions = form_data.get("extra_conditions", [])
 
     conditions = []
     if item_ids:
-        id_pattern = "^(" + "|".join(str(i) for i in item_ids) + ")$"
+        normalized_ids = [int(item) if str(item).isdigit() else item for item in item_ids]
         conditions.append({
-            "trigger": {"aim": r"dataList\.\d+\.id", "re": id_pattern},
-            "aim": f"[back].{field_path}"
+            "path": "id",
+            "operator": "in",
+            "value": normalized_ids,
         })
-    else:
-        conditions.append({"aim": rf"dataList\.\d+\.{field_path}"})
 
     for ec in extra_conditions:
-        cond = {}
-        if ec.get("field") and ec.get("pattern"):
-            cond["trigger"] = {
-                "aim": rf"dataList\.\d+\.{ec['field']}",
-                "re": ec["pattern"]
-            }
-            cond["aim"] = f"[back].{field_path}"
-        conditions.append(cond)
+        path = ec.get("path") or ec.get("field")
+        operator = ec.get("operator", "regex")
+        value = ec.get("value", ec.get("pattern"))
+        if not path or value in (None, ""):
+            continue
+        if operator == "in" and isinstance(value, str):
+            value = [part.strip() for part in value.split(',') if part.strip()]
+            value = [int(part) if str(part).isdigit() else part for part in value]
+        conditions.append({"path": path, "operator": operator, "value": value})
 
-    action = [{"from": op["from"], "to": op["to"]} for op in operations]
-    return {"aimFile": aim_file, "conditions": conditions, "action": action}
+    actions = []
+    for operation in operations:
+        if operation.get('type'):
+            actions.append(operation)
+        elif operation.get('from') is not None and operation.get('to') is not None:
+            actions.append({
+                "type": "replace",
+                "mode": operation.get("mode", "literal"),
+                "from": operation["from"],
+                "to": operation["to"],
+            })
+    return {
+        "files": [aim_file],
+        "scope": scope,
+        "targets": target_paths,
+        "where": conditions,
+        "actions": actions,
+    }
 
 def validate_rule(rule_json: str) -> dict:
-    errors = []
     try:
-        rule = json.loads(rule_json)
+        payload = json.loads(rule_json)
     except json.JSONDecodeError as e:
         return {"valid": False, "errors": [f"JSON 语法错误: {e}"]}
-    if not isinstance(rule, dict):
+    if not isinstance(payload, dict):
         return {"valid": False, "errors": ["规则必须是 JSON 对象"]}
-    if "aimFile" not in rule or not rule["aimFile"]:
-        errors.append("缺少 aimFile 字段（文件匹配模式）")
-    conds = rule.get("conditions", [])
-    if not conds and "aim" not in rule and "trigger" not in rule:
-        errors.append("缺少 conditions 或 aim 字段（定位条件）")
-    action = rule.get("action", [])
-    if not action:
-        errors.append("缺少 action 字段（操作列表）")
-    else:
-        for i, act in enumerate(action):
-            if not isinstance(act, dict):
-                errors.append(f"action[{i}] 不是有效的操作对象")
-            elif "from" in act and "to" not in act:
-                errors.append(f"action[{i}] 有 from 但缺少 to")
-            elif "to" in act and "from" not in act:
-                errors.append(f"action[{i}] 有 to 但缺少 from")
     try:
-        re.compile(rule.get("aimFile", ""))
-    except re.error as e:
-        errors.append(f"aimFile 正则语法错误: {e}")
-    return {"valid": len(errors) == 0, "errors": errors}
+        if "rules" in payload:
+            compile_rulesets([payload])
+        else:
+            compile_rulesets([payload])
+    except RuleValidationError as exc:
+        return {"valid": False, "errors": [str(exc)]}
+    return {"valid": True, "errors": []}
 
 def _analyze_value_change(old_val, new_val) -> dict:
     if not isinstance(old_val, str) or not isinstance(new_val, str):
@@ -774,14 +779,11 @@ def apply_ruleset_to_content(ruleset_name: str, file_path: str, content: str) ->
     if not ruleset:
         return {"success": False, "error": "规则集不存在"}
 
-    rules = ruleset.get('rules', [])
-    matching_rules = []
-    for rule in rules:
-        aim_file = rule.get('aimFile', '')
-        if aim_file and re.search(aim_file, file_path):
-            matching_rules.append(rule)
-
-    if not matching_rules:
+    try:
+        matching_rules = compile_rulesets([ruleset]).for_file(file_path)
+    except RuleValidationError as exc:
+        return {"success": False, "error": f"规则验证失败: {exc}"}
+    if not matching_rules.rules:
         return {"success": True, "modified_content": content, "rules_applied": 0}
 
     try:
@@ -790,9 +792,14 @@ def apply_ruleset_to_content(ruleset_name: str, file_path: str, content: str) ->
         return {"success": False, "error": f"JSON 格式错误: {e}"}
 
     try:
-        data = exec_json(data, matching_rules)
+        result = apply_rules(data, matching_rules)
     except Exception as e:
         return {"success": False, "error": f"规则执行异常: {e}"}
 
-    modified = json.dumps(data, ensure_ascii=False, indent=4)
-    return {"success": True, "modified_content": modified, "rules_applied": len(matching_rules)}
+    modified = json.dumps(result.data, ensure_ascii=False, indent=4)
+    return {
+        "success": True,
+        "modified_content": modified,
+        "rules_applied": len(matching_rules.rules),
+        "values_changed": result.changed_count,
+    }

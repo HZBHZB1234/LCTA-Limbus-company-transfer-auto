@@ -5,7 +5,7 @@ import UnityPy
 from copy import deepcopy
 import logging
 from UnityPy.enums import ClassIDType
-from typing import List
+from typing import Dict, Iterable, List, Optional, Tuple
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 
@@ -28,66 +28,106 @@ def extract_files_from_resource(resource_path: str, file_names: List[str], outpu
         raise FileNotFoundError(f"资源文件不存在: {resource_path}")
 
     env = UnityPy.load(resource_path)
-    objects = list(env.objects)  # 缓存对象列表，避免多次加载
-
     found = []
-
-    for file_name in file_names:
-        extracted = False
-        for obj in objects:
-            try:
-                if not obj.container.endswith(file_name):
-                    continue
-            except:
-                continue
-
+    remaining = set(file_names)
+    for obj in env.objects:
+        if not remaining:
+            break
+        try:
+            container = obj.container
+        except (AttributeError, TypeError):
+            continue
+        file_name = next((name for name in remaining if container.endswith(name)), None)
+        if file_name is None:
+            continue
+        try:
             data = obj.read()
             raw_data = None
-
-            # 根据不同类型提取二进制数据
             if obj.type == ClassIDType.TextAsset:
-                raw_data = data.script          # bytes
+                raw_data = data.script
             elif obj.type == ClassIDType.Texture2D:
-                # 将图片转为 PNG 字节流，文件名仍使用原名（不加 .png）
-                img = data.image
                 import io
+
                 with io.BytesIO() as output:
-                    img.save(output, format='PNG')
+                    data.image.save(output, format='PNG')
                     raw_data = output.getvalue()
             elif obj.type == ClassIDType.MonoBehaviour:
-                # 对于 MonoBehaviour 可导出为 JSON 字符串
                 raw_data = data.to_json().encode('utf-8')
-            else:
-                # 其他类型尝试获取原始数据（如果有 bytes 属性）
-                if hasattr(data, 'bytes'):
-                    raw_data = data.bytes
-                else:
-                    _log_manager.log(f"警告: 对象 '{file_name}' 类型 {obj.type.name} 不支持直接提取")
-                    continue
-
+            elif hasattr(data, 'bytes'):
+                raw_data = data.bytes
             if raw_data is None:
                 continue
-
-            # 保存文件（文件名不加任何扩展名）
             os.makedirs(output_dir, exist_ok=True)
-            out_path = os.path.join(output_dir, file_name)
-            try:
-                with open(out_path, 'wb') as f:
-                    f.write(raw_data)
-                extracted = True
-                found.append(file_name)
-                break  # 找到第一个匹配即停止处理该文件
-            except Exception as e:
-                _log_manager.log_error(e)
-                continue
+            with open(os.path.join(output_dir, file_name), 'wb') as output_file:
+                output_file.write(raw_data)
+            found.append(file_name)
+            remaining.remove(file_name)
+        except Exception as exc:
+            _log_manager.log_error(exc)
 
     return found
 
+
+def get_limbus_resource_files() -> List[Path]:
+    resource_path = Path.home() / 'AppData' / 'LocalLow' / 'Unity' / 'ProjectMoon_LimbusCompany'
+    if not resource_path.exists():
+        return []
+    candidates = []
+    for path in resource_path.rglob('__data'):
+        try:
+            candidates.append((path.stat().st_ctime_ns, path))
+        except OSError:
+            continue
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [path for _, path in candidates]
+
+
+def load_text_assets(
+    file_names: Iterable[str],
+    logger: logging.Logger = logging.getLogger('resourcer'),
+    resource_files: Optional[Iterable[Path]] = None,
+) -> Tuple[Dict[str, bytes], List[str]]:
+    remaining = set(file_names)
+    loaded: Dict[str, bytes] = {}
+    candidates = list(resource_files) if resource_files is not None else get_limbus_resource_files()
+    logger.debug('找到%s个资源文件', len(candidates))
+
+    for resource_file in candidates:
+        if not remaining:
+            break
+        try:
+            env = UnityPy.load(str(resource_file))
+        except Exception as exc:
+            logger.debug('跳过无法加载的资源文件 %s: %s', resource_file, exc)
+            continue
+        found_here = []
+        for obj in env.objects:
+            if not remaining:
+                break
+            try:
+                container = obj.container
+            except (AttributeError, TypeError):
+                continue
+            target_name = next((name for name in remaining if container.endswith(name)), None)
+            if target_name is None or obj.type != ClassIDType.TextAsset:
+                continue
+            try:
+                loaded[target_name] = obj.read().script
+            except Exception as exc:
+                logger.warning('读取资源 %s 失败: %s', target_name, exc)
+                continue
+            remaining.remove(target_name)
+            found_here.append(target_name)
+        if found_here:
+            logger.debug('在文件%s中找到文件%s', resource_file, found_here)
+
+    if remaining:
+        logger.warning('未完全找到文件，还差%s', sorted(remaining))
+    return loaded, sorted(remaining)
+
 def function_resources(target: list, logger: logging.Logger= logging.getLogger('resourcer')):
     _tmp = tempfile.mkdtemp()
-    resourcePath = Path.home() / 'AppData' / 'LocalLow' / 'Unity' / 'ProjectMoon_LimbusCompany'
-    files = resourcePath.rglob('__data')
-    files = sorted(files, key=lambda a: a.stat().st_ctime_ns, reverse=True)
+    files = get_limbus_resource_files()
     logger.debug(f'找到{len(files)}个文件')
     customTarget = deepcopy(target)
     for file in files:

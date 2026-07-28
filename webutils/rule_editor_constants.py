@@ -1,5 +1,3 @@
-import re
-
 FILE_PREFIX_RULES = [
     ('BattleSpeechBubbleDlg', '战斗气泡'), ('BattleResultHint', '战斗结果提示'),
     ('BattleKeywords', '战斗关键词'), ('BattlePass', '通行证'),
@@ -23,17 +21,17 @@ FILE_PREFIX_RULES = [
 ]
 
 CATEGORY_FILE_PATTERNS = {
-    'Skill': r'Skill.*\.json$', 'Bufs': r'Bufs.*\.json$',
-    'BattleSpeechBubbleDlg': r'BattleSpeechBubbleDlg.*\.json$',
-    'Egos': r'(Skills_Ego_Personality|Egos).*\.json$',
-    'Passives': r'Passives.*\.json$', 'Personalities': r'Personalities.*\.json$',
-    'Enemies': r'Enemies.*\.json$', 'EGOgift': r'EGOgift.*\.json$',
-    'Railway': r'Railway.*\.json$', 'MirrorDungeon': r'MirrorDungeon.*\.json$',
-    'Dungeon': r'Dungeon.*\.json$', 'Stage': r'Stage.*\.json$',
-    'Story': r'Story.*\.json$', 'Event': r'Event.*\.json$',
-    'BattleUIText': r'BattleUIText.*\.json$', 'BattleKeywords': r'BattleKeywords.*\.json$',
-    'AbEvents': r'AbEvents.*\.json$', 'Announcer': r'Announcer.*\.json$',
-    'UnitKeyword': r'UnitKeyword.*\.json$',
+    'Skill': 'Skill*.json', 'Bufs': 'Bufs*.json',
+    'BattleSpeechBubbleDlg': 'BattleSpeechBubbleDlg*.json',
+    'Egos': 'Skills_Ego_Personality-*.json',
+    'Passives': 'Passives*.json', 'Personalities': 'Personalities*.json',
+    'Enemies': 'Enemies*.json', 'EGOgift': 'EGOgift*.json',
+    'Railway': 'Railway*.json', 'MirrorDungeon': 'MirrorDungeon*.json',
+    'Dungeon': 'Dungeon*.json', 'Stage': 'Stage*.json',
+    'Story': 'Story*.json', 'Event': 'Event*.json',
+    'BattleUIText': 'BattleUIText*.json', 'BattleKeywords': 'BattleKeywords*.json',
+    'AbEvents': 'AbEvents*.json', 'Announcer': 'Announcer*.json',
+    'UnitKeyword': 'UnitKeyword*.json',
 }
 
 COMMON_REPLACEMENTS = [
@@ -47,24 +45,24 @@ COMMON_REPLACEMENTS = [
 ]
 
 TEMPLATES = [
-    {"name": "空规则集", "template": {"name": "", "desc": "", "rules": []}},
+    {"name": "空规则集", "template": {"version": 2, "name": "", "desc": "", "rules": []}},
     {"name": "简单文本替换", "template": {
-        "name": "", "desc": "",
-        "rules": [{"aimFile": "Skill.*\\.json$",
-                   "conditions": [{"aim": "dataList\\.\\d+\\.desc"}],
-                   "action": [{"from": "查找", "to": "替换"}]}]
+        "version": 2, "name": "", "desc": "",
+        "rules": [{"files": ["Skill*.json"], "scope": "dataList[*]",
+                   "targets": ["desc"], "where": [],
+                   "actions": [{"type": "replace", "mode": "literal", "from": "查找", "to": "替换"}]}]
     }},
     {"name": "按ID定位替换", "template": {
-        "name": "", "desc": "",
-        "rules": [{"aimFile": "Skill.*\\.json$",
-                   "conditions": [{"trigger": {"aim": "dataList\\.\\d+\\.id", "re": "^10001$"},
-                                   "aim": "[back].desc"}],
-                   "action": [{"from": "查找", "to": "替换"}]}]
+        "version": 2, "name": "", "desc": "",
+        "rules": [{"files": ["Skill*.json"], "scope": "dataList[*]",
+                   "targets": ["desc"],
+                   "where": [{"path": "id", "operator": "equals", "value": 10001}],
+                   "actions": [{"type": "replace", "mode": "literal", "from": "查找", "to": "替换"}]}]
     }},
     {"name": "颜色渐变", "template": {
-        "name": "", "desc": "",
-        "rules": [{"aimFile": "BattleSpeechBubbleDlg.*\\.json$",
-                   "conditions": [{"aim": "dataList\\.\\d+\\.dlg"}],
-                   "action": [{"rate": 0.4}]}]
+        "version": 2, "name": "", "desc": "",
+        "rules": [{"files": ["BattleSpeechBubbleDlg*.json"], "scope": "dataList[*]",
+                   "targets": ["dlg"], "where": [],
+                   "actions": [{"type": "gradient", "rate": 0.4}]}]
     }},
 ]

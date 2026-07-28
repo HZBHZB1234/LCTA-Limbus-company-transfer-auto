@@ -873,23 +873,19 @@
         let html = '';
         for (let i = 0; i < rules.length; i++) {
             const rule = rules[i];
-            const aimFile = rule.aimFile || 'no aimFile';
-            let conds = rule.conditions;
-            if (!conds && (rule.trigger || rule.aim)) conds = [rule];
-            let targetField = '?';
-            if (conds && conds[0]) {
-                targetField = conds[0].aim || (conds[0].trigger ? conds[0].trigger.aim : '') || '?';
-            }
+            const files = Array.isArray(rule.files) ? rule.files.join(', ') : 'no files';
+            const scope = rule.scope || '(root)';
+            const targetField = Array.isArray(rule.targets) ? rule.targets.join(', ') : '?';
             let actionStr = '';
-            if (Array.isArray(rule.action) && rule.action.length) {
-                actionStr = rule.action.map(function (a) {
-                    if (a && 'from' in a && 'to' in a) return escapeHtml(String(a.from)) + '→' + escapeHtml(String(a.to));
-                    return escapeHtml(JSON.stringify(a));
+            if (Array.isArray(rule.actions) && rule.actions.length) {
+                actionStr = rule.actions.map(function (a) {
+                    if (a && a.type === 'replace') return escapeHtml(String(a.from)) + '→' + escapeHtml(String(a.to));
+                    return escapeHtml(a.type || JSON.stringify(a));
                 }).join(', ');
             }
             html += '<div class="re-rule-summary">' +
                 '<span class="re-rule-index">#' + (i + 1) + '</span>' +
-                '<span class="re-rule-summary-text">' + escapeHtml(aimFile) + ' → ' + escapeHtml(targetField) +
+                '<span class="re-rule-summary-text">' + escapeHtml(files) + ' [' + escapeHtml(scope) + '] → ' + escapeHtml(targetField) +
                 (actionStr ? ' {' + actionStr + '}' : '') + '</span>' +
                 '<div class="re-rule-actions">' +
                 '<button class="re-edit-rule-btn" data-idx="' + i + '" title="编辑规则">✏</button>' +
@@ -1569,6 +1565,14 @@
             showToast('没有可保存的规则集（请先选择或新建）', 'error');
             return;
         }
+        if (state.mode === 'advanced') {
+            const parsed = getAdvancedContent();
+            if (parsed == null) return;
+            parsed.version = 2;
+            parsed.name = parsed.name || state.currentRuleset.name;
+            state.currentRuleset = parsed;
+        }
+        state.currentRuleset.version = 2;
         const api = getApi();
         if (!api || !api.save_ruleset) return warnNoApi();
         try {
@@ -1716,17 +1720,16 @@
     }
 
     function filePatternFromSelection(selection) {
-        if (!selection) return '.*\\.json$';
+        if (!selection) return '*.json';
         if (CATEGORY_FILE_PATTERNS[selection]) return CATEGORY_FILE_PATTERNS[selection];
-        if (/[.*+?^${}()|[\]\\]/.test(selection)) return selection;
-        return escapeRegex(selection) + '.*\\.json$';
+        return selection;
     }
 
     function categoryToPattern(catName) {
         for (let i = 0; i < FILE_PREFIX_RULES.length; i++) {
             if (FILE_PREFIX_RULES[i][1] === catName) {
                 const prefix = FILE_PREFIX_RULES[i][0];
-                return CATEGORY_FILE_PATTERNS[prefix] || (escapeRegex(prefix) + '.*\\.json$');
+                return CATEGORY_FILE_PATTERNS[prefix] || (prefix + '*.json');
             }
         }
         if (CATEGORY_FILE_PATTERNS[catName]) return CATEGORY_FILE_PATTERNS[catName];
@@ -1767,7 +1770,7 @@
         const fps = [];
         for (let i = 0; i < FILE_PREFIX_RULES.length; i++) {
             const prefix = FILE_PREFIX_RULES[i][0];
-            const value = CATEGORY_FILE_PATTERNS[prefix] || (prefix + '.*\\.json$');
+            const value = CATEGORY_FILE_PATTERNS[prefix] || (prefix + '*.json');
             fps.push({ label: prefix, value: value });
         }
         return {
@@ -1800,11 +1803,14 @@
             });
         }
         const fieldEl = $i('re-simple-field');
-        const field_path = fieldEl ? (fieldEl.value.trim() || 'desc') : 'desc';
+        const target_paths = fieldEl ? fieldEl.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean) : ['desc'];
+        const scopeEl = $i('re-simple-scope');
+        const scope = scopeEl ? (scopeEl.value.trim() || 'dataList[*]') : 'dataList[*]';
         return {
             file_pattern: file_pattern,
             item_ids: item_ids,
-            field_path: field_path,
+            scope: scope,
+            target_paths: target_paths.length ? target_paths : ['desc'],
             operations: readOperationRows(),
             extra_conditions: readConditionRows()
         };
@@ -1816,11 +1822,18 @@
         const rows = cont.querySelectorAll('.re-operation-item');
         const out = [];
         for (let i = 0; i < rows.length; i++) {
+            const typeEl = rows[i].querySelector('.re-op-type');
+            const modeEl = rows[i].querySelector('.re-op-mode');
             const fromEl = rows[i].querySelector('.re-op-from');
             const toEl = rows[i].querySelector('.re-op-to');
+            const type = typeEl ? typeEl.value : 'replace';
+            const mode = modeEl ? modeEl.value : 'literal';
             const from = fromEl ? fromEl.value : '';
             const to = toEl ? toEl.value : '';
-            if (from.length || to.length) out.push({ from: from, to: to });
+            if (type === 'replace' && (from.length || to.length)) out.push({ type: type, mode: mode, from: from, to: to });
+            else if (type === 'wrap') out.push({ type: type, prefix: from, suffix: to });
+            else if (type === 'gradient' && from.length) out.push({ type: type, rate: Number(from) });
+            else if (type === 'skill_color') out.push({ type: type, idPath: from || 'id' });
         }
         return out;
     }
@@ -1832,60 +1845,60 @@
         const out = [];
         for (let i = 0; i < rows.length; i++) {
             const fieldEl = rows[i].querySelector('.re-cond-field');
+            const operatorEl = rows[i].querySelector('.re-cond-operator');
             const patEl = rows[i].querySelector('.re-cond-pattern');
             const field = fieldEl ? fieldEl.value : '';
-            const pattern = patEl ? patEl.value : '';
-            if (field && pattern) out.push({ field: field, pattern: pattern });
+            const operator = operatorEl ? operatorEl.value : 'regex';
+            const value = patEl ? patEl.value : '';
+            if (field && value) out.push({ path: field, operator: operator, value: value });
         }
         return out;
     }
 
     function buildRuleLocally(form) {
-        const aim_file = filePatternFromSelection(form.file_pattern || '');
+        const filePattern = filePatternFromSelection(form.file_pattern || '');
         const item_ids = form.item_ids || [];
-        const field_path = form.field_path || 'desc';
+        const targetPaths = form.target_paths || ['desc'];
         const operations = form.operations || [];
         const extra_conditions = form.extra_conditions || [];
-        const conditions = [];
+        const where = [];
         if (item_ids.length) {
-            const idPattern = '^(' + item_ids.map(function (i) { return escapeRegex(String(i)); }).join('|') + ')$';
-            conditions.push({
-                trigger: { aim: 'dataList\\.\\d+\\.id', re: idPattern },
-                aim: '[back].' + field_path
-            });
-        } else {
-            conditions.push({ aim: 'dataList\\.\\d+\\.' + escapeRegex(field_path) });
+            where.push({ path: 'id', operator: 'in', value: item_ids });
         }
         for (let i = 0; i < extra_conditions.length; i++) {
             const ec = extra_conditions[i];
-            if (ec.field && ec.pattern) {
-                conditions.push({
-                    trigger: { aim: 'dataList\\.\\d+\\.' + escapeRegex(ec.field), re: ec.pattern },
-                    aim: '[back].' + field_path
-                });
+            if (ec.path && ec.value) {
+                let value = ec.value;
+                if (ec.operator === 'in') value = String(value).split(',').map(function (part) { return part.trim(); }).filter(Boolean);
+                where.push({ path: ec.path, operator: ec.operator || 'regex', value: value });
             }
         }
-        const action = operations.map(function (op) { return { from: op.from, to: op.to }; });
-        return { aimFile: aim_file, conditions: conditions, action: action };
+        return { files: [filePattern], scope: form.scope || 'dataList[*]', targets: targetPaths, where: where, actions: operations };
     }
 
     function validateRuleLocally(rule) {
         const errors = [];
         if (!rule || typeof rule !== 'object') return { valid: false, errors: ['规则必须是 JSON 对象'] };
-        if (!rule.aimFile) errors.push('缺少 aimFile 字段（文件匹配模式）');
-        const conds = rule.conditions || [];
-        if (!conds.length && !rule.aim && !rule.trigger) errors.push('缺少 conditions 或 aim 字段（定位条件）');
-        const action = rule.action || [];
-        if (!action.length) errors.push('缺少 action 字段（操作列表）');
+        if (Array.isArray(rule.rules)) {
+            if (rule.version !== 2) errors.push('规则集必须包含 version: 2');
+            for (let ruleIndex = 0; ruleIndex < rule.rules.length; ruleIndex++) {
+                const result = validateRuleLocally(rule.rules[ruleIndex]);
+                for (let errorIndex = 0; errorIndex < result.errors.length; errorIndex++) {
+                    errors.push('rules[' + ruleIndex + ']: ' + result.errors[errorIndex]);
+                }
+            }
+            return { valid: errors.length === 0, errors: errors };
+        }
+        if (!Array.isArray(rule.files) || !rule.files.length) errors.push('缺少 files 字段（Glob 列表）');
+        if (!Array.isArray(rule.targets) || !rule.targets.length) errors.push('缺少 targets 字段');
+        const action = rule.actions || [];
+        if (!action.length) errors.push('缺少 actions 字段（操作列表）');
         else {
             for (let i = 0; i < action.length; i++) {
                 const a = action[i];
-                if (!a || typeof a !== 'object') errors.push('action[' + i + '] 不是有效的操作对象');
-                else if ('from' in a && !('to' in a)) errors.push('action[' + i + '] 有 from 但缺少 to');
-                else if ('to' in a && !('from' in a)) errors.push('action[' + i + '] 有 to 但缺少 from');
+                if (!a || typeof a !== 'object' || !a.type) errors.push('actions[' + i + '] 缺少 type');
             }
         }
-        try { new RegExp(rule.aimFile || ''); } catch (e) { errors.push('aimFile 正则语法错误: ' + e.message); }
         return { valid: errors.length === 0, errors: errors };
     }
 
@@ -1952,6 +1965,7 @@
 
     async function persistCurrentRuleset() {
         if (!state.currentRuleset || !state.currentRuleset.name) return;
+        state.currentRuleset.version = 2;
         const api = getApi();
         if (!api || !api.save_ruleset) return;
         try {
@@ -1995,17 +2009,16 @@
         // 切换到简单模式并填充表单
         setMode('simple');
 
-        // 填充 aimFile
-        var aimFile = rule.aimFile || '';
+        // 填充文件 Glob
+        var filePattern = (rule.files && rule.files[0]) || '';
         var fileSelect = $i('re-simple-file');
         var fileCustom = $i('re-simple-file-custom');
-        // 尝试将 aimFile 与已知分类/前缀匹配
         var matched = false;
         if (fileSelect) {
             for (var ci = 0; ci < FILE_PREFIX_RULES.length; ci++) {
-                var catPattern = categoryToPattern(FILE_PREFIX_RULES[ci][1]);
-                if (catPattern && aimFile.indexOf(catPattern.replace('.*\\.json$', '')) >= 0) {
-                    fileSelect.value = FILE_PREFIX_RULES[ci][1];
+                var key = FILE_PREFIX_RULES[ci][0];
+                if (CATEGORY_FILE_PATTERNS[key] === filePattern) {
+                    fileSelect.value = key;
                     matched = true;
                     break;
                 }
@@ -2013,49 +2026,47 @@
             if (!matched) fileSelect.value = '';
         }
         if (fileCustom) {
-            fileCustom.value = (!matched && aimFile !== '.*\\.json$') ? aimFile : '';
+            fileCustom.value = !matched ? filePattern : '';
         }
 
-        // 填充 conditions
-        var conditions = rule.conditions || [];
+        // 填充作用域、目标与条件
+        var conditions = rule.where || [];
         var condContainer = $i('re-simple-conditions');
         if (condContainer) condContainer.innerHTML = '';
 
-        // 填充 dataList fields 和 ID
-        var fields = [];
         var useIdEl = $i('re-simple-use-id');
         var idEl = $i('re-simple-item-id');
         var fieldEl = $i('re-simple-field');
+        var scopeEl = $i('re-simple-scope');
+        if (scopeEl) scopeEl.value = rule.scope || 'dataList[*]';
+        if (fieldEl) fieldEl.value = (rule.targets || ['desc']).join(', ');
 
-        for (var ci2 = 0; ci2 < conditions.length; ci2++) {
-            var cond = conditions[ci2];
-            var aim = cond.aim || '';
-            var fieldMatch = aim.match(/dataList\.\d+\.(.+)/);
-            if (fieldMatch) fields.push(fieldMatch[1]);
-        }
-
-        if (fieldEl && fields.length) fieldEl.value = fields.join(', ');
-        else if (fieldEl) fieldEl.value = 'desc';
-
-        // 检查是否有 ID-based trigger
         var useId = false;
-        var idPattern = '';
-        if (conditions.length && conditions[0].trigger && conditions[0].trigger.aim &&
-            conditions[0].trigger.aim.indexOf('dataList.\\\\d+.id') >= 0) {
-            useId = true;
-            idPattern = conditions[0].trigger.re || '';
+        var idValues = [];
+        for (var ci2 = 0; ci2 < conditions.length; ci2++) {
+            var condition = conditions[ci2];
+            if (condition.path === 'id' && condition.operator === 'in' && Array.isArray(condition.value)) {
+                useId = true;
+                idValues = condition.value;
+                continue;
+            }
+            addConditionRow();
+            var conditionRows = condContainer ? condContainer.querySelectorAll('.re-condition-item') : [];
+            var conditionRow = conditionRows[conditionRows.length - 1];
+            if (conditionRow) {
+                var condField = conditionRow.querySelector('.re-cond-field');
+                var condOperator = conditionRow.querySelector('.re-cond-operator');
+                var condValue = conditionRow.querySelector('.re-cond-pattern');
+                if (condField) condField.value = condition.path || '';
+                if (condOperator) condOperator.value = condition.operator || 'regex';
+                if (condValue) condValue.value = Array.isArray(condition.value) ? condition.value.join(', ') : String(condition.value == null ? '' : condition.value);
+            }
         }
         if (useIdEl) useIdEl.checked = useId;
-        if (idEl && useId && idPattern) {
-            var idMatch = idPattern.match(/^\^\((.+)\)\$$/);
-            if (idMatch) idEl.value = idMatch[1].replace(/\|/g, ', ');
-            else idEl.value = idPattern;
-        } else if (idEl) {
-            idEl.value = '';
-        }
+        if (idEl) idEl.value = useId ? idValues.join(', ') : '';
 
-        // 填充操作列表（action）
-        var action = rule.action || [];
+        // 填充操作列表
+        var action = rule.actions || [];
         var opsContainer = $i('re-simple-operations');
         if (opsContainer) {
             opsContainer.innerHTML = '';
@@ -2065,10 +2076,19 @@
                 var rows = opsContainer.querySelectorAll('.re-operation-item');
                 var lastRow = rows[rows.length - 1];
                 if (lastRow) {
+                    var typeInp = lastRow.querySelector('.re-op-type');
+                    var modeInp = lastRow.querySelector('.re-op-mode');
                     var fromInp = lastRow.querySelector('.re-op-from');
                     var toInp = lastRow.querySelector('.re-op-to');
-                    if (fromInp) fromInp.value = a.from || '';
-                    if (toInp) toInp.value = a.to || '';
+                    if (typeInp) typeInp.value = a.type || 'replace';
+                    if (modeInp) modeInp.value = a.mode || 'literal';
+                    if (fromInp) {
+                        if (a.type === 'wrap') fromInp.value = a.prefix || '';
+                        else if (a.type === 'gradient') fromInp.value = String(a.rate == null ? 2 : a.rate);
+                        else if (a.type === 'skill_color') fromInp.value = a.idPath || 'id';
+                        else fromInp.value = a.from || '';
+                    }
+                    if (toInp) toInp.value = a.type === 'wrap' ? (a.suffix || '') : (a.to || '');
                 }
             }
             if (action.length === 0) addOperationRow();
@@ -2087,15 +2107,11 @@
     function addConditionRow() {
         const cont = $i('re-simple-conditions');
         if (!cont) return;
-        const fields = ['id', 'name', 'desc', 'dlg', 'text', 'title', 'comment', 'keyword'];
-        let opts = '';
-        for (let i = 0; i < fields.length; i++) {
-            opts += '<option value="' + escapeAttr(fields[i]) + '">' + escapeHtml(fields[i]) + '</option>';
-        }
         const row = document.createElement('div');
         row.className = 're-condition-item';
-        row.innerHTML = '<select class="re-cond-field">' + opts + '</select>' +
-            '<input type="text" class="re-cond-pattern" placeholder="匹配正则">' +
+        row.innerHTML = '<input type="text" class="re-cond-field" placeholder="相对路径，例如 levelList[*].desc">' +
+            '<select class="re-cond-operator"><option value="equals">等于</option><option value="in">属于</option><option value="contains">包含</option><option value="regex">正则</option></select>' +
+            '<input type="text" class="re-cond-pattern" placeholder="条件值">' +
             '<button class="re-btn re-btn-sm re-remove-cond-btn">✕</button>';
         cont.appendChild(row);
     }
@@ -2105,9 +2121,11 @@
         if (!cont) return;
         const row = document.createElement('div');
         row.className = 're-operation-item';
-        row.innerHTML = '<input type="text" placeholder="查找" class="re-op-from">' +
+        row.innerHTML = '<select class="re-op-type"><option value="replace">替换</option><option value="wrap">包裹</option><option value="gradient">渐变</option><option value="skill_color">技能颜色</option></select>' +
+            '<select class="re-op-mode"><option value="literal">普通文本</option><option value="regex">正则</option></select>' +
+            '<input type="text" placeholder="查找 / 前缀 / 渐变率 / ID路径" class="re-op-from">' +
             '<span>→</span>' +
-            '<input type="text" placeholder="替换为" class="re-op-to">' +
+            '<input type="text" placeholder="替换为 / 后缀" class="re-op-to">' +
             '<button class="re-btn re-btn-sm re-remove-op-btn">✕</button>';
         cont.appendChild(row);
     }
@@ -2223,21 +2241,19 @@
 
     function localTemplates() {
         return [
-            { name: '空规则集', template: { name: '', desc: '', rules: [] } },
-            { name: '简单文本替换', template: { name: '', desc: '', rules: [{
-                aimFile: 'Skill.*\\.json$',
-                conditions: [{ aim: 'dataList\\.\\d+\\.desc' }],
-                action: [{ from: '查找', to: '替换' }]
+            { name: '空规则集', template: { version: 2, name: '', desc: '', rules: [] } },
+            { name: '简单文本替换', template: { version: 2, name: '', desc: '', rules: [{
+                files: ['Skill*.json'], scope: 'dataList[*]', targets: ['desc'], where: [],
+                actions: [{ type: 'replace', mode: 'literal', from: '查找', to: '替换' }]
             }] } },
-            { name: '按ID定位替换', template: { name: '', desc: '', rules: [{
-                aimFile: 'Skill.*\\.json$',
-                conditions: [{ trigger: { aim: 'dataList\\.\\d+\\.id', re: '^10001$' }, aim: '[back].desc' }],
-                action: [{ from: '查找', to: '替换' }]
+            { name: '按ID定位替换', template: { version: 2, name: '', desc: '', rules: [{
+                files: ['Skill*.json'], scope: 'dataList[*]', targets: ['desc'],
+                where: [{ path: 'id', operator: 'equals', value: 10001 }],
+                actions: [{ type: 'replace', mode: 'literal', from: '查找', to: '替换' }]
             }] } },
-            { name: '颜色渐变', template: { name: '', desc: '', rules: [{
-                aimFile: 'BattleSpeechBubbleDlg.*\\.json$',
-                conditions: [{ aim: 'dataList\\.\\d+\\.dlg' }],
-                action: [{ rate: 0.4 }]
+            { name: '颜色渐变', template: { version: 2, name: '', desc: '', rules: [{
+                files: ['BattleSpeechBubbleDlg*.json'], scope: 'dataList[*]', targets: ['dlg'], where: [],
+                actions: [{ type: 'gradient', rate: 0.4 }]
             }] } }
         ];
     }
@@ -2523,59 +2539,52 @@
         const actionPreview = group.action_preview || [];
         if (!actionPreview.length) return rules;
 
-        let aimFile;
-        if (sel.l1 === 'all') aimFile = '.*\\.json$';
-        else if (sel.l1 === 'custom') aimFile = sel.l1Custom || '.*\\.json$';
+        let files;
+        if (sel.l1 === 'all') files = ['*.json'];
+        else if (sel.l1 === 'custom') files = [sel.l1Custom || '*.json'];
         else if (sel.l1 === 'exact') {
-            const files = (group.l1_options && group.l1_options.exact_files) || [];
-            const pats = files.map(function (f) { return escapeRegex(f) + '\\.json$'; });
-            aimFile = pats.length ? pats.join('|') : '.*\\.json$';
+            const exactFiles = (group.l1_options && group.l1_options.exact_files) || [];
+            files = exactFiles.map(function (f) { return String(f).endsWith('.json') ? String(f) : String(f) + '.json'; });
+            if (!files.length) files = ['*.json'];
         } else if (sel.l1 === 'category') {
             const cats = sel.l1Categories.length ? sel.l1Categories :
                 ((group.l1_options && group.l1_options.categories) || []).map(function (c) { return c.name; });
-            const pats = cats.map(categoryToPattern);
-            aimFile = pats.length ? pats.join('|') : '.*\\.json$';
-        } else { aimFile = '.*\\.json$'; }
+            files = cats.map(categoryToPattern).filter(Boolean);
+            if (!files.length) files = ['*.json'];
+        } else { files = ['*.json']; }
 
         let fields = sel.l3Fields.slice();
         if (!fields.length) fields = ((group.l3_options && group.l3_options.fields) || []).slice();
         if (!fields.length) fields = ['desc'];
 
         const useId = sel.l2 === 'id' && sel.l2Ids && sel.l2Ids.length;
-        const idPattern = useId ? '^(' + sel.l2Ids.map(function (i) { return escapeRegex(String(i)); }).join('|') + ')$' : '';
         const exact = sel.l4 === 'exact';
         const customCond = (sel.l4 === 'custom' && sel.l4Field && sel.l4Pattern);
 
-        rules.push(buildSmartRule(aimFile, fields, useId, idPattern, exact, customCond, sel, actionPreview));
+        rules.push(buildSmartRule(files, fields, useId, sel.l2Ids || [], exact, customCond, sel, actionPreview));
         return rules;
     }
 
-    function buildSmartRule(aimFile, fields, useId, idPattern, exact, customCond, sel, actionPreview) {
-        const conditions = [];
-        for (let i = 0; i < fields.length; i++) {
-            const f = fields[i] || 'desc';
-            if (useId) {
-                conditions.push({
-                    trigger: { aim: 'dataList\\.\\d+\\.id', re: idPattern },
-                    aim: '[back].' + f
-                });
-            } else {
-                conditions.push({ aim: 'dataList\\.\\d+\\.' + escapeRegex(f) });
-            }
-        }
+    function buildSmartRule(files, fields, useId, ids, exact, customCond, sel, actionPreview) {
+        const where = [];
+        if (useId) where.push({ path: 'id', operator: 'in', value: ids.map(function (id) {
+            const numberValue = Number(id);
+            return isNaN(numberValue) ? id : numberValue;
+        }) });
         if (customCond) {
-            conditions.push({
-                trigger: { aim: 'dataList\\.\\d+\\.' + escapeRegex(sel.l4Field), re: sel.l4Pattern },
-                aim: '[back].' + (fields[0] || 'desc')
-            });
+            where.push({ path: sel.l4Field, operator: 'regex', value: sel.l4Pattern });
         }
-        const action = [];
+        const actions = [];
         for (let i = 0; i < actionPreview.length; i++) {
             const ap = actionPreview[i];
-            const from = exact ? ('^' + ap.from + '$') : ap.from;
-            action.push({ from: from, to: ap.to });
+            actions.push({
+                type: 'replace',
+                mode: exact ? 'regex' : 'literal',
+                from: exact ? ('^' + escapeRegex(ap.from) + '$') : ap.from,
+                to: ap.to
+            });
         }
-        return { aimFile: aimFile, conditions: conditions, action: action };
+        return { files: files, scope: 'dataList[*]', targets: fields, where: where, actions: actions };
     }
 
     async function generateAllSmart() {
@@ -4027,16 +4036,13 @@
 
     function _computeRuleSignature(rule) {
         if (!rule) return null;
-        var aimFile = rule.aimFile || '';
-        var conds = (rule.conditions || []).map(function (c) {
-            var aim = c.aim || '';
-            var trigger = c.trigger || {};
-            return aim + '|' + (trigger.aim || '') + '|' + (trigger.re || '');
-        }).join(';;');
-        var actions = (rule.action || []).map(function (a) {
-            return (a.from || '') + '→' + (a.to || '');
-        }).join(';;');
-        return aimFile + '||' + conds + '||' + actions;
+        return JSON.stringify({
+            files: rule.files || [],
+            scope: rule.scope || '',
+            targets: rule.targets || [],
+            where: rule.where || [],
+            actions: rule.actions || []
+        });
     }
 
     function analyzeChangesLocally(changes) {

@@ -787,6 +787,12 @@ body {
     font-size: 13px;
 }
 
+.re-operation-item select {
+    width: auto;
+    min-width: 96px;
+    flex: 0 1 auto;
+}
+
 .re-operation-item span {
     color: var(--color-text-secondary, #7f8c8d);
     font-weight: 600;

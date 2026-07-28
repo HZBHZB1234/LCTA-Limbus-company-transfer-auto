@@ -108,25 +108,33 @@
             <div id="re-simple-mode" class="re-editor-panel">
                 <div class="re-form-group"><label>文件匹配</label>
                     <select id="re-simple-file"><option value="">-- 选择文件分类 --</option></select>
-                    <input type="text" id="re-simple-file-custom" placeholder="或自定义正则..." style="margin-top:4px;">
+                    <input type="text" id="re-simple-file-custom" placeholder="或自定义 Glob，例如 StoryData/*.json" style="margin-top:4px;">
                 </div>
-                <div class="re-form-group"><label>数据条目</label>
+                <div class="re-form-group"><label>作用域与目标</label>
                     <div class="re-form-row">
                         <label class="re-checkbox"><input type="checkbox" id="re-simple-use-id" checked> 按ID定位</label>
                         <input type="text" id="re-simple-item-id" placeholder="ID（逗号分隔）" style="flex:1;">
-                        <input type="text" id="re-simple-field" placeholder="字段名" style="flex:1;" value="desc">
+                        <input type="text" id="re-simple-scope" placeholder="作用域" style="flex:1;" value="dataList[*]">
+                        <input type="text" id="re-simple-field" placeholder="目标路径（逗号分隔）" style="flex:1;" value="desc">
                     </div>
                 </div>
-                <div class="re-form-group"><label>条件触发（可选）</label>
+                <div class="re-form-group"><label>AND 条件（可选）</label>
                     <div id="re-simple-conditions"></div>
                     <button class="re-btn re-btn-sm" id="re-add-condition-btn">＋ 添加条件</button>
                 </div>
                 <div class="re-form-group"><label>操作列表</label>
                     <div id="re-simple-operations">
                         <div class="re-operation-item">
-                            <input type="text" placeholder="查找" class="re-op-from">
+                            <select class="re-op-type">
+                                <option value="replace">替换</option>
+                                <option value="wrap">包裹</option>
+                                <option value="gradient">渐变</option>
+                                <option value="skill_color">技能颜色</option>
+                            </select>
+                            <select class="re-op-mode"><option value="literal">普通文本</option><option value="regex">正则</option></select>
+                            <input type="text" placeholder="查找 / 前缀 / 渐变率 / ID路径" class="re-op-from">
                             <span>→</span>
-                            <input type="text" placeholder="替换为" class="re-op-to">
+                            <input type="text" placeholder="替换为 / 后缀" class="re-op-to">
                             <button class="re-btn re-btn-sm re-remove-op-btn">✕</button>
                         </div>
                     </div>

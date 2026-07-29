@@ -8,10 +8,14 @@ StageStrategy —— 实现三阶段翻译管线。
 """
 from __future__ import annotations
 import json
+import logging
 from typing import Any, Callable
 
 from translateFunc.enums import FileType, MatchConfidence
 from translateFunc.builder.prompt import PromptFactory
+
+
+logger = logging.getLogger("LCTA")
 
 
 class StageStrategy:
@@ -60,6 +64,54 @@ class StageStrategy:
         return self._prompt_factory.build_stage_0_user_message(
             candidate_terms, text_blocks, prompt_format,
         )
+
+    def split_stage_0_inputs(
+        self,
+        candidate_terms: list[dict],
+        text_blocks: list[dict],
+        prompt_format: str = "xml_json",
+        max_length: int = 20000,
+    ) -> list[dict]:
+        """Split stage 0 by rendered prompt length while retaining relevant context."""
+        if not candidate_terms:
+            return []
+
+        def context_indices_for(terms: list[dict]) -> list[int]:
+            indices: list[int] = []
+            seen: set[int] = set()
+            for term in terms:
+                for index in term.get("text_block_indices", []):
+                    if isinstance(index, int) and 0 <= index < len(text_blocks) and index not in seen:
+                        seen.add(index)
+                        indices.append(index)
+            return indices
+
+        def context_for(terms: list[dict]) -> list[dict]:
+            indices = context_indices_for(terms)
+            if not indices:
+                return text_blocks[:3]
+            return [text_blocks[index] for index in indices[:3]]
+
+        def render(terms: list[dict]) -> str:
+            return self.build_stage_0_user_prompt(
+                terms,
+                context_for(terms),
+                prompt_format=prompt_format,
+            )
+
+        term_parts = self._split_by_rendered_length(
+            candidate_terms,
+            render,
+            max_length,
+            stage="stage_0",
+        )
+        return [
+            {
+                "candidate_terms": terms,
+                "text_blocks": context_for(terms),
+            }
+            for terms in term_parts
+        ]
 
     def parse_stage_0_result(self, result_text: str, prompt_format: str = "xml_json") -> list[dict]:
         """将 LLM 消歧结果解析为结构化数据。"""
@@ -192,9 +244,109 @@ class StageStrategy:
         parts.append("</context>")
         return "\n".join(parts)
 
+    def split_stage_2_inputs(
+        self,
+        original_blocks: list[dict],
+        translations: list[dict],
+        prompt_format: str = "xml_json",
+        *,
+        reference: dict | None = None,
+        max_length: int = 20000,
+    ) -> list[dict]:
+        """Split stage 2 pairs by rendered length and keep global result offsets."""
+        pairs = list(zip(original_blocks, translations))
+        if not pairs:
+            return []
+
+        def reference_for(pair_chunk: list[tuple[dict, dict]]) -> dict | None:
+            if not reference:
+                return None
+            proper_refs: set[str] = set()
+            affect_refs: set[str] = set()
+            for original, _ in pair_chunk:
+                proper_refs.update(original.get("proper_refs", []))
+                affect_refs.update(original.get("affect_refs", []))
+            return {
+                "proper_terms": [
+                    term for term in reference.get("proper_terms", [])
+                    if term.get("term", "") in proper_refs
+                ],
+                "affects": [
+                    affect for affect in reference.get("affects", [])
+                    if f'[{affect.get("id", "")}]' in affect_refs
+                ],
+            }
+
+        def render(pair_chunk: list[tuple[dict, dict]]) -> str:
+            return self.build_stage_2_user_prompt(
+                [original for original, _ in pair_chunk],
+                [translation for _, translation in pair_chunk],
+                prompt_format=prompt_format,
+                reference=reference_for(pair_chunk),
+            )
+
+        pair_parts = self._split_by_rendered_length(
+            pairs,
+            render,
+            max_length,
+            stage="stage_2",
+        )
+        parts: list[dict] = []
+        offset = 0
+        for pair_chunk in pair_parts:
+            parts.append({
+                "offset": offset,
+                "original_blocks": [original for original, _ in pair_chunk],
+                "translations": [translation for _, translation in pair_chunk],
+                "reference": reference_for(pair_chunk),
+            })
+            offset += len(pair_chunk)
+        return parts
+
     def parse_stage_2_result(self, result_text: str, prompt_format: str = "xml_json") -> list[dict]:
         """解析自校验结果。"""
         return self._prompt_factory.parse_response(result_text, stage=2, prompt_format=prompt_format)
+
+    @staticmethod
+    def _split_by_rendered_length(
+        items: list,
+        render: Callable[[list], str],
+        max_length: int,
+        *,
+        stage: str,
+    ) -> list[list]:
+        """Greedily split ordered items using the actual rendered user prompt length."""
+        parts: list[list] = []
+        current: list = []
+        for item in items:
+            candidate = current + [item]
+            if current and len(render(candidate)) > max_length:
+                parts.append(current)
+                current = [item]
+            else:
+                current = candidate
+        if current:
+            parts.append(current)
+
+        oversized = []
+        for index, part in enumerate(parts):
+            rendered_length = len(render(part))
+            if rendered_length > max_length:
+                oversized.append((index, rendered_length, len(part)))
+        if oversized:
+            details = "; ".join(
+                f"part[{index}]={length}chars({count}items)"
+                for index, length, count in oversized
+            )
+            logger.warning(
+                "%s split still has %d/%d oversized parts (limit=%d): %s",
+                stage,
+                len(oversized),
+                len(parts),
+                max_length,
+                details,
+            )
+        return parts
 
     def consume_parse_errors(self) -> list[dict]:
         """取得最近一次阶段响应解析失败的结构化原因。"""

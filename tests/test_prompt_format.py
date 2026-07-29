@@ -471,6 +471,142 @@ class TestFormatAwareSplit:
         )
 
 
+class TestStageInputSplit:
+    """Stage 0/2 requests are split using their rendered user prompt length."""
+
+    def setup_method(self):
+        self.strategy = StageStrategy(TranslateConfig())
+
+    @pytest.mark.parametrize("prompt_format", ["xml_json", "xml_xml", "json_json"])
+    def test_stage_0_split_preserves_terms_and_relevant_context(self, prompt_format):
+        text_blocks = [
+            {"kr": f"context-{index}-" + "K" * 180, "jp": "J" * 80, "en": "E" * 80}
+            for index in range(8)
+        ]
+        candidate_terms = [
+            {
+                "kr": f"term-{index}-" + "T" * 120,
+                "cn": "C" * 100,
+                "note": "N" * 80,
+                "text_block_indices": [index],
+            }
+            for index in range(8)
+        ]
+        max_length = max(
+            len(self.strategy.build_stage_0_user_prompt(
+                [term],
+                [text_blocks[index]],
+                prompt_format=prompt_format,
+            ))
+            for index, term in enumerate(candidate_terms)
+        ) + 20
+
+        parts = self.strategy.split_stage_0_inputs(
+            candidate_terms,
+            text_blocks,
+            prompt_format=prompt_format,
+            max_length=max_length,
+        )
+
+        assert len(parts) > 1
+        assert [
+            term["kr"]
+            for part in parts
+            for term in part["candidate_terms"]
+        ] == [term["kr"] for term in candidate_terms]
+        for part in parts:
+            prompt = self.strategy.build_stage_0_user_prompt(
+                part["candidate_terms"],
+                part["text_blocks"],
+                prompt_format=prompt_format,
+            )
+            assert len(prompt) <= max_length
+            first_index = part["candidate_terms"][0]["text_block_indices"][0]
+            assert part["text_blocks"][0] is text_blocks[first_index]
+
+    @pytest.mark.parametrize("prompt_format", ["xml_json", "xml_xml", "json_json"])
+    def test_stage_2_split_preserves_offsets_and_prunes_references(self, prompt_format):
+        original_blocks = [
+            {
+                "kr": f"original-{index}-" + "K" * 180,
+                "jp": "J" * 80,
+                "en": "E" * 80,
+                "proper_refs": [f"term-{index}"],
+                "affect_refs": [f"[{1000 + index}]"],
+            }
+            for index in range(8)
+        ]
+        translations = [
+            {"id": index + 1, "translation": f"translation-{index}-" + "C" * 180}
+            for index in range(8)
+        ]
+        reference = {
+            "proper_terms": [
+                {"term": f"term-{index}", "translation": f"术语-{index}"}
+                for index in range(8)
+            ],
+            "affects": [
+                {"id": str(1000 + index), "name": f"affect-{index}"}
+                for index in range(8)
+            ],
+        }
+        max_length = max(
+            len(self.strategy.build_stage_2_user_prompt(
+                [original_blocks[index]],
+                [translations[index]],
+                prompt_format=prompt_format,
+                reference={
+                    "proper_terms": [reference["proper_terms"][index]],
+                    "affects": [reference["affects"][index]],
+                },
+            ))
+            for index in range(8)
+        ) + 20
+
+        parts = self.strategy.split_stage_2_inputs(
+            original_blocks,
+            translations,
+            prompt_format=prompt_format,
+            reference=reference,
+            max_length=max_length,
+        )
+
+        assert len(parts) > 1
+        assert [part["offset"] for part in parts] == [
+            sum(len(previous["original_blocks"]) for previous in parts[:index])
+            for index in range(len(parts))
+        ]
+        assert [
+            translation["id"]
+            for part in parts
+            for translation in part["translations"]
+        ] == list(range(1, 9))
+        for part in parts:
+            prompt = self.strategy.build_stage_2_user_prompt(
+                part["original_blocks"],
+                part["translations"],
+                prompt_format=prompt_format,
+                reference=part["reference"],
+            )
+            assert len(prompt) <= max_length
+            expected_terms = {
+                ref
+                for block in part["original_blocks"]
+                for ref in block["proper_refs"]
+            }
+            expected_affects = {
+                ref.strip("[]")
+                for block in part["original_blocks"]
+                for ref in block["affect_refs"]
+            }
+            assert {
+                term["term"] for term in part["reference"]["proper_terms"]
+            } == expected_terms
+            assert {
+                affect["id"] for affect in part["reference"]["affects"]
+            } == expected_affects
+
+
 class TestFormatAwareEscapeRules:
     """转义规则按响应格式分离的测试。"""
 

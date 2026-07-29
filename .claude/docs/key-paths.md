@@ -45,13 +45,17 @@ JS: user configures & clicks translate
       → translateFunc/builder/prompt.py      construct LLM prompts
       → translateFunc/builder/request.py     build API requests; split by rendered
                                                input length
+      → translateFunc/builder/stages.py      split Stage 0 disambiguation terms and
+                                               Stage 2 source/translation pairs by
+                                               rendered input length; prune per-part refs
       → translateFunc/translate_request.py   call LLM API, parse response
       → translateFunc/validator.py           rule-based post-processing (skill files only,
                                               controlled by enable_rule_validation config):
                                               validate [ID] bracket spacing → auto-fix
                                               validate effect refs from source → warning
-      → translateFunc/processor.py           run Stage 2 self-check on the combined
-                                               translation result
+      → translateFunc/processor.py           run split Stage 0 calls before translation;
+                                               run split Stage 2 self-check calls and
+                                               remap local correction IDs to global IDs
     Stage 5: translateFunc/matcher/engine.py post-translation proper matching
     Stage 6: translateFunc/pipeline.py       aggregate results → PipelineSummary
   → webutils/function_translate.py  write output files

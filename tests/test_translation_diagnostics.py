@@ -11,6 +11,7 @@ from translatekit import APIError
 from translateFunc.config import FilePathConfig, PathConfig, ProcessOutcome, TranslateConfig
 from translateFunc.diagnostics import HttpResponseObserver, safe_json_value, serialize_exception
 from translateFunc.enums import ProcessResult
+from translateFunc.matcher.engine import MatcherEngine
 from translateFunc.processor import FileProcessor
 from translateFunc.recorder import TranslationRecorder
 
@@ -66,6 +67,52 @@ class _StaticTranslator:
 
     def update_config(self, **_kwargs):
         return None
+
+
+class _CountingMultiStageTranslator:
+    def __init__(self):
+        self._session = _FakeSession()
+        self.system_prompt = ""
+        self.stage_calls = {"stage_0": 0, "stage_1": 0, "stage_2": 0}
+
+    def update_config(self, **kwargs):
+        self.system_prompt = kwargs.get("system_prompt", "")
+
+    def translate(self, text, timeout=None):
+        if "disambiguations" in self.system_prompt:
+            self.stage_calls["stage_0"] += 1
+            return json.dumps({
+                "disambiguations": [{
+                    "term": f"observed-{self.stage_calls['stage_0']}",
+                    "applies": True,
+                }],
+            })
+        if "checked_translations" in self.system_prompt:
+            self.stage_calls["stage_2"] += 1
+            count = text.count('<pair id="')
+            return json.dumps({
+                "checked_translations": [
+                    {
+                        "id": index + 1,
+                        "translation": f"checked-{self.stage_calls['stage_2']}-{index + 1}",
+                        "changed": index == 0,
+                    }
+                    for index in range(count)
+                ],
+            })
+
+        self.stage_calls["stage_1"] += 1
+        count = text.count('<block id="')
+        return json.dumps({
+            "translations": [
+                {
+                    "id": index + 1,
+                    "translation": f"translated-{index + 1}",
+                    "confidence": "high",
+                }
+                for index in range(count)
+            ],
+        })
 
 
 class _SupplementalBuilder:
@@ -308,6 +355,60 @@ def test_intentional_source_preservation_does_not_trigger_supplemental_retry(
     assert translated == ["LCE"]
     assert had_fallback is False
     assert [call["stage"] for call in processor._api_calls] == ["stage_1"]
+
+
+def test_multistage_translation_splits_stage_0_and_stage_2(tmp_path):
+    translator = _CountingMultiStageTranslator()
+    processor = _make_processor(tmp_path, translator)
+    processor._config = TranslateConfig(
+        translation_mode="multi_stage",
+        disambiguation_mode="llm",
+        enable_self_check=True,
+        fallback=False,
+    )
+
+    engine = MatcherEngine()
+    proper_terms = [
+        {
+            "term": f"[TERM-{index:03d}]",
+            "translation": f"术语-{index}-" + "C" * 300,
+            "note": "N" * 200,
+        }
+        for index in range(48)
+    ]
+    engine.build_proper(proper_terms)
+    engine.build_roles([])
+    engine.build_affects([])
+    processor._engine = engine
+
+    request_text = {
+        "kr": {
+            index: {("text",): f"[TERM-{index:03d}] " + "K" * 500}
+            for index in range(48)
+        },
+        "jp": {
+            index: {("text",): "J" * 200}
+            for index in range(48)
+        },
+        "en": {
+            index: {("text",): "E" * 200}
+            for index in range(48)
+        },
+    }
+
+    translated, had_fallback = processor._translate(request_text)
+
+    assert had_fallback is False
+    assert len(translated) == 48
+    assert translator.stage_calls["stage_0"] > 1
+    assert translator.stage_calls["stage_1"] > 1
+    assert translator.stage_calls["stage_2"] > 1
+    checked_values = [
+        item[("text",)]
+        for item in translated.values()
+        if item[("text",)].startswith("checked-")
+    ]
+    assert len(checked_values) == translator.stage_calls["stage_2"]
 
 
 def test_recovered_call_is_removed_from_failure_tracking(tmp_path):

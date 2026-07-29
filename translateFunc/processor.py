@@ -524,47 +524,78 @@ class FileProcessor:
                 _logger.debug(f"[{self.file_name}] 阶段 0: 术语消歧 (mode={self._config.disambiguation_mode})")
                 ambiguous_terms = self._collect_ambiguous_terms(builder)
                 if ambiguous_terms:
-                    s0_call_started = False
                     try:
                         s0_system = stage_strategy.build_stage_0_prompt(prompt_format=user_format)
                         self._update_translator_prompt(s0_system, self._format_to_response_format(user_format))
-                        # user message 仅含消歧上下文数据（候选术语 + 文本块）
-                        # 不拼接完整 Stage 1 请求，避免上下文混乱
-                        s0_user = stage_strategy.build_stage_0_user_prompt(
+                        stage_0_parts = stage_strategy.split_stage_0_inputs(
                             ambiguous_terms,
                             builder.unified_request.get("text_blocks", []),
                             prompt_format=user_format,
+                            max_length=builder.max_length,
                         )
-
-                        s0_call_started = True
-                        _, disambiguated, _ = self._call_ai(
-                            stage="stage_0",
-                            system_prompt=s0_system,
-                            user_prompt=s0_user,
-                            response_format=self._format_to_response_format(user_format),
-                            timeout=60,
-                            parser=lambda response: stage_strategy.parse_stage_0_result(
-                                response, prompt_format=user_format,
-                            ),
-                            parse_error_provider=stage_strategy.consume_parse_errors,
-                            prompt_format=user_format,
-                            attempt=1,
-                        )
-
-                        if disambiguated:
-                            _logger.debug(f"[{self.file_name}] 阶段 0 消歧：{len(disambiguated)} 个术语被评估")
-                            self._apply_disambiguation(builder, disambiguated)
-                        else:
-                            _logger.debug(f"[{self.file_name}] 阶段 0 消歧：解析结果为空，使用原始术语表")
+                        for part_idx, stage_0_part in enumerate(stage_0_parts):
+                            s0_call_started = False
+                            try:
+                                s0_user = stage_strategy.build_stage_0_user_prompt(
+                                    stage_0_part["candidate_terms"],
+                                    stage_0_part["text_blocks"],
+                                    prompt_format=user_format,
+                                )
+                                s0_call_started = True
+                                _, disambiguated, _ = self._call_ai(
+                                    stage="stage_0",
+                                    system_prompt=s0_system,
+                                    user_prompt=s0_user,
+                                    response_format=self._format_to_response_format(user_format),
+                                    timeout=60,
+                                    parser=lambda response: stage_strategy.parse_stage_0_result(
+                                        response, prompt_format=user_format,
+                                    ),
+                                    parse_error_provider=stage_strategy.consume_parse_errors,
+                                    prompt_format=user_format,
+                                    part=part_idx + 1,
+                                    attempt=1,
+                                    metadata={
+                                        "total_parts": len(stage_0_parts),
+                                        "candidate_terms": len(stage_0_part["candidate_terms"]),
+                                    },
+                                )
+                                if disambiguated:
+                                    _logger.debug(
+                                        f"[{self.file_name}] 阶段 0 消歧 "
+                                        f"{part_idx + 1}/{len(stage_0_parts)}："
+                                        f"{len(disambiguated)} 个术语被评估"
+                                    )
+                                    self._apply_disambiguation(builder, disambiguated)
+                                else:
+                                    _logger.debug(
+                                        f"[{self.file_name}] 阶段 0 消歧 "
+                                        f"{part_idx + 1}/{len(stage_0_parts)}：解析结果为空"
+                                    )
+                            except Exception as e:
+                                if not s0_call_started:
+                                    self._record_diagnostic_event(
+                                        stage="stage_0",
+                                        status="internal_error",
+                                        failure_kind="prompt_or_config_error",
+                                        prompt_format=user_format,
+                                        part=part_idx + 1,
+                                        exc=e,
+                                        metadata={"total_parts": len(stage_0_parts)},
+                                    )
+                                _logger.exception(
+                                    f"[{self.file_name}] 阶段 0 消歧 "
+                                    f"{part_idx + 1}/{len(stage_0_parts)} 异常 ({e})，跳过该分片"
+                                )
+                        builder._split_by_length(prompt_format=user_format)
                     except Exception as e:
-                        if not s0_call_started:
-                            self._record_diagnostic_event(
-                                stage="stage_0",
-                                status="internal_error",
-                                failure_kind="prompt_or_config_error",
-                                prompt_format=user_format,
-                                exc=e,
-                            )
+                        self._record_diagnostic_event(
+                            stage="stage_0",
+                            status="internal_error",
+                            failure_kind="prompt_or_config_error",
+                            prompt_format=user_format,
+                            exc=e,
+                        )
                         _logger.exception(f"[{self.file_name}] 阶段 0 消歧异常 ({e})，使用原始术语表继续")
 
             # 确定格式回退链
@@ -903,11 +934,8 @@ class FileProcessor:
             # ====== 阶段 2：自校验（仅主格式，阶段 1 全部成功时执行） ======
             if stage_strategy.needs_self_check() and not had_fallback:
                 _logger.debug(f"[{self.file_name}] 阶段 2: 自校验")
-                s2_call_started = False
                 try:
-                    # 收集原文块（从 builder.unified_request 中）
                     original_blocks = builder.unified_request.get("text_blocks", [])
-                    # 构建译文 dict 列表（格式与 parse_stage_1_result 输出一致）
                     translations_for_check = [
                         {"id": i + 1, "translation": t}
                         for i, t in enumerate(result)
@@ -918,41 +946,77 @@ class FileProcessor:
                         prompt_format=user_format,
                     )
                     self._update_translator_prompt(s2_system, self._format_to_response_format(user_format))
-                    # 阶段 2 的 user message 包含原文/译文对 + 引用字段 + 术语表
-                    s2_user = stage_strategy.build_stage_2_user_prompt(
+                    stage_2_parts = stage_strategy.split_stage_2_inputs(
                         original_blocks,
                         translations_for_check,
                         prompt_format=user_format,
                         reference=builder.unified_request.get("reference"),
+                        max_length=builder.max_length,
                     )
-                    s2_call_started = True
-                    _, checked, _ = self._call_ai(
-                        stage="stage_2",
-                        system_prompt=s2_system,
-                        user_prompt=s2_user,
-                        response_format=self._format_to_response_format(user_format),
-                        timeout=120,
-                        parser=lambda response: stage_strategy.parse_stage_2_result(
-                            response, prompt_format=user_format,
-                        ),
-                        parse_error_provider=stage_strategy.consume_parse_errors,
-                        prompt_format=user_format,
-                        attempt=1,
-                    )
-
-                    if checked:
-                        result = self._apply_corrections(result, checked)
-                    else:
-                        _logger.debug(f"[{self.file_name}] 阶段 2 自校验：解析结果为空，保留阶段 1 翻译")
+                    for part_idx, stage_2_part in enumerate(stage_2_parts):
+                        s2_call_started = False
+                        try:
+                            s2_user = stage_strategy.build_stage_2_user_prompt(
+                                stage_2_part["original_blocks"],
+                                stage_2_part["translations"],
+                                prompt_format=user_format,
+                                reference=stage_2_part["reference"],
+                            )
+                            s2_call_started = True
+                            _, checked, _ = self._call_ai(
+                                stage="stage_2",
+                                system_prompt=s2_system,
+                                user_prompt=s2_user,
+                                response_format=self._format_to_response_format(user_format),
+                                timeout=120,
+                                parser=lambda response: stage_strategy.parse_stage_2_result(
+                                    response, prompt_format=user_format,
+                                ),
+                                parse_error_provider=stage_strategy.consume_parse_errors,
+                                prompt_format=user_format,
+                                part=part_idx + 1,
+                                attempt=1,
+                                metadata={
+                                    "total_parts": len(stage_2_parts),
+                                    "offset": stage_2_part["offset"],
+                                    "pair_count": len(stage_2_part["original_blocks"]),
+                                },
+                            )
+                            if checked:
+                                offset = stage_2_part["offset"]
+                                global_checked = [
+                                    {**item, "id": int(item.get("id", 0)) + offset}
+                                    for item in checked
+                                ]
+                                result = self._apply_corrections(result, global_checked)
+                            else:
+                                _logger.debug(
+                                    f"[{self.file_name}] 阶段 2 自校验 "
+                                    f"{part_idx + 1}/{len(stage_2_parts)}：解析结果为空"
+                                )
+                        except Exception as e:
+                            if not s2_call_started:
+                                self._record_diagnostic_event(
+                                    stage="stage_2",
+                                    status="internal_error",
+                                    failure_kind="prompt_or_config_error",
+                                    prompt_format=user_format,
+                                    part=part_idx + 1,
+                                    exc=e,
+                                    metadata={"total_parts": len(stage_2_parts)},
+                                )
+                            _logger.exception(
+                                f"[{self.file_name}] 阶段 2 自校验 "
+                                f"{part_idx + 1}/{len(stage_2_parts)} 异常 ({e})，跳过该分片"
+                            )
                 except Exception as e:
-                    if not s2_call_started:
-                        self._record_diagnostic_event(
-                            stage="stage_2",
-                            status="internal_error",
-                            failure_kind="prompt_or_config_error",
-                            prompt_format=user_format,
-                            exc=e,
-                        )
+                    self._record_diagnostic_event(
+                        stage="stage_2",
+                        status="internal_error",
+                        failure_kind="prompt_or_config_error",
+                        prompt_format=user_format,
+                        exc=e,
+                    )
                     _logger.exception(
                         f"[{self.file_name}] 阶段 2 自校验异常 ({e})，使用未校验的翻译结果"
                     )

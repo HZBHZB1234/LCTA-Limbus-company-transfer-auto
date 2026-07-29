@@ -30,6 +30,9 @@ jobs:
         python-version: '3.9'
         cache: 'pip'
 
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
     - name: Init code for release
       run: |
         python -m pip install requests rjsmin rcssmin
@@ -45,6 +48,13 @@ jobs:
         mkdir release/${{ env.APP_NAME }}/code
         mkdir release/${{ env.APP_NAME }}-Compatible
         mkdir release/${{ env.APP_NAME }}-Compatible/code
+
+    - name: Compile Rust translation engine
+      run: |
+        $env:CARGO_TARGET_DIR = (Join-Path (Get-Location) "rust-target")
+        cargo build --release --locked --manifest-path .\LCTA\native\lcta_translation_engine\Cargo.toml
+        Copy-Item .\rust-target\release\_lcta_native.dll .\LCTA\_lcta_native.pyd -Force
+        Copy-Item .\rust-target\release\_lcta_native.dll .\LCTA_update\_lcta_native.pyd -Force
     
     - name: Setup MSYS2 and MinGW (for C compilation)
       uses: msys2/setup-msys2@v2

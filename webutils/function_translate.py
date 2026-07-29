@@ -64,8 +64,21 @@ def translate_main(
         # 4. 设置输出目录
         config.output_dir = tmp
 
-        # 5. 创建管线
-        pipeline = TranslationPipeline(config)
+        # 5. 创建管线。LLM 与空翻译器优先使用 Rust 原生引擎；
+        # 其他旧服务在迁移完成前继续使用 Python 管线。
+        if config.is_llm or config.translator_name == "空翻译器(使用原文)":
+            from translateFunc.native_pipeline import (
+                NativeTranslationPipeline,
+                native_engine_available,
+            )
+            if native_engine_available():
+                pipeline = NativeTranslationPipeline(config)
+                _log_manager.log("使用 Rust 原生翻译引擎")
+            else:
+                pipeline = TranslationPipeline(config)
+                _log_manager.log("未找到 Rust 原生模块，回退到 Python 翻译引擎")
+        else:
+            pipeline = TranslationPipeline(config)
 
         # 6. 绑定 UI 回调
         pipeline.set_callbacks(

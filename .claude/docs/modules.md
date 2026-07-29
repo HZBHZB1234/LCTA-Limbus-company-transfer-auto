@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-28 -->
+<!-- Last updated: 2026-07-29 -->
 
 ## Directory Overview
 
@@ -9,7 +9,8 @@
 | `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 15 + sections |
 | `webutils/` | Business logic layer (feature modules + beautification engine) | 32 Python files |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
-| `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
+| `translateFunc/` | Rust engine bridge and legacy translation fallback | 14+ |
+| `native/lcta_translation_engine/` | PyO3 native translation engine | Rust crate |
 | `globalManagers/` | Cross-cutting singletons | 2 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
@@ -110,15 +111,16 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `LanzouFolder.py` | Lanzou cloud drive folder downloader (modified from 52pojie) |
 | `Webnote.py` | Webnote/note.chat API client for remote config/data |
 
-## translateFunc/ — Translation Engine
+## translateFunc/ — Translation Bridge and Legacy Engine
 
-Standalone library with own `__init__.py` public API.
+Python-facing translation API. `native_pipeline.py` bridges the WebUI to the Rust engine; the previous Python implementation remains available as a compatibility fallback during migration.
 
 **Root files:**
 
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Public API |
+| `native_pipeline.py` | PyO3 `TranslationJob` adapter, event dispatch, native configuration conversion, and summary conversion |
 | `pipeline.py` | `TranslationPipeline` — end-to-end orchestration |
 | `config.py` | `TranslateConfig` dataclass, `PipelineSummary`, `ProcessOutcome` |
 | `enums.py` | `ProcessResult`, `FileType`, `MatchConfidence` enums |
@@ -131,6 +133,17 @@ Standalone library with own `__init__.py` public API.
 | `profiler.py` | `TimingProfiler` — performance profiling |
 | `recorder.py` | `TranslationRecorder` — per-translation dump record writing (JSONL) |
 | `validator.py` | `RuleBasedValidator` — deterministic post-processing checks between Stage 1 and Stage 2. Detects/auto-fixes: `[ID]` bracket spacing errors, missing effect references. Skill files only, controlled by `enable_rule_validation` config |
+
+## native/lcta_translation_engine/ — Rust Translation Engine
+
+| Path | Purpose |
+|------|---------|
+| `src/lib.rs` | PyO3 module and background `TranslationJob` lifecycle |
+| `src/engine.rs` | Concurrent file pipeline, locale path mapping, request chunking, merging, fallback, and atomic output |
+| `src/provider.rs` | Shared Reqwest client, request semaphore, retries, and OpenAI-compatible request execution |
+| `src/document.rs` | BOM-aware JSON parsing, ID/position indexes, string flattening, and path-based updates |
+| `src/rules.rs` | Native deterministic translation validation |
+| `src/config.rs` | Immutable native run/provider/concurrency configuration |
 
 **Subdirectories:**
 

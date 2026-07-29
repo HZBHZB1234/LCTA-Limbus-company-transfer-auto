@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-07-28 -->
+<!-- Last updated: 2026-07-29 -->
 
 ## Project Purpose
 
@@ -10,7 +10,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 
 | Language | Layer | Notes |
 |----------|-------|-------|
-| Python 3.9.6+ | Backend (primary) | Business logic, translation engine, webview bridge |
+| Python 3.9.6+ | Backend bridge | WebUI, configuration, packaging, and legacy translation fallback |
+| Rust | Native translation engine | PyO3 job API, Tokio/Reqwest networking, concurrent JSON file processing, and deterministic validation |
 | C (MinGW-w64) | Native launcher | `launcher.c` → compiled to .exe as PE entry point for packaged releases |
 | JavaScript | Frontend | SPA modules plus standalone editor and translation-log viewer scripts, bridged to Python via `pywebview.api` |
 | HTML/CSS | Frontend | SPA in `webui/index.html` with lazy section fragments plus standalone rule editor, quick editor, and translation diagnostic viewer windows with theme sync |
@@ -62,7 +63,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `webui/` | Frontend: pywebview desktop window + HTML/CSS/JS SPA |
 | `webutils/` | Business logic: one `function_*.py` per feature, all exported via `__init__.py` |
 | `webFunc/` | Infrastructure: GitHub downloads, file transfer, Lanzou parsing, web notes |
-| `translateFunc/` | Translation engine: multi-stage LLM pipeline with proper noun matching |
+| `translateFunc/` | Python bridge for the Rust engine plus the legacy translation fallback |
+| `native/lcta_translation_engine/` | Rust translation engine: file discovery, JSON transformation, async provider calls, validation, and atomic output |
 | `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py` |
 | `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey, optional WinForms GUI progress window |
 

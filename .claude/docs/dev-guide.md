@@ -1,12 +1,15 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-07-28 -->
+<!-- Last updated: 2026-07-29 -->
 
 ## How to Run
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
+
+# Build the Rust/PyO3 translation engine
+cargo build --release --locked --manifest-path native/lcta_translation_engine/Cargo.toml
 
 # WebUI mode (full desktop app)
 python start_webui.py
@@ -21,14 +24,14 @@ python start_webui.py -launcher
 .\build.ps1
 ```
 
-6-step pipeline: InitCode → C compilation (MinGW-w64) → embedded Python → dist assembly → update package clean → ZIP packaging.
+6-step pipeline: InitCode → native compilation (MinGW C launchers plus Rust/PyO3 engine) → embedded Python → dist assembly → update package clean → ZIP packaging.
 
 Outputs:
 - `LCTA-Portable-Full.zip` — normal release
 - `LCTA-Portable-Full-Compatible.zip` — compatible release
 - `LCTA-update.zip` — source update package
 
-Requirements: PowerShell 5.0+, MinGW-w64 (optional, skips if unavailable), Python 3.9.6, network.
+Requirements: PowerShell 5.0+, Rust/Cargo, MinGW-w64 (optional for launchers), Python 3.9.6, network.
 
 ## How to Test
 
@@ -41,6 +44,9 @@ pytest tests/test_config.py
 
 # Run text-beautification engine coverage
 pytest tests/test_fancy_conditions.py tests/test_fancy_v2.py tests/test_fancy_performance.py
+
+# Run Rust translation engine tests
+cargo test --locked --manifest-path native/lcta_translation_engine/Cargo.toml
 ```
 
 Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`

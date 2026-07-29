@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-28 -->
+<!-- Last updated: 2026-07-29 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -35,24 +35,14 @@ JS: user clicks install button (PC or Android source)
 JS: user configures & clicks translate
   → webui/app.py                   LCTA_API.translate()
   → webutils/function_translate.py orchestration entry
-  → translateFunc/pipeline.py      TranslationPipeline.run()
-    Stage 1: translateFunc/get_proper.py     fetch proper nouns from remote
-    Stage 2: translateFunc/matcher/engine.py build AC automaton matcher
-                                              load KR/JP/EN/CN effect names and use
-                                              JP/EN entries to reject Korean substring false positives
-    Stage 3: translateFunc/processor.py      process priority files first
-    Stage 4: translateFunc/workers.py        WorkerPool concurrent translation
-      → translateFunc/builder/prompt.py      construct LLM prompts
-      → translateFunc/builder/request.py     build API requests; split by rendered
-                                               input length
-      → translateFunc/builder/stages.py      split Stage 0 disambiguation terms and
-                                               Stage 2 source/translation pairs by
-                                               rendered input length; prune per-part refs
-      → translateFunc/translate_request.py   call LLM API, parse response
-      → translateFunc/validator.py           rule-based post-processing (skill files only,
-                                              controlled by enable_rule_validation config):
-                                              validate [ID] bracket spacing → auto-fix
-                                              validate effect refs from source → warning
+  → translateFunc/native_pipeline.py NativeTranslationPipeline.run()
+    → _lcta_native.start_translation()       create Rust TranslationJob
+    → native/.../engine.rs                   scan KR files and resolve JP/EN/LLC paths
+    → native/.../document.rs                 parse, index, flatten, merge JSON documents
+    → native/.../provider.rs                 Tokio/Reqwest concurrent OpenAI-compatible calls
+    → native/.../rules.rs                    deterministic placeholder validation
+    → native/.../engine.rs                   atomic UTF-8 BOM output and summary events
+  → translateFunc/pipeline.py                legacy fallback when the native module is absent
       → translateFunc/processor.py           run split Stage 0 calls before translation;
                                                run split Stage 2 self-check calls and
                                                remap local correction IDs to global IDs

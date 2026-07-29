@@ -21,6 +21,7 @@ proper.json
 logs
 build
 .build_cache
+native/**/target/
 venv
 dist
 dev_assets

@@ -15,9 +15,11 @@ $BuildCacheDir = "$ProjectRoot\.build_cache"
 $PythonZipCache = "$BuildCacheDir\python-$PYTHON_VERSION-embed-amd64.zip"
 $PythonEmbedCache = "$BuildCacheDir\python-embed"
 $CCompileCache = "$BuildCacheDir\c"
+$RustNativeCache = "$BuildCacheDir\rust-native"
+$RustTargetDir = "$BuildCacheDir\rust-target"
 $WebuiBuildCache = "$BuildCacheDir\webui-build"
 
-foreach ($d in @($BuildCacheDir, $PythonEmbedCache, $CCompileCache)) {
+foreach ($d in @($BuildCacheDir, $PythonEmbedCache, $CCompileCache, $RustNativeCache)) {
     if (-not (Test-Path $d)) {
         New-Item -ItemType Directory -Path $d -Force | Out-Null
     }
@@ -151,9 +153,9 @@ if (Test-Path $initScript) {
 }
 
 # ============================================================
-# Step 2: 编译 C 启动器
+# Step 2: 编译原生组件
 # ============================================================
-Write-Host "`n[2/6] 编译 C 启动器..." -ForegroundColor Yellow
+Write-Host "`n[2/6] 编译原生组件..." -ForegroundColor Yellow
 
 $gcc = Get-Command gcc -ErrorAction SilentlyContinue
 $windres = Get-Command windres -ErrorAction SilentlyContinue
@@ -212,6 +214,31 @@ if (-not $gcc -or -not $windres) {
     Set-Location $ProjectRoot
     Write-Host "  C 编译完成" -ForegroundColor Green
 }
+
+# ---- 编译 Rust/PyO3 翻译引擎 ----
+$cargo = Get-Command cargo -ErrorAction SilentlyContinue
+$nativeManifest = "$ProjectRoot\native\lcta_translation_engine\Cargo.toml"
+$nativeDll = "$RustTargetDir\release\_lcta_native.dll"
+$nativePyd = "$RustNativeCache\_lcta_native.pyd"
+
+if (-not $cargo) {
+    Write-Host "  ERROR: 未找到 cargo，无法编译 Rust 翻译引擎" -ForegroundColor Red
+    exit 1
+}
+if (-not (Test-Path $nativeManifest)) {
+    Write-Host "  ERROR: Rust 翻译引擎清单不存在: $nativeManifest" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "  编译 Rust/PyO3 翻译引擎..."
+$env:CARGO_TARGET_DIR = $RustTargetDir
+& cargo build --release --locked --manifest-path $nativeManifest
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $nativeDll)) {
+    Write-Host "  ERROR: Rust 翻译引擎编译失败" -ForegroundColor Red
+    exit 1
+}
+Copy-Item $nativeDll $nativePyd -Force
+Write-Host "  Rust 翻译引擎编译完成" -ForegroundColor Green
 
 # ============================================================
 # Step 3: 嵌入式 Python + pip 依赖
@@ -452,6 +479,10 @@ function Copy-ProjectFiles {
 Copy-ProjectFiles $lctaCode
 Copy-ProjectFiles $lctaCompatCode
 Copy-ProjectFiles $lctaUpdate
+
+foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+    Copy-Item $nativePyd "$dest\_lcta_native.pyd" -Force
+}
 
 Write-Host "  源文件复制完成" -ForegroundColor Green
 

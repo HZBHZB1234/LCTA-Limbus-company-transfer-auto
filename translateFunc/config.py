@@ -31,6 +31,9 @@ class TranslateConfig:
     # --- 并发 ---
     max_workers: int = 4
     enable_concurrent: bool = True
+    file_concurrency: int = 24
+    request_concurrency: int = 16
+    file_io_concurrency: int = 32
 
     # --- 提示词 / 管线 ---
     translation_mode: str = "multi_stage"     # "multi_stage" | "single_stage"
@@ -69,10 +72,13 @@ class TranslateConfig:
         configs: dict = mgr.get("ui_default.translator", {})
         game_path = Path(mgr.get("game_path", ""))
         debug_mode = mgr.get("debug", False)
+        translator_name = configs.get("translator", "LLM通用翻译服务")
+        if translator_name not in {"LLM通用翻译服务", "空翻译器(使用原文)"}:
+            translator_name = "LLM通用翻译服务"
 
         return cls(
-            translator_name=configs.get("translator", "LLM通用翻译服务"),
-            is_llm=(configs.get("translator", "LLM通用翻译服务") == "LLM通用翻译服务"),
+            translator_name=translator_name,
+            is_llm=(translator_name == "LLM通用翻译服务"),
             game_path=game_path,
             enable_proper=configs.get("enable_proper", True),
             enable_role=configs.get("enable_role", True),
@@ -92,6 +98,9 @@ class TranslateConfig:
             # 新增配置项及其默认值：
             max_workers=configs.get("max_workers", 4),
             enable_concurrent=configs.get("enable_concurrent", True),
+            file_concurrency=configs.get("file_concurrency", 24),
+            request_concurrency=configs.get("request_concurrency", 16),
+            file_io_concurrency=configs.get("file_io_concurrency", 32),
             translation_mode=configs.get("translation_mode", "multi_stage"),
             enable_self_check=configs.get("enable_self_check", False),
             disambiguation_mode=configs.get("disambiguation_mode", "hybrid"),

@@ -81,30 +81,11 @@ class NativeTranslationPipeline:
         api_settings = inject_thinking_mode(
             dict(self._config.translator_api), self._config.enable_thinking
         )
-        if self._config.translator_name == "空翻译器(使用原文)":
-            provider: dict[str, Any] = {"kind": "null"}
-        elif self._config.is_llm:
-            provider = {
-                "kind": "open_ai_compatible",
-                "api_key": str(api_settings.get("api_key", "")),
-                "base_url": str(
-                    api_settings.get("base_url", "https://api.openai.com/v1")
-                ),
-                "model": str(
-                    api_settings.get("model_name", api_settings.get("model", "gpt-4o-mini"))
-                ),
-                "temperature": float(api_settings.get("temperature", 0.0)),
-                "max_tokens": _optional_int(api_settings.get("max_tokens")),
-                "extra_body": _dict_value(api_settings.get("extra_body")),
-                "timeout_seconds": int(api_settings.get("timeout", 120)),
-                "max_retries": int(api_settings.get("max_retries", 3)),
-            }
-        else:
-            raise ValueError(
-                f"Rust 翻译引擎暂不支持服务: {self._config.translator_name}"
-            )
+        provider = build_native_provider(self._config.translator_name, api_settings)
 
-        files = max(1, int(self._config.max_workers))
+        files = max(1, int(self._config.file_concurrency))
+        requests = max(1, int(self._config.request_concurrency))
+        file_io = max(1, int(self._config.file_io_concurrency))
         return {
             "game_path": str(self._config.game_path),
             "output_dir": str(self._config.output_dir),
@@ -117,12 +98,22 @@ class NativeTranslationPipeline:
             "provider": provider,
             "concurrency": {
                 "files": files if self._config.enable_concurrent else 1,
-                "requests": max(files, min(files * 2, 64)),
+                "requests": requests if self._config.enable_concurrent else 1,
+                "file_io": file_io if self._config.enable_concurrent else 1,
             },
             "pipeline": {
                 "has_prefix": self._config.has_prefix,
                 "save_result": self._config.save_result,
                 "max_prompt_chars": 18000,
+                "enable_self_check": self._config.enable_self_check,
+                "enable_rule_validation": self._config.enable_rule_validation,
+            },
+            "rules": {
+                "enable_proper": self._config.enable_proper,
+                "enable_role": self._config.enable_role,
+                "enable_skill": self._config.enable_skill,
+                "auto_fetch_proper": self._config.auto_fetch_proper,
+                "proper_path": _optional_path(self._config.proper_path),
             },
         }
 
@@ -136,6 +127,7 @@ class NativeTranslationPipeline:
             if event_type == "phase":
                 phase = {
                     "scan": "正在扫描翻译文件",
+                    "rules": "正在构建原生翻译规则快照",
                     "translate": "正在并发翻译",
                     "complete": "翻译处理完成",
                 }.get(event.get("name"), str(event.get("name", "")))
@@ -180,6 +172,37 @@ def _optional_int(value: Any) -> int | None:
     if value in (None, ""):
         return None
     return int(value)
+
+
+def build_native_provider(
+    translator_name: str, api_settings: dict[str, Any]
+) -> dict[str, Any]:
+    if translator_name == "空翻译器(使用原文)":
+        return {"kind": "null"}
+    if translator_name != "LLM通用翻译服务":
+        raise ValueError(f"Rust 翻译引擎不支持服务: {translator_name}")
+
+    extra_body = _dict_value(api_settings.get("extra_body"))
+    for key in ("top_p", "frequency_penalty", "presence_penalty"):
+        if api_settings.get(key) not in (None, ""):
+            extra_body[key] = float(api_settings[key])
+    return {
+        "kind": "open_ai_compatible",
+        "api_key": str(api_settings.get("api_key", "")),
+        "base_url": str(
+            api_settings.get("base_url") or "https://api.openai.com/v1"
+        ),
+        "model": str(
+            api_settings.get("model_name")
+            or api_settings.get("model")
+            or "gpt-4o-mini"
+        ),
+        "temperature": float(api_settings.get("temperature", 0.0)),
+        "max_tokens": _optional_int(api_settings.get("max_tokens")),
+        "extra_body": extra_body,
+        "timeout_seconds": int(api_settings.get("timeout", 120)),
+        "max_retries": int(api_settings.get("max_retries", 3)),
+    }
 
 
 def _dict_value(value: Any) -> dict:

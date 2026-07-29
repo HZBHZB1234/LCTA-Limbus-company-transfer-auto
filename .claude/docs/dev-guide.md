@@ -11,6 +11,9 @@ pip install -r requirements.txt
 # Build the Rust/PyO3 translation engine
 cargo build --release --locked --manifest-path native/lcta_translation_engine/Cargo.toml
 
+# For direct development imports on Windows, copy/rename the DLL as a Python extension
+Copy-Item native/lcta_translation_engine/target/release/_lcta_native.dll _lcta_native.pyd
+
 # WebUI mode (full desktop app)
 python start_webui.py
 
@@ -33,6 +36,8 @@ Outputs:
 
 Requirements: PowerShell 5.0+, Rust/Cargo, MinGW-w64 (optional for launchers), Python 3.9.6, network.
 
+The active translation WebUI path requires `_lcta_native.pyd`; absence is an error rather than a fallback to the old Python/translatekit pipeline.
+
 ## How to Test
 
 ```bash
@@ -47,6 +52,9 @@ pytest tests/test_fancy_conditions.py tests/test_fancy_v2.py tests/test_fancy_pe
 
 # Run Rust translation engine tests
 cargo test --locked --manifest-path native/lcta_translation_engine/Cargo.toml
+
+# Run native bridge and legacy translation regressions
+pytest tests/test_native_pipeline.py tests/test_pipeline.py tests/test_prompt_format.py tests/test_ac_automaton.py tests/test_validator.py tests/test_translation_diagnostics.py tests/test_extract_contexts.py
 ```
 
 Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`
@@ -57,6 +65,8 @@ Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_w
 - **Config access**: Always use `ConfigManager.get("dotted.path")`, never read `config.json` directly
 - **Logging**: Use `LogManager` singleton, not `print()` or root `logging`
 - **Bridge pattern**: New JS-accessible methods go in `webui/app.py` `LCTA_API` class; JS calls via `pywebview.api.<method>()`
+- **Native translation configuration**: Keep file task concurrency, HTTP request concurrency, and file-I/O concurrency independent; prompts belong to each request and must not mutate provider state
+- **Rule barriers**: `BattleKeywords.json` and `ScenarioModelCodes-AutoCreated.json` must complete before ordinary files so immutable effect/role snapshots are safe to share
 - **Public API**: New webutils functions must be exported in `webutils/__init__.py`
 - **Launcher license scope**: `launcher/` is GPL-3.0-licensed, but its Python modules currently reuse shared `webutils/`, `webFunc/`, and `globalManagers/` code; do not assume import isolation
 - **Knowledge-base maintenance**: Significant features, files, entry points, dependencies, or structural changes must update the relevant `.claude/docs/*.md` file and its `Last updated` date

@@ -56,10 +56,10 @@ class TestTranslateConfig:
         }.get(key, default)
 
         config = TranslateConfig.from_config_manager(mock_mgr)
-        assert config.translator_name == "百度翻译服务"
+        assert config.translator_name == "LLM通用翻译服务"
         assert config.max_workers == 8
         assert config.enable_concurrent is False
-        assert config.is_llm is False
+        assert config.is_llm is True
 
 
 class TestProcessOutcome:

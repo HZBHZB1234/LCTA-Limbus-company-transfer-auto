@@ -18,6 +18,10 @@ pub enum EngineEvent<'a> {
         delay_ms: u64,
         reason: &'a str,
     },
+    Log {
+        level: &'a str,
+        message: &'a str,
+    },
 }
 
 pub fn emit(sender: &Sender<String>, event: EngineEvent<'_>) {

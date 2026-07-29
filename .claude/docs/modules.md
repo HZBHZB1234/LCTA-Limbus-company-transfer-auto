@@ -111,18 +111,19 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `LanzouFolder.py` | Lanzou cloud drive folder downloader (modified from 52pojie) |
 | `Webnote.py` | Webnote/note.chat API client for remote config/data |
 
-## translateFunc/ — Translation Bridge and Legacy Engine
+## translateFunc/ — Native Translation Bridge
 
-Python-facing translation API. `native_pipeline.py` bridges the WebUI to the Rust engine; the previous Python implementation remains available as a compatibility fallback during migration.
+Python-facing translation API. The active WebUI path requires the Rust engine and no longer falls back to `translatekit`. The previous Python implementation is retained only for focused legacy tests/diagnostics and is exposed through a lazy compatibility import.
 
 **Root files:**
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Public API |
-| `native_pipeline.py` | PyO3 `TranslationJob` adapter, event dispatch, native configuration conversion, and summary conversion |
-| `pipeline.py` | `TranslationPipeline` — end-to-end orchestration |
-| `config.py` | `TranslateConfig` dataclass, `PipelineSummary`, `ProcessOutcome` |
+| `__init__.py` | Native public API plus lazy `TranslationPipeline` compatibility export |
+| `native_pipeline.py` | PyO3 `TranslationJob` adapter, event dispatch, native provider/config conversion, and summary conversion |
+| `provider_config.py` | Static project-specific provider metadata/defaults and API-setting normalization; active services are OpenAI-compatible LLM and Null |
+| `pipeline.py` | Legacy `TranslationPipeline`, no longer selected by the WebUI runtime |
+| `config.py` | `TranslateConfig`, including separate file/request/file-I/O concurrency, plus summaries/outcomes |
 | `enums.py` | `ProcessResult`, `FileType`, `MatchConfidence` enums |
 | `processor.py` | `FileProcessor` — per-file translation logic; Stage 2 self-check on the combined translation result |
 | `workers.py` | `WorkerPool` — concurrent translation execution |
@@ -138,12 +139,13 @@ Python-facing translation API. `native_pipeline.py` bridges the WebUI to the Rus
 
 | Path | Purpose |
 |------|---------|
-| `src/lib.rs` | PyO3 module and background `TranslationJob` lifecycle |
-| `src/engine.rs` | Concurrent file pipeline, locale path mapping, request chunking, merging, fallback, and atomic output |
+| `src/lib.rs` | PyO3 module, background `TranslationJob` lifecycle, and synchronous `test_provider()` bridge |
+| `src/engine.rs` | Priority-file barrier, concurrent file pipeline, per-request rule trimming, supplemental translation, optional self-check, merging, fallback, and atomic output |
 | `src/provider.rs` | Shared Reqwest client, request semaphore, retries, and OpenAI-compatible request execution |
 | `src/document.rs` | BOM-aware JSON parsing, ID/position indexes, string flattening, and path-based updates |
-| `src/rules.rs` | Native deterministic translation validation |
-| `src/config.rs` | Immutable native run/provider/concurrency configuration |
+| `src/matcher.rs` | Project-local immutable Unicode Aho-Corasick implementation used by rule snapshots |
+| `src/rules.rs` | Async/local proper-term loading, role/effect snapshot construction, JP/EN-assisted matching, bracket/tag/placeholder/number validation |
+| `src/config.rs` | Immutable native run/provider/rule/pipeline configuration and independent file/request/file-I/O concurrency |
 
 **Subdirectories:**
 
@@ -221,7 +223,7 @@ Note: `launcher/` is separately GPL-3.0-licensed, but the current Python impleme
 | Package | Used In | Purpose |
 |---------|---------|---------|
 | `pywebview` | `webui/app.py` | Native desktop webview window |
-| `translatekit` | `webutils/`, `translateFunc/` | Multi-provider translation API (Baidu, Google, DeepL, LLM) |
+| `translatekit` | Legacy `translateFunc/pipeline.py` tests only | Temporary compatibility dependency; the WebUI translation path and provider test path no longer import or instantiate it |
 | `UnityPy` | `launcher/patch.py`, `webutils/function_resource.py` | Unity asset patching plus batched text-asset extraction for skill-color beautification |
 | `openspeedy` | `webutils/function_speed.py`, `launcher/speed_hotkey.py` | DLL injection for game speed |
 | `keyboard` | `launcher/speed_hotkey.py` | Global hotkey registration |

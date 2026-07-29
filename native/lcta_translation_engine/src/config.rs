@@ -8,6 +8,9 @@ fn default_file_concurrency() -> usize {
 fn default_request_concurrency() -> usize {
     16
 }
+fn default_file_io_concurrency() -> usize {
+    32
+}
 fn default_max_prompt_chars() -> usize {
     18_000
 }
@@ -19,6 +22,15 @@ fn default_max_retries() -> usize {
 }
 fn default_true() -> bool {
     true
+}
+fn default_proper_endpoint() -> String {
+    "https://paratranz.cn/api/projects/6860/terms".to_string()
+}
+fn default_page_size() -> usize {
+    800
+}
+fn default_max_pages() -> usize {
+    10
 }
 fn default_model() -> String {
     "gpt-4o-mini".to_string()
@@ -38,6 +50,8 @@ pub struct RunConfig {
     pub concurrency: ConcurrencyConfig,
     #[serde(default)]
     pub pipeline: PipelineConfig,
+    #[serde(default)]
+    pub rules: RuleConfig,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -80,6 +94,8 @@ pub struct ConcurrencyConfig {
     pub files: usize,
     #[serde(default = "default_request_concurrency")]
     pub requests: usize,
+    #[serde(default = "default_file_io_concurrency")]
+    pub file_io: usize,
 }
 
 impl Default for ConcurrencyConfig {
@@ -87,6 +103,7 @@ impl Default for ConcurrencyConfig {
         Self {
             files: default_file_concurrency(),
             requests: default_request_concurrency(),
+            file_io: default_file_io_concurrency(),
         }
     }
 }
@@ -99,6 +116,10 @@ pub struct PipelineConfig {
     pub save_result: bool,
     #[serde(default = "default_max_prompt_chars")]
     pub max_prompt_chars: usize,
+    #[serde(default)]
+    pub enable_self_check: bool,
+    #[serde(default = "default_true")]
+    pub enable_rule_validation: bool,
 }
 
 impl Default for PipelineConfig {
@@ -107,6 +128,42 @@ impl Default for PipelineConfig {
             has_prefix: true,
             save_result: true,
             max_prompt_chars: default_max_prompt_chars(),
+            enable_self_check: false,
+            enable_rule_validation: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RuleConfig {
+    #[serde(default)]
+    pub enable_proper: bool,
+    #[serde(default)]
+    pub enable_role: bool,
+    #[serde(default)]
+    pub enable_skill: bool,
+    #[serde(default)]
+    pub auto_fetch_proper: bool,
+    pub proper_path: Option<PathBuf>,
+    #[serde(default = "default_proper_endpoint")]
+    pub proper_endpoint: String,
+    #[serde(default = "default_page_size")]
+    pub proper_page_size: usize,
+    #[serde(default = "default_max_pages")]
+    pub proper_max_pages: usize,
+}
+
+impl Default for RuleConfig {
+    fn default() -> Self {
+        Self {
+            enable_proper: false,
+            enable_role: false,
+            enable_skill: false,
+            auto_fetch_proper: false,
+            proper_path: None,
+            proper_endpoint: default_proper_endpoint(),
+            proper_page_size: default_page_size(),
+            proper_max_pages: default_max_pages(),
         }
     }
 }

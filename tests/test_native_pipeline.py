@@ -3,7 +3,8 @@ import sys
 from types import SimpleNamespace
 
 from translateFunc.config import TranslateConfig
-from translateFunc.native_pipeline import NativeTranslationPipeline
+from translateFunc.native_pipeline import NativeTranslationPipeline, build_native_provider
+from translateFunc.provider_config import format_api_settings
 
 
 class _FakeJob:
@@ -45,6 +46,20 @@ class _FakeJob:
         self.cancelled = True
 
 
+class _ConfigManagerStub:
+    def __init__(self, translator):
+        self.translator = translator
+
+    def get(self, key, default=None):
+        if key == "ui_default.translator":
+            return {"translator": self.translator}
+        if key == "game_path":
+            return ""
+        if key == "debug":
+            return False
+        return default
+
+
 def test_native_config_passes_complete_llm_request_settings(tmp_path):
     config = TranslateConfig(
         game_path=tmp_path / "game",
@@ -57,7 +72,16 @@ def test_native_config_passes_complete_llm_request_settings(tmp_path):
             "max_tokens": "4096",
             "extra_body": {"seed": 7},
         },
-        max_workers=8,
+        file_concurrency=32,
+        request_concurrency=24,
+        file_io_concurrency=48,
+        enable_self_check=True,
+        enable_rule_validation=False,
+        enable_proper=True,
+        enable_role=True,
+        enable_skill=True,
+        auto_fetch_proper=False,
+        proper_path=str(tmp_path / "terms.json"),
     )
 
     native = NativeTranslationPipeline(config)._build_native_config()
@@ -67,7 +91,16 @@ def test_native_config_passes_complete_llm_request_settings(tmp_path):
     assert native["provider"]["temperature"] == 0.2
     assert native["provider"]["max_tokens"] == 4096
     assert native["provider"]["extra_body"] == {"seed": 7}
-    assert native["concurrency"] == {"files": 8, "requests": 16}
+    assert native["concurrency"] == {"files": 32, "requests": 24, "file_io": 48}
+    assert native["pipeline"]["enable_self_check"] is True
+    assert native["pipeline"]["enable_rule_validation"] is False
+    assert native["rules"] == {
+        "enable_proper": True,
+        "enable_role": True,
+        "enable_skill": True,
+        "auto_fetch_proper": False,
+        "proper_path": str(tmp_path / "terms.json"),
+    }
 
 
 def test_native_pipeline_dispatches_events_and_decodes_summary(monkeypatch, tmp_path):
@@ -103,3 +136,37 @@ def test_native_pipeline_dispatches_events_and_decodes_summary(monkeypatch, tmp_
     assert summary.fallback == ["b.json"]
     assert progress == [(50, "已处理 1/2: a.json")]
     assert "正在并发翻译" in logs
+
+
+def test_static_provider_schema_builds_native_openai_config():
+    settings = format_api_settings(
+        "LLM通用翻译服务",
+        {
+            "api_key": "secret",
+            "temperature": "0.1",
+            "top_p": "0.8",
+            "extra_body": '{"seed": 9}',
+            "timeout": "90",
+        },
+    )
+
+    provider = build_native_provider("LLM通用翻译服务", settings)
+
+    assert provider["kind"] == "open_ai_compatible"
+    assert provider["temperature"] == 0.1
+    assert provider["timeout_seconds"] == 90
+    assert provider["extra_body"] == {"seed": 9, "top_p": 0.8,
+                                      "frequency_penalty": 0.0,
+                                      "presence_penalty": 0.0}
+
+
+def test_static_provider_schema_supports_null_provider():
+    assert format_api_settings("空翻译器(使用原文)", {}) == {}
+    assert build_native_provider("空翻译器(使用原文)", {}) == {"kind": "null"}
+
+
+def test_legacy_provider_selection_migrates_to_native_llm():
+    config = TranslateConfig.from_config_manager(_ConfigManagerStub("百度翻译服务"))
+
+    assert config.translator_name == "LLM通用翻译服务"
+    assert config.is_llm is True

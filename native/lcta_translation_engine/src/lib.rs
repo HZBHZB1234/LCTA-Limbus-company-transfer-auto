@@ -3,13 +3,17 @@ mod document;
 mod engine;
 mod error;
 mod event;
+mod matcher;
 mod provider;
 mod rules;
 
-use config::RunConfig;
+use config::{ProviderConfig, RunConfig};
 use crossbeam_channel::{bounded, Receiver};
+use provider::{Provider, TranslationRequest, TranslationTask};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use serde::Deserialize;
+use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -96,9 +100,85 @@ fn start_translation(config_json: &str) -> PyResult<TranslationJob> {
     Ok(TranslationJob { state })
 }
 
+#[derive(Debug, Deserialize)]
+struct ProviderTestConfig {
+    provider: ProviderConfig,
+}
+
+#[pyfunction]
+fn test_provider(py: Python<'_>, config_json: &str) -> PyResult<String> {
+    let config: ProviderTestConfig = serde_json::from_str(config_json)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    py.allow_threads(|| {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .thread_name("lcta-provider-test")
+            .build()
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        runtime.block_on(async move {
+            let (events, _) = bounded(32);
+            let provider = Provider::new(config.provider, 3, events)
+                .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+            let user_prompt = json!({
+                "text_blocks": [
+                    {"id": 1, "kr": "안녕"},
+                    {"id": 2, "kr": "Hello"},
+                    {"id": 3, "kr": "こんにちは"}
+                ]
+            })
+            .to_string();
+            let raw = provider
+                .translate(TranslationRequest {
+                    file: "<provider-test>".to_string(),
+                    task: TranslationTask::Translate,
+                    system_prompt:
+                        "将每个输入条目翻译为简体中文。不得改变 id，只返回 translations JSON。"
+                            .to_string(),
+                    user_prompt,
+                })
+                .await
+                .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+            let trimmed = raw.trim();
+            let normalized = if trimmed.starts_with("```") {
+                trimmed
+                    .trim_start_matches("```json")
+                    .trim_start_matches("```")
+                    .trim_end_matches("```")
+                    .trim()
+            } else {
+                trimmed
+            };
+            let response: Value = serde_json::from_str(normalized)
+                .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+            let translations = response
+                .get("translations")
+                .and_then(Value::as_array)
+                .or_else(|| response.as_array())
+                .ok_or_else(|| PyRuntimeError::new_err("API 测试响应缺少 translations"))?;
+            let mut by_id = std::collections::HashMap::new();
+            for item in translations {
+                if let (Some(id), Some(translation)) = (
+                    item.get("id").and_then(Value::as_u64),
+                    item.get("translation").and_then(Value::as_str),
+                ) {
+                    by_id.insert(id, translation.to_string());
+                }
+            }
+            serde_json::to_string(&json!({
+                "kr": by_id.get(&1).cloned().unwrap_or_default(),
+                "en": by_id.get(&2).cloned().unwrap_or_default(),
+                "jp": by_id.get(&3).cloned().unwrap_or_default(),
+            }))
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))
+        })
+    })
+}
+
 #[pymodule]
 fn _lcta_native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<TranslationJob>()?;
     module.add_function(wrap_pyfunction!(start_translation, module)?)?;
+    module.add_function(wrap_pyfunction!(test_provider, module)?)?;
     Ok(())
 }

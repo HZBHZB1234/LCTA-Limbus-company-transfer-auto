@@ -10,8 +10,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 
 | Language | Layer | Notes |
 |----------|-------|-------|
-| Python 3.9.6+ | Backend bridge | WebUI, configuration, packaging, and legacy translation fallback |
-| Rust | Native translation engine | PyO3 job API, Tokio/Reqwest networking, concurrent JSON file processing, and deterministic validation |
+| Python 3.9.6+ | Backend bridge | WebUI, configuration, events, packaging, and static provider metadata |
+| Rust | Native translation engine | PyO3 job/provider-test APIs, Tokio/Reqwest networking, concurrent JSON/file I/O, immutable rule snapshots, and deterministic validation |
 | C (MinGW-w64) | Native launcher | `launcher.c` → compiled to .exe as PE entry point for packaged releases |
 | JavaScript | Frontend | SPA modules plus standalone editor and translation-log viewer scripts, bridged to Python via `pywebview.api` |
 | HTML/CSS | Frontend | SPA in `webui/index.html` with lazy section fragments plus standalone rule editor, quick editor, and translation diagnostic viewer windows with theme sync |
@@ -35,13 +35,12 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │  webutils/load.py        config loading/validation   │
 ├─────────────────────────────────────────────────────┤
 │                DOMAIN ENGINES                        │
-│  translateFunc/           LLM translation pipeline   │
-│    pipeline.py            orchestration              │
-│    processor.py           per-file logic             │
-│    validator.py           rule-based post-processing │
-│    workers.py             concurrency                │
-│    builder/               prompt & request building  │
-│    matcher/               proper noun AC matching    │
+│  native/lcta_translation_engine/                     │
+│    engine.rs              async translation pipeline │
+│    matcher.rs             immutable AC snapshots     │
+│    rules.rs               terminology + validation   │
+│    provider.rs            pooled HTTP provider       │
+│  translateFunc/           thin PyO3/config bridge    │
 │  webutils/fancy_engine.py compiled v2 rule engine    │
 │  webutils/function_fancy.py file orchestration/stats │
 ├─────────────────────────────────────────────────────┤
@@ -52,7 +51,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │  CFST/                    CloudflareSpeedTest binary │
 ├─────────────────────────────────────────────────────┤
 │               EXTERNAL TOOLS                         │
-│  translatekit  openspeedy  UnityPy  pywebview  etcpak│
+│  openspeedy  UnityPy  pywebview  etcpak              │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -63,8 +62,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `webui/` | Frontend: pywebview desktop window + HTML/CSS/JS SPA |
 | `webutils/` | Business logic: one `function_*.py` per feature, all exported via `__init__.py` |
 | `webFunc/` | Infrastructure: GitHub downloads, file transfer, Lanzou parsing, web notes |
-| `translateFunc/` | Python bridge for the Rust engine plus the legacy translation fallback |
-| `native/lcta_translation_engine/` | Rust translation engine: file discovery, JSON transformation, async provider calls, validation, and atomic output |
+| `translateFunc/` | Python bridge, native provider schema, summaries/events, plus lazily loaded legacy diagnostic modules |
+| `native/lcta_translation_engine/` | Rust translation engine: priority barriers, JSON transformation, async provider/file I/O, rule snapshots, validation, and atomic output |
 | `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py` |
 | `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey, optional WinForms GUI progress window |
 
@@ -74,7 +73,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 |---------|-------|-----------------|
 | **Singleton** | `globalManagers/` | `ConfigManager` — thread-safe, lazy-init, dotted-path access. `LogManager` — async UI callbacks via thread pool |
 | **Bridge** | `webui/app.py` ↔ JS | `LCTA_API` class exposes Python methods to JS via `pywebview.api`; JS calls like `pywebview.api.install_llc()` |
-| **Pipeline** | `translateFunc/pipeline.py` | `TranslationPipeline` orchestrates: fetch proper nouns → build matcher → priority files → WorkerPool → aggregate |
+| **Pipeline** | `native/lcta_translation_engine/src/engine.rs` | Native pipeline orchestrates: scan → async proper terms → priority rule files → freeze snapshot → concurrent files/requests → supplemental translation → optional self-check → atomic output |
+| **Immutable Snapshot** | `native/lcta_translation_engine/src/matcher.rs`, `rules.rs` | Proper noun, role, and effect Aho-Corasick matchers are rebuilt only at priority barriers, then shared read-only by file tasks |
 | **Compile/Apply** | `webutils/fancy_engine.py` | Text beautification validates and compiles v2 rules once, selects rules per file, then applies structured-path conditions/actions without repeatedly reparsing paths or regexes |
 | **Factory** | `launcher/updates.py` | Update objects for LLC, OurPlay, Machine translation — each implements a common interface |
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |
@@ -88,7 +88,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `RuleEditorAPI` | `webui/app.py` | Secondary pywebview bridge for the rule editor window: wraps `webutils/function_rule_editor.py` methods (file browser, rules CRUD, rule building, validation, smart analysis), plus `get_config_value()` for cross-window config queries (e.g. theme). Instantiated as `js_api=RuleEditorAPI()` in a separate `webview.create_window()` call |
 | `QuickEditorAPI` | `webui/app.py` | Pywebview bridge for the quick editor window: wraps `webutils/function_quick_editor.py` methods (diff_json, load/save/apply_quick_edits) plus shared methods from `function_rule_editor.py` (file browser, search). Instantiated as `js_api=QuickEditorAPI()` in `open_quick_editor()` |
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |
-| `TranslationPipeline` | `translateFunc/pipeline.py` | Orchestrates the 6-stage LLM translation pipeline |
+| `NativeTranslationPipeline` | `translateFunc/native_pipeline.py` | Converts Python configuration to one immutable native run config and polls the bounded Rust event queue |
+| `TranslationJob` / `test_provider` | `native/lcta_translation_engine/src/lib.rs` | PyO3 background job lifecycle plus direct OpenAI-compatible/Null provider validation for WebUI API tests |
 | `CompiledRules` / `ApplyResult` | `webutils/fancy_engine.py` | Immutable compiled beautification rules plus per-file changed-path results; exposes `requires_skill_color` so resource extraction is prepared only when an enabled rule needs it |
 | `FancyRunStats` | `webutils/function_fancy.py` | Reports scanned, matched and changed files/values, elapsed time, and skill-color resource cache hits; files are rewritten atomically only when content changes |
 | `LogManager` | `globalManagers/LogManager.py` | Singleton logger: file rotation, console, webview modal callbacks |

@@ -1,6 +1,6 @@
 """
 webutils/function_translate.py
-translateFunc.TranslationPipeline 的 WebUI 薄封装。
+Rust 原生翻译引擎的 WebUI 薄封装。
 负责：配置加载、临时目录设置、UI 回调绑定、产物打包。
 """
 import os
@@ -9,9 +9,9 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 from contextlib import suppress
-from typing import Callable
 
-from translateFunc import TranslationPipeline, TranslateConfig
+from translateFunc import TranslateConfig
+from translateFunc.provider_config import format_api_settings
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 from webutils.functions import get_cache_font, zip_folder
@@ -22,14 +22,12 @@ _log_manager = LogManager()
 def translate_main(
     modal_id,
     translator_config: dict,
-    formating_function: Callable[[dict, dict], dict],
 ):
     """WebUI 翻译主入口。
 
     Args:
         modal_id: UI 模态框标识符，用于进度上报。
         translator_config: 以翻译器名称为键的 API 设置字典。
-        formating_function: (api_settings, translator_cls) -> 格式化后的 api_settings。
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         _log_manager.log_modal_process("开始初始化", modal_id)
@@ -55,30 +53,23 @@ def translate_main(
         translator_text = config.translator_name
         api_settings = translator_config.get(translator_text, {})
 
-        # 应用 UI 格式化函数（保留旧流程）
-        from translateFunc.translate_request import TRANSLATOR_TRANS
-        translator_cls = TRANSLATOR_TRANS[translator_text]
-        api_settings = formating_function(api_settings, translator_cls)
-        config.translator_api = api_settings
+        config.translator_api = format_api_settings(translator_text, api_settings)
 
         # 4. 设置输出目录
         config.output_dir = tmp
 
-        # 5. 创建管线。LLM 与空翻译器优先使用 Rust 原生引擎；
-        # 其他旧服务在迁移完成前继续使用 Python 管线。
-        if config.is_llm or config.translator_name == "空翻译器(使用原文)":
-            from translateFunc.native_pipeline import (
-                NativeTranslationPipeline,
-                native_engine_available,
+        # 5. 创建 Rust 原生管线。翻译热路径不再回退到 translatekit。
+        from translateFunc.native_pipeline import (
+            NativeEngineUnavailable,
+            NativeTranslationPipeline,
+            native_engine_available,
+        )
+        if not native_engine_available():
+            raise NativeEngineUnavailable(
+                "未找到 _lcta_native，当前版本不再提供 Python/translatekit 翻译回退"
             )
-            if native_engine_available():
-                pipeline = NativeTranslationPipeline(config)
-                _log_manager.log("使用 Rust 原生翻译引擎")
-            else:
-                pipeline = TranslationPipeline(config)
-                _log_manager.log("未找到 Rust 原生模块，回退到 Python 翻译引擎")
-        else:
-            pipeline = TranslationPipeline(config)
+        pipeline = NativeTranslationPipeline(config)
+        _log_manager.log("使用 Rust 原生翻译引擎")
 
         # 6. 绑定 UI 回调
         pipeline.set_callbacks(

@@ -11,8 +11,15 @@ use tokio::sync::Semaphore;
 #[derive(Debug, Clone)]
 pub struct TranslationRequest {
     pub file: String,
+    pub task: TranslationTask,
     pub system_prompt: String,
     pub user_prompt: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TranslationTask {
+    Translate,
+    SelfCheck,
 }
 
 #[derive(Clone)]
@@ -80,9 +87,18 @@ impl Provider {
                     .into_iter()
                     .flatten()
                     .map(|item| {
+                        let translation = match request.task {
+                            TranslationTask::Translate => {
+                                item.get("kr").and_then(Value::as_str).unwrap_or_default()
+                            }
+                            TranslationTask::SelfCheck => item
+                                .get("translation")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default(),
+                        };
                         json!({
                             "id": item.get("id").and_then(Value::as_u64).unwrap_or_default(),
-                            "translation": item.get("kr").and_then(Value::as_str).unwrap_or_default(),
+                            "translation": translation,
                         })
                     })
                     .collect::<Vec<_>>();

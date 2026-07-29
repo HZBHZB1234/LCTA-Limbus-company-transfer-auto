@@ -35,24 +35,26 @@ JS: user clicks install button (PC or Android source)
 JS: user configures & clicks translate
   → webui/app.py                   LCTA_API.translate()
   → webutils/function_translate.py orchestration entry
+    → translateFunc/provider_config.py normalize project-specific OpenAI/Null settings
   → translateFunc/native_pipeline.py NativeTranslationPipeline.run()
     → _lcta_native.start_translation()       create Rust TranslationJob
     → native/.../engine.rs                   scan KR files and resolve JP/EN/LLC paths
+    → native/.../rules.rs                    load proper terms asynchronously/local file
+    → native/.../engine.rs                   translate BattleKeywords then ScenarioModelCodes
+    → native/.../matcher.rs                  freeze proper/affect/role AC snapshots
     → native/.../document.rs                 parse, index, flatten, merge JSON documents
-    → native/.../provider.rs                 Tokio/Reqwest concurrent OpenAI-compatible calls
-    → native/.../rules.rs                    deterministic placeholder validation
+    → native/.../provider.rs                 pooled Tokio/Reqwest calls under request semaphore
+    → native/.../engine.rs                   trim references per chunk; supplemental call for missing/invalid entries; optional self-check
+    → native/.../rules.rs                    effect/tag/placeholder/number validation and skill spacing normalization
     → native/.../engine.rs                   atomic UTF-8 BOM output and summary events
-  → translateFunc/pipeline.py                legacy fallback when the native module is absent
-      → translateFunc/processor.py           run split Stage 0 calls before translation;
-                                               run split Stage 2 self-check calls and
-                                               remap local correction IDs to global IDs
-    Stage 5: translateFunc/matcher/engine.py post-translation proper matching
-    Stage 6: translateFunc/pipeline.py       aggregate results → PipelineSummary
+  → native module missing                   fail fast; no translatekit runtime fallback
   → webutils/function_translate.py  write output files
   → webui/app.py                    callback: summary → JS modal
 ```
 
-Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc/pipeline.py`, `translateFunc/config.py`, `translateFunc/processor.py`, `translateFunc/validator.py`, `translateFunc/workers.py`, `translateFunc/translate_request.py`, `translateFunc/get_proper.py`, `translateFunc/builder/prompt.py`, `translateFunc/builder/request.py`, `translateFunc/builder/stages.py`, `translateFunc/matcher/engine.py`, `translateFunc/matcher/ac_automaton.py`, `translateFunc/log_bridge.py`, `translateFunc/recorder.py`, `globalManagers/LogManager.py`
+Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc/provider_config.py`, `translateFunc/native_pipeline.py`, `translateFunc/config.py`, `native/lcta_translation_engine/src/lib.rs`, `config.rs`, `engine.rs`, `provider.rs`, `document.rs`, `matcher.rs`, `rules.rs`, `globalManagers/LogManager.py`
+
+API configuration testing follows `webui/app.py::test_api()` → `_lcta_native.test_provider()` and uses the same native provider serialization as full translation.
 
 ### 3b. Translation Dump Recording (转储过程记录)
 

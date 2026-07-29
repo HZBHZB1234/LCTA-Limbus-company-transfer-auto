@@ -5,6 +5,8 @@ from pathlib import Path
 import warnings
 from typing import List, Dict, Tuple
 import re
+from hashlib import sha256
+from urllib.parse import urljoin, urlsplit
 
 projext_path = Path(__file__).parent.parent
 
@@ -62,15 +64,31 @@ print("开始本地化样式资源...")
 os.chdir(projext_path / "webui")
 print(f"切换工作目录至: {os.getcwd()}")
 
-URL_TRANSFER = [("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
-                 'css/all.min.css'),
-                ("https://cdn.jsdelivr.net/npm/marked/marked.min.js",'marked/marked.min.js'),
-                ("https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css",
-                 'css/github-markdown-light.min.css')]
+FONT_AWESOME_URL = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+CODEMIRROR_MODULES = {
+    "https://esm.sh/codemirror@6.0.1": './vendor/codemirror/codemirror.js',
+    "https://esm.sh/@codemirror/view@6.0.1": './vendor/codemirror/view.js',
+    "https://esm.sh/@codemirror/lang-json@6.0.1": './vendor/codemirror/lang-json.js',
+    "https://esm.sh/@codemirror/search@6.0.1": './vendor/codemirror/search.js',
+}
+HTML_RESOURCE_TRANSFERS = {
+    'index.html': [
+        (FONT_AWESOME_URL, 'css/all.min.css'),
+        ("https://cdn.jsdelivr.net/npm/marked/marked.min.js", 'marked/marked.min.js'),
+        ("https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css",
+         'css/github-markdown-light.min.css'),
+    ],
+    'quick-editor.html': [
+        (FONT_AWESOME_URL, 'css/all.min.css'),
+        *CODEMIRROR_MODULES.items(),
+    ],
+    'translation-log-viewer.html': [
+        (FONT_AWESOME_URL, 'css/all.min.css'),
+    ],
+}
 
 FILES = [
-    ("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
-        'css/all.min.css'),
+    (FONT_AWESOME_URL, 'css/all.min.css'),
     ("https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css",
         'css/github-markdown-light.min.css'),
     ("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2",
@@ -81,24 +99,22 @@ FILES = [
         'css/github-markdown-light.min.css'),
     ("https://cdn.jsdelivr.net/npm/marked/marked.min.js",
         'marked/marked.min.js'),
-    ("https://web-static-res-edge-speedtest-b1-hk.dahi.edu.eu.org/scripts/556780/1710242/NexusMods%20%E4%B8%AD%E6%96%87%E5%8C%96-%E8%AF%8D%E5%BA%93.js",
+    ("https://update.greasyfork.org/scripts/556780/NexusMods%20%E4%B8%AD%E6%96%87%E5%8C%96-%E8%AF%8D%E5%BA%93.js",
         'nexus/dict.js'),
-    ("https://update.greasyfork.org.cn/scripts/556781/NexusMods%20%E4%B8%AD%E6%96%87%E5%8C%96%E6%8F%92%E4%BB%B6.user.js",
+    ("https://update.greasyfork.org/scripts/556781/NexusMods%20%E4%B8%AD%E6%96%87%E5%8C%96%E6%8F%92%E4%BB%B6.user.js",
         'nexus/cn.js'),
-    ("https://update.greasyfork.org.cn/scripts/519037/Nexus%20No%20Wait%20%2B%2B.user.js",
+    ("https://update.greasyfork.org/scripts/519037/Nexus%20No%20Wait%20%2B%2B.user.js",
         'nexus/skip.js')
 ]
 
-print("修改index.html文件，替换CDN链接为本地链接...")
-with open('index.html', 'r', encoding='utf-8') as f:
-    html_content = f.read()
-    for url, path in URL_TRANSFER:
+print("替换HTML中的在线资源链接...")
+for html_file, transfers in HTML_RESOURCE_TRANSFERS.items():
+    html_path = Path(html_file)
+    html_content = html_path.read_text(encoding='utf-8')
+    for url, path in transfers:
         html_content = html_content.replace(url, path)
-    print("已完成替换CDN链接")
-
-with open('index.html', 'w', encoding='utf-8') as f:
-    f.write(html_content)
-    print("已保存修改后的index.html文件")
+    html_path.write_text(html_content, encoding='utf-8')
+    print(f"已本地化: {html_file}")
     
 print("开始下载本地化资源文件...")
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
@@ -112,7 +128,66 @@ for url, file in FILES:
         f.write(r.content)
         print(f"已成功下载: {file}")
             
-print("所有资源文件下载完成！")
+print("静态资源文件下载完成！")
+
+ESM_IMPORT_PATTERN = re.compile(
+    r'(?P<prefix>\b(?:from\s*|import\s*(?:\(\s*)?))'
+    r'(?P<quote>["\'])'
+    r'(?P<specifier>(?:(?:https://esm\.sh)?/|\.\.?/)[^"\']+)'
+    r'(?P=quote)'
+)
+
+
+def esm_dependency_path(url: str) -> Path:
+    name = Path(urlsplit(url).path).name or 'module'
+    name = re.sub(r'[^A-Za-z0-9._-]+', '-', name).strip('-') or 'module'
+    stem = Path(name).stem
+    return Path('vendor/esm') / f"{stem}-{sha256(url.encode()).hexdigest()[:12]}.js"
+
+
+def localize_esm_modules(modules: Dict[str, str]) -> None:
+    module_paths = {url: Path(path) for url, path in modules.items()}
+    localized = set()
+    visiting = set()
+    session = requests.Session()
+
+    def localize(url: str) -> Path:
+        destination = module_paths.setdefault(url, esm_dependency_path(url))
+        if url in localized or url in visiting:
+            return destination
+
+        visiting.add(url)
+        try:
+            print(f"正在下载ESM模块: {url}")
+            response = session.get(url, timeout=30, verify=False)
+            response.raise_for_status()
+            code = response.content.decode('utf-8')
+
+            def replace_import(match: re.Match) -> str:
+                dependency_url = urljoin(url, match.group('specifier'))
+                dependency_path = localize(dependency_url)
+                relative_path = os.path.relpath(dependency_path, destination.parent).replace(os.sep, '/')
+                if not relative_path.startswith('.'):
+                    relative_path = f'./{relative_path}'
+                return f"{match.group('prefix')}{match.group('quote')}{relative_path}{match.group('quote')}"
+
+            code = ESM_IMPORT_PATTERN.sub(replace_import, code)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(code, encoding='utf-8')
+            localized.add(url)
+            return destination
+        finally:
+            visiting.remove(url)
+
+    try:
+        for module_url in modules:
+            localize(module_url)
+    finally:
+        session.close()
+    print(f"ESM模块本地化完成，共处理 {len(localized)} 个文件")
+
+
+localize_esm_modules(CODEMIRROR_MODULES)
 
 
 print("修改marked.js，替换.at()")

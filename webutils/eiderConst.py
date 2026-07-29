@@ -114,9 +114,6 @@ bindRefer = {
         'elder-translator-service': [
             'translator-service-select', 'ui_default.translator.translator',
         ],
-        'elder-from-lang': [
-            'from-lang', 'ui_default.translator.from_lang',
-        ],
         'elder-enable-proper': [
             'enable-proper', 'ui_default.translator.enable_proper',
         ],
@@ -125,9 +122,6 @@ bindRefer = {
         ],
         'elder-enable-skill': [
             'enable-skill', 'ui_default.translator.enable_skill',
-        ],
-        'elder-fallback': [
-            'fallback', 'ui_default.translator.fallback',
         ],
         'elder-enable-rule-validation': [
             'enable-rule-validation', 'ui_default.translator.enable_rule_validation',

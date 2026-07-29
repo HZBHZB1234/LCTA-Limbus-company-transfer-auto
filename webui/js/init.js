@@ -89,7 +89,6 @@ window.addEventListener('pywebviewready', function() {
                 configManager.applyConfigToUI().then(function() {
                     toggleCachePathInput();
                     toggleStoragePathInput();
-                    toggleDevelopSettings();
                     toggleCustomLangGui();
                     toggleAutoProper();
                     toggleSteamCommand();

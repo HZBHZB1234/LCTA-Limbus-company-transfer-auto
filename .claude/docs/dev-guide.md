@@ -100,7 +100,10 @@ The repository-local pre-commit hook copies `CLAUDE.md` to `AGENTS.md` and stage
 1. Add default value to `config_default.json`
 2. Add type entry to `config_check.json`
 3. If it needs a tooltip, follow `prompts/tooltip.md`
-4. UI reads via `ConfigManager.get("path.to.key")`
+4. Add the DOM ID → dotted config path mapping in `webui/js/core.js`
+5. UI reads via `ConfigManager.get("path.to.key")`
+
+Translation concurrency is intentionally split into `file_concurrency`, `request_concurrency`, and `file_io_concurrency`. Keep these controls independent; `enable_concurrent=false` is the only supported way to force all three native limits to 1.
 
 ### Adding a New Modal Operation
 

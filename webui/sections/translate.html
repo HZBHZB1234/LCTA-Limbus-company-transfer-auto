@@ -41,7 +41,7 @@
 
         <div class="form-group">
             <label class="checkbox-container">
-                <input type="checkbox" id="enable-role" onchange="toggleProper()">
+                <input type="checkbox" id="enable-role">
                 <span class="checkmark"></span>
                 启用人物角色标识 (LLM翻译专用)
             </label>
@@ -49,23 +49,20 @@
 
         <div class="form-group">
             <label class="checkbox-container">
-                <input type="checkbox" id="enable-skill" onchange="toggleProper()">
+                <input type="checkbox" id="enable-skill">
                 <span class="checkmark"></span>
                 启用状态效果标识 (LLM翻译专用)
             </label>
         </div>
-        
+
         <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="enable-dev-settings" onchange="toggleDevelopSettings()">
-                <span class="checkmark"></span>
-                启用高级选项
-            </label>
+            <label>源文本路径覆盖（通常留空）</label>
+            <small class="form-hint">仅在自动定位失败或需要使用自定义语料目录时设置。</small>
         </div>
 
-        <div id="dev-settings" style="display: none;">
+        <div id="source-path-overrides">
             <div class="form-group" id="kr-path-text">
-                <label for="kr-path-text">韩文文本路径</label>
+                <label for="kr-path">韩文文本路径</label>
                 <div class="file-input-group">
                     <input type="text" id="kr-path" placeholder="选择韩文文本文件夹">
                     <button class="action-btn secondary" 
@@ -76,7 +73,7 @@
             </div>
 
             <div class="form-group" id="jp-path-text">
-                <label for="jp-path-text">日文文本路径</label>
+                <label for="jp-path">日文文本路径</label>
                 <div class="file-input-group">
                     <input type="text" id="jp-path" placeholder="选择日文文本文件夹">
                     <button class="action-btn secondary"
@@ -87,7 +84,7 @@
             </div>
 
             <div class="form-group" id="en-path-text">
-                <label for="en-path-text">英文文本路径</label>
+                <label for="en-path">英文文本路径</label>
                 <div class="file-input-group">
                     <input type="text" id="en-path" placeholder="选择英文文本文件夹">
                     <button class="action-btn secondary"
@@ -98,7 +95,7 @@
             </div>
 
             <div class="form-group" id="llc-path-text">
-                <label for="llc-path-text">中文文本路径</label>
+                <label for="llc-path">中文文本路径</label>
                 <div class="file-input-group">
                     <input type="text" id="llc-path" placeholder="选择中文文本文件夹">
                     <button class="action-btn secondary"
@@ -117,13 +114,6 @@
             </div>
         </div>
 
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="dump-translation">
-                <span class="checkmark"></span>
-                转储过程内容以供分析
-            </label>
-        </div>
     </div>
     
     <div class="setting-card">
@@ -133,50 +123,11 @@
             <div class="translator-services">
             </div>
         </div>
-        
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="fallback" checked>
-                <span class="checkmark"></span>
-                失败时进行相反重试 (LLM翻译专用)
-            </label>
-        </div>
-        
-        <div class="form-group">
-            <label for="prompt-format">请求 / 响应格式:</label>
-            <div class="select-wrapper">
-                <select id="prompt-format">
-                    <option value="xml_json">XML 请求 → JSON 响应（推荐）</option>
-                    <option value="json_json">JSON 请求 → JSON 响应</option>
-                    <option value="xml_xml">XML 请求 → XML 响应</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <label for="from-lang">使用源语言 (除LLM翻译外使用):</label>
-            <div class="select-wrapper">
-                <select id="from-lang">
-                    <option value="EN">英文</option>
-                    <option value="JP">日文</option>
-                    <option value="KR">韩文</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
-            </div>
-        </div>
+        <small class="form-hint">Rust 原生引擎会为每个请求分别构造 system prompt 与 user prompt，并自动解析 JSON 响应。</small>
     </div>
 
     <div class="setting-card">
-        <h3 class="setting-title">高级管线配置</h3>
-
-        <div class="form-group">
-            <label for="max-workers">并发线程数:</label>
-            <div class="input-with-icon">
-                <i class="fas fa-hashtag"></i>
-                <input type="number" id="max-workers" placeholder="4" min="1" max="16">
-            </div>
-        </div>
+        <h3 class="setting-title">Rust 原生管线</h3>
 
         <div class="form-group">
             <label class="checkbox-container">
@@ -187,13 +138,26 @@
         </div>
 
         <div class="form-group">
-            <label for="translation-mode">翻译模式:</label>
-            <div class="select-wrapper">
-                <select id="translation-mode">
-                    <option value="multi_stage">多阶段翻译</option>
-                    <option value="single_stage">单阶段翻译</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
+            <label for="file-concurrency">文件并发数:</label>
+            <div class="input-with-icon">
+                <i class="fas fa-layer-group"></i>
+                <input type="number" id="file-concurrency" placeholder="24" min="1" max="128">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="request-concurrency">网络请求并发数:</label>
+            <div class="input-with-icon">
+                <i class="fas fa-cloud-arrow-up"></i>
+                <input type="number" id="request-concurrency" placeholder="16" min="1" max="128">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="file-io-concurrency">文件 I/O 并发数:</label>
+            <div class="input-with-icon">
+                <i class="fas fa-hard-drive"></i>
+                <input type="number" id="file-io-concurrency" placeholder="32" min="1" max="256">
             </div>
         </div>
 
@@ -222,27 +186,11 @@
         </div>
 
         <div class="form-group">
-            <label for="disambiguation-mode">消歧模式:</label>
-            <div class="select-wrapper">
-                <select id="disambiguation-mode">
-                    <option value="hybrid">混合模式（推荐）</option>
-                    <option value="similarity">相似度匹配</option>
-                    <option value="llm">LLM消歧</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <label for="min-confidence">最低匹配置信度:</label>
-            <div class="select-wrapper">
-                <select id="min-confidence">
-                    <option value="medium">中（推荐）</option>
-                    <option value="high">高</option>
-                    <option value="low">低</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
-            </div>
+            <label class="checkbox-container">
+                <input type="checkbox" id="dump-translation">
+                <span class="checkmark"></span>
+                转储过程内容以供分析
+            </label>
         </div>
     </div>
 </div>

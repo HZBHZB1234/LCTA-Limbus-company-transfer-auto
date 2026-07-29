@@ -73,7 +73,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `functions.py` | Shared utilities | zip/unzip, hashing, downloads, 7z integration, symlinks, font handling |
 | `load.py` | Config & game detection | Config loading/validation, Steam registry game path detection |
 | `update.py` | Self-updater | GitHub Releases-based auto-update |
-| `const_apiConfig.py` | API provider configs | TranslateKit provider definitions (Baidu, Google, DeepL, etc.) |
+| `const_apiConfig.py` | API provider config compatibility export | Re-exports the project-specific Rust-native OpenAI-compatible/Null provider catalog used by the WebUI |
 | `function_llc.py` | LLC/零协会 install | Download & install Zero Association translation packs |
 | `function_ourplay.py` | OurPlay PC install | Download OurPlay PC translation packs |
 | `function_ourplay_new.py` | OurPlay Android install | Download OurPlay Android-origin translation packs |
@@ -93,7 +93,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `builtinFancy.py` | Built-in text rules | Built-in text beautification rules |
 | `builtinFancyFunc.py` | Fancy skill-color resources | `SkillColorHandler` lazily extracts skill attributes from Unity resources, fingerprints source files, caches color mappings in `tmp/fancy/skill-colors.json`, records cache hits, and suppresses repeated retries after an initialization failure |
 | `function_resource.py` | Unity resource reader | Locates Limbus resource files and extracts text assets in batches through UnityPy; sets fallback Unity version `6000.3.12f1` for resources without usable version metadata |
-| `eiderConst.py` | Update constants | Translation pack update lists, dependency chains |
+| `eiderConst.py` | Elder-mode bindings/constants | Update lists, dependency chains, and the reduced native translation-setting bindings |
 | `FL2LCTA.py` | Rule converter | Fancy Language → LCTA rule format converter |
 | `Faust_fancy.py` | Faust rules | Faust character-specific fancy text rules |
 | `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`); content search counts raw text occurrences with `utf-8-sig`, so BOM and temporarily invalid JSON files remain searchable. Also provides ruleset CRUD, v2 rule validation/building, V1/V2/V3 smart analysis, 5-dimension scoring, and JSON-validated file saving with backup |
@@ -122,7 +122,7 @@ Python-facing translation API. Translation execution, matching, response repair,
 | `__init__.py` | Native translation public API and result/config exports |
 | `native_pipeline.py` | PyO3 `TranslationJob` adapter, event dispatch, native provider/config/diagnostic-path conversion, and summary conversion |
 | `provider_config.py` | Static project-specific provider metadata/defaults and API-setting normalization; active services are OpenAI-compatible LLM and Null |
-| `config.py` | `TranslateConfig`, including separate file/request/file-I/O concurrency, plus summaries/outcomes |
+| `config.py` | `TranslateConfig`, including bounded file/request/file-I/O concurrency normalization, plus summaries/outcomes |
 | `enums.py` | `ProcessResult` summary compatibility enum |
 
 ## native/lcta_translation_engine/ — Rust Translation Engine

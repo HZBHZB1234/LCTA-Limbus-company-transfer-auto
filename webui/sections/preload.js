@@ -33,7 +33,6 @@ function onSectionLoaded(name) {
             break;
         case 'translate':
             console.log('[LCTA] Init section: translate');
-            toggleDevelopSettings();
             toggleAutoProper();
             if (typeof apiConfigManager !== 'undefined' && apiConfigManager.initialized) {
                 apiConfigManager.loadAPIServicesTranslator();

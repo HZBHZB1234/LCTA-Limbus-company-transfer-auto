@@ -47,12 +47,13 @@ class _FakeJob:
 
 
 class _ConfigManagerStub:
-    def __init__(self, translator):
+    def __init__(self, translator, translator_config=None):
         self.translator = translator
+        self.translator_config = translator_config or {}
 
     def get(self, key, default=None):
         if key == "ui_default.translator":
-            return {"translator": self.translator}
+            return {"translator": self.translator, **self.translator_config}
         if key == "game_path":
             return ""
         if key == "debug":
@@ -174,3 +175,20 @@ def test_legacy_provider_selection_migrates_to_native_llm():
     config = TranslateConfig.from_config_manager(_ConfigManagerStub("百度翻译服务"))
 
     assert config.translator_name == "LLM通用翻译服务"
+
+
+def test_native_concurrency_config_is_parsed_and_bounded():
+    config = TranslateConfig.from_config_manager(
+        _ConfigManagerStub(
+            "LLM通用翻译服务",
+            {
+                "file_concurrency": "999",
+                "request_concurrency": "invalid",
+                "file_io_concurrency": "0",
+            },
+        )
+    )
+
+    assert config.file_concurrency == 128
+    assert config.request_concurrency == 16
+    assert config.file_io_concurrency == 1

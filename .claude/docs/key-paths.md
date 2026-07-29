@@ -33,8 +33,11 @@ JS: user clicks install button (PC or Android source)
 
 ```
 JS: user configures & clicks translate
+  → webui/sections/translate.html       native rule, provider, diagnostic, and three-way concurrency controls
+  → webui/js/core.js                    persist ui_default.translator.file/request/file_io_concurrency
   → webui/app.py                   LCTA_API.translate()
   → webutils/function_translate.py orchestration entry
+    → translateFunc/config.py           normalize and bound native concurrency values
     → translateFunc/provider_config.py normalize project-specific OpenAI/Null settings
   → translateFunc/native_pipeline.py NativeTranslationPipeline.run()
     → _lcta_native.start_translation()       create Rust TranslationJob

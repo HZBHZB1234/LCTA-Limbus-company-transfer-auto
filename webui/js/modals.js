@@ -442,18 +442,6 @@ function toggleStoragePathInput() {
     }
 }
 
-function toggleDevelopSettings() {
-    const group = document.getElementById('dev-settings');
-    const enable = document.getElementById('enable-dev-settings');
-    if (!group || !enable) return;
-    if (enable.checked) {
-        group.style.display = 'block';
-    } 
-    else {
-        group.style.display = 'none';
-    }
-};
-
 async function toggleCustomLang() {
     const checkbox = document.getElementById('enable-lang');
     if (!checkbox) return;

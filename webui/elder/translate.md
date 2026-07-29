@@ -1,8 +1,8 @@
 # 翻译设置
 
-配置手动翻译功能的基本选项。在开始翻译之前，需要先选择翻译服务和源语言。
+配置 Rust 原生翻译管线的基本选项。在开始翻译之前，需要先选择翻译服务。
 
-<div data-version="415">
+<div data-version="500">
 
 <div class="elder-info-card">
     <h4><i class="fas fa-cogs"></i> 翻译服务</h4>
@@ -11,28 +11,6 @@
         <!-- 翻译服务列表由后端动态填充 -->
     </select>
     <p class="elder-setting-hint">API 密钥请在「配置汉化API」页面中另行设置。</p>
-</div>
-
-<div class="elder-info-card">
-    <h4><i class="fas fa-globe"></i> 源语言</h4>
-    <p>选择游戏原文的语言。大部分文本为英文，部分为日文或韩文。</p>
-    <select id="elder-from-lang" class="elder-select">
-        <option value="EN">English（英文）</option>
-        <option value="JP">日本語（日文）</option>
-        <option value="KR">한국어（韩文）</option>
-    </select>
-</div>
-
-<div class="elder-info-card">
-    <h4><i class="fas fa-exchange-alt"></i> 回退翻译</h4>
-    <div class="elder-setting-row">
-        <label for="elder-fallback">翻译失败时反向回退重试</label>
-        <label class="checkbox-container">
-            <input type="checkbox" id="elder-fallback" checked>
-            <span class="checkmark"></span>
-        </label>
-    </div>
-    <p class="elder-setting-hint">开启后，若源语言方向翻译失败，会自动尝试反向翻译以提高成功率。</p>
 </div>
 
 <h3 style="margin-top:20px;">翻译优化选项</h3>

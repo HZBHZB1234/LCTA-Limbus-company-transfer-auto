@@ -11,6 +11,14 @@ from typing import Optional
 from translateFunc.enums import ProcessResult
 
 
+def _bounded_int(value, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(parsed, maximum))
+
+
 @dataclass
 class TranslateConfig:
     """一次翻译运行的全部配置。由调用方（WebUI 或 CLI）注入。"""
@@ -79,9 +87,15 @@ class TranslateConfig:
             llc_path=configs.get("llc_path", ""),
             dump=configs.get("dump", False),
             enable_concurrent=configs.get("enable_concurrent", True),
-            file_concurrency=configs.get("file_concurrency", 24),
-            request_concurrency=configs.get("request_concurrency", 16),
-            file_io_concurrency=configs.get("file_io_concurrency", 32),
+            file_concurrency=_bounded_int(
+                configs.get("file_concurrency", 24), 24, 1, 128
+            ),
+            request_concurrency=_bounded_int(
+                configs.get("request_concurrency", 16), 16, 1, 128
+            ),
+            file_io_concurrency=_bounded_int(
+                configs.get("file_io_concurrency", 32), 32, 1, 256
+            ),
             enable_self_check=configs.get("enable_self_check", False),
             enable_thinking=configs.get("enable_thinking", False),
             enable_rule_validation=configs.get("enable_rule_validation", True),

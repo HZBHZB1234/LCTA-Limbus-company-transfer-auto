@@ -169,6 +169,8 @@ JS → Python:
 
 Rust 引擎采用阶段屏障与不可变快照组合：规则源文件串行建立依赖，普通文件并发消费冻结后的快照。文件并发、HTTP 请求并发和文件 I/O 并发分别限流，避免网络等待阻塞文件转换。
 
+WebUI 直接暴露这三个独立限制，并通过 `ui_default.translator.file_concurrency`、`request_concurrency`、`file_io_concurrency` 保存。Python 桥接层只负责范围归一化和序列化；请求/响应格式、源语言选择、旧 translatekit 回退模式和未落地的消歧选项不再进入原生运行配置。
+
 ### Factory — Update Objects
 
 `launcher/updates.py` 使用工厂模式创建不同类型的更新对象（LLC 更新、OurPlay 更新、机翻更新）。每种更新类型实现相同的接口，调用方无需关心具体类型。

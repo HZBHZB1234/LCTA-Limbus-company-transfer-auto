@@ -58,7 +58,7 @@ def translate_main(
         # 4. 设置输出目录
         config.output_dir = tmp
 
-        # 5. 创建 Rust 原生管线。翻译热路径不再回退到 translatekit。
+        # 5. 创建 Rust 原生管线。翻译路径不提供 Python 回退。
         from translateFunc.native_pipeline import (
             NativeEngineUnavailable,
             NativeTranslationPipeline,
@@ -66,7 +66,7 @@ def translate_main(
         )
         if not native_engine_available():
             raise NativeEngineUnavailable(
-                "未找到 _lcta_native，当前版本不再提供 Python/translatekit 翻译回退"
+                "未找到 _lcta_native，当前版本不提供 Python 翻译回退"
             )
         pipeline = NativeTranslationPipeline(config)
         _log_manager.log("使用 Rust 原生翻译引擎")

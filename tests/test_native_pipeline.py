@@ -82,6 +82,8 @@ def test_native_config_passes_complete_llm_request_settings(tmp_path):
         enable_skill=True,
         auto_fetch_proper=False,
         proper_path=str(tmp_path / "terms.json"),
+        dump=True,
+        dump_path=tmp_path / "logs" / "native.jsonl",
     )
 
     native = NativeTranslationPipeline(config)._build_native_config()
@@ -100,6 +102,9 @@ def test_native_config_passes_complete_llm_request_settings(tmp_path):
         "enable_skill": True,
         "auto_fetch_proper": False,
         "proper_path": str(tmp_path / "terms.json"),
+    }
+    assert native["diagnostics"] == {
+        "dump_path": str(tmp_path / "logs" / "native.jsonl"),
     }
 
 
@@ -169,4 +174,3 @@ def test_legacy_provider_selection_migrates_to_native_llm():
     config = TranslateConfig.from_config_manager(_ConfigManagerStub("百度翻译服务"))
 
     assert config.translator_name == "LLM通用翻译服务"
-    assert config.is_llm is True

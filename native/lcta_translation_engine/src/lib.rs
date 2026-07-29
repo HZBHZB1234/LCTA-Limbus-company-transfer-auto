@@ -1,14 +1,17 @@
 mod config;
+mod diagnostics;
 mod document;
 mod engine;
 mod error;
 mod event;
 mod matcher;
 mod provider;
+mod response;
 mod rules;
 
 use config::{ProviderConfig, RunConfig};
 use crossbeam_channel::{bounded, Receiver};
+use diagnostics::ProviderTrace;
 use provider::{Provider, TranslationRequest, TranslationTask};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -129,14 +132,17 @@ fn test_provider(py: Python<'_>, config_json: &str) -> PyResult<String> {
             })
             .to_string();
             let raw = provider
-                .translate(TranslationRequest {
-                    file: "<provider-test>".to_string(),
-                    task: TranslationTask::Translate,
-                    system_prompt:
-                        "将每个输入条目翻译为简体中文。不得改变 id，只返回 translations JSON。"
-                            .to_string(),
-                    user_prompt,
-                })
+                .translate(
+                    TranslationRequest {
+                        file: "<provider-test>".to_string(),
+                        task: TranslationTask::Translate,
+                        system_prompt:
+                            "将每个输入条目翻译为简体中文。不得改变 id，只返回 translations JSON。"
+                                .to_string(),
+                        user_prompt,
+                    },
+                    &mut ProviderTrace::default(),
+                )
                 .await
                 .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
             let trimmed = raw.trim();

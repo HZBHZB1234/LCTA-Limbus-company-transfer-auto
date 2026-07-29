@@ -2,6 +2,7 @@
 
 > 面向开发者的详细架构说明，包含技术决策理由和权衡分析。
 > AI 快速参考请见 `.claude/docs/architecture.md`
+> Last updated: 2026-07-29
 
 ## 项目概述
 
@@ -14,7 +15,7 @@ LCTA（Limbus Company Transfer Auto / 边狱公司工具箱）是一个面向游
 
 - **翻译管理**：支持零协会(LLC)、OurPlay PC、OurPlay Android、机翻等多种汉化源的一键下载安装
 - **LLM 自动翻译**：基于大语言模型的游戏文本自动翻译流水线，支持专有名词匹配
-- **API 配置与测试**：支持多种翻译 API（百度、Google、DeepL、DeepSeek 等）的配置和连通性测试
+- **API 配置与测试**：支持项目专用的 OpenAI-compatible LLM 与 Null provider 配置和原生连通性测试
 - **集成启动器**：带模组支持的游戏启动器，含 CDN 优化（支持缓存有效期避免重复测速）、变速、热键全生命周期日志等功能
 - **其他工具**：缓存清理、专有名词抓取、字体定制、Bubble 语言包下载、文本美化等
 
@@ -23,7 +24,7 @@ LCTA（Limbus Company Transfer Auto / 边狱公司工具箱）是一个面向游
 ### 为什么选择 pywebview 而不是 Electron？
 
 - **体积**：pywebview 使用系统原生 WebView（Windows 上为 Edge WebView2），不需要捆绑完整的 Chromium，发布包体积显著小于 Electron
-- **Python 生态**：项目核心逻辑（翻译、文件处理）重度依赖 Python 生态（translatekit、UnityPy 等），使用 pywebview 可以直接调用，无需通过 IPC 桥接
+- **混合生态**：pywebview 可直接复用 Python 的桌面与 Unity 资源生态；翻译、规则和文件热路径通过 PyO3 调用 Rust，无需额外 IPC 服务
 - **启动速度**：pywebview 窗口启动明显快于 Electron
 
 代价：仅支持 Windows（系统 WebView 依赖），跨平台能力受限。但目标用户群体几乎全部使用 Windows，此代价可接受。
@@ -31,7 +32,8 @@ LCTA（Limbus Company Transfer Auto / 边狱公司工具箱）是一个面向游
 ### 为什么选择 Python 而不是 .NET/C#？
 
 - 团队更熟悉 Python 生态
-- translatekit、UnityPy 等关键依赖只有 Python 版本
+- WebUI、配置、打包和 UnityPy 资源处理继续复用成熟的 Python 生态
+- 翻译热路径使用 Rust/Tokio/Reqwest，避免 Python 线程和同步网络 I/O 成为瓶颈
 - 快速迭代：Python 的开发效率适合工具类项目频繁的需求变更
 
 代价：分发时需要捆绑嵌入式 Python（~30MB），且 Python 作为解释型语言在某些场景性能不如编译型语言。
@@ -73,14 +75,14 @@ launcher/ 的模组功能基于 LimbusModLoader（GPL-3.0），因此该子目�
 ├──────────────────────────────────────────────────────────────┤
 │                     DOMAIN ENGINES                            │
 │                                                              │
-│  translateFunc/  翻译流水线引擎                               │
+│  native/lcta_translation_engine/ Rust 翻译引擎               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │ pipeline.py   →  编排器 (6 阶段)                      │    │
-│  │ processor.py  →  单文件翻译逻辑                        │    │
-│  │ workers.py    →  并发工作池                            │    │
-│  │ builder/      →  提示词 & 请求构建                     │    │
-│  │ matcher/      →  专有名词 AC 自动机匹配                │    │
-│  │ proper/       →  专有名词分析                          │    │
+│  │ engine.rs      → 阶段屏障与并发编排                    │    │
+│  │ provider.rs    → Tokio/Reqwest 高并发网络              │    │
+│  │ response.rs    → JSON 提取、修复与 ID 校验             │    │
+│  │ matcher.rs     → 不可变 AC 自动机                      │    │
+│  │ rules.rs       → 术语快照与确定性校验                  │    │
+│  │ diagnostics.rs → schema-v2 异步诊断日志                │    │
 │  └──────────────────────────────────────────────────────┘    │
 ├──────────────────────────────────────────────────────────────┤
 │                     INFRASTRUCTURE                            │
@@ -90,7 +92,7 @@ launcher/ 的模组功能基于 LimbusModLoader（GPL-3.0），因此该子目�
 │  CFST/             CloudflareSpeedTest (第三方二进制)        │
 ├──────────────────────────────────────────────────────────────┤
 │                    EXTERNAL TOOLS                             │
-│  translatekit  openspeedy  UnityPy  pywebview  etcpak          │
+│  openspeedy  UnityPy  pywebview  etcpak                       │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -119,15 +121,16 @@ launcher/ 的模组功能基于 LimbusModLoader（GPL-3.0），因此该子目�
 
 ### 领域引擎层 (Domain Engines)
 
-**translateFunc/** 是整个项目最复杂的子系统。它是一个独立的翻译流水线库，有自己完整的公共 API（`__init__.py`）、配置系统（`config.py`）、枚举定义（`enums.py`）。
+**native/lcta_translation_engine/** 是翻译领域引擎。`translateFunc/` 仅保留配置与 PyO3 桥接，不再包含 Python 翻译实现。
 
-翻译流水线的 6 个阶段：
-1. **获取专有名词**：从远程源获取游戏专有名词列表
-2. **构建匹配器**：基于 Aho-Corasick 自动机构建多模式匹配引擎
-3. **处理优先级文件**：先翻译高优先级的关键文件
-4. **并发翻译**：WorkerPool 管理并发，每个 worker 执行：构建 LLM 提示词 → 调用翻译 API → 解析响应
-5. **后处理匹配**：翻译结果与专有名词库进行二次匹配
-6. **结果聚合**：生成 PipelineSummary
+原生翻译流水线的主要阶段：
+1. **异步加载规则**：并发读取本地术语或抓取 ParaTranz 术语
+2. **优先级屏障**：先处理 BattleKeywords 与 ScenarioModelCodes，冻结效果和角色快照
+3. **并发文件处理**：Tokio 文件任务、请求信号量和文件 I/O 信号量相互独立
+4. **请求级提示词**：system/user prompt 随每次请求传递，provider 配置保持不可变
+5. **响应修复与补译**：提取/修复 JSON，检测缺失与重复 ID，对无效条目发起补充请求
+6. **确定性校验与输出**：检查标签、占位符、数字和效果引用，原子写入 UTF-8 BOM JSON
+7. **结构化诊断**：单 Tokio writer 输出 schema-v2 JSONL 和每阶段耗时/重试信息
 
 ### 基础设施层 (Infrastructure)
 
@@ -162,9 +165,9 @@ JS → Python:
 
 `LCTA_API` 类的方法通过 pywebview 自动暴露给前端 JavaScript。JS 中可以直接调用 `pywebview.api.<method_name>()` 来执行 Python 方法。这种桥接模式使得前端可以像调用本地函数一样调用后端能力。
 
-### Pipeline — TranslationPipeline
+### Pipeline — Native Translation Engine
 
-翻译流水线采用管道模式，每个阶段有明确的输入/输出契约。阶段可以独立测试、独立优化。WorkerPool 在并发翻译阶段使用，支持配置并行 worker 数量。
+Rust 引擎采用阶段屏障与不可变快照组合：规则源文件串行建立依赖，普通文件并发消费冻结后的快照。文件并发、HTTP 请求并发和文件 I/O 并发分别限流，避免网络等待阻塞文件转换。
 
 ### Factory — Update Objects
 
@@ -194,7 +197,6 @@ C 代码（`launcher.c`）仅在发布包中使用，作为 PE 入口点：
 | 包 | 版本 | 用途 | 备注 |
 |----|------|------|------|
 | pywebview | latest | 桌面窗口 | 依赖系统 WebView2 |
-| translatekit | latest | 多厂商翻译 API 抽象 | 支持百度、Google、DeepL、LLM |
 | UnityPy | 1.10.18 | Unity 资源提取/修改 | launcher 模组功能核心 |
 | openspeedy | latest | 游戏变速 | DLL 注入 |
 | etcpak | 0.9.8 | ETC 纹理压缩 | **必须固定版本**，0.9.9 崩溃 |

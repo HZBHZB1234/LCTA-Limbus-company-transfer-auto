@@ -115,6 +115,9 @@ class NativeTranslationPipeline:
                 "auto_fetch_proper": self._config.auto_fetch_proper,
                 "proper_path": _optional_path(self._config.proper_path),
             },
+            "diagnostics": {
+                "dump_path": _optional_path(self._config.dump_path) if self._config.dump else None,
+            },
         }
 
     def _dispatch_events(self, raw_events: list[str]) -> None:

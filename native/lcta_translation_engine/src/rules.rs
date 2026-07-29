@@ -373,8 +373,20 @@ pub fn validate_translation(
     translation: &str,
     snapshot: &RuleSnapshot,
 ) -> bool {
+    translation_validation_errors(source, jp, en, translation, snapshot).is_empty()
+}
+
+pub fn translation_validation_errors(
+    source: &str,
+    jp: &str,
+    en: &str,
+    translation: &str,
+    snapshot: &RuleSnapshot,
+) -> Vec<String> {
+    let mut errors = Vec::new();
     if translation.trim().is_empty() {
-        return false;
+        errors.push("translation_is_empty".to_string());
+        return errors;
     }
     for token in bracket_tokens(source) {
         let inner = token.trim_matches(['[', ']']);
@@ -386,7 +398,7 @@ pub fn validate_translation(
             }
         }
         if !translation.contains(token) {
-            return false;
+            errors.push(format!("missing_bracket_token:{token}"));
         }
     }
     for source_text in [source, jp, en] {
@@ -399,14 +411,27 @@ pub fn validate_translation(
             {
                 continue;
             }
-            return false;
+            errors.push(format!("missing_effect_reference:{effect_id}"));
         }
     }
-    preserve_tokens(source, translation, '<', '>')
-        && preserve_tokens(source, translation, '{', '}')
-        && numeric_tokens(source)
-            .into_iter()
-            .all(|number| translation.contains(number))
+    for token in delimited_tokens(source, '<', '>') {
+        if !translation.contains(token) {
+            errors.push(format!("missing_tag:{token}"));
+        }
+    }
+    for token in delimited_tokens(source, '{', '}') {
+        if !translation.contains(token) {
+            errors.push(format!("missing_placeholder:{token}"));
+        }
+    }
+    for number in numeric_tokens(source) {
+        if !translation.contains(number) {
+            errors.push(format!("missing_number:{number}"));
+        }
+    }
+    errors.sort();
+    errors.dedup();
+    errors
 }
 
 pub fn normalize_bracket_spacing(text: &str) -> String {
@@ -436,12 +461,6 @@ pub fn normalize_bracket_spacing(text: &str) -> String {
     }
     output.push_str(&text[cursor..]);
     output
-}
-
-fn preserve_tokens(source: &str, translation: &str, open: char, close: char) -> bool {
-    delimited_tokens(source, open, close)
-        .into_iter()
-        .all(|token| translation.contains(token))
 }
 
 fn delimited_tokens(text: &str, open: char, close: char) -> Vec<&str> {

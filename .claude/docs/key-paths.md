@@ -47,12 +47,12 @@ JS: user configures & clicks translate
     → native/.../engine.rs                   trim references per chunk; supplemental call for missing/invalid entries; optional self-check
     → native/.../rules.rs                    effect/tag/placeholder/number validation and skill spacing normalization
     → native/.../engine.rs                   atomic UTF-8 BOM output and summary events
-  → native module missing                   fail fast; no translatekit runtime fallback
+  → native module missing                   fail fast; no Python translation fallback
   → webutils/function_translate.py  write output files
   → webui/app.py                    callback: summary → JS modal
 ```
 
-Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc/provider_config.py`, `translateFunc/native_pipeline.py`, `translateFunc/config.py`, `native/lcta_translation_engine/src/lib.rs`, `config.rs`, `engine.rs`, `provider.rs`, `document.rs`, `matcher.rs`, `rules.rs`, `globalManagers/LogManager.py`
+Files involved: `webui/app.py`, `webutils/function_translate.py`, `translateFunc/provider_config.py`, `translateFunc/native_pipeline.py`, `translateFunc/config.py`, `native/lcta_translation_engine/src/lib.rs`, `config.rs`, `engine.rs`, `provider.rs`, `response.rs`, `diagnostics.rs`, `document.rs`, `matcher.rs`, `rules.rs`, `globalManagers/LogManager.py`
 
 API configuration testing follows `webui/app.py::test_api()` → `_lcta_native.test_provider()` and uses the same native provider serialization as full translation.
 
@@ -62,16 +62,18 @@ When `ui_default.translator.dump` is enabled, each file's translation process is
 
 ```
 webutils/function_translate.py  sets config.dump_path → logs/translation_dump/{timestamp}.jsonl
-  → translateFunc/pipeline.py   creates TranslationRecorder(config.dump_path)
-  → translateFunc/processor.py  FileProcessor records each file's API calls
-    → translateFunc/recorder.py TranslationRecorder.write_record() appends to JSONL
+  → translateFunc/native_pipeline.py passes diagnostics.dump_path in immutable native config
+  → native/.../engine.rs        aggregates input, references, calls, parse/validation results per file
+    → native/.../provider.rs    records queue wait, HTTP attempts, retries, status and redacted bodies
+    → native/.../response.rs    extracts embedded JSON and repairs common malformed responses
+    → native/.../diagnostics.rs single Tokio writer appends schema-v2 JSONL
 ```
 
-Each JSONL line contains: `timestamp`, `file_name`, `text_blocks` (actual input), `reference` (proper_terms/affects/models), `api_calls[]` (system_prompt, user_prompt, raw_response, parsed, status per stage), `outcome`, `elapsed_seconds`.
+The native writer always creates `LLc-CN-LCTA/processing_log.jsonl`; when dump is enabled it writes the same records concurrently to the persistent `logs/translation_dump/{timestamp}.jsonl`. Each line contains `timestamp`, `file_name`, `text_blocks`, rule snapshot counts, `api_calls[]` (prompts, raw/parsed response, queue wait, HTTP attempts, retry delays, response-repair steps, parse and deterministic validation errors), `outcome`, fallback statistics and elapsed time.
 
-Log simplification: verbose data (raw LLM responses) is removed from `logs/app.log` and stored only in the dump JSONL file.
+Response/error bodies are redacted and length-limited before serialization. Concurrent file tasks never write files directly; they send completed per-file records to one bounded asynchronous writer.
 
-Files involved: `webutils/function_translate.py`, `translateFunc/recorder.py`, `translateFunc/pipeline.py`, `translateFunc/processor.py`, `translateFunc/config.py`
+Files involved: `webutils/function_translate.py`, `translateFunc/native_pipeline.py`, `native/lcta_translation_engine/src/engine.rs`, `native/lcta_translation_engine/src/provider.rs`, `native/lcta_translation_engine/src/diagnostics.rs`
 
 ### 3c. Translation Diagnostic Viewer
 

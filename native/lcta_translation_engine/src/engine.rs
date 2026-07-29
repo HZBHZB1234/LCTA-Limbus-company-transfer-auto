@@ -1,4 +1,8 @@
 use crate::config::{ResolvedPaths, RunConfig};
+use crate::diagnostics::{
+    failure_kind, sanitize_text, ApiCallRecord, DiagnosticsSink, FileDiagnosticRecord,
+    ProviderTrace,
+};
 use crate::document::{
     build_output_root, flatten_map, flatten_strings, path_key, set_string_at_path, EntryKey,
     LocaleDocument, PathSegment,
@@ -6,17 +10,19 @@ use crate::document::{
 use crate::error::{EngineError, Result};
 use crate::event::{emit, EngineEvent};
 use crate::provider::{Provider, TranslationRequest, TranslationTask};
+use crate::response::parse_translations;
 use crate::rules::{
     load_affects_from_files, load_proper_terms, load_roles_from_files, normalize_bracket_spacing,
-    validate_translation, RuleSnapshot,
+    translation_validation_errors, validate_translation, RuleSnapshot,
 };
 use crossbeam_channel::Sender;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use walkdir::WalkDir;
@@ -66,15 +72,10 @@ struct TranslationUnit {
     model: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct TranslationEnvelope {
-    translations: Vec<TranslationItem>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TranslationItem {
-    id: usize,
-    translation: String,
+#[derive(Debug)]
+struct TranslationBatch {
+    translations: HashMap<usize, String>,
+    call_index: usize,
 }
 
 pub async fn run(
@@ -85,6 +86,11 @@ pub async fn run(
     emit(&events, EngineEvent::Phase { name: "scan" });
     let paths = config.resolve_paths();
     tokio::fs::create_dir_all(&paths.output).await?;
+    let mut diagnostic_paths = vec![paths.output.join("processing_log.jsonl")];
+    if let Some(path) = &config.diagnostics.dump_path {
+        diagnostic_paths.push(path.clone());
+    }
+    let (diagnostics, diagnostics_writer) = DiagnosticsSink::start(diagnostic_paths).await?;
     let mut files = discover_files(&paths, config.pipeline.has_prefix)?;
     let total = files.len();
     let provider = Provider::new(
@@ -144,6 +150,7 @@ pub async fn run(
             &rules,
             &io_limiter,
             &cancelled,
+            &diagnostics,
         )
         .await
         {
@@ -234,6 +241,7 @@ pub async fn run(
         let cancelled = cancelled.clone();
         let rules = rules.clone();
         let io_limiter = io_limiter.clone();
+        let diagnostics = diagnostics.clone();
         tasks.spawn(async move {
             let _permit = permit;
             if cancelled.load(Ordering::Relaxed) {
@@ -249,6 +257,7 @@ pub async fn run(
                 &rules,
                 &io_limiter,
                 &cancelled,
+                &diagnostics,
             )
             .await
             {
@@ -279,6 +288,30 @@ pub async fn run(
             &mut fallback,
             &mut errors,
         );
+    }
+    drop(diagnostics);
+    match diagnostics_writer.await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            let message = format!("原生翻译诊断日志写入失败: {error}");
+            emit(
+                &events,
+                EngineEvent::Log {
+                    level: "warning",
+                    message: &message,
+                },
+            );
+        }
+        Err(error) => {
+            let message = format!("原生翻译诊断写入任务异常结束: {error}");
+            emit(
+                &events,
+                EngineEvent::Log {
+                    level: "warning",
+                    message: &message,
+                },
+            );
+        }
     }
     emit(&events, EngineEvent::Phase { name: "complete" });
     Ok(TranslationSummary {
@@ -426,6 +459,59 @@ async fn process_file(
     rules: &RuleSnapshot,
     io_limiter: &Arc<Semaphore>,
     cancelled: &AtomicBool,
+    diagnostics: &DiagnosticsSink,
+) -> Result<FileOutcome> {
+    let mut record = FileDiagnosticRecord::new(
+        descriptor.name.clone(),
+        json!({
+            "proper_count": rules.proper_count(),
+            "role_count": rules.role_count(),
+            "affect_count": rules.affect_count(),
+            "rule_validation_enabled": config.pipeline.enable_rule_validation,
+        }),
+    );
+    let result = process_file_inner(
+        descriptor,
+        config,
+        provider,
+        rules,
+        io_limiter,
+        cancelled,
+        &mut record,
+    )
+    .await;
+    match &result {
+        Ok(FileOutcome::Saved(_)) => {
+            let extra = std::mem::replace(&mut record.outcome_extra, json!({}));
+            record.finish_success("SUCCESS_SAVED", extra);
+        }
+        Ok(FileOutcome::Skipped(_)) => {
+            let extra = std::mem::replace(&mut record.outcome_extra, json!({}));
+            record.finish_success("ALREADY_TRANSLATED", extra);
+        }
+        Ok(FileOutcome::Fallback(_)) => {
+            let extra = std::mem::replace(&mut record.outcome_extra, json!({}));
+            record.finish_success("FALLBACK_TO_ORIGINAL", extra);
+        }
+        Ok(FileOutcome::Error(error)) => {
+            let engine_error = EngineError::InvalidResponse(error.message.clone());
+            record.finish_error(&engine_error);
+        }
+        Err(error) => record.finish_error(error),
+    }
+    diagnostics.record(record).await;
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn process_file_inner(
+    descriptor: &FileDescriptor,
+    config: &RunConfig,
+    provider: &Provider,
+    rules: &RuleSnapshot,
+    io_limiter: &Arc<Semaphore>,
+    cancelled: &AtomicBool,
+    diagnostics: &mut FileDiagnosticRecord,
 ) -> Result<FileOutcome> {
     let (kr, jp, en, llc) = tokio::join!(
         load_required(&descriptor.kr, io_limiter),
@@ -442,6 +528,7 @@ async fn process_file(
         if descriptor.llc.exists() {
             copy_atomic(&descriptor.llc, &descriptor.output, io_limiter).await?;
         }
+        diagnostics.outcome_extra = json!({"reason": "empty_source"});
         return Ok(FileOutcome::Skipped(descriptor.name.clone()));
     }
 
@@ -455,6 +542,7 @@ async fn process_file(
         if descriptor.llc.exists() {
             copy_atomic(&descriptor.llc, &descriptor.output, io_limiter).await?;
         }
+        diagnostics.outcome_extra = json!({"reason": "already_translated"});
         return Ok(FileOutcome::Skipped(descriptor.name.clone()));
     }
 
@@ -485,45 +573,66 @@ async fn process_file(
     }
     if units.is_empty() {
         fallback_copy(descriptor, io_limiter).await?;
+        diagnostics.outcome_extra = json!({"reason": "no_translatable_strings"});
         return Ok(FileOutcome::Fallback(descriptor.name.clone()));
     }
 
+    diagnostics.text_blocks = units
+        .iter()
+        .map(|unit| {
+            json!({
+                "id": unit.id,
+                "kr": unit.kr,
+                "jp": unit.jp,
+                "en": unit.en,
+                "model": unit.model,
+            })
+        })
+        .collect();
+
     let mut translated = HashMap::new();
-    for chunk in split_units(&units, config.pipeline.max_prompt_chars, descriptor, rules)? {
+    let chunks = split_units(&units, config.pipeline.max_prompt_chars, descriptor, rules)?;
+    for (chunk_index, chunk) in chunks.into_iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) {
             return Err(EngineError::Cancelled);
         }
-        let mut chunk_translations = request_translations(
+        let main = request_translations(
             provider,
             descriptor,
             &chunk,
             rules,
-            TranslationTask::Translate,
-            false,
+            "main",
+            chunk_index + 1,
+            config,
+            diagnostics,
         )
         .await?;
+        let main_call_index = main.call_index;
+        let mut chunk_translations = main.translations;
 
-        let retry_units = chunk
-            .iter()
-            .filter(|unit| {
-                chunk_translations
-                    .get(&unit.id)
-                    .and_then(|value| validated_candidate(descriptor, unit, value, rules, config))
-                    .is_none()
-            })
-            .cloned()
-            .collect::<Vec<_>>();
+        let (retry_units, validation_errors) =
+            invalid_units(descriptor, &chunk, &chunk_translations, rules, config);
+        diagnostics.add_validation_errors(main_call_index, validation_errors);
         if !retry_units.is_empty() {
             let supplemental = request_translations(
                 provider,
                 descriptor,
                 &retry_units,
                 rules,
-                TranslationTask::Translate,
-                true,
+                "supplemental",
+                chunk_index + 1,
+                config,
+                diagnostics,
             )
             .await?;
-            chunk_translations.extend(supplemental);
+            let supplemental_call_index = supplemental.call_index;
+            chunk_translations.extend(supplemental.translations);
+            let (still_invalid, supplemental_errors) =
+                invalid_units(descriptor, &retry_units, &chunk_translations, rules, config);
+            diagnostics.add_validation_errors(supplemental_call_index, supplemental_errors);
+            if still_invalid.is_empty() {
+                diagnostics.mark_recovered(main_call_index);
+            }
         }
 
         if config.pipeline.enable_self_check {
@@ -539,8 +648,22 @@ async fn process_file(
                     (unit.id, translation)
                 })
                 .collect::<HashMap<_, _>>();
-            let checked = request_self_check(provider, descriptor, &chunk, &current, rules).await?;
-            chunk_translations.extend(checked);
+            let checked = request_self_check(
+                provider,
+                descriptor,
+                &chunk,
+                &current,
+                rules,
+                chunk_index + 1,
+                config,
+                diagnostics,
+            )
+            .await?;
+            let checked_call_index = checked.call_index;
+            chunk_translations.extend(checked.translations);
+            let (_, self_check_errors) =
+                invalid_units(descriptor, &chunk, &chunk_translations, rules, config);
+            diagnostics.add_validation_errors(checked_call_index, self_check_errors);
         }
 
         for unit in &chunk {
@@ -588,6 +711,13 @@ async fn process_file(
         )
         .await?;
     }
+    diagnostics.outcome_extra = json!({
+        "missing_entries": missing_keys.len(),
+        "text_units": units.len(),
+        "translated_units": translated.len(),
+        "fallback_units": units.len().saturating_sub(translated.len()),
+        "saved": config.pipeline.save_result,
+    });
     Ok(FileOutcome::Saved(descriptor.name.clone()))
 }
 
@@ -729,21 +859,26 @@ async fn request_translations(
     descriptor: &FileDescriptor,
     units: &[TranslationUnit],
     rules: &RuleSnapshot,
-    task: TranslationTask,
-    supplemental: bool,
-) -> Result<HashMap<usize, String>> {
-    let raw = provider
-        .translate(TranslationRequest {
+    stage: &str,
+    part: usize,
+    config: &RunConfig,
+    diagnostics: &mut FileDiagnosticRecord,
+) -> Result<TranslationBatch> {
+    execute_translation_request(
+        provider,
+        TranslationRequest {
             file: descriptor.name.clone(),
-            task,
-            system_prompt: system_prompt(descriptor, supplemental),
+            task: TranslationTask::Translate,
+            system_prompt: system_prompt(descriptor, stage == "supplemental"),
             user_prompt: user_prompt(units, descriptor, rules)?,
-        })
-        .await?;
-    Ok(parse_translations(&raw)?
-        .into_iter()
-        .map(|item| (item.id, item.translation))
-        .collect())
+        },
+        units,
+        stage,
+        part,
+        provider_timeout(config),
+        diagnostics,
+    )
+    .await
 }
 
 async fn request_self_check(
@@ -752,7 +887,10 @@ async fn request_self_check(
     units: &[TranslationUnit],
     translations: &HashMap<usize, String>,
     rules: &RuleSnapshot,
-) -> Result<HashMap<usize, String>> {
+    part: usize,
+    config: &RunConfig,
+    diagnostics: &mut FileDiagnosticRecord,
+) -> Result<TranslationBatch> {
     let base: Value = serde_json::from_str(&user_prompt(units, descriptor, rules)?)?;
     let mut items = base
         .get("text_blocks")
@@ -769,8 +907,9 @@ async fn request_self_check(
         "role_styles": base.get("role_styles").cloned().unwrap_or_else(|| json!([])),
         "text_blocks": items,
     }))?;
-    let raw = provider
-        .translate(TranslationRequest {
+    execute_translation_request(
+        provider,
+        TranslationRequest {
             file: descriptor.name.clone(),
             task: TranslationTask::SelfCheck,
             system_prompt: format!(
@@ -778,12 +917,151 @@ async fn request_self_check(
                  不改变 id，不增删条目；只返回 JSON 对象 {{\"translations\":[{{\"id\":1,\"translation\":\"修正后译文\"}}]}}。"
             ),
             user_prompt,
-        })
-        .await?;
-    Ok(parse_translations(&raw)?
-        .into_iter()
-        .map(|item| (item.id, item.translation))
-        .collect())
+        },
+        units,
+        "self_check",
+        part,
+        provider_timeout(config),
+        diagnostics,
+    )
+    .await
+}
+
+async fn execute_translation_request(
+    provider: &Provider,
+    request: TranslationRequest,
+    units: &[TranslationUnit],
+    stage: &str,
+    part: usize,
+    timeout: u64,
+    diagnostics: &mut FileDiagnosticRecord,
+) -> Result<TranslationBatch> {
+    let requested_ids = units.iter().map(|unit| unit.id).collect::<Vec<_>>();
+    let mut call = ApiCallRecord::new(
+        stage,
+        Some(part),
+        request.system_prompt.clone(),
+        request.user_prompt.clone(),
+        timeout,
+        &requested_ids,
+    );
+    let started = Instant::now();
+    let mut trace = ProviderTrace::default();
+    let raw = match provider.translate(request, &mut trace).await {
+        Ok(raw) => raw,
+        Err(error) => {
+            call.fail(&error, failure_kind(&error));
+            call.finish(started, trace);
+            diagnostics.push_call(call);
+            return Err(error);
+        }
+    };
+    call.raw_response = Some(sanitize_text(&raw));
+    match parse_translations(&raw) {
+        Ok(parsed) => {
+            call.parsed_response = Some(parsed.value);
+            if !parsed.repairs.is_empty() {
+                call.status = "recovered";
+                call.failure_kind = Some("response_repaired");
+                call.metadata["response_repairs"] = json!(parsed.repairs);
+            }
+            let mut translations = HashMap::new();
+            let mut duplicates = BTreeSet::new();
+            for item in parsed.items {
+                if translations.insert(item.id, item.translation).is_some() {
+                    duplicates.insert(item.id);
+                }
+            }
+            let missing = requested_ids
+                .iter()
+                .filter(|id| !translations.contains_key(id))
+                .copied()
+                .collect::<Vec<_>>();
+            if !duplicates.is_empty() || !missing.is_empty() {
+                call.status = "validation_error";
+                call.failure_kind = Some("response_id_mismatch");
+                if !duplicates.is_empty() {
+                    call.validation_errors.push(json!({
+                        "type": "duplicate_ids",
+                        "ids": duplicates,
+                    }));
+                }
+                if !missing.is_empty() {
+                    call.validation_errors.push(json!({
+                        "type": "missing_ids",
+                        "ids": missing,
+                    }));
+                }
+            }
+            call.finish(started, trace);
+            let call_index = diagnostics.push_call(call);
+            Ok(TranslationBatch {
+                translations,
+                call_index,
+            })
+        }
+        Err(error) => {
+            call.status = "parse_error";
+            call.failure_kind = Some("response_parse_error");
+            call.parse_errors.push(json!({
+                "type": "JsonDecodeError",
+                "message": error.to_string(),
+            }));
+            call.exception = Some(crate::diagnostics::exception_record(&error));
+            call.finish(started, trace);
+            diagnostics.push_call(call);
+            Err(error)
+        }
+    }
+}
+
+fn provider_timeout(config: &RunConfig) -> u64 {
+    match &config.provider {
+        crate::config::ProviderConfig::OpenAiCompatible(provider) => provider.timeout_seconds,
+        crate::config::ProviderConfig::Null => 0,
+    }
+}
+
+fn invalid_units(
+    descriptor: &FileDescriptor,
+    units: &[TranslationUnit],
+    translations: &HashMap<usize, String>,
+    rules: &RuleSnapshot,
+    config: &RunConfig,
+) -> (Vec<TranslationUnit>, Vec<Value>) {
+    let mut invalid = Vec::new();
+    let mut errors = Vec::new();
+    for unit in units {
+        let Some(value) = translations.get(&unit.id) else {
+            invalid.push(unit.clone());
+            errors.push(json!({
+                "id": unit.id,
+                "errors": ["missing_translation"],
+            }));
+            continue;
+        };
+        let candidate = if is_skill_file(descriptor) {
+            normalize_bracket_spacing(value)
+        } else {
+            value.clone()
+        };
+        let unit_errors = if config.pipeline.enable_rule_validation {
+            translation_validation_errors(&unit.kr, &unit.jp, &unit.en, &candidate, rules)
+        } else if candidate.trim().is_empty() {
+            vec!["translation_is_empty".to_string()]
+        } else {
+            Vec::new()
+        };
+        if !unit_errors.is_empty() {
+            invalid.push(unit.clone());
+            errors.push(json!({
+                "id": unit.id,
+                "errors": unit_errors,
+                "translation": sanitize_text(&candidate),
+            }));
+        }
+    }
+    (invalid, errors)
 }
 
 fn validated_candidate(
@@ -804,28 +1082,6 @@ fn validated_candidate(
         !candidate.trim().is_empty()
     };
     valid.then_some(candidate)
-}
-
-fn parse_translations(raw: &str) -> Result<Vec<TranslationItem>> {
-    let trimmed = raw.trim();
-    let normalized = if trimmed.starts_with("```") {
-        trimmed
-            .trim_start_matches("```json")
-            .trim_start_matches("```")
-            .trim_end_matches("```")
-            .trim()
-    } else {
-        trimmed
-    };
-    if let Ok(envelope) = serde_json::from_str::<TranslationEnvelope>(normalized) {
-        return Ok(envelope.translations);
-    }
-    if let Ok(items) = serde_json::from_str::<Vec<TranslationItem>>(normalized) {
-        return Ok(items);
-    }
-    Err(EngineError::InvalidResponse(
-        "无法解析 translations JSON".to_string(),
-    ))
 }
 
 async fn load_required(path: &Path, io_limiter: &Semaphore) -> Result<LocaleDocument> {

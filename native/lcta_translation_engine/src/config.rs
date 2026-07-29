@@ -52,6 +52,13 @@ pub struct RunConfig {
     pub pipeline: PipelineConfig,
     #[serde(default)]
     pub rules: RuleConfig,
+    #[serde(default)]
+    pub diagnostics: DiagnosticsConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiagnosticsConfig {
+    pub dump_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

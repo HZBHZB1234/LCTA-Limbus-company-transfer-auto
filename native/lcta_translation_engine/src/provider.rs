@@ -1,11 +1,12 @@
 use crate::config::{OpenAiConfig, ProviderConfig};
+use crate::diagnostics::{rounded_seconds, sanitize_text, HttpAttemptRecord, ProviderTrace};
 use crate::error::{EngineError, Result};
 use crate::event::{emit, EngineEvent};
 use crossbeam_channel::Sender;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::{json, Value};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 
 #[derive(Debug, Clone)]
@@ -72,12 +73,18 @@ impl Provider {
         })
     }
 
-    pub async fn translate(&self, request: TranslationRequest) -> Result<String> {
+    pub async fn translate(
+        &self,
+        request: TranslationRequest,
+        trace: &mut ProviderTrace,
+    ) -> Result<String> {
+        let queue_started = Instant::now();
         let _permit = self
             .limiter
             .acquire()
             .await
             .map_err(|_| EngineError::Cancelled)?;
+        trace.queue_wait_seconds = rounded_seconds(queue_started.elapsed());
         match &self.kind {
             ProviderKind::Null => {
                 let value: Value = serde_json::from_str(&request.user_prompt)?;
@@ -129,6 +136,7 @@ impl Provider {
 
                 let mut last_error = None;
                 for attempt in 0..=config.max_retries {
+                    let attempt_started = Instant::now();
                     let response = client
                         .post(endpoint)
                         .header(CONTENT_TYPE, "application/json")
@@ -140,8 +148,31 @@ impl Provider {
                     match response {
                         Ok(response) => {
                             let status = response.status();
-                            let response_text = response.text().await?;
+                            let response_text = match response.text().await {
+                                Ok(text) => text,
+                                Err(error) => {
+                                    trace.http_attempts.push(HttpAttemptRecord {
+                                        attempt: attempt + 1,
+                                        status_code: Some(status.as_u16()),
+                                        elapsed_seconds: rounded_seconds(attempt_started.elapsed()),
+                                        retryable: false,
+                                        retry_delay_ms: None,
+                                        error: Some(sanitize_text(&error.to_string())),
+                                        response_body: None,
+                                    });
+                                    return Err(EngineError::Network(error));
+                                }
+                            };
                             if status.is_success() {
+                                trace.http_attempts.push(HttpAttemptRecord {
+                                    attempt: attempt + 1,
+                                    status_code: Some(status.as_u16()),
+                                    elapsed_seconds: rounded_seconds(attempt_started.elapsed()),
+                                    retryable: false,
+                                    retry_delay_ms: None,
+                                    error: None,
+                                    response_body: Some(sanitize_text(&response_text)),
+                                });
                                 let value: Value = serde_json::from_str(&response_text)?;
                                 return value
                                     .pointer("/choices/0/message/content")
@@ -154,22 +185,51 @@ impl Provider {
                                     });
                             }
                             let retryable = status.as_u16() == 429 || status.is_server_error();
+                            let retry_delay_ms = (retryable && attempt < config.max_retries)
+                                .then(|| 500_u64.saturating_mul(2_u64.pow(attempt.min(5) as u32)));
+                            trace.http_attempts.push(HttpAttemptRecord {
+                                attempt: attempt + 1,
+                                status_code: Some(status.as_u16()),
+                                elapsed_seconds: rounded_seconds(attempt_started.elapsed()),
+                                retryable,
+                                retry_delay_ms,
+                                error: Some(format!("HTTP {}", status.as_u16())),
+                                response_body: Some(sanitize_text(&response_text)),
+                            });
                             if !retryable || attempt == config.max_retries {
                                 return Err(EngineError::Api {
                                     status: status.as_u16(),
-                                    body: response_text,
+                                    body: sanitize_text(&response_text),
                                 });
                             }
                             last_error = Some(format!("HTTP {}", status.as_u16()));
                         }
                         Err(error) => {
+                            let retryable = attempt < config.max_retries;
+                            let retry_delay_ms = retryable
+                                .then(|| 500_u64.saturating_mul(2_u64.pow(attempt.min(5) as u32)));
+                            trace.http_attempts.push(HttpAttemptRecord {
+                                attempt: attempt + 1,
+                                status_code: error.status().map(|status| status.as_u16()),
+                                elapsed_seconds: rounded_seconds(attempt_started.elapsed()),
+                                retryable,
+                                retry_delay_ms,
+                                error: Some(sanitize_text(&error.to_string())),
+                                response_body: None,
+                            });
                             if attempt == config.max_retries {
                                 return Err(EngineError::Network(error));
                             }
                             last_error = Some(error.to_string());
                         }
                     }
-                    let delay_ms = 500_u64.saturating_mul(2_u64.pow(attempt.min(5) as u32));
+                    let delay_ms = trace
+                        .http_attempts
+                        .last()
+                        .and_then(|entry| entry.retry_delay_ms)
+                        .unwrap_or_else(|| {
+                            500_u64.saturating_mul(2_u64.pow(attempt.min(5) as u32))
+                        });
                     let reason = last_error.as_deref().unwrap_or("temporary error");
                     emit(
                         &self.events,

@@ -40,6 +40,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │    matcher.rs             immutable AC snapshots     │
 │    rules.rs               terminology + validation   │
 │    provider.rs            pooled HTTP provider       │
+│    response.rs            JSON extraction + repair   │
+│    diagnostics.rs         async schema-v2 JSONL      │
 │  translateFunc/           thin PyO3/config bridge    │
 │  webutils/fancy_engine.py compiled v2 rule engine    │
 │  webutils/function_fancy.py file orchestration/stats │
@@ -62,8 +64,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `webui/` | Frontend: pywebview desktop window + HTML/CSS/JS SPA |
 | `webutils/` | Business logic: one `function_*.py` per feature, all exported via `__init__.py` |
 | `webFunc/` | Infrastructure: GitHub downloads, file transfer, Lanzou parsing, web notes |
-| `translateFunc/` | Python bridge, native provider schema, summaries/events, plus lazily loaded legacy diagnostic modules |
-| `native/lcta_translation_engine/` | Rust translation engine: priority barriers, JSON transformation, async provider/file I/O, rule snapshots, validation, and atomic output |
+| `translateFunc/` | Thin Python bridge: native provider schema, immutable run config conversion, events, and summary types |
+| `native/lcta_translation_engine/` | Rust translation engine: priority barriers, JSON transformation, async provider/file I/O, rule snapshots, validation, schema-v2 diagnostics, and atomic output |
 | `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py` |
 | `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey, optional WinForms GUI progress window |
 
@@ -75,6 +77,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Bridge** | `webui/app.py` ↔ JS | `LCTA_API` class exposes Python methods to JS via `pywebview.api`; JS calls like `pywebview.api.install_llc()` |
 | **Pipeline** | `native/lcta_translation_engine/src/engine.rs` | Native pipeline orchestrates: scan → async proper terms → priority rule files → freeze snapshot → concurrent files/requests → supplemental translation → optional self-check → atomic output |
 | **Immutable Snapshot** | `native/lcta_translation_engine/src/matcher.rs`, `rules.rs` | Proper noun, role, and effect Aho-Corasick matchers are rebuilt only at priority barriers, then shared read-only by file tasks |
+| **Single Writer** | `native/lcta_translation_engine/src/diagnostics.rs` | File tasks aggregate diagnostics locally; one Tokio task serializes schema-v2 JSONL records to `processing_log.jsonl` and the optional persistent dump without cross-task file locks |
 | **Compile/Apply** | `webutils/fancy_engine.py` | Text beautification validates and compiles v2 rules once, selects rules per file, then applies structured-path conditions/actions without repeatedly reparsing paths or regexes |
 | **Factory** | `launcher/updates.py` | Update objects for LLC, OurPlay, Machine translation — each implements a common interface |
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |

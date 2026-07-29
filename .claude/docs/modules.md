@@ -9,13 +9,13 @@
 | `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 15 + sections |
 | `webutils/` | Business logic layer (feature modules + beautification engine) | 32 Python files |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
-| `translateFunc/` | Rust engine bridge and legacy translation fallback | 14+ |
+| `translateFunc/` | Thin Rust engine/config bridge | 5 Python files |
 | `native/lcta_translation_engine/` | PyO3 native translation engine | Rust crate |
 | `globalManagers/` | Cross-cutting singletons | 2 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
 | `fancy/` | User rule sets (one JSON file per ruleset) | auto-created |
-| `tests/` | Pytest test suite | 13 Python files |
+| `tests/` | Pytest test suite | 7 Python files |
 | `.githooks/` | Repository-local Git hooks | `pre-commit` |
 | `.github/workflows/` | CI/CD and repository consistency checks | `release.yml`, `check.yml`, `check-sync.yml` |
 
@@ -113,53 +113,31 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 
 ## translateFunc/ — Native Translation Bridge
 
-Python-facing translation API. The active WebUI path requires the Rust engine and no longer falls back to `translatekit`. The previous Python implementation is retained only for focused legacy tests/diagnostics and is exposed through a lazy compatibility import.
+Python-facing translation API. Translation execution, matching, response repair, diagnostics, file I/O, and validation are implemented by the required Rust engine; Python only normalizes configuration, drives the PyO3 job, reports events, and packages output.
 
 **Root files:**
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Native public API plus lazy `TranslationPipeline` compatibility export |
-| `native_pipeline.py` | PyO3 `TranslationJob` adapter, event dispatch, native provider/config conversion, and summary conversion |
+| `__init__.py` | Native translation public API and result/config exports |
+| `native_pipeline.py` | PyO3 `TranslationJob` adapter, event dispatch, native provider/config/diagnostic-path conversion, and summary conversion |
 | `provider_config.py` | Static project-specific provider metadata/defaults and API-setting normalization; active services are OpenAI-compatible LLM and Null |
-| `pipeline.py` | Legacy `TranslationPipeline`, no longer selected by the WebUI runtime |
 | `config.py` | `TranslateConfig`, including separate file/request/file-I/O concurrency, plus summaries/outcomes |
-| `enums.py` | `ProcessResult`, `FileType`, `MatchConfidence` enums |
-| `processor.py` | `FileProcessor` — per-file translation logic; Stage 2 self-check on the combined translation result |
-| `workers.py` | `WorkerPool` — concurrent translation execution |
-| `translate_request.py` | LLM API request construction and response parsing |
-| `translate_doc.py` | Translation documentation/help |
-| `get_proper.py` | Proper noun fetching from remote sources |
-| `log_bridge.py` | Bridge between translateFunc logging and global LogManager |
-| `profiler.py` | `TimingProfiler` — performance profiling |
-| `recorder.py` | `TranslationRecorder` — per-translation dump record writing (JSONL) |
-| `validator.py` | `RuleBasedValidator` — deterministic post-processing checks between Stage 1 and Stage 2. Detects/auto-fixes: `[ID]` bracket spacing errors, missing effect references. Skill files only, controlled by `enable_rule_validation` config |
+| `enums.py` | `ProcessResult` summary compatibility enum |
 
 ## native/lcta_translation_engine/ — Rust Translation Engine
 
 | Path | Purpose |
 |------|---------|
 | `src/lib.rs` | PyO3 module, background `TranslationJob` lifecycle, and synchronous `test_provider()` bridge |
-| `src/engine.rs` | Priority-file barrier, concurrent file pipeline, per-request rule trimming, supplemental translation, optional self-check, merging, fallback, and atomic output |
-| `src/provider.rs` | Shared Reqwest client, request semaphore, retries, and OpenAI-compatible request execution |
+| `src/engine.rs` | Priority-file barrier, concurrent file pipeline, per-request rule trimming, supplemental translation, optional self-check, per-file diagnostic aggregation, merging, fallback, and atomic output |
+| `src/provider.rs` | Shared Reqwest client, request semaphore, retries, OpenAI-compatible request execution, queue-wait timing, and redacted HTTP-attempt traces |
+| `src/diagnostics.rs` | Schema-v2 file/call/HTTP diagnostic model, validation/failure classification, sensitive-text redaction, timestamps, and one Tokio JSONL writer for processing and dump logs |
+| `src/response.rs` | Project-specific JSON response parser: strict envelope/array decoding, fenced or explanatory-text extraction, common malformed JSON repair, and repair metadata for diagnostics |
 | `src/document.rs` | BOM-aware JSON parsing, ID/position indexes, string flattening, and path-based updates |
 | `src/matcher.rs` | Project-local immutable Unicode Aho-Corasick implementation used by rule snapshots |
 | `src/rules.rs` | Async/local proper-term loading, role/effect snapshot construction, JP/EN-assisted matching, bracket/tag/placeholder/number validation |
-| `src/config.rs` | Immutable native run/provider/rule/pipeline configuration and independent file/request/file-I/O concurrency |
-
-**Subdirectories:**
-
-| Path | Purpose |
-|------|---------|
-| `builder/prompt.py` | LLM prompt construction: `PromptFactory` with XML/JSON format-aware escape rules, response parsing with repair fallbacks. v1 prompt_version removed; only v2 (priority-tagged rules, reasoning-first) remains. Supports file-type-conditional rules via `_FILETYPE_RULES` (SKILL/STORY/UI) |
-| `builder/request.py` | API request building with format-aware input limits, equal-partition splitting, and per-part reference trimming |
-| `builder/stages.py` | Pipeline stage definitions |
-| `builder/examples.py` | Example translations for few-shot prompting |
-| `matcher/engine.py` | `MatcherEngine` — proper noun/effect matching orchestration; Korean effect-name hits are cross-checked against JP/EN BattleKeywords names when references are available |
-| `matcher/ac_automaton.py` | Aho-Corasick automaton for fast multi-pattern matching |
-| `matcher/proper.py` | `ProperAnalyzer` — proper noun analysis |
-| `proper/analyze.py` | Proper noun analysis utilities |
-| `proper/flat.py` | Proper noun flattening/normalization |
+| `src/config.rs` | Immutable native run/provider/rule/pipeline/diagnostic configuration and independent file/request/file-I/O concurrency |
 
 ## globalManagers/ — Cross-Cutting Singletons
 
@@ -190,7 +168,7 @@ Python-facing translation API. The active WebUI path requires the Rust engine an
 ```
 webui/app.py
   → webutils/ (all feature functions via __init__.py)
-    → translateFunc/ (translation pipeline)
+    → translateFunc/ (native translation bridge)
     → webFunc/ (GitHub downloads, file transfer)
   → globalManagers/ (ConfigManager, LogManager)
   → webutils/function_rule_editor.py (RuleEditorAPI: file browser, rules CRUD)
@@ -223,7 +201,6 @@ Note: `launcher/` is separately GPL-3.0-licensed, but the current Python impleme
 | Package | Used In | Purpose |
 |---------|---------|---------|
 | `pywebview` | `webui/app.py` | Native desktop webview window |
-| `translatekit` | Legacy `translateFunc/pipeline.py` tests only | Temporary compatibility dependency; the WebUI translation path and provider test path no longer import or instantiate it |
 | `UnityPy` | `launcher/patch.py`, `webutils/function_resource.py` | Unity asset patching plus batched text-asset extraction for skill-color beautification |
 | `openspeedy` | `webutils/function_speed.py`, `launcher/speed_hotkey.py` | DLL injection for game speed |
 | `keyboard` | `launcher/speed_hotkey.py` | Global hotkey registration |

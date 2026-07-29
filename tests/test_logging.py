@@ -1,12 +1,8 @@
 """Logging infrastructure tests."""
 import json
-import logging
-import pytest
-from unittest.mock import MagicMock, patch, call
 
-from translateFunc.config import ProcessOutcome, PipelineSummary, TranslateConfig
+from translateFunc.config import ProcessOutcome, PipelineSummary
 from translateFunc.enums import ProcessResult
-from translateFunc.log_bridge import LogBridge
 
 
 class TestProcessOutcomeExtra:
@@ -68,90 +64,3 @@ class TestPipelineSummaryFallback:
         summary = PipelineSummary()
         summary.fallback.append("fallback.json")
         assert "fallback.json" not in [e.file_name for e in summary.errors]
-
-
-class TestLogBridge:
-    """LogBridge 双通道日志测试。"""
-
-    def test_info_to_both(self):
-        ui_msgs = []
-        bridge = LogBridge(ui_callback=lambda msg: ui_msgs.append(msg))
-
-        with patch.object(bridge._logger, 'info') as mock_info:
-            bridge.info("test message")
-
-        mock_info.assert_called_once_with("test message")
-        assert ui_msgs == ["test message"]
-
-    def test_warning_to_both(self):
-        ui_msgs = []
-        bridge = LogBridge(ui_callback=lambda msg: ui_msgs.append(msg))
-
-        with patch.object(bridge._logger, 'warning') as mock_warning:
-            bridge.warning("test warning")
-
-        mock_warning.assert_called_once_with("test warning")
-        assert "警告: test warning" in ui_msgs
-
-    def test_error_to_both(self):
-        ui_msgs = []
-        bridge = LogBridge(ui_callback=lambda msg: ui_msgs.append(msg))
-
-        with patch.object(bridge._logger, 'error') as mock_error:
-            bridge.error("test error")
-
-        mock_error.assert_called_once_with("test error")
-        assert "错误: test error" in ui_msgs
-
-    def test_exception_to_both(self):
-        ui_msgs = []
-        bridge = LogBridge(ui_callback=lambda msg: ui_msgs.append(msg))
-
-        with patch.object(bridge._logger, 'exception') as mock_exc:
-            bridge.exception("test exception")
-
-        mock_exc.assert_called_once_with("test exception")
-        assert "异常: test exception" in ui_msgs
-
-    def test_set_ui_callback(self):
-        bridge = LogBridge()
-        msgs = []
-        bridge.set_ui_callback(lambda msg: msgs.append(msg))
-        bridge.info("hello")
-        assert msgs == ["hello"]
-
-    def test_default_ui_is_noop(self):
-        bridge = LogBridge()
-        # 不应抛出异常
-        bridge.info("no UI attached")
-
-
-class TestLoggingExceptionCalls:
-    """验证 _logger.exception() 在关键路径被调用（使用 LCTA logger 确保日志正确路由到 app.log）。"""
-
-    def test_worker_exception_logging(self):
-        """WorkerPool 异常处理应调用 _logger.exception。"""
-        from translateFunc.workers import WorkerPool
-        import inspect
-        source = inspect.getsource(WorkerPool.map)
-        assert "_logger.exception" in source, (
-            "WorkerPool.map() 应包含 _logger.exception() 调用"
-        )
-
-    def test_processor_exception_logging(self):
-        """FileProcessor.process() 应包含 _logger.exception 调用。"""
-        from translateFunc.processor import FileProcessor
-        import inspect
-        source = inspect.getsource(FileProcessor.process)
-        assert "_logger.exception" in source, (
-            "FileProcessor.process() 应包含 _logger.exception() 调用"
-        )
-
-    def test_pipeline_exception_logging(self):
-        """TranslationPipeline 异常处理应包含 _logger.exception 调用。"""
-        from translateFunc.pipeline import TranslationPipeline
-        import inspect
-        source = inspect.getsource(TranslationPipeline._update_roles)
-        assert "_logger.exception" in source, (
-            "TranslationPipeline._update_roles() 应包含 _logger.exception() 调用"
-        )

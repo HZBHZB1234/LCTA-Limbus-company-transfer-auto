@@ -16,6 +16,8 @@
     </p>
 </div>
 
+> 本页会进行完整性自检：若「尚未配置翻译 API」或「尚未设置游戏路径」，将显示警告卡片，可点击对应按钮直接跳转配置。自检结果由系统自动生成，无需手动操作。
+
 ---
 
 ## 下一步
@@ -32,7 +34,7 @@
     <span class="elder-step-number">2</span>
     <div>
         <strong>粘贴 Steam 启动命令</strong>
-        <p>如果配置了启动器，请前往「启动器设置」页面，复制启动命令并粘贴到 Steam 游戏属性的「启动选项」中。</p>
+        <p>如果配置了启动器，请前往「Launcher配置」页面，复制启动命令并粘贴到 Steam 游戏属性的「启动选项」中。</p>
     </div>
 </div>
 
@@ -48,7 +50,7 @@
     <span class="elder-step-number">4</span>
     <div>
         <strong>善用帮助系统</strong>
-        <p>在任意页面长按 <kbd>W</kbd> 键两秒或点击标题旁的 <strong>?</strong> 按钮，即可查看该页面的详细使用帮助。</p>
+        <p>在任意页面长按 <kbd>W</kbd> 键两秒或点击侧边栏条目旁的 <strong>?</strong> 按钮，即可查看该页面的详细使用帮助。</p>
     </div>
 </div>
 

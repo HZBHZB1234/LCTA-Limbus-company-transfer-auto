@@ -18,6 +18,7 @@ bindRefer = {
 
     'gamepath': {
         'elder-game-path': ['game-path', 'game_path'],
+        'elder-game-source': ['--elder-game-source', 'elder.game_source'],
     },
 
     'character': {
@@ -77,6 +78,15 @@ bindRefer = {
         ],
         'elder-launcher-fancy': [
             'launcher-work-fancy', 'launcher.work.fancy',
+        ],
+        'elder-launcher-cdn-optimize': [
+            'launcher-work-cdn-optimize', 'launcher.work.cdn_optimize',
+        ],
+        'elder-launcher-cdn-auto-apply': [
+            'launcher-work-cdn-auto-apply', 'launcher.work.cdn_auto_apply',
+        ],
+        'elder-launcher-cdn-ttl': [
+            'launcher-work-cdn-cache-ttl', 'launcher.work.cdn_cache_ttl',
         ],
     },
 
@@ -213,10 +223,11 @@ relyList = {
     'main': [],
     'gamepath': [],
     'character': [],
-    'base': ['elder.character.base'],
+    'base': [],
     'network': [],
     'launcher': ['elder.character.launcher'],
-    'launcher-source': ['elder.character.launcher'],
+    'launcher-source': ['elder.character.launcher',
+                        ['launcher.work.update', 'llc', 'ourplay', 'LCTA-AU', 'LO', 'LM-G', 'LM-A']],
     'translate': ['elder.character.translate'],
     'download': [],
     'bubble': ['elder.character.launcher',

@@ -73,6 +73,7 @@
         }
     },
     "elder": {
+        "game_source": "str",
         "character": {
             "base": "bool",
             "launcher": "bool",

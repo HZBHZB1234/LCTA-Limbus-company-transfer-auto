@@ -10,7 +10,7 @@ LCTA (Limbus Company Transfer Auto) 是一款为《边狱公司》游戏打造�
 ### 我想要自动汉化更新
 配置 **Launcher配置** 页面：
 1. 选择更新模式（推荐 LCTA-AU）
-2. 按需启用 MOD 支持、气泡文本、文本美化
+2. 按需启用 MOD支持、气泡文本、文本美化
 3. 保存配置，复制 Steam 启动命令
 4. 在 Steam 游戏属性中将命令粘贴到"启动选项"
 
@@ -21,16 +21,15 @@ LCTA (Limbus Company Transfer Auto) 是一款为《边狱公司》游戏打造�
 
 ### 我想要安装模组
 1. 从 [Nexus Mods](https://www.nexusmods.com/limbuscompany/mods) 下载模组
-2. 在 **已安装数据管理** 页面启用模组支持
-3. 将模组文件放入模组文件夹
+2. 在 **Launcher配置** 页面勾选"启用MOD支持"
+3. 在 **已安装数据管理** 页面将模组文件放入模组文件夹（可在此修改模组目录）
 
 ## 使用帮助
 
-- 在任意页面标题旁点击 **?** 按钮，或长按键盘 **W** 键 2 秒，即可查看当前页面的详细帮助
-- 侧边栏点击 **设置向导**，可以分步完成初始配置
+- 点击侧边栏任意导航按钮右侧的 **?** 图标，或长按键盘 **W** 键 2 秒，即可查看当前页面的详细帮助
+- 需要初始配置时，可通过首次使用窗口、帮助中心的"设置向导"卡片或更新提示弹窗进入 **设置向导**；进入后侧边栏会显示"设置向导"按钮，可随时再次使用
 - 遇到问题请查看 **日志** 页面或加入 **QQ 群：1081988645**
 
 ## 反馈
 
-- [GitHub Issues](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues)
-- QQ 群：1081988645
+如有 Bug 或建议，请前往 [GitHub Issues](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/issues) 反馈。

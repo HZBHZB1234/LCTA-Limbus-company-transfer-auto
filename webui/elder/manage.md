@@ -8,12 +8,12 @@
     <h4><i class="fas fa-box"></i> 汉化包存放目录</h4>
     <p>下载的汉化包文件将保存在此目录中。</p>
     <div class="elder-path-input">
-        <input type="text" id="elder-package-directory" placeholder="留空使用默认位置 (tmp)">
+        <input type="text" id="elder-package-directory" placeholder="留空使用程序所在目录">
         <button type="button" class="primary-btn" onclick="pywebview.api.browse_folder('elder-package-directory')" style="padding:10px 20px;white-space:nowrap;margin-top:0;">
             <i class="fas fa-folder"></i> 浏览
         </button>
     </div>
-    <p class="elder-setting-hint">留空则使用默认临时目录。</p>
+    <p class="elder-setting-hint">留空则使用程序所在目录。</p>
 </div>
 
 <div class="elder-info-card">
@@ -44,12 +44,12 @@
             <span class="checkmark"></span>
         </label>
     </div>
-    <p class="elder-setting-hint">将翻译结果、配置备份等数据持久化存储到指定目录。</p>
+    <p class="elder-setting-hint">保存用户配置与运行状态，关闭后部分设置可能在重启后丢失。</p>
 </div>
 
 <div class="elder-info-card">
     <h4><i class="fas fa-broom"></i> 清理选项</h4>
-    <p>自动清理临时文件，释放磁盘空间。</p>
+    <p>按需清理本地缓存、进度与通知文件，释放磁盘空间。清理项默认均不勾选。</p>
     <div class="elder-setting-row">
         <label for="elder-clean-progress">清理进度文件</label>
         <label class="checkbox-container">
@@ -71,6 +71,7 @@
             <span class="checkmark"></span>
         </label>
     </div>
+    <p class="elder-setting-hint">「清理默认 MOD 资源」会解析 AppData\Roaming\LimbusCompanyMods 下模组文件的结构，并删除游戏数据目录（LocalLow\Unity）中对应的已安装资源，影响范围远超临时文件，请谨慎勾选。</p>
 </div>
 
 </div>

@@ -4,18 +4,18 @@
 
 <div data-version="415">
 
+<div id="elder-api-jump-container"></div>
+
 <div class="elder-info-card">
     <h4><i class="fas fa-cogs"></i> 翻译服务</h4>
-    <p>选择用于翻译的 API 服务。推荐使用 <strong>DeepSeek</strong>，性价比高，一个赛季约 10 元左右。</p>
-    <select id="elder-translator-service" class="elder-select">
-        <!-- 翻译服务列表由后端动态填充 -->
-    </select>
-    <p class="elder-setting-hint">API 密钥请在「配置汉化API」页面中另行设置。</p>
+    <p>选择用于翻译的 API 服务。推荐使用 <strong>DeepSeek</strong>，性价比高。</p>
+    <select id="elder-translator-service" class="elder-select"></select>
+    <p class="elder-setting-hint">服务列表由系统自动加载；LLM 相关服务需先在主界面「配置汉化API」页配置密钥后才会出现。API 密钥请在「配置汉化API」页面中另行设置。</p>
 </div>
 
 <div class="elder-info-card">
     <h4><i class="fas fa-globe"></i> 源语言</h4>
-    <p>选择游戏原文的语言。大部分文本为英文，部分为日文或韩文。</p>
+    <p>选择游戏原文的语言。大部分文本为英文，部分为日文或韩文；LLM 翻译可自动检测语言，若不确定，保持 English 即可。</p>
     <select id="elder-from-lang" class="elder-select">
         <option value="EN">English（英文）</option>
         <option value="JP">日本語（日文）</option>
@@ -24,15 +24,15 @@
 </div>
 
 <div class="elder-info-card">
-    <h4><i class="fas fa-exchange-alt"></i> 回退翻译</h4>
+    <h4><i class="fas fa-exchange-alt"></i> 解析失败重试</h4>
     <div class="elder-setting-row">
-        <label for="elder-fallback">翻译失败时反向回退重试</label>
+        <label for="elder-fallback">翻译结果解析失败时切换格式重试</label>
         <label class="checkbox-container">
             <input type="checkbox" id="elder-fallback" checked>
             <span class="checkmark"></span>
         </label>
     </div>
-    <p class="elder-setting-hint">开启后，若源语言方向翻译失败，会自动尝试反向翻译以提高成功率。</p>
+    <p class="elder-setting-hint">开启后，当翻译结果解析失败时，会自动按 XML→JSON、JSON→JSON、XML→XML 顺序切换请求/响应格式重试，减少因格式问题导致的翻译失败。</p>
 </div>
 
 <h3 style="margin-top:20px;">翻译优化选项</h3>

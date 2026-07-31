@@ -10,9 +10,8 @@ LCTA 是一个综合性工具箱，涵盖启动器、翻译、MOD 管理等多�
         <h4>基础介绍</h4>
         <p>了解 LCTA 的基本功能、更新机制以及遇到问题时如何获取帮助。非常简短。</p>
         <label class="checkbox-container">
-            <input type="checkbox" id="elder-character-base" checked
-                   data-warn-uncheck="꒦ິ^꒦ິ ">
-            <span class="checkmark"></span> 我希望基本的了解一下 LCTA
+            <input type="checkbox" id="elder-character-base" checked>
+            <span class="checkmark"></span> 我想先大致了解一下 LCTA
         </label>
     </div>
 </div>
@@ -26,8 +25,8 @@ LCTA 是一个综合性工具箱，涵盖启动器、翻译、MOD 管理等多�
             <summary>与 Faust Launcher 对比</summary>
             <ul>
                 <li><strong>更多汉化包来源</strong>：支持 LLC、OurPlay、<a onclick="showMarkdownModal('assets/LCTA-AU.md', '什么是LCTA-AU');">LCTA-AU</a> 等</li>
-                <li><strong>更快的启动速度</strong>：仅在有更新时才复制文件，无需每次全量复制</li>
-                <li><strong>更好的时效性</strong>：直接从来源获取，无需等待第三方手动更新</li>
+                <li><strong>按需复制</strong>：仅在有更新时才复制文件，无需每次全量复制</li>
+                <li><strong>来源直连</strong>：直接从所选汉化来源获取更新，无需等待第三方中转</li>
             </ul>
         </details>
         <label class="checkbox-container">
@@ -42,9 +41,9 @@ LCTA 是一个综合性工具箱，涵盖启动器、翻译、MOD 管理等多�
     <div class="elder-feature-body">
         <h4>手动翻译</h4>
         <p>配置翻译 API 后手动翻译游戏文本。适合对翻译质量和时效性有较高要求的用户。</p>
-        <p class="elder-setting-hint">推荐使用 DeepSeek 进行翻译，性价比高，一个赛季约 10 元左右。</p>
+        <p class="elder-setting-hint">推荐使用 DeepSeek 进行翻译，按实际用量计费，费用不高。</p>
         <label class="checkbox-container">
-            <input type="checkbox" id="elder-character-translate">
+            <input type="checkbox" id="elder-character-translate" checked>
             <span class="checkmark"></span> 我希望使用 LCTA 进行翻译
         </label>
     </div>
@@ -56,7 +55,7 @@ LCTA 是一个综合性工具箱，涵盖启动器、翻译、MOD 管理等多�
         <h4>数据管理</h4>
         <p>汉化包管理、MOD 管理、缓存与存储设置。所有管理功能都可以在侧边栏方便地访问。</p>
         <label class="checkbox-container">
-            <input type="checkbox" id="elder-character-manage">
+            <input type="checkbox" id="elder-character-manage" checked>
             <span class="checkmark"></span> 我希望使用 LCTA 进行管理
         </label>
     </div>

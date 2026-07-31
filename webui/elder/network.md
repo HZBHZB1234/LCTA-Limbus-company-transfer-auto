@@ -13,7 +13,7 @@
             <span class="checkmark"></span>
         </label>
     </div>
-    <p class="elder-setting-hint">国内用户建议开启，使用镜像加速 GitHub 下载。</p>
+    <p class="elder-setting-hint">国内用户建议开启，使用镜像加速 GitHub 下载。此开关仅影响 LCTA 工具箱本体的更新，与汉化包下载的代理设置相互独立。</p>
     <div class="elder-setting-row" style="margin-top:12px;">
         <label for="elder-update-only-stable">仅下载正式版更新</label>
         <label class="checkbox-container">
@@ -35,10 +35,10 @@
 <div class="elder-info-card">
     <h4><i class="fas fa-download"></i> 下载性能</h4>
     <div class="elder-setting-row">
-        <label>GitHub 下载线程数</label>
+        <label>GitHub 代理下载线程数</label>
         <input type="number" id="elder-github-max-workers" value="4" min="1" max="16">
     </div>
-    <p class="elder-setting-hint">同时下载的文件数量，增大可提升速度但占用更多带宽。推荐值：4</p>
+    <p class="elder-setting-hint">GitHub 代理下载时的最大并发线程数，增大可提升速度但占用更多带宽。推荐值：4</p>
     <div class="elder-setting-row" style="margin-top:12px;">
         <label>请求超时时间（秒）</label>
         <input type="number" id="elder-github-timeout" value="8" min="3" max="60">
@@ -48,6 +48,7 @@
 
 <div class="elder-info-card">
     <h4><i class="fas fa-bug"></i> 开发者选项</h4>
+    <p class="elder-setting-hint">以下为高级选项，普通用户通常无需修改。</p>
     <div class="elder-setting-row">
         <label for="elder-debug-mode">调试模式</label>
         <label class="checkbox-container">

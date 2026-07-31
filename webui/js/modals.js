@@ -123,7 +123,11 @@ class ElderManager {
             const target = e.target;
             if (target.type === 'checkbox' && target.dataset.warnUncheck) {
                 if (!target.checked && typeof showMessage === 'function') {
-                    showMessage(target.dataset.warnUncheck, '(ó﹏ò｡)');
+                    if (target.id === 'elder-character-base') {
+                        showMessage('提示', '取消勾选后，「基础设置」步骤仍会照常显示，主题与自动更新配置不受影响，仅完成页不再标记"基础介绍已阅读"。');
+                    } else {
+                        showMessage(target.dataset.warnUncheck, '(ó﹏ò｡)');
+                    }
                 }
             }
         });
@@ -170,11 +174,15 @@ class ElderManager {
         const pageRefer = this.refer[this.latestPage];
         if (!pageRefer) return;
         for (const value of Object.keys(pageRefer)) {
-            const target = document.getElementById(value);
+            let target = document.getElementById(value);
+            if (!target) target = document.querySelector(`input[name="${value}"]`);
             if (!target) continue;
             let newValue;
             if (target.type === 'checkbox') {
                 newValue = target.checked;
+            } else if (target.type === 'radio') {
+                const checkedRadio = document.querySelector(`input[name="${target.name || value}"]:checked`);
+                if (checkedRadio) newValue = checkedRadio.value;
             } else if (target.tagName === 'SELECT' || target.tagName === 'INPUT') {
                 newValue = target.value;
             }
@@ -191,11 +199,16 @@ class ElderManager {
         const pageRefer = this.refer[this.latestPage];
         if (!pageRefer) return;
         for (const value of Object.keys(pageRefer)) {
-            const target = document.getElementById(value);
+            let target = document.getElementById(value);
+            if (!target) target = document.querySelector(`input[name="${value}"]`);
             if (!target) continue;
             let newValue = configManager.getCachedValue(pageRefer[value][1]);
             if (target.type === 'checkbox') {
                 target.checked = newValue;
+            } else if (target.type === 'radio') {
+                document.querySelectorAll(`input[name="${target.name || value}"]`).forEach(radio => {
+                    radio.checked = (radio.value === newValue);
+                });
             } else if (target.tagName === 'SELECT' || target.tagName === 'INPUT') {
                 target.value = newValue;
             }
@@ -255,6 +268,12 @@ class ElderManager {
             case 'main':
                 this._renderMainPage();
                 break;
+            case 'translate':
+                this._renderTranslatePage();
+                break;
+            case 'launcher-source':
+                this._renderLauncherSource();
+                break;
             case 'final':
                 this._renderFinalSummary();
                 break;
@@ -296,7 +315,10 @@ class ElderManager {
         // 游戏路径
         const gamePath = configManager.getCachedValue('game_path');
         if (gamePath) {
-            items.push({ icon: 'fa-folder-open', title: '游戏路径', desc: gamePath });
+            const gameSourceMap = { 'steam': 'Steam', 'ourplay': 'OurPlay 加速器', 'other': '其他' };
+            const gameSource = configManager.getCachedValue('elder.game_source');
+            const sourceDesc = gameSource ? '（' + (gameSourceMap[gameSource] || gameSource) + '）' : '';
+            items.push({ icon: 'fa-folder-open', title: '游戏路径', desc: gamePath + sourceDesc });
         }
 
         // 功能选择
@@ -350,6 +372,182 @@ class ElderManager {
             </div>`;
         });
         summaryDiv.innerHTML = html;
+
+        // 完整性自检区（E3）
+        this._renderFinalCheck();
+    }
+
+    // final 步完整性自检：翻译 API / 游戏路径 警告
+    _renderFinalCheck() {
+        let checkDiv = document.getElementById('elder-final-check');
+        if (!checkDiv) {
+            checkDiv = document.createElement('div');
+            checkDiv.id = 'elder-final-check';
+            const summaryDiv = document.getElementById('elder-summary');
+            if (summaryDiv) {
+                summaryDiv.insertAdjacentElement('afterend', checkDiv);
+            } else {
+                this.targetDiv.appendChild(checkDiv);
+            }
+        }
+        checkDiv.innerHTML = '';
+
+        const warnings = [];
+
+        // 警告1：翻译已启用但未配置 API
+        const translateEnabled = configManager.getCachedValue('elder.character.translate') === true ||
+            !!String(configManager.getCachedValue('ui_default.translator.translator') || '').trim();
+        if (translateEnabled && !this._isApiConfigured()) {
+            warnings.push(`
+                <div class="elder-warning-card">
+                    <h4><i class="fas fa-exclamation-triangle"></i> 尚未配置翻译 API</h4>
+                    <p>你已启用翻译功能，但还未在「配置汉化API」页面设置密钥，翻译前请先完成 API 配置。</p>
+                    <div style="margin-top:12px;">
+                        <button type="button" class="primary-btn" onclick="goAndShow('config')">
+                            <i class="fas fa-key"></i> 去配置
+                        </button>
+                    </div>
+                </div>`);
+        }
+
+        // 警告2：启动器已启用但未设置游戏路径
+        const launcherEnabled = String(configManager.getCachedValue('launcher.work.update') || '') !== 'no' ||
+            !!configManager.getCachedValue('launcher.work.mod') ||
+            !!configManager.getCachedValue('launcher.work.bubble') ||
+            !!configManager.getCachedValue('launcher.work.fancy');
+        if (launcherEnabled && !configManager.getCachedValue('game_path')) {
+            warnings.push(`
+                <div class="elder-warning-card">
+                    <h4><i class="fas fa-exclamation-triangle"></i> 尚未设置游戏路径</h4>
+                    <p>启动器相关功能需要正确的游戏安装目录才能工作。</p>
+                    <div style="margin-top:12px;">
+                        <button type="button" class="primary-btn" onclick="elderManager.jumpTo('gamepath')">
+                            <i class="fas fa-folder-open"></i> 去设置
+                        </button>
+                    </div>
+                </div>`);
+        }
+
+        checkDiv.innerHTML = warnings.join('');
+    }
+
+    // API 是否已配置（api_config 缓存非空即视为已配置，支持加密存储场景）
+    _isApiConfigured() {
+        const apiConfig = configManager.getCachedValue('api_config');
+        if (apiConfig === undefined || apiConfig === null) return false;
+        return String(apiConfig).trim() !== '';
+    }
+
+    // 跳转到指定步骤（供 final 步自检"去设置"等场景使用）
+    async jumpTo(name) {
+        this.latestPage = name;
+        await this.loadPage(name);
+        this.loadPageRefer();
+    }
+
+    // translate.md 动态渲染：E1 真实填充翻译服务下拉 + E2 去配置汉化API跳转按钮
+    async _renderTranslatePage() {
+        // E2：顶部注入「去配置汉化API」按钮（容器 id 由文档提供，缺失时自动创建）
+        let jumpContainer = document.getElementById('elder-api-jump-container');
+        if (!jumpContainer) {
+            jumpContainer = document.createElement('div');
+            jumpContainer.id = 'elder-api-jump-container';
+            const wrap = this.targetDiv.querySelector('[data-version]');
+            (wrap || this.targetDiv).insertAdjacentElement('afterbegin', jumpContainer);
+        }
+        const apiConfigured = this._isApiConfigured();
+        jumpContainer.innerHTML = '';
+        const jumpBtn = document.createElement('button');
+        jumpBtn.type = 'button';
+        jumpBtn.className = 'primary-btn';
+        jumpBtn.innerHTML = '<i class="fas fa-key"></i> 去配置汉化API';
+        jumpBtn.onclick = function () { goAndShow('config'); };
+        jumpContainer.appendChild(jumpBtn);
+        if (!apiConfigured) {
+            jumpContainer.classList.add('elder-warning-card');
+            const tip = document.createElement('p');
+            tip.innerHTML = '<i class="fas fa-exclamation-triangle"></i> 翻译前需先配置 API，请在「配置汉化API」页面设置密钥。';
+            jumpContainer.appendChild(tip);
+        }
+
+        // E1：与 api-config.js loadAPIServices 相同的数据源（后端 TKIT_MACHINE_OBJECT）
+        const select = document.getElementById('elder-translator-service');
+        if (select) {
+            try {
+                const services = await pywebview.api.get_attr('TKIT_MACHINE_OBJECT');
+                if (services && typeof services === 'object' && Object.keys(services).length > 0) {
+                    select.innerHTML = '';
+                    const placeholder = document.createElement('option');
+                    placeholder.value = '';
+                    placeholder.textContent = '请选择翻译服务...';
+                    select.appendChild(placeholder);
+                    Object.keys(services).forEach(name => {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = name;
+                        select.appendChild(option);
+                    });
+                    const current = configManager.getCachedValue('ui_default.translator.translator');
+                    if (current && services[current]) {
+                        select.value = current;
+                    }
+                }
+            } catch (error) {
+                console.error('加载翻译服务列表失败:', error);
+            }
+        }
+    }
+
+    // launcher-source.md 动态渲染：E4 按更新源显示来源卡片
+    _renderLauncherSource() {
+        const cards = this.targetDiv.querySelectorAll('.elder-source-card');
+        if (cards.length === 0) return;
+
+        const sourceIdByName = { 'LLC': 'elder-src-llc', 'LCTA-AU': 'elder-src-machine', 'OurPlay': 'elder-src-ourplay' };
+        const updateToSources = {
+            'llc': ['elder-src-llc'],
+            'ourplay': ['elder-src-ourplay'],
+            'LCTA-AU': ['elder-src-machine'],
+            'LM-G': ['elder-src-llc', 'elder-src-machine'],
+            'LM-A': ['elder-src-llc', 'elder-src-machine'],
+            'LO': ['elder-src-llc', 'elder-src-ourplay'],
+            'no': [],
+        };
+        const updateVal = configManager.getCachedValue('launcher.work.update');
+        const showSources = updateVal !== undefined && updateToSources[updateVal] !== undefined
+            ? updateToSources[updateVal]
+            : Object.values(sourceIdByName);
+
+        cards.forEach(card => {
+            const h4 = card.querySelector('h4');
+            const title = h4 ? h4.textContent : '';
+            let sourceId = null;
+            for (const [name, id] of Object.entries(sourceIdByName)) {
+                if (title.includes(name)) { sourceId = id; break; }
+            }
+            if (!sourceId) {
+                card.style.display = 'block';
+                return;
+            }
+            if (!card.id) card.id = sourceId;
+            card.style.display = showSources.includes(sourceId) ? 'block' : 'none';
+        });
+
+        // "不自动更新"提示
+        let hint = document.getElementById('elder-src-none-hint');
+        if (updateVal === 'no') {
+            if (!hint) {
+                hint = document.createElement('div');
+                hint.id = 'elder-src-none-hint';
+                hint.className = 'elder-tip-card';
+                hint.innerHTML = '<i class="fas fa-info-circle"></i><span>已选择"不自动更新"，本步骤的来源设置无需配置，可直接点击继续。</span>';
+                const wrap = this.targetDiv.querySelector('[data-version]');
+                (wrap || this.targetDiv).insertAdjacentElement('afterbegin', hint);
+            }
+            hint.style.display = 'flex';
+        } else if (hint) {
+            hint.style.display = 'none';
+        }
     }
 
     // 重置向导进度

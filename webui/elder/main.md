@@ -2,11 +2,11 @@
 
 欢迎使用 LCTA 设置向导！本向导将分步引导你完成从游戏路径到高级功能的全套初始配置。
 
-无需担心遗漏任何设置 —— 你可以随时通过侧边栏的 **设置向导** 重新进入，也可以使用底部的重置按钮重新开始。
+无需担心遗漏任何设置 —— 你可以随时通过侧边栏的 **设置向导** 重新进入，回到本页即可使用底部重置按钮重新开始。
 
 ---
 
-<div data-version="1145">
+<div data-version="415">
 
 <div class="elder-hero" data-state="first-use" style="display:none">
     <span class="elder-hero-icon"><i class="fas fa-rocket"></i></span>
@@ -35,6 +35,8 @@
 </div>
 
 ---
+
+<p class="elder-setting-hint">注意：重置将清除全部向导进度，已完成的设置项需重新确认。</p>
 
 <button class="primary-btn elder-btn-reset" onclick="elderManager.resetElder()">
     <i class="fas fa-redo-alt"></i> 重置引导进度

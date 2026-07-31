@@ -37,7 +37,7 @@
 <div class="elder-info-card">
     <h4><i class="fas fa-folder-plus"></i> 模组安装</h4>
     <p>大多数模组的安装方式非常简单：将模组文件放入模组文件夹即可。</p>
-    <p>一些模组附带 <strong>.json</strong> 文件，这是特殊的文本替换格式，不能直接安装。请将 JSON 文件<strong>拖入 LCTA 窗口</strong>以自动转换后安装。</p>
+    <p>一些模组附带 <strong>.json</strong> 文件，这是特殊的文本替换格式。建议将 JSON 文件<strong>拖入 LCTA 窗口</strong>进行识别与安装；直接放入模组文件夹同样可被识别。</p>
 </div>
 
 <div class="elder-tip-card">

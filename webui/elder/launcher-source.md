@@ -1,10 +1,12 @@
 # 启动器下载来源设置
 
-针对你在上一步选择的更新源，这里可以调整每个来源的详细下载选项。默认值已适用于大多数情况。
+针对你在上一步选择的更新源，这里可以调整每个来源的详细下载选项。默认值已适用于大多数情况。LM-G（默认）更新模式复用 LLC 与 LCTA-AU 的来源设置。
 
 <div data-version="415">
 
-<div class="elder-source-card">
+<div id="elder-src-none-hint"></div>
+
+<div class="elder-source-card" id="elder-src-llc">
     <h4><i class="fas fa-users"></i> LLC（零协）</h4>
     <p>零协社区汉化包。最常用的汉化来源之一。</p>
     <div class="elder-source-options">
@@ -12,7 +14,7 @@
             <label for="elder-l-zero-download-source">下载源</label>
             <select id="elder-l-zero-download-source" class="elder-select" style="width:auto;min-width:120px;">
                 <option value="github">GitHub</option>
-                <option value="mirror">镜像站</option>
+                <option value="api">从公益镜像下载 (Beta)</option>
             </select>
         </div>
         <div class="elder-setting-row" style="margin-top:8px;">
@@ -36,11 +38,12 @@
                 <span class="checkmark"></span>
             </label>
         </div>
+        <p class="elder-setting-hint">当前固定开启。</p>
 
     </div>
 </div>
 
-<div class="elder-source-card">
+<div class="elder-source-card" id="elder-src-machine">
     <h4><i class="fas fa-robot"></i> LCTA-AU</h4>
     <p>作者自维护的机翻汉化包，更新速度快（约 1-3 小时）。详见 <a onclick="showMarkdownModal('assets/LCTA-AU.md', '什么是LCTA-AU');">LCTA-AU 介绍</a>。</p>
     <div class="elder-source-options">
@@ -48,7 +51,7 @@
             <label for="elder-l-machine-download-source">下载源</label>
             <select id="elder-l-machine-download-source" class="elder-select" style="width:auto;min-width:120px;">
                 <option value="github">GitHub</option>
-                <option value="mirror">镜像站</option>
+                <option value="api">从公益镜像下载 (Beta)</option>
             </select>
         </div>
         <div class="elder-setting-row" style="margin-top:8px;">
@@ -61,7 +64,7 @@
     </div>
 </div>
 
-<div class="elder-source-card">
+<div class="elder-source-card" id="elder-src-ourplay">
     <h4><i class="fas fa-mobile-alt"></i> OurPlay</h4>
     <p>OurPlay 加速器的汉化包。</p>
     <div class="elder-source-options">

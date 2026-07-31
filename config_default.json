@@ -78,7 +78,8 @@
             "launcher": true,
             "translate": true,
             "manage": true
-        }
+        },
+        "game_source": "steam"
     },
     "api_config": "",
     "api_crypto": true,

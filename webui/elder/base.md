@@ -7,16 +7,16 @@
 <div class="elder-info-card">
     <h4><i class="fas fa-sync-alt"></i> 自动更新</h4>
     <p>启用后，LCTA 会在每次启动时自动检查是否有新版本。如有更新，点击确认即可自动下载安装，无需手动操作。</p>
-    <img src="https://free.picui.cn/free/2026/03/28/69c772ff8417f.png" alt="更新提示" style="max-width:500px;border-radius:8px;margin:8px 0;">
+    <img src="assets/images/base-update-preview.png" alt="自动更新提示示例" style="max-width:100%;border-radius:8px;margin:8px 0;">
     <label class="checkbox-container">
         <input type="checkbox" id="elder-auto-update" checked>
-        <span class="checkmark"></span> 启动时自动检查更新
+        <span class="checkmark"></span> 启动时自动检查更新（首次使用除外）
     </label>
 </div>
 
 <div class="elder-info-card">
     <h4><i class="fas fa-palette"></i> 界面主题</h4>
-    <p>选择你喜欢的配色方案，随时可以在设置中更改。</p>
+    <p>选择你喜欢的配色方案，点击窗口右上角的主题切换按钮随时更改。</p>
     <div class="elder-theme-switch">
         <button type="button" class="elder-theme-btn active" data-theme="light" onclick="document.querySelectorAll('.elder-theme-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');document.getElementById('elder-theme').value='light';">
             <i class="fas fa-sun"></i> 亮色
@@ -29,7 +29,7 @@
         </button>
     </div>
     <input type="hidden" id="elder-theme" value="light">
-    <p class="elder-setting-hint">你可以在设置页面中随时更改主题。</p>
+    <p class="elder-setting-hint">点击窗口右上角的主题切换按钮随时更改。</p>
 </div>
 
 <div class="elder-info-card">
@@ -46,9 +46,9 @@
     <details>
         <summary><strong>如何获取日志文件？</strong></summary>
         <p style="margin-top:8px;">
-            3. 打开 LCTA 安装目录。<br>
-            4. 进入 <strong>logs</strong> 文件夹。<br>
-            5. 若问题发生在当天，上传 <strong>app.log</strong>；否则根据日期选择对应日志文件。
+            1. 打开 LCTA 安装目录。<br>
+            2. 进入 <strong>logs</strong> 文件夹。<br>
+            3. 若问题发生在当天，上传 <strong>app.log</strong>；否则根据日期选择对应日志文件。
         </p>
     </details>
 </div>

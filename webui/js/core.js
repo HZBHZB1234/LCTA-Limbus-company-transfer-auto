@@ -213,6 +213,7 @@ class ConfigManager {
             '--elder-character-launcher': 'elder.character.launcher',
             '--elder-character-translate': 'elder.character.translate',
             '--elder-character-manage': 'elder.character.manage',
+            '--elder-game-source': 'elder.game_source',
 
             // 翻译设置
             "translator-service-select": "ui_default.translator.translator",

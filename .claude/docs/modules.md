@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-31 -->
+<!-- Last updated: 2026-08-01 -->
 
 ## Directory Overview
 
@@ -47,7 +47,7 @@
 | `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip, FancyManager (saveAll now persists to `fancy/` folder via `pywebview.api.save_ruleset()`), `openRuleEditor()` global function |
 | `js/init.js` | Initialization and bootstrap: uses single `get_startup_data()` call; welcome content deferred via `_pendingWelcomeContent` for lazy section loading compatibility |
 | `js/utils.js` | Navigation, encryption, sidebar search; `initNavigation` async handler with `await loadSection()`, `goAndShow` async for lazy section loading |
-| `js/modals.js` | Modal dialog management, markdown content loader with `_loadedMarkdowns` cache, toggle functions (all null-guarded for lazy section loading safety) |
+| `js/modals.js` | Modal dialog management, markdown content loader with `_loadedMarkdowns` cache, toggle functions (all null-guarded for lazy section loading safety). Also hosts `ElderManager` (13-step wizard: per-step render/load/save via `renderPageDynamic`/`loadPageRefer`/`savePageRefer`, final-step completeness self-check `_renderFinalCheck`, translate-step API service select + "去配置汉化API" jump, launcher-source card filtering by update source) |
 | `js/api-config.js` | API configuration page logic; container-not-found logs suppressed for lazy loading compatibility |
 | `js/cdn.js` | CDN optimization page logic |
 | `js/speed.js` | Game speed control page logic |
@@ -57,8 +57,8 @@
 | `js/translation-log-viewer.js` | Translation dump viewer frontend: native file selection, manual reread, structured filters, pagination, lazy detail rendering, clipboard copy, and filtered JSONL export; no directory scan or content search |
 | `sections/preload.js` | Lazy section loader: preloads only dashboard at startup, fetches others on first navigation via `loadSection()`; `onSectionLoaded()` callback re-runs per-section init (toggle funcs, list manager refs, select box values, DOM ref rebuilds) |
 | `sections/*.html` | 18 individual section HTML fragments (dashboard, translate, install, etc.) |
-| `guide/*.md` | 16 in-app user guide pages (one per feature tab) |
-| `elder/*.md` | 14 setup wizard pages |
+| `guide/*.md` | 18 in-app user guide pages (one per feature tab) |
+| `elder/*.md` | 13 setup wizard pages |
 | `assets/update.md` | Release changelog (v5.0.0+) |
 | `assets/LCTA-AU.md` | Auto-update system documentation |
 | `assets/firstUse.md` | First-time user welcome guide |
@@ -94,7 +94,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `builtinFancy.py` | Built-in text rules | Built-in text beautification rules |
 | `builtinFancyFunc.py` | Fancy skill-color resources | `SkillColorHandler` lazily extracts skill attributes from Unity resources, fingerprints source files, caches color mappings in `tmp/fancy/skill-colors.json`, records cache hits, and suppresses repeated retries after an initialization failure |
 | `function_resource.py` | Unity resource reader | Locates Limbus resource files and extracts text assets in batches through UnityPy; sets fallback Unity version `6000.3.12f1` for resources without usable version metadata |
-| `eiderConst.py` | Update constants | Translation pack update lists, dependency chains |
+| `eiderConst.py` | Update constants | Translation pack update lists, dependency chains; `bindRefer` wizard control bindings (incl. launcher CDN options, game source), `relyList` step dependencies (base always shown; launcher-source depends on `launcher.work.update != no`) |
 | `FL2LCTA.py` | Rule converter | Fancy Language → LCTA rule format converter |
 | `Faust_fancy.py` | Faust rules | Faust character-specific fancy text rules |
 | `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`); content search counts raw text occurrences with `utf-8-sig`, so BOM and temporarily invalid JSON files remain searchable. Also provides ruleset CRUD, v2 rule validation/building, V1/V2/V3 smart analysis, 5-dimension scoring, and JSON-validated file saving with backup |

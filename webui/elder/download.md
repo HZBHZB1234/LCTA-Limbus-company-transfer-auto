@@ -12,7 +12,7 @@
             <label for="elder-d-zero-download-source">下载源</label>
             <select id="elder-d-zero-download-source" class="elder-select" style="width:auto;min-width:120px;">
                 <option value="github">GitHub</option>
-                <option value="mirror">镜像站</option>
+                <option value="api">从公益镜像下载 (Beta)</option>
             </select>
         </div>
         <div class="elder-setting-row" style="margin-top:8px;">
@@ -55,7 +55,7 @@
             <label for="elder-d-machine-download-source">下载源</label>
             <select id="elder-d-machine-download-source" class="elder-select" style="width:auto;min-width:120px;">
                 <option value="github">GitHub</option>
-                <option value="mirror">镜像站</option>
+                <option value="api">从公益镜像下载 (Beta)</option>
             </select>
         </div>
         <div class="elder-setting-row" style="margin-top:8px;">
@@ -77,7 +77,7 @@
             <select id="elder-d-ourplay-font-option" class="elder-select" style="width:auto;min-width:120px;">
                 <option value="simplify">简化处理</option>
                 <option value="keep">保留原样</option>
-                <option value="llc">LLC 风格</option>
+                <option value="llc">使用本地字体缓存</option>
             </select>
         </div>
         <div class="elder-setting-row" style="margin-top:8px;">
@@ -88,12 +88,13 @@
             </label>
         </div>
         <div class="elder-setting-row" style="margin-top:8px;">
-            <label for="elder-d-ourplay-use-api">使用 API 获取版本信息</label>
+            <label for="elder-d-ourplay-use-api">使用API获取下载链接</label>
             <label class="checkbox-container">
                 <input type="checkbox" id="elder-d-ourplay-use-api">
                 <span class="checkmark"></span>
             </label>
         </div>
+        <p class="elder-setting-hint">通过 Webnote API 获取下载链接。</p>
     </div>
 </div>
 

@@ -21,18 +21,18 @@ def function_fetch_main(modal_id, **kwargs):
     _log_manager.log_modal_process("数据获取完成", modal_id)
     _log_manager.log_modal_process("开始处理数据", modal_id)
     _log_manager.log_modal_status("正在处理数据", modal_id)
-    min_lenth = int(kwargs.get("min_lenth", 0))
+    min_length = int(kwargs.get("min_length", 0) or 0)
     json_data = [
         {
             'term': i.get('term', ''),
             'translation': i.get('translation', ''),
             'note': i.get('note', '')
-        } for i in data if len(i.get('term', '')) >= min_lenth
+        } for i in data if len(i.get('term', '')) >= min_length
     ]
     if kwargs.get('disable_space', False):
         json_data = [i for i in json_data if ' ' not in i['term']]
-    if (max_lenth:=int(kwargs.get('max_lenth', 0))) and max_lenth>0:
-        json_data = json_data[:max_lenth]
+    if (max_length:=int(kwargs.get('max_length', 0) or 0)) and max_length>0:
+        json_data = json_data[:max_length]
     _log_manager.log_modal_process("数据处理完成", modal_id)
     _log_manager.log_modal_status("正在保存数据", modal_id)
     _log_manager.log_modal_process("开始保存数据", modal_id)

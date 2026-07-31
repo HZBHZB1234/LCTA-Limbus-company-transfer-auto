@@ -323,10 +323,10 @@ function fetchProperNouns() {
     
     const updates = {
         'proper-join-char': joinChar,
-        'proper-max-lenth': maxCount,
-        'proper-min-lenth': minCount,
-        'proper-output-type': outputFormat,
-        'proper-disable-space': skipSpace
+        'proper-max-count': maxCount,
+        'proper-min-count': minCount,
+        'proper-output': outputFormat,
+        'proper-skip-space': skipSpace
     };
 
     const modal = new ProgressModal('抓取专有词汇');
@@ -338,7 +338,7 @@ function fetchProperNouns() {
         modal.addLog(`最大词汇数量: ${maxCount}`);
     }
     if (outputFormat === 'single') {
-        modal.addLog(`文本分割符：${joinChar}`);
+        modal.addLog(`文本分隔符：${joinChar}`);
     }
     
     configManager.updateConfigValues(updates)

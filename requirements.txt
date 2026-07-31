@@ -15,3 +15,4 @@ xxhash==3.5.0
 translatekit
 openspeedy
 keyboard
+urllib3==1.25.11

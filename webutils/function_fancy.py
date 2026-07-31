@@ -1,14 +1,27 @@
+from __future__ import annotations
 import json
 import logging
 import os
 import tempfile
 import time
+from copy import deepcopy
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from globalManagers.LogManager import LogManager
+from webutils.bus_engine import (
+    BUS_FORMAT,
+    BUS_VERSION,
+    CompiledBus,
+    apply_bus,
+    compile_bus_ruleset,
+    convert_edits_to_bus_ruleset,
+    convert_tiaozhua_config,
+    is_bus_ruleset,
+    is_tiaozhua_config,
+)
 from webutils.fancy_engine import ApplyResult, CompiledRules, apply_rules, compile_rulesets
 
 _log_manager = LogManager()
@@ -28,6 +41,12 @@ class FancyRunStats:
     values_changed: int
     elapsed_seconds: float
     resource_cache_hit: bool
+
+
+@dataclass(frozen=True)
+class _CompiledRuleset:
+    kind: str
+    compiled: CompiledRules | CompiledBus
 
 
 def _write_json_atomic(file: Path, data: dict) -> None:
@@ -63,6 +82,37 @@ def _select_enabled_rulesets(config: list, enable_map: Optional[Mapping] = None)
     ]
 
 
+def _compile_mixed_rulesets(rulesets: list) -> tuple[_CompiledRuleset, ...]:
+    compiled: list[_CompiledRuleset] = []
+    for ruleset in rulesets:
+        if is_bus_ruleset(ruleset):
+            compiled.append(_CompiledRuleset("bus", compile_bus_ruleset(ruleset)))
+        else:
+            compiled.append(_CompiledRuleset("v2", compile_rulesets([ruleset])))
+    return tuple(compiled)
+
+
+def _count_changed_values(original, current) -> int:
+    if type(original) is not type(current):
+        return 1
+    if isinstance(original, dict):
+        count = 0
+        for key in original.keys() | current.keys():
+            if key not in original or key not in current:
+                count += 1
+            else:
+                count += _count_changed_values(original[key], current[key])
+        return count
+    if isinstance(original, list):
+        common_length = min(len(original), len(current))
+        count = sum(
+            _count_changed_values(original[index], current[index])
+            for index in range(common_length)
+        )
+        return count + abs(len(original) - len(current))
+    return int(original != current)
+
+
 def fancy_main(
     game_path: str,
     package_name: str,
@@ -76,9 +126,12 @@ def fancy_main(
     """
     started_at = time.perf_counter()
     enabled_rulesets = _select_enabled_rulesets(config, enable_map)
-    compiled = compile_rulesets(enabled_rulesets)
+    compiled_rulesets = _compile_mixed_rulesets(enabled_rulesets)
     resource_cache_hit = False
-    if compiled.requires_skill_color:
+    if any(
+        item.kind == "v2" and item.compiled.requires_skill_color
+        for item in compiled_rulesets
+    ):
         from webutils.builtinFancyFunc import skillColorHandler
 
         skillColorHandler.prepare()
@@ -93,18 +146,31 @@ def fancy_main(
 
     for file in files:
         relative_path = file.relative_to(lang_path).as_posix()
-        file_rules = compiled.for_file(relative_path)
-        if not file_rules.rules:
+        matched_entries = []
+        for entry in compiled_rulesets:
+            if entry.kind == "v2":
+                file_rules = entry.compiled.for_file(relative_path)
+                if file_rules.rules:
+                    matched_entries.append((entry.kind, file_rules))
+            elif entry.compiled.for_file(relative_path):
+                matched_entries.append((entry.kind, entry.compiled))
+        if not matched_entries:
             continue
         files_matched += 1
-        logger.debug(f'{relative_path} 匹配 {len(file_rules.rules)} 条规则')
         try:
             data = json.loads(file.read_text(encoding='utf-8-sig'))
-            result: ApplyResult = apply_rules(data, file_rules)
-            if result.changed_count:
-                _write_json_atomic(file, result.data)
+            original_data = deepcopy(data)
+            for kind, matched_rules in matched_entries:
+                if kind == "v2":
+                    result: ApplyResult = apply_rules(data, matched_rules)
+                    data = result.data
+                else:
+                    data = apply_bus(data, matched_rules, relative_path).data
+            changed_count = _count_changed_values(original_data, data)
+            if changed_count:
+                _write_json_atomic(file, data)
                 files_changed += 1
-                values_changed += result.changed_count
+                values_changed += changed_count
         except Exception as e:
             logger.exception(f"处理文件 {file} 时出错: {e}")
             _log_manager.log_error(e)
@@ -152,11 +218,24 @@ def load_fancy_folder_rules(fancy_dir: str = None) -> list:
         try:
             content = f.read_text(encoding='utf-8')
             data = json.loads(content)
-            if isinstance(data, dict) and data.get('version') == 2 and 'name' in data and 'rules' in data:
+            if (
+                f.name == '_quick_edits.json'
+                and isinstance(data, dict)
+                and isinstance(data.get('edits'), list)
+                and 'rules' not in data
+            ):
+                migrated, _ = convert_edits_to_bus_ruleset(data['edits'])
+                migrated.update({key: value for key, value in data.items() if key not in migrated})
+                data = migrated
+            if is_bus_ruleset(data):
+                data.setdefault('format', BUS_FORMAT)
+                compile_bus_ruleset(data)
+                rulesets.append(data)
+            elif isinstance(data, dict) and data.get('version') == 2 and 'name' in data and 'rules' in data:
                 compile_rulesets([data])
                 rulesets.append(data)
             else:
-                logger.warning(f"跳过无效 v2 规则集文件: {f.name}")
+                logger.warning(f"跳过无效规则集文件: {f.name}")
         except json.JSONDecodeError as e:
             logger.warning(f"跳过无效 JSON 文件: {f.name} — {e}")
         except Exception as e:
@@ -165,8 +244,13 @@ def load_fancy_folder_rules(fancy_dir: str = None) -> list:
 
 def save_ruleset_to_folder(name: str, data: dict) -> Path:
     """保存规则集到 fancy/{name}.json，返回保存路径"""
-    data['version'] = 2
-    compile_rulesets([data])
+    if is_bus_ruleset(data):
+        data['format'] = BUS_FORMAT
+        data['version'] = BUS_VERSION
+        compile_bus_ruleset(data)
+    else:
+        data['version'] = 2
+        compile_rulesets([data])
     folder = _get_fancy_folder()
     folder.mkdir(parents=True, exist_ok=True)
     filename = _sanitize_filename(name) + '.json'
@@ -176,6 +260,53 @@ def save_ruleset_to_folder(name: str, data: dict) -> Path:
         encoding='utf-8'
     )
     return filepath
+
+
+def _unique_ruleset_name(name: str) -> str:
+    base_name = name.strip() or '导入的巴士替换规则'
+    if base_name == '_quick_edits':
+        base_name = '导入的巴士替换规则'
+    existing_names = {
+        ruleset.get('name', '')
+        for ruleset in load_fancy_folder_rules()
+    }
+    candidate = base_name
+    suffix = 2
+    while candidate in existing_names or (_get_fancy_folder() / (_sanitize_filename(candidate) + '.json')).exists():
+        candidate = f'{base_name} ({suffix})'
+        suffix += 1
+    return candidate
+
+
+def import_bus_rules_file(file_path: str, name: str = None) -> dict:
+    source_path = Path(file_path)
+    data = json.loads(source_path.read_text(encoding='utf-8-sig'))
+    target_name = _unique_ruleset_name(name or data.get('name') or source_path.stem)
+    if is_tiaozhua_config(data):
+        ruleset, stats = convert_tiaozhua_config(data, name=target_name)
+    elif is_bus_ruleset(data):
+        ruleset = dict(data)
+        ruleset['name'] = target_name
+        compile_bus_ruleset(ruleset)
+        stats = {
+            'source_rules': len(ruleset.get('rules', [])),
+            'converted_rules': len(ruleset.get('rules', [])),
+            'converted_actions': sum(
+                len(rule.get('replacements', []))
+                for rule in ruleset.get('rules', [])
+            ),
+            'skipped': 0,
+            'warnings': [],
+        }
+    else:
+        raise ValueError('文件不是 bus 或调爪替换规则配置')
+    saved_path = save_ruleset_to_folder(target_name, ruleset)
+    return {
+        'file': source_path.name,
+        'ruleset_name': target_name,
+        'path': str(saved_path),
+        'stats': stats,
+    }
 
 def delete_ruleset_from_folder(name: str) -> bool:
     """删除规则集文件，返回是否成功"""

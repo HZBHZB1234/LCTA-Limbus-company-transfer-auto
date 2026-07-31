@@ -2,11 +2,11 @@
 
 import json
 import logging
-import re
 from pathlib import Path
 from collections import defaultdict
 from typing import Optional
 
+from webutils.bus_engine import apply_bus, compile_bus_ruleset, convert_edits_to_bus_ruleset
 from webutils.function_fancy import _get_fancy_folder
 from webutils.rule_editor_constants import FILE_PREFIX_RULES
 
@@ -46,38 +46,6 @@ def diff_json(original, modified, prefix=''):
     return changes
 
 
-# ──── Path Navigation ────
-
-def _set_value_by_path(obj, path_str, value):
-    """按点分隔路径导航 JSON 树并设值。
-    路径示例: "dataList.0.name" → obj["dataList"][0]["name"] = value
-    移植自 test2_reconstructed.py """
-    if not path_str:
-        return
-    # 分割路径: "dataList.0.name" → ["dataList", "0", "name"]
-    parts = re.findall(r'\w+|\[\d+\]', path_str)
-    if not parts:
-        return
-    # 导航到父节点
-    for i, part in enumerate(parts[:-1]):
-        if part.startswith('['):
-            idx = int(part[1:-1])
-            obj = obj[idx]
-        elif part.isdigit():
-            obj = obj[int(part)]
-        else:
-            obj = obj[part]
-    # 设置最后一个节点
-    last = parts[-1]
-    if last.startswith('['):
-        idx = int(last[1:-1])
-        obj[idx] = value
-    elif last.isdigit():
-        obj[int(last)] = value
-    else:
-        obj[last] = value
-
-
 # ──── Quick Edits Persistence ────
 
 QUICK_EDITS_FILENAME = '_quick_edits.json'
@@ -102,6 +70,10 @@ def load_quick_edits() -> dict:
         data = json.loads(path.read_text(encoding='utf-8'))
         if 'edits' not in data:
             data['edits'] = []
+        if 'rules' not in data:
+            migrated, _ = convert_edits_to_bus_ruleset(data['edits'])
+            migrated.update({key: value for key, value in data.items() if key not in migrated})
+            data = migrated
         return data
     except (json.JSONDecodeError, Exception) as e:
         logger.warning(f"加载快速编辑文件失败: {e}")
@@ -115,22 +87,16 @@ def load_quick_edits() -> dict:
 
 def save_quick_edits(edits: list) -> dict:
     """保存 edits 列表到 fancy/_quick_edits.json。
-    直接接收 JS 传来的 edits 数组，包裹为标准结构后写入。"""
-    from webutils.function_rule_editor import _get_lang_dir
+    直接接收 JS 传来的 edits 数组，并派生可执行的 bus 规则。"""
     path = _get_quick_edits_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = {
-        "name": "_quick_edits",
-        "desc": "简易翻译编辑",
-        "version": 1,
-        "edits": edits
-    }
     try:
+        data, report = convert_edits_to_bus_ruleset(edits)
         path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding='utf-8'
         )
-        return {"success": True, "path": str(path)}
+        return {"success": True, "path": str(path), "report": report}
     except Exception as e:
         logger.error(f"保存快速编辑文件失败: {e}")
         return {"success": False, "error": str(e)}
@@ -151,34 +117,41 @@ def apply_quick_edits() -> dict:
     if not edits:
         return {"success": True, "applied": 0, "failed": 0, "message": "没有待应用的修改"}
 
-    # 按文件分组
+    ruleset, report = convert_edits_to_bus_ruleset(edits)
+    compiled = compile_bus_ruleset(ruleset)
     by_file = defaultdict(list)
     for edit in edits:
-        by_file[edit['file']].append(edit)
+        if isinstance(edit, dict) and isinstance(edit.get('file'), str):
+            by_file[edit['file']].append(edit)
 
     success_count = 0
-    fail_count = 0
-    errors = []
+    fail_count = report['skipped']
+    errors = list(report['warnings'])
+    resolved_lang_dir = lang_dir.resolve()
 
     for rel_path, file_edits in by_file.items():
-        full_path = lang_dir / rel_path
+        full_path = (resolved_lang_dir / rel_path).resolve()
+        try:
+            full_path.relative_to(resolved_lang_dir)
+        except ValueError:
+            fail_count += len(file_edits)
+            errors.append(f"文件路径超出语言包目录: {rel_path}")
+            continue
         if not full_path.exists():
             fail_count += len(file_edits)
             errors.append(f"文件不存在: {rel_path}")
             continue
         try:
-            content = full_path.read_text(encoding='utf-8')
+            content = full_path.read_text(encoding='utf-8-sig')
             data_obj = json.loads(content)
-            for edit in file_edits:
-                try:
-                    _set_value_by_path(data_obj, edit['path'], edit['new'])
-                    success_count += 1
-                except (KeyError, IndexError, TypeError) as e:
-                    fail_count += 1
-                    errors.append(f"{rel_path} / {edit['path']}: {e}")
-            # 写回文件（无 .bak 备份）
-            formatted = json.dumps(data_obj, ensure_ascii=False, indent=2)
-            full_path.write_text(formatted, encoding='utf-8')
+            result = apply_bus(data_obj, compiled, rel_path.replace('\\', '/'))
+            success_count += result.matched_rules
+            fail_count += result.failed_rules
+            errors.extend(result.errors)
+            if result.changed_count:
+                from webutils.function_fancy import _write_json_atomic
+
+                _write_json_atomic(full_path, result.data)
         except json.JSONDecodeError as e:
             fail_count += len(file_edits)
             errors.append(f"JSON 解析失败 {rel_path}: {e}")

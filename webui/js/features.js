@@ -114,6 +114,8 @@ class FancyManager {
             if (rulesEl) { rulesEl.value = ''; rulesEl.disabled = true; }
             const saveBtn = document.getElementById('fancy-save-current-btn');
             if (saveBtn) saveBtn.disabled = true;
+            const ruleEditorBtn = document.getElementById('fancy-open-rule-editor-btn');
+            if (ruleEditorBtn) ruleEditorBtn.disabled = false;
             return;
         }
 
@@ -122,6 +124,7 @@ class FancyManager {
         const rulesTextarea = document.getElementById('fancy-ruleset-rules');
         const builtinCheck = document.getElementById('builtinRule');
         const saveBtn = document.getElementById('fancy-save-current-btn');
+        const ruleEditorBtn = document.getElementById('fancy-open-rule-editor-btn');
 
         if (!nameInput) return;
 
@@ -132,10 +135,13 @@ class FancyManager {
 
         // 内置规则集不可编辑
         const isBuiltin = this.selectedRuleset.builtin;
-        nameInput.disabled = isBuiltin;
-        descInput.disabled = isBuiltin;
-        rulesTextarea.disabled = isBuiltin;
-        saveBtn.disabled = isBuiltin;
+        const isBus = this.selectedRuleset.format === 'lcta-bus';
+        const isQuickEdits = this.selectedRuleset.name === '_quick_edits';
+        nameInput.disabled = isBuiltin || isQuickEdits;
+        descInput.disabled = isBuiltin || isQuickEdits;
+        rulesTextarea.disabled = isBuiltin || isQuickEdits;
+        saveBtn.disabled = isBuiltin || isQuickEdits;
+        if (ruleEditorBtn) ruleEditorBtn.disabled = isBus;
     }
 
     // 保存当前编辑的规则集
@@ -190,7 +196,10 @@ class FancyManager {
 
         // 持久化到后端
         try {
-            await pywebview.api.save_ruleset(newName, { name: newName, desc: newDesc, rules: newRules });
+            const payload = { ...this.selectedRuleset, name: newName, desc: newDesc, rules: newRules };
+            delete payload.builtin;
+            const result = await pywebview.api.save_ruleset(newName, payload);
+            if (!result || !result.success) throw new Error((result && result.error) || '后端拒绝保存');
             showMessage('成功', '规则集已保存');
         } catch (e) {
             showMessage('错误', '保存失败: ' + (e.message || e));
@@ -261,7 +270,8 @@ class FancyManager {
         // 将用户规则集逐个写入 fancy/ 文件夹
         try {
             for (const rs of userData) {
-                await pywebview.api.save_ruleset(rs.name, rs);
+                const result = await pywebview.api.save_ruleset(rs.name, rs);
+                if (!result || !result.success) throw new Error((result && result.error) || `保存 ${rs.name} 失败`);
             }
             await configManager.updateConfigValue('fancy-allow', JSON.stringify(this.enabledMap));
             await configManager.flushPendingUpdates();
@@ -1409,6 +1419,26 @@ function openQuickEditor() {
     pywebview.api.open_quick_editor();
 }
 
+async function importBusRules() {
+    try {
+        const result = await pywebview.api.import_bus_rules();
+        if (!result || result.cancelled) return;
+        const escapeText = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
+        const lines = [];
+        (result.imported || []).forEach(item => {
+            const stats = item.stats || {};
+            lines.push(`${escapeText(item.ruleset_name)}: ${stats.converted_rules || 0} 条规则，${stats.converted_actions || 0} 个操作`);
+        });
+        (result.errors || []).forEach(item => lines.push(`${escapeText(item.file)}: ${escapeText(item.error)}`));
+        showMessage(result.success ? '导入完成' : '导入部分完成', lines.join('<br>') || '没有导入规则');
+        await fancyManager.loadRulesets();
+    } catch (error) {
+        showMessage('错误', '导入巴士规则失败: ' + error);
+    }
+}
+
 // 设置拖拽文件回调函数（可根据需要自定义）
 function setupDragDropCallback() {
     if (!dragDropManager) return;
@@ -1427,7 +1457,11 @@ function setupDragDropCallback() {
                     modal.close();
                     const progressModal = new ProgressModal('处理文件');
                     progressModal.addLog('正在处理文件...');
-                    pywebview.api.eval_dropped_files(result.file_info, progressModal.id);
+                    pywebview.api.eval_dropped_files(result.file_info, progressModal.id).then(async (processed) => {
+                        if (processed && processed.imported) {
+                            await fancyManager.loadRulesets();
+                        }
+                    });
                 }
                 modal.onConfirmCallback = modal.eval_dropped_files;
             }

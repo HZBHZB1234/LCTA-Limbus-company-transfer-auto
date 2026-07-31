@@ -7,9 +7,11 @@ import json
 import zipfile
 
 from .function_install import install_translation_package
+from .function_fancy import import_bus_rules_file
 from .function_manage import get_mod_path
 from .functions import extract_zip_smartly, decompress_7z
 from .update import Updater
+from .bus_engine import is_bus_ruleset, is_tiaozhua_config
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
@@ -34,6 +36,7 @@ NAMEREFER = {
     'textFile': '文本内容替换包',
     'LCTAchange': 'LCTA文本修改包',
     'FLchange': '浮士德启动器格式文本修改包',
+    'busimport': '巴士替换规则配置',
 }
 
 def evalZip(zip_path):
@@ -88,8 +91,10 @@ def eval7zip(file_path):
     
 def evalJson(json_path):
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
+        with open(json_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
+        if is_bus_ruleset(data) or is_tiaozhua_config(data):
+            return 'busimport'
         if 'dataList' in data:
             return 'textFile'
         if 'patches' in data:
@@ -153,7 +158,7 @@ def evalFiles(files_data, modal_id="false"):
     if not files_data:
         _log_manager.log_modal_process("没有需要处理的文件", modal_id)
         return {"success": True, "message": "没有需要处理的文件",
-                "installed": 0, "modded": 0, "skipped": 0, "errors": 0,
+                "installed": 0, "modded": 0, "imported": 0, "skipped": 0, "errors": 0,
                 "error_details": []}
 
     game_path = ConfigManager().get('game_path', '')
@@ -161,7 +166,7 @@ def evalFiles(files_data, modal_id="false"):
     os.makedirs(mod_path, exist_ok=True)
 
     total = len(files_data)
-    results = {"installed": 0, "modded": 0, "skipped": 0, "updated": 0, "errors": 0}
+    results = {"installed": 0, "modded": 0, "imported": 0, "skipped": 0, "updated": 0, "errors": 0}
     error_details = []
 
     for idx, (file_path, file_type) in enumerate(files_data.items()):
@@ -294,6 +299,17 @@ def evalFiles(files_data, modal_id="false"):
                 results["modded"] += 1
                 _log_manager.log_modal_process(f"{label}安装完成: {file_name}", modal_id)
 
+            elif file_type == 'busimport':
+                _log_manager.log_modal_process(f"正在导入巴士规则: {file_name}", modal_id)
+                imported = import_bus_rules_file(file_path)
+                results["imported"] += 1
+                stats = imported["stats"]
+                _log_manager.log_modal_process(
+                    f"规则导入完成: {imported['ruleset_name']}，"
+                    f"{stats['converted_rules']} 条规则/{stats.get('converted_actions', 0)} 个操作",
+                    modal_id,
+                )
+
             elif file_type == 'invalid':
                 _log_manager.log_modal_process(f"跳过无效文件: {file_name}", modal_id)
                 results["skipped"] += 1
@@ -360,6 +376,8 @@ def evalFiles(files_data, modal_id="false"):
         parts.append(f"{results['modded']}个模组")
     if results["updated"] > 0:
         parts.append(f"{results['updated']}个更新")
+    if results["imported"] > 0:
+        parts.append(f"{results['imported']}个规则集")
     if results["skipped"] > 0:
         parts.append(f"跳过{results['skipped']}个")
     if results["errors"] > 0:
@@ -377,6 +395,7 @@ def evalFiles(files_data, modal_id="false"):
         "installed": results["installed"],
         "modded": results["modded"],
         "updated": results["updated"],
+        "imported": results["imported"],
         "skipped": results["skipped"],
         "errors": results["errors"],
         "error_details": error_details if error_details else []

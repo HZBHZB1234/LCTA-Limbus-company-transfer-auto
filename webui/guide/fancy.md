@@ -12,7 +12,7 @@
 
 ## 规则集格式
 
-规则集统一使用版本 2：
+规则集支持原生 v2 和 bus v1。原生 v2 适合条件、包裹、渐变和技能属性颜色：
 
 ```json
 {
@@ -22,6 +22,44 @@
   "rules": []
 }
 ```
+
+## Bus 替换规则
+
+bus 格式用于顺序文本替换、调爪规则导入和简易翻译编辑：
+
+```json
+{
+  "format": "lcta-bus",
+  "version": 1,
+  "name": "巴士替换示例",
+  "desc": "按顺序替换技能名称",
+  "files": ["*.json"],
+  "exclude_dirs": ["config", "font"],
+  "rules": [
+    {
+      "files": [{"regex": "Skills.*\\.json$"}],
+      "path": "dataList[?id=10100201].levelList[*].name",
+      "replacements": [
+        {"from": "肉斩", "to": "舍吾皮肉"},
+        {"from": "X", "to": "XX", "safe": true},
+        {"from": "！", "to": "。", "mode": "end"},
+        {"set": "精确值"}
+      ]
+    }
+  ]
+}
+```
+
+- `path` 支持普通字段、自动列表遍历、`[*]`、`[n]` 和 `[?字段=值]` 首项定位；空路径表示遍历整份 JSON 的所有字符串叶子。
+- `files` 支持 glob、`{"regex":"..."}` 和内部精确路径匹配；调爪 `aimFile` 导入时保留正则搜索语义。
+- `replacements` 严格按数组顺序执行，支持 literal、regex、end、safe 和任意 JSON 值的 `set`。
+- `exclude_dirs` 对相对路径中的目录组件执行大小写不敏感的子串排除。
+
+在美化页面点击“导入巴士规则”可多选 bus JSON 或调爪 JSON。也可以直接拖入文件并确认导入。导入会生成独立用户规则集，默认保持禁用，检查内容后再手动启用。
+
+简易翻译编辑器将 `_quick_edits.json` 保存为带 `edits` 和 bus `set` 规则的派生规则集。它会显示在美化列表中，但必须继续通过简易翻译编辑器维护，因此主页面将其设为只读。
+
+## V2 规则字段
 
 每条规则包含文件匹配、作用域、目标、条件和操作：
 

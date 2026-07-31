@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-28 -->
+<!-- Last updated: 2026-07-31 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -250,27 +250,38 @@ WebUI user applies text beautification
 
 Launcher finishes an enabled translation update
   → launcher/updates.py UpdateBase.run()
-    → load_fancy_folder_rules()                     append user v2 rulesets
+    → load_fancy_folder_rules()                     append user v2/bus rulesets
     → read config fancy_allow                       default {}
 
 Both paths
   → webutils/function_fancy.py fancy_main(gamePath, package, rulesets, enableMap)
     → _select_enabled_rulesets()                    discard disabled rules before compilation
-    → webutils/fancy_engine.py compile_rulesets()
-      → validate/compile file globs, paths, regexes, conditions, actions
+    → compile each enabled ruleset in original order
+      → webutils/fancy_engine.py compile_rulesets()  v2 conditions/actions
+      → webutils/bus_engine.py compile_bus_ruleset() bus selectors/replacements
       → CompiledRules.requires_skill_color
         → builtinFancyFunc.SkillColorHandler.prepare() only when an enabled rule needs it
           → function_resource.py load_text_assets()
           → fingerprinted tmp/fancy/skill-colors.json cache
     → scan language-package *.json files
-      → CompiledRules.for_file(relativePath)         skip files with no matching rules
+      → v2/bus per-file matching and bus directory exclusions
       → read UTF-8-SIG JSON
-      → apply_rules()                                return changed JSON paths
-      → atomic replace only when changed_count > 0
+      → apply_rules()/apply_bus() in ruleset order
+      → compare final JSON with original and atomically replace only when changed
     → FancyRunStats                                  scanned/matched/changed/value/time/cache data
 ```
 
-Key files: `webui/js/features.js`, `webui/app.py`, `launcher/updates.py`, `webutils/function_fancy.py`, `webutils/fancy_engine.py`, `webutils/builtinFancyFunc.py`, `webutils/function_resource.py`
+```
+Bus import button
+  → webui/js/features.js importBusRules()
+  → webui/app.py LCTA_API.import_bus_rules()
+  → webutils/function_fancy.py import_bus_rules_file()
+    → bus_engine.is_bus_ruleset() or is_tiaozhua_config()
+    → validate or mechanically convert
+    → save disabled-by-default user ruleset under fancy/
+```
+
+Key files: `webui/js/features.js`, `webui/app.py`, `launcher/updates.py`, `webutils/function_fancy.py`, `webutils/fancy_engine.py`, `webutils/bus_engine.py`, `webutils/builtinFancyFunc.py`, `webutils/function_resource.py`
 
 ## 9. Config Management
 
@@ -341,11 +352,12 @@ JS: user drags files onto window
     → full/nofont:                  install_translation_package() (7z support)
     → FLmod:                        extract_zip_smartly() or copytree to mod_path
     → jsononly:                     extract to mod_path
+    → busimport:                    import_bus_rules_file() to fancy/
     → update:                       Updater() via webutils/update.py
     → progress:                     LogManager modal callbacks
 ```
 
-Files: `webui/js/features.js`, `webui/app.py`, `webutils/function_drop.py`, `webutils/update.py`
+Files: `webui/js/features.js`, `webui/app.py`, `webutils/function_drop.py`, `webutils/function_fancy.py`, `webutils/bus_engine.py`, `webutils/update.py`
 
 ## 13. WebUI Startup Bootstrap
 

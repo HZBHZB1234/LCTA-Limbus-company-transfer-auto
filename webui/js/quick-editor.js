@@ -402,9 +402,19 @@
         var api = getApi();
         if (!api) return;
         try {
-            await api.save_quick_edits(state.pendingEdits);
+            var result = await api.save_quick_edits(state.pendingEdits);
+            if (!result || !result.success) {
+                throw new Error((result && result.error) || '后端拒绝保存');
+            }
+            var warnings = result.report && result.report.warnings ? result.report.warnings : [];
+            if (warnings.length) {
+                alert('部分修改无法转换为巴士规则:\n' + warnings.slice(0, 10).join('\n'));
+            }
+            return result;
         } catch (e) {
             console.error('保存快速编辑失败:', e);
+            alert('保存快速编辑失败: ' + e);
+            return null;
         }
     }
 

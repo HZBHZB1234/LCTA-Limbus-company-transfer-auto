@@ -703,6 +703,29 @@ class LCTA_API():
                  "{\"技能文本美化(FL Like)\": true,\"气泡文本渐变(FL Like)\": true,\"EGO文本渐变(FL Like)\": true}"))
         }}
 
+    def import_bus_rules(self, name=None):
+        from webutils.function_fancy import import_bus_rules_file
+
+        selected = self._window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            allow_multiple=True,
+            file_types=("JSON Files (*.json)",),
+        )
+        if not selected:
+            return {"success": False, "cancelled": True, "imported": [], "errors": []}
+        imported = []
+        errors = []
+        for file_path in selected:
+            try:
+                imported.append(import_bus_rules_file(file_path, name=name))
+            except Exception as exc:
+                errors.append({"file": Path(file_path).name, "error": str(exc)})
+        return {
+            "success": not errors,
+            "imported": imported,
+            "errors": errors,
+        }
+
     def download_llc_translation(self, modal_id= "false"):
         """下载LLC翻译"""
         try:

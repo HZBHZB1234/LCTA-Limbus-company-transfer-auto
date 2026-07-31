@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-07-28 -->
+<!-- Last updated: 2026-07-31 -->
 
 ## Project Purpose
 
@@ -42,6 +42,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │    builder/               prompt & request building  │
 │    matcher/               proper noun AC matching    │
 │  webutils/fancy_engine.py compiled v2 rule engine    │
+│  webutils/bus_engine.py   bus/import rule engine     │
 │  webutils/function_fancy.py file orchestration/stats │
 ├─────────────────────────────────────────────────────┤
 │                INFRASTRUCTURE                        │
@@ -74,6 +75,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Bridge** | `webui/app.py` ↔ JS | `LCTA_API` class exposes Python methods to JS via `pywebview.api`; JS calls like `pywebview.api.install_llc()` |
 | **Pipeline** | `translateFunc/pipeline.py` | `TranslationPipeline` orchestrates: fetch proper nouns → build matcher → priority files → WorkerPool → aggregate |
 | **Compile/Apply** | `webutils/fancy_engine.py` | Text beautification validates and compiles v2 rules once, selects rules per file, then applies structured-path conditions/actions without repeatedly reparsing paths or regexes |
+| **Bus Compile/Apply** | `webutils/bus_engine.py` | Validates `format: lcta-bus`, compiles glob/regex file matchers and structured selector paths, preserves ordered literal/regex/end/safe/set operations, and mechanically converts 调爪 and quick-editor edits |
 | **Factory** | `launcher/updates.py` | Update objects for LLC, OurPlay, Machine translation — each implements a common interface |
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |
 | **Pipeline** | `launcher/pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline (init→check_update→cdn→prepare_mod→launch→running→exit). Modules register callbacks per phase via `on(phase, callback)`; `cancel_event` supports GUI-initiated shutdown.
@@ -88,6 +90,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |
 | `TranslationPipeline` | `translateFunc/pipeline.py` | Orchestrates the 6-stage LLM translation pipeline |
 | `CompiledRules` / `ApplyResult` | `webutils/fancy_engine.py` | Immutable compiled beautification rules plus per-file changed-path results; exposes `requires_skill_color` so resource extraction is prepared only when an enabled rule needs it |
+| `CompiledBus` / `BusApplyResult` | `webutils/bus_engine.py` | Immutable bus rules with per-ruleset directory exclusions, ordered path execution, exact quick-edit success/failure counts, and changed-path reporting |
 | `FancyRunStats` | `webutils/function_fancy.py` | Reports scanned, matched and changed files/values, elapsed time, and skill-color resource cache hits; files are rewritten atomically only when content changes |
 | `LogManager` | `globalManagers/LogManager.py` | Singleton logger: file rotation, console, webview modal callbacks |
 

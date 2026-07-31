@@ -1,20 +1,20 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-07-29 -->
+<!-- Last updated: 2026-07-31 -->
 
 ## Directory Overview
 
 | Directory | Role | Key Files |
 |-----------|------|-----------|
 | `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 15 + sections |
-| `webutils/` | Business logic layer (feature modules + beautification engine) | 32 Python files |
+| `webutils/` | Business logic layer (feature modules + beautification engines) | 33 Python files |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
 | `globalManagers/` | Cross-cutting singletons | 2 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
 | `fancy/` | User rule sets (one JSON file per ruleset) | auto-created |
-| `tests/` | Pytest test suite | 13 Python files |
+| `tests/` | Pytest test suite | 14 Python files |
 | `.githooks/` | Repository-local Git hooks | `pre-commit` |
 | `.github/workflows/` | CI/CD and repository consistency checks | `release.yml`, `check.yml`, `check-sync.yml` |
 
@@ -32,10 +32,10 @@
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core** pywebview bridge. Includes the main `LCTA_API` plus `RuleEditorAPI`, `QuickEditorAPI`, and read-only `TranslationLogViewerAPI`; spawns secondary windows and synchronizes light/dark/purple themes |
+| `app.py` | **Core** pywebview bridge. Includes the main `LCTA_API` plus `RuleEditorAPI`, `QuickEditorAPI`, and read-only `TranslationLogViewerAPI`; exposes bus-rule multi-file import, spawns secondary windows, and synchronizes light/dark/purple themes |
 | `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
 | `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器. Sidebar search input filters filenames/categories while typing and runs full-content search on Enter or the search button. File-edit tab: VSCode-style CodeMirror 6 editor with find/replace (Ctrl+F/H), match highlighting, dirty state indicator, status bar, change tracking, and smart ruleset generation. Ruleset-edit tab: simple form + advanced JSON editors for ruleset CRUD. Theme syncs with main app window (light/dark/purple) |
-| `quick-editor.html` | Standalone pywebview page for the 简易翻译编辑器. Simpler than rule-editor: sidebar file browser (categorized, searchable) + CodeMirror 6 JSON editor + bottom change list panel. Changes recorded as `{file, path, old, new}` path-patch format, saved to fixed `fancy/_quick_edits.json`. No ruleset management or regex patterns — designed for lightweight users who just want to edit translations directly |
+| `quick-editor.html` | Standalone pywebview page for the 简易翻译编辑器. Simpler than rule-editor: sidebar file browser (categorized, searchable) + CodeMirror 6 JSON editor + bottom change list panel. Changes recorded as `{file, path, old, new}`, saved with derived bus `set` rules to fixed `fancy/_quick_edits.json`, and shown read-only in the main Fancy list |
 | `translation-log-viewer.html` | Standalone read-only translation diagnostic viewer. Opens one user-selected current `schema_version: 2` JSONL dump and provides structured filters, pagination, lazy full-record details, copy, refresh, and filtered export |
 | `css/base.css` | Base styling with 3 theme definitions (light/dark/purple) and CSS custom properties |
 | `css/components.css` | Component-specific styles: cards, buttons, forms, progress bars, modals |
@@ -83,11 +83,12 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `function_manage.py` | Package management | Installed packages, mod management, symlink operations |
 | `function_clean.py` | Cache cleaner | Clean game cache files |
 | `function_fetch.py` | Proper noun scrape | Fetch proper nouns from remote sources |
-| `function_fancy.py` | Text effects orchestration | Selects enabled built-in/user v2 rulesets before compilation, prepares skill-color resources only when required, scans matching language JSON files with UTF-8 BOM support, applies compiled rules, atomically rewrites changed files only, and returns `FancyRunStats`. Also owns validated `fancy/` ruleset load/save/delete helpers |
+| `function_fancy.py` | Text effects orchestration | Selects enabled v2/bus rulesets, preserves ruleset order across both engines, prepares skill-color resources only when required, scans UTF-8-SIG language JSON, atomically rewrites final changes, and returns `FancyRunStats`. Also owns validated `fancy/` load/save/delete and shared bus/调爪 import helpers |
 | `fancy_engine.py` | Compiled v2 beautification engine | Validates and compiles file globs, structured JSON paths, AND conditions (`equals`, `in`, `contains`, `regex`) and typed actions (`replace`, `wrap`, `gradient`, `skill_color`); filters rules per file and returns exact changed paths through `ApplyResult` |
+| `bus_engine.py` | Bus replacement engine and converters | Validates `format: lcta-bus`, `version: 1`; supports glob/regex/exact file matchers, case-insensitive directory exclusions, automatic list traversal, wildcard/index/key-value selector paths, ordered literal/regex/end/safe/set operations, 调爪 conversion, and quick-edit conversion |
 | `function_translate.py` | Translation orchestration | Connects webui to translateFunc pipeline |
 | `function_translation_logs.py` | Translation diagnostics viewer backend | Reads only the user-selected `.jsonl` within its selected parent directory; v2-only indexing, cached summaries/byte offsets, filtering, pagination, lazy record reads, and filtered JSONL export |
-| `function_drop.py` | Drag-and-drop | Drag-and-drop file installation with zip/7z extraction, mod installation, update package handling via Updater |
+| `function_drop.py` | Drag-and-drop | Drag-and-drop file installation with zip/7z extraction, mod installation, update package handling via Updater, plus bus/调爪 JSON recognition and shared import into `fancy/` |
 | `function_cdn.py` | CDN optimization | Cloudflare + CloudFront CDN speed testing and optimization |
 | `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection; `is_injected()` checks self-tracked injection state |
 | `builtinFancy.py` | Built-in text rules | Built-in text beautification rules |
@@ -98,7 +99,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `Faust_fancy.py` | Faust rules | Faust character-specific fancy text rules |
 | `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`); content search counts raw text occurrences with `utf-8-sig`, so BOM and temporarily invalid JSON files remain searchable. Also provides ruleset CRUD, v2 rule validation/building, V1/V2/V3 smart analysis, 5-dimension scoring, and JSON-validated file saving with backup |
 | `rule_editor_constants.py` | Rule editor shared data | Single-source-of-truth for `FILE_PREFIX_RULES`, `CATEGORY_FILE_PATTERNS`, `COMMON_REPLACEMENTS`, `TEMPLATES`. Imported by `function_rule_editor.py` and `app.py` (RuleEditorAPI). JS fetches via `get_editor_constants()` API with hardcoded fallback. |
-| `function_quick_editor.py` | Quick editor backend | Path-patch edit tracking and application. `diff_json()` (deep JSON diff → `{path, old, new}` list), `_set_value_by_path()` (dot-separated JSON path navigation), `load/save/apply_quick_edits()` (persist to `fancy/_quick_edits.json`, apply edits to game files without .bak). Reuses `_get_lang_dir`, `get_lang_files`, `search_files`, etc. from `function_rule_editor.py` |
+| `function_quick_editor.py` | Quick editor backend | Tracks deep JSON diffs as `{file, path, old, new}`, persists edits plus derived bus `set` rules to `fancy/_quick_edits.json`, migrates legacy edits-only files in memory, and applies through `bus_engine` with per-edit path failures and atomic writes |
 | `test.py` | Debug utilities | Internal testing/debug helpers |
 | `debug_environ_test.py` | Environment diag | Environment diagnostics on startup failure |
 
@@ -189,6 +190,7 @@ webutils/function_rule_editor.py
 
 webutils/function_fancy.py
   → webutils/fancy_engine.py (compile_rulesets, apply_rules)
+  → webutils/bus_engine.py (compile_bus_ruleset, apply_bus, import conversion)
   → webutils/builtinFancyFunc.py (lazy skill-color preparation when required)
     → webutils/function_resource.py (Unity text asset extraction)
 

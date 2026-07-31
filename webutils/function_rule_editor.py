@@ -13,6 +13,7 @@ from webutils.function_fancy import (
     load_fancy_folder_rules, save_ruleset_to_folder,
     delete_ruleset_from_folder, _get_fancy_folder, _sanitize_filename,
 )
+from webutils.bus_engine import compile_bus_ruleset, is_bus_ruleset
 from webutils.fancy_engine import RuleValidationError, apply_rules, compile_rulesets
 from webutils.rule_editor_constants import FILE_PREFIX_RULES, CATEGORY_FILE_PATTERNS
 
@@ -110,7 +111,7 @@ def search_files(keyword: str, case_sensitive: bool = False) -> dict:
     return {"results_by_category": results_by_category, "total_matches": total_matches}
 
 def get_ruleset_list() -> list:
-    rulesets = load_fancy_folder_rules()
+    rulesets = [ruleset for ruleset in load_fancy_folder_rules() if ruleset.get('version') == 2]
     return [
         {"name": rs["name"], "desc": rs.get("desc", ""), "rule_count": len(rs.get("rules", []))}
         for rs in rulesets
@@ -131,10 +132,13 @@ def save_ruleset(name: str, data: dict) -> dict:
     try:
         if 'name' not in data:
             data['name'] = name
-        data['version'] = 2
-        errors = validate_rule(json.dumps(data, ensure_ascii=False)).get('errors', [])
-        if errors:
-            return {"success": False, "error": "; ".join(errors)}
+        if is_bus_ruleset(data):
+            compile_bus_ruleset(data)
+        else:
+            data['version'] = 2
+            errors = validate_rule(json.dumps(data, ensure_ascii=False)).get('errors', [])
+            if errors:
+                return {"success": False, "error": "; ".join(errors)}
         filepath = save_ruleset_to_folder(name, data)
         return {"success": True, "path": str(filepath)}
     except Exception as e:

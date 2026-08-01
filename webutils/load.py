@@ -1,6 +1,7 @@
 import winreg
 import json
 import os
+import vdf
 import zipfile
 from shutil import rmtree, copytree,copyfile
 import time
@@ -20,17 +21,39 @@ def find_lcb() -> Optional[str]:
         winreg.CloseKey(key)
         
         with open(value + '\\steamapps\\libraryfolders.vdf', 'r') as f:
-            game_path_file = f.read()
-            applist=[i.split('\"')[3].replace('\\\\','\\') for i in game_path_file.split('\n') if 'path' in i]
+            data = vdf.load(f)
+            print(json.dumps(data, indent=4))
         
-        for i in applist:
-            game_path = i + '\\steamapps\\common\\Limbus Company\\'
-            if check_game_path(game_path):
-                return game_path
+        for i in data["libraryfolders"].values():
+            if "1973530" in i["apps"]:
+                game_path = i["path"] + '\\steamapps\\common\\Limbus Company\\'
+                if check_game_path(game_path):
+                    return game_path
                 
         return None
     except Exception as e:
         _log_manager.log(f"查找游戏路径时出错: {str(e)}")
+        _log_manager.log_error(e)
+        return None
+
+def find_lcb_new() -> Optional[str]:
+    """通过注册表 Uninstall 键查找游戏安装路径（未来替代 find_lcb 的实现，目前不使用）"""
+    subkey = r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 1973530'
+    try:
+        try:
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, subkey, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+        except OSError:
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, subkey)
+        install_location, _ = winreg.QueryValueEx(key, 'InstallLocation')
+        winreg.CloseKey(key)
+        if not install_location:
+            return None
+        game_path = install_location + '\\'
+        if check_game_path(game_path):
+            return game_path
+        return None
+    except Exception as e:
+        _log_manager.log(f"通过注册表查找游戏路径时出错: {str(e)}")
         _log_manager.log_error(e)
         return None
 

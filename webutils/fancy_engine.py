@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
@@ -47,10 +48,12 @@ class CompiledRule:
     def matches_file(self, relative_path: str) -> bool:
         normalized = relative_path.replace("\\", "/")
         filename = normalized.rsplit("/", 1)[-1]
-        return any(
-            fnmatch.fnmatchcase(normalized if "/" in pattern else filename, pattern)
-            for pattern in self.files
-        )
+        for pattern in self.files:
+            normalized_pattern = pattern.replace("\\", "/")
+            target = normalized if "/" in normalized_pattern else filename
+            if fnmatch.fnmatchcase(target, normalized_pattern):
+                return True
+        return False
 
 
 @dataclass(frozen=True)
@@ -165,7 +168,7 @@ def _compile_action(action: dict, index: int) -> CompiledAction:
         return CompiledAction(type=action_type, prefix=prefix, suffix=suffix)
     if action_type == "gradient":
         rate = action.get("rate", 2.0)
-        if not isinstance(rate, (int, float)) or rate <= 0:
+        if not isinstance(rate, (int, float)) or not math.isfinite(rate) or rate <= 0:
             raise RuleValidationError(f"actions[{index}].rate 必须是正数")
         return CompiledAction(type=action_type, rate=float(rate))
     if action_type == "skill_color":
@@ -286,7 +289,13 @@ def _condition_matches(condition: CompiledCondition, values: Iterable[Any]) -> b
         return any(value == condition.value for value in values)
     if condition.operator == "in":
         allowed = condition.value
-        return any(value in allowed for value in values)
+        for value in values:
+            try:
+                if value in allowed:
+                    return True
+            except TypeError:
+                continue
+        return False
     if condition.operator == "contains":
         return any(condition.value in value for value in values if isinstance(value, str))
     return any(condition.pattern.search(str(value)) for value in values if isinstance(value, (str, int, float, bool)))

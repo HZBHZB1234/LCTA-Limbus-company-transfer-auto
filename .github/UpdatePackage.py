@@ -103,7 +103,7 @@ def get_llc():
 
     except Exception as e:
         print(f"获取 LLC 版本失败: {e}")
-        return None
+        return None, None
 
 def get_current_week_boundary():
     """
@@ -257,16 +257,24 @@ def main():
     
     if need_update_llc or should_check_llc_mirror_flag:
         if need_update_llc:print(f"LLC版本更新: {current_llc_version} -> {new_llc_version}")
-        seven_zip_asset = last_ver.get_assets_by_extension(".7z")[0]
-        zip_asset = last_ver.get_assets_by_extension(".zip")[0]
+        if last_ver is None:
+            print("获取LLC版本失败，跳过LLC镜像更新")
+            return
+        seven_zip_asset_list = last_ver.get_assets_by_extension(".7z")
+        zip_asset_list = last_ver.get_assets_by_extension(".zip")
+        if not zip_asset_list or not seven_zip_asset_list:
+            print(f"LLC发布资产缺少.zip或.7z文件（zip: {len(zip_asset_list)}个, 7z: {len(seven_zip_asset_list)}个），跳过LLC镜像更新")
+            return
+        seven_zip_asset = seven_zip_asset_list[0]
+        zip_asset = zip_asset_list[0]
         new_llc_download_url = {'zip':zip_asset.download_url, 
                                 'seven':seven_zip_asset.download_url}
         with open(zip_asset.name, "wb") as f:
-            r = requests.get(zip_asset.download_url)
+            r = requests.get(zip_asset.download_url, timeout=(10, 60))
             f.write(r.content)
             
         with open(seven_zip_asset.name, "wb") as f:
-            r = requests.get(seven_zip_asset.download_url)
+            r = requests.get(seven_zip_asset.download_url, timeout=(10, 60))
             f.write(r.content)
         
         file_transfer = UpFileClient()

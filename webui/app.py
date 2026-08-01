@@ -153,8 +153,9 @@ class LCTA_API():
                 self.log_error(e)
 
     def check_show(self):
-        last_version = ConfigManager().get('last_version', 'v1.0.0')
-        if last_version != os.environ["__version__"]:
+        last_version = str(ConfigManager().get('last_version', 'v1.0.0')).lstrip('vV')
+        current_version = str(os.environ["__version__"]).lstrip('vV')
+        if last_version != current_version:
             ConfigManager().set('last_version', os.environ["__version__"])
             update_note = (Path(__file__).parent / 'assets' / 'update.md').read_text(encoding='utf-8').split('\n')
             r = []
@@ -228,8 +229,9 @@ class LCTA_API():
         if file_path and len(file_path) > 0:
             selected_path = file_path[0]
             # 通过JavaScript更新页面中的输入框
-            js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
-            self._window.run_js(js_code)
+            if input_id:
+                js_code = f"document.getElementById({json.dumps(input_id, ensure_ascii=False)}).value = {json.dumps(selected_path.replace(os.sep, '/'), ensure_ascii=False)};"
+                self._window.run_js(js_code)
             self.log_ui(f"已选择文件: {selected_path}")
             return selected_path
         return None
@@ -243,8 +245,9 @@ class LCTA_API():
         if folder_path and len(folder_path) > 0:
             selected_path = folder_path[0]
             # 通过JavaScript更新页面中的输入框
-            js_code = f"document.getElementById('{input_id}').value = '{selected_path.replace(os.sep, '/')}';"
-            self._window.run_js(js_code)
+            if input_id:
+                js_code = f"document.getElementById({json.dumps(input_id, ensure_ascii=False)}).value = {json.dumps(selected_path.replace(os.sep, '/'), ensure_ascii=False)};"
+                self._window.run_js(js_code)
             self.log_ui(f"已选择文件夹: {selected_path}")
             return selected_path
         return None
@@ -262,8 +265,7 @@ class LCTA_API():
         full_message = f"{timestamp} {message}"
         
         # 通过JavaScript将日志消息发送到前端
-        escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
-        js_code = f"addLogMessage('{escaped_message}');"
+        js_code = f"addLogMessage({json.dumps(message, ensure_ascii=False)});"
         try:
             self._window.run_js(js_code)
         except:
@@ -275,8 +277,7 @@ class LCTA_API():
 
     def update_progress(self, percent, text):
         """更新进度"""
-        escaped_text = text.replace("'", "\\'")
-        js_code = f"updateProgress({percent}, '{escaped_text}');"
+        js_code = f"updateProgress({percent}, {json.dumps(text, ensure_ascii=False)});"
         try:
             self._window.run_js(js_code)
         except:
@@ -559,8 +560,13 @@ class LCTA_API():
     def move_folders(self, from_path: str, target_path: str):
         frPath = Path(from_path)
         user32 = ctypes.windll.user32
-        paths = [[str(i)[idx:] for idx, letter in enumerate(str(i)) if letter.isalpha()][0]
-                  for i in frPath.iterdir()]
+        paths = []
+        for i in frPath.iterdir():
+            path_str = str(i)
+            # 驱动器路径含盘符（splitdrive 返回非空），UNC 路径以 \\ 开头
+            if not (os.path.splitdrive(path_str)[0] or path_str.startswith('\\\\')):
+                continue
+            paths.append(path_str)
         return _move_folders(
             paths, target_path,
             hwnd=user32.FindWindowW(None, 'LCTA - 边狱公司汉化工具箱'))
@@ -655,12 +661,14 @@ class LCTA_API():
             self.log_manager.log_modal_status("下载失败", modal_id)
             return {"success": False, "message": str(e)}
 
-    def clean_cache(self, modal_id= "false", custom_files= [], clean_progress=None, clean_notice=None, clean_mods=None):
+    def clean_cache(self, modal_id= "false", custom_files=None, clean_progress=None, clean_notice=None, clean_mods=None):
         """清理缓存"""
         try:
             self.add_modal_log("开始清除缓存...", modal_id)
             
             # 如果参数未从前端传递，则从配置中获取
+            if custom_files is None:
+                custom_files = []
             if clean_progress is None:
                 clean_progress = ConfigManager().get("ui_default.clean.clean_progress", False)
             if clean_notice is None:
@@ -892,13 +900,13 @@ class LCTA_API():
         try:
             self.log(f"[{modal_id}] 状态变更{status}")
         except Exception:pass
-        escaped_status = status.replace("'", "\\'").replace("\n", "\\n")
+        escaped_status = json.dumps(status, ensure_ascii=False)
         if modal_id == 'false':
             return
         js_code = f"""
-        const modal = modalWindows.find(m => m.id === '{modal_id}');
+        const modal = modalWindows.find(m => m.id === {json.dumps(modal_id, ensure_ascii=False)});
         if (modal) {{
-            modal.setStatus('{escaped_status}');
+            modal.setStatus({escaped_status});
         }}
         """
         try:
@@ -912,14 +920,14 @@ class LCTA_API():
         try:
             self.log(f"[{modal_id}] {message}")
         except Exception:pass
-        escaped_message = message.replace("'", "\\'").replace("\n", "\\n")
+        escaped_message = json.dumps(message, ensure_ascii=False)
         if modal_id == "false":
-            self.log_ui(escaped_message)
+            self.log_ui(message)
             return
         js_code = f"""
-        const modal = modalWindows.find(m => m.id === '{modal_id}');
+        const modal = modalWindows.find(m => m.id === {json.dumps(modal_id, ensure_ascii=False)});
         if (modal) {{
-            modal.addLog('{escaped_message}');
+            modal.addLog({escaped_message});
         }}
         """
         try:
@@ -934,13 +942,13 @@ class LCTA_API():
             if log:
                 self.log(f"[{modal_id}] 进度变更至{percent}% 消息内容[{text}]")
         except Exception:pass
-        escaped_text = text.replace("'", "\\'").replace("\n", "\\n")
+        escaped_text = json.dumps(text, ensure_ascii=False)
         if modal_id == "false":
             return
         js_code = f"""
-        const modal = modalWindows.find(m => m.id === '{modal_id}');
+        const modal = modalWindows.find(m => m.id === {json.dumps(modal_id, ensure_ascii=False)});
         if (modal) {{
-            modal.updateProgress({percent}, '{escaped_text}');
+            modal.updateProgress({percent}, {escaped_text});
         }}
         """
         try:
@@ -992,15 +1000,13 @@ class LCTA_API():
         :return: 批量更新是否成功
         """
         try:
-            success_count = 0
+            if not config_updates:
+                return {"success": True, "updated": 0, "total": 0}
+            updated = ConfigManager().set_batch(config_updates)
             total_count = len(config_updates)
-            
-            for key_path, value in config_updates.items():
-                if self.update_config_value(key_path, value, create_missing=True):
-                    success_count += 1
-            
-            self.log(f"批量更新配置: 成功 {success_count}/{total_count} 项")
-            return {"success": True, "updated": success_count, "total": total_count}
+
+            self.log(f"批量更新配置: 成功 {updated}/{total_count} 项")
+            return {"success": True, "updated": updated, "total": total_count}
         except Exception as e:
             self.log(f"批量更新配置时出错: {e}")
             self.log_error(e)
@@ -1519,6 +1525,15 @@ class LCTA_API():
             self._rule_editor_windows = []
         self._rule_editor_windows.append(window)
 
+        def remove_window(*_args):
+            if getattr(self, '_rule_editor_windows', None):
+                try:
+                    self._rule_editor_windows.remove(window)
+                except ValueError:
+                    pass
+
+        window.events.closed += remove_window
+
     def sync_theme_to_rule_editor(self, theme):
         """推送主题变更到所有打开的规则编辑器窗口"""
         for w in getattr(self, '_rule_editor_windows', []):
@@ -1557,6 +1572,15 @@ class LCTA_API():
         if not hasattr(self, '_quick_editor_windows'):
             self._quick_editor_windows = []
         self._quick_editor_windows.append(window)
+
+        def remove_window(*_args):
+            if getattr(self, '_quick_editor_windows', None):
+                try:
+                    self._quick_editor_windows.remove(window)
+                except ValueError:
+                    pass
+
+        window.events.closed += remove_window
 
     def sync_theme_to_quick_editor(self, theme):
         """推送主题变更到所有打开的简易编辑器窗口"""

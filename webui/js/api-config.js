@@ -503,18 +503,31 @@ class APIConfigManager {
     async loadSettings() { 
         try {
             const savedSettings = configManager.getCachedValue('api_config');
+            if (!savedSettings) {
+                this.currentSettings = {};
+                return true;
+            }
             let api_settings
             if (configManager.getCachedValue('api_crypto')) {
-                api_settings = JSON.parse(await decryptText("AutoTranslate", savedSettings));
+                // 兼容"先明文保存、后勾选加密但未重新保存"的迁移场景：
+                // 内容可直接解析为明文JSON时按明文使用，避免误入解密分支
+                // （密文为Base64，不可能通过JSON.parse；明文JSON不可能通过atob）
+                try {
+                    api_settings = JSON.parse(savedSettings);
+                }
+                catch (parseError) {
+                    api_settings = JSON.parse(await decryptText("AutoTranslate", savedSettings));
+                }
             }
             else {
                 api_settings = JSON.parse(savedSettings);
             };
             this.currentSettings = api_settings;
+            return true;
         } catch (error) {
             console.error('加载设置失败:', error);
-            addLogMessage('加载api设置时发生错误，清空api设置');
-            this.updateSettings();
+            addLogMessage('配置解密失败，已保留原数据');
+            showMessage('错误', 'API配置解密失败，已保留原数据。请检查"加密存储API配置"开关是否与上次保存时一致，如需修改请重新保存配置。');
             return false;
         }
     }

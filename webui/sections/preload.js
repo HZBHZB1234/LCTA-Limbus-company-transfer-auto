@@ -122,7 +122,6 @@ function onSectionLoaded(name) {
         case 'speed':
             console.log('[LCTA] Init section: speed');
             if (typeof speedPage !== 'undefined' && speedPage) {
-                speedPage._initDomRefs();
                 speedPage.init();
             }
             break;

@@ -8,6 +8,7 @@ class SpeedPage {
         this.pollInterval = 2000; // 状态轮询间隔（毫秒）
         this._injected = false;   // 缓存注入状态，供 toggle 按钮判断
         this._running = false;    // 缓存游戏运行状态
+        this._eventsBound = false; // 事件是否已绑定，防止重复 init 时叠加监听
         this._initDomRefs();
     }
 
@@ -36,6 +37,9 @@ class SpeedPage {
     }
 
     async init() {
+        // 每次进入页面都刷新 DOM 引用（section 懒加载后构造函数中的引用可能为 null）
+        this._initDomRefs();
+
         // 检查免责声明
         try {
             const accepted = await pywebview.api.get_config_value('speed.disclaimer_accepted', false);
@@ -82,6 +86,10 @@ class SpeedPage {
     }
 
     _bindEvents() {
+        // 幂等保护：init() 会在每次进入页面时被调用，事件只绑定一次
+        if (this._eventsBound) return;
+        this._eventsBound = true;
+
         // 滑块 ↔ 输入框双向绑定
         if (this.speedSlider && this.speedInput) {
             this.speedSlider.addEventListener('input', () => {

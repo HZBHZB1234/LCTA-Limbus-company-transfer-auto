@@ -4,7 +4,6 @@ import logging
 import os
 import tempfile
 import time
-from copy import deepcopy
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -92,27 +91,6 @@ def _compile_mixed_rulesets(rulesets: list) -> tuple[_CompiledRuleset, ...]:
     return tuple(compiled)
 
 
-def _count_changed_values(original, current) -> int:
-    if type(original) is not type(current):
-        return 1
-    if isinstance(original, dict):
-        count = 0
-        for key in original.keys() | current.keys():
-            if key not in original or key not in current:
-                count += 1
-            else:
-                count += _count_changed_values(original[key], current[key])
-        return count
-    if isinstance(original, list):
-        common_length = min(len(original), len(current))
-        count = sum(
-            _count_changed_values(original[index], current[index])
-            for index in range(common_length)
-        )
-        return count + abs(len(original) - len(current))
-    return int(original != current)
-
-
 def fancy_main(
     game_path: str,
     package_name: str,
@@ -134,6 +112,7 @@ def fancy_main(
     ):
         from webutils.builtinFancyFunc import skillColorHandler
 
+        skillColorHandler.last_cache_hit = False
         skillColorHandler.prepare()
         resource_cache_hit = skillColorHandler.last_cache_hit
 
@@ -159,14 +138,15 @@ def fancy_main(
         files_matched += 1
         try:
             data = json.loads(file.read_text(encoding='utf-8-sig'))
-            original_data = deepcopy(data)
+            file_changed_paths: set[tuple] = set()
             for kind, matched_rules in matched_entries:
                 if kind == "v2":
-                    result: ApplyResult = apply_rules(data, matched_rules)
-                    data = result.data
+                    result = apply_rules(data, matched_rules)
                 else:
-                    data = apply_bus(data, matched_rules, relative_path).data
-            changed_count = _count_changed_values(original_data, data)
+                    result = apply_bus(data, matched_rules, relative_path)
+                data = result.data
+                file_changed_paths.update(result.changed_paths)
+            changed_count = len(file_changed_paths)
             if changed_count:
                 _write_json_atomic(file, data)
                 files_changed += 1
@@ -216,7 +196,7 @@ def load_fancy_folder_rules(fancy_dir: str = None) -> list:
     rulesets = []
     for f in sorted(folder.glob('*.json')):
         try:
-            content = f.read_text(encoding='utf-8')
+            content = f.read_text(encoding='utf-8-sig')
             data = json.loads(content)
             if (
                 f.name == '_quick_edits.json'

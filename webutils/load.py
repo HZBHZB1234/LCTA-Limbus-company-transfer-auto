@@ -1,7 +1,6 @@
 import winreg
 import json
 import os
-import vdf
 import zipfile
 from shutil import rmtree, copytree,copyfile
 import time
@@ -16,19 +15,25 @@ _log_manager = LogManager()
 def find_lcb() -> Optional[str]:
     """查找游戏安装路径"""
     try:
+        import vdf
+    except ImportError:
+        _log_manager.log("未安装 vdf 库，无法解析 libraryfolders.vdf，跳过 Steam 库查找")
+        return None
+    try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'SOFTWARE\Valve\Steam')
         value, value_type = winreg.QueryValueEx(key, 'SteamPath')
         winreg.CloseKey(key)
         
-        with open(value + '\\steamapps\\libraryfolders.vdf', 'r') as f:
+        with open(value + '\\steamapps\\libraryfolders.vdf', 'r', encoding='utf-8') as f:
             data = vdf.load(f)
-            print(json.dumps(data, indent=4))
         
         for i in data["libraryfolders"].values():
-            if "1973530" in i["apps"]:
-                game_path = i["path"] + '\\steamapps\\common\\Limbus Company\\'
+            if "1973530" in i.get("apps", {}):
+                game_path = i.get("path", "") + '\\steamapps\\common\\Limbus Company\\'
                 if check_game_path(game_path):
                     return game_path
+                # 命中但路径无效，继续检查其余库文件夹
+                continue
                 
         return None
     except Exception as e:

@@ -1,4 +1,5 @@
 import os
+import re
 import zipfile
 import shutil
 import subprocess
@@ -52,18 +53,23 @@ class Updater:
             _log_manager.log_modal_process(f"获取最新版本失败: {e}", self.modal_id)
             return None
     
+    @staticmethod
+    def _version_tuple(version: str) -> tuple:
+        """将版本号转换为整数元组用于逐段比较，容错 v 前缀与带后缀的段（取段首连续数字）"""
+        version = version.lstrip('v')
+        parts = []
+        for seg in version.split('.'):
+            m = re.match(r'\d+', seg)
+            parts.append(int(m.group()) if m else 0)
+        return tuple(parts)
+
     def compare_versions(self, current_version: str, latest_version: str) -> bool:
         """比较版本号，判断是否有新版本"""
         try:
-            # 去掉版本号前缀 v
-            current = current_version.lstrip('v')
-            latest = latest_version.lstrip('v')
-
-            current = current.replace('.', '')
-            latest = latest.replace('.', '')
-            
+            current = self._version_tuple(current_version)
+            latest = self._version_tuple(latest_version)
             with suppress(Exception):
-                return int(latest) > int(current)
+                return latest > current
             return True
         except:
             return False
@@ -138,7 +144,7 @@ class Updater:
                     _log_manager.log_modal_process(f"卸载依赖错误: {e}", self.modal_id)
                     _log_manager.log(f"退出码: {e.returncode}，错误输出{e.stderr}")
                     _log_manager.log_modal_process(f"退出码: {e.returncode}，错误输出{e.stderr}", self.modal_id)
-                return True
+            return True
         except Exception as e:
             _log_manager.log(f"安装依赖失败: {e}")
             _log_manager.log_modal_process(f"安装依赖失败: {e}", self.modal_id)

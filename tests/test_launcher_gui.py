@@ -6,7 +6,9 @@
 """
 
 import logging
+import os
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -664,3 +666,269 @@ class TestVisiblePhaseGameRunning:
         for ph in [PHASE_CHECK_UPDATE, PHASE_CDN, PHASE_PREPARE_MOD]:
             lbl = mock_safe_window._phase_labels[ph]
             assert "\u25cb" in lbl.Text
+
+
+# ═══════════════════════════════════════════════════════════════════
+# webui/app.py LCTA_API 修复回归测试
+# ═══════════════════════════════════════════════════════════════════
+
+class _EventHolder:
+    """模拟 pywebview 事件对象，支持 += 注册处理器。"""
+
+    def __init__(self):
+        self._handlers = []
+
+    def __iadd__(self, handler):
+        self._handlers.append(handler)
+        return self
+
+
+def _make_api():
+    from webui.app import LCTA_API
+
+    api = object.__new__(LCTA_API)
+    api._window = MagicMock()
+    api.log = MagicMock()
+    api.log_error = MagicMock()
+    api.log_manager = MagicMock()
+    return api
+
+
+class TestModalJsEscaping:
+    """JS 字符串拼接转义：含反斜杠/单引号的文本必须生成合法 JS 字面量。"""
+
+    def test_log_ui_escapes_backslash_and_quote(self):
+        api = _make_api()
+        api.log_ui(r"C:\tmp\new it's")
+        js = api._window.run_js.call_args[0][0]
+        assert js.startswith("addLogMessage(")
+        assert r"C:\\tmp\\new it's" in js
+
+    def test_log_ui_trailing_backslash_keeps_string_closed(self):
+        api = _make_api()
+        api.log_ui("path\\to\\")
+        js = api._window.run_js.call_args[0][0]
+        assert js.rstrip().endswith(");")
+
+    def test_add_modal_log_escapes_path(self):
+        api = _make_api()
+        api.add_modal_log(r"解压到 C:\tmp\mods", "m1")
+        js = api._window.evaluate_js.call_args[0][0]
+        assert 'modalWindows.find(m => m.id === "m1")' in js
+        assert r"C:\\tmp\\mods" in js
+
+    def test_add_modal_log_false_routes_to_log_ui_raw(self):
+        api = _make_api()
+        api.log_ui = MagicMock()
+        api.add_modal_log(r"C:\tmp\note", "false")
+        api.log_ui.assert_called_once_with(r"C:\tmp\note")
+
+    def test_set_modal_status_escapes(self):
+        api = _make_api()
+        api.set_modal_status("done\n已'完成'", "m2")
+        js = api._window.evaluate_js.call_args[0][0]
+        assert 'modal.setStatus("done\\n已\'完成\'")' in js
+
+    def test_update_modal_progress_escapes(self):
+        api = _make_api()
+        api.update_modal_progress(42, r"进度 C:\dir", "m3")
+        js = api._window.evaluate_js.call_args[0][0]
+        assert 'modal.updateProgress(42, "进度 C:\\\\dir")' in js
+
+
+class TestBrowseDialogs:
+    """browse_file/browse_folder 的 JS 注入与空 input_id 防御。"""
+
+    def _set_picked(self, api, picked):
+        api._window.create_file_dialog.return_value = [picked]
+        api.log_ui = MagicMock()
+
+    def test_browse_file_empty_input_id_returns_path_without_js(self):
+        api = _make_api()
+        self._set_picked(api, r"C:\O'Brien\update.zip")
+        result = api.browse_file("")
+        assert result == r"C:\O'Brien\update.zip"
+        api._window.run_js.assert_not_called()
+
+    def test_browse_file_injects_json_quoted_path(self):
+        api = _make_api()
+        self._set_picked(api, r"C:\O'Brien\file.txt")
+        api.browse_file("input-id")
+        js = api._window.run_js.call_args[0][0]
+        assert js.startswith('document.getElementById("input-id").value =')
+        assert r"O'Brien" in js
+
+    def test_browse_folder_empty_input_id_returns_path_without_js(self):
+        api = _make_api()
+        self._set_picked(api, r"C:\tmp\dir")
+        result = api.browse_folder("")
+        assert result == r"C:\tmp\dir"
+        api._window.run_js.assert_not_called()
+
+    def test_browse_cancelled_returns_none(self):
+        api = _make_api()
+        api._window.create_file_dialog.return_value = None
+        assert api.browse_file("x") is None
+        assert api.browse_folder("x") is None
+
+
+class TestCleanCache:
+    """clean_cache 可变默认参数修复：custom_files 不得跨调用累积。"""
+
+    @patch("webui.app.clean_config_main")
+    def test_custom_files_not_shared_across_calls(self, mock_clean):
+        api = _make_api()
+        api.add_modal_log = MagicMock()
+        api.clean_cache(modal_id="m", clean_mods=True)
+        api.clean_cache(modal_id="m", clean_mods=True)
+        assert mock_clean.call_count == 2
+        first = mock_clean.call_args_list[0].kwargs["custom_files"]
+        second = mock_clean.call_args_list[1].kwargs["custom_files"]
+        assert len(first) == 1
+        assert len(second) == 1
+        assert first is not second
+
+    @patch("webui.app.clean_config_main")
+    def test_clean_cache_no_mods_passes_empty_list(self, mock_clean):
+        api = _make_api()
+        api.add_modal_log = MagicMock()
+        api.clean_cache(modal_id="m", clean_mods=False)
+        assert mock_clean.call_args.kwargs["custom_files"] == []
+
+
+class TestMoveFolders:
+    """move_folders 盘符提取：UNC 不截断、无字母目录名不崩溃。"""
+
+    @patch("webui.app.ctypes.windll.user32", create=True)
+    @patch("webui.app._move_folders")
+    def test_drive_paths_preserved_and_no_letter_dir_safe(self, mock_move, fake_user32):
+        import tempfile
+
+        fake_user32.FindWindowW.return_value = 0
+        api = _make_api()
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "sub1").mkdir()
+            (Path(tmp) / "123").mkdir()
+            api.move_folders(tmp, r"C:\dst")
+        sources = mock_move.call_args.args[0]
+        assert len(sources) == 2
+        assert all(os.path.isabs(s) for s in sources)
+        assert mock_move.call_args.args[1] == r"C:\dst"
+
+    @patch("webui.app.ctypes.windll.user32", create=True)
+    @patch("webui.app._move_folders")
+    def test_unc_paths_not_truncated(self, mock_move, fake_user32):
+        import webui.app as app_mod
+
+        fake_user32.FindWindowW.return_value = 0
+        real_path = Path
+        unc_children = [r"\\server\share\base\mods", r"\\server\share\base\123"]
+
+        class _FakePath:
+            def iterdir(self):
+                return iter(unc_children)
+
+        with patch.object(app_mod, "Path",
+                          side_effect=lambda p: _FakePath() if p == r"\\server\share\base" else real_path(p)):
+            api = _make_api()
+            api.move_folders(r"\\server\share\base", r"C:\dst")
+        sources = mock_move.call_args.args[0]
+        assert sources == unc_children
+
+
+class TestUpdateConfigBatch:
+    """update_config_batch 应一次批量写入，避免逐项全量写盘。"""
+
+    @patch("webui.app.ConfigManager")
+    def test_uses_set_batch_once(self, mock_cm):
+        api = _make_api()
+        instance = mock_cm.return_value
+        instance.set_batch.return_value = 3
+        updates = {"a.b": 1, "c": 2, "d.e": 3}
+        result = api.update_config_batch(updates)
+        instance.set_batch.assert_called_once_with(updates)
+        instance.set.assert_not_called()
+        assert result == {"success": True, "updated": 3, "total": 3}
+
+    @patch("webui.app.ConfigManager")
+    def test_empty_updates_skip_write(self, mock_cm):
+        api = _make_api()
+        result = api.update_config_batch({})
+        mock_cm.return_value.set_batch.assert_not_called()
+        assert result == {"success": True, "updated": 0, "total": 0}
+
+
+class TestCheckShow:
+    """check_show 版本号归一化：'v5.0.0' 与 '5.0.0' 视为相同，避免首启误弹。"""
+
+    @patch("webui.app.ConfigManager")
+    @patch.dict(os.environ, {"__version__": "5.0.0"}, clear=False)
+    def test_v_prefixed_last_version_does_not_show_update(self, mock_cm):
+        api = _make_api()
+        instance = mock_cm.return_value
+        instance.get.return_value = "v5.0.0"
+        result = api.check_show()
+        assert result == {"show": False}
+        instance.set.assert_not_called()
+
+    @patch("webui.app.ConfigManager")
+    @patch.dict(os.environ, {"__version__": "5.0.0"}, clear=False)
+    def test_older_version_shows_update(self, mock_cm):
+        api = _make_api()
+        instance = mock_cm.return_value
+        instance.get.return_value = "v4.9.0"
+        result = api.check_show()
+        assert result["show"] is True
+        instance.set.assert_called_once_with("last_version", "5.0.0")
+
+
+class TestEditorWindowsCleanup:
+    """编辑器窗口 closed 后应从句柄列表移除。"""
+
+    def _open_rule_editor(self, api, window):
+        import webui.app as app_mod
+
+        with patch.object(app_mod.webview, "create_window", return_value=window), \
+             patch.object(app_mod.ConfigManager, "get", return_value="light"), \
+             patch.dict(os.environ, {"path_": str(Path(__file__).parent.parent)}, clear=False):
+            api.open_rule_editor()
+        return window.events.closed._handlers
+
+    def test_rule_editor_window_removed_on_closed(self):
+        from webui.app import LCTA_API
+
+        api = _make_api()
+        window = MagicMock()
+        window.events.closed = _EventHolder()
+        self._open_rule_editor(api, window)
+        assert api._rule_editor_windows == [window]
+        self._open_rule_editor(api, MagicMock(events=MagicMock(closed=_EventHolder())))
+        assert len(api._rule_editor_windows) == 2
+        handlers = window.events.closed._handlers
+        assert handlers
+        handlers[0]()
+        assert len(api._rule_editor_windows) == 1
+
+    def test_quick_editor_window_removed_on_closed(self):
+        api = _make_api()
+        window = MagicMock()
+        window.events.closed = _EventHolder()
+        import webui.app as app_mod
+
+        with patch.object(app_mod.webview, "create_window", return_value=window), \
+             patch.object(app_mod.ConfigManager, "get", return_value="light"), \
+             patch.dict(os.environ, {"path_": str(Path(__file__).parent.parent)}, clear=False):
+            api.open_quick_editor()
+        assert api._quick_editor_windows == [window]
+        window.events.closed._handlers[0]()
+        assert api._quick_editor_windows == []
+
+    def test_sync_theme_skips_closed_windows(self):
+        api = _make_api()
+        window = MagicMock()
+        window.events.closed = _EventHolder()
+        self._open_rule_editor(api, window)
+        window.events.closed._handlers[0]()
+        window.evaluate_js.reset_mock()
+        api.sync_theme_to_rule_editor("dark")
+        window.evaluate_js.assert_not_called()

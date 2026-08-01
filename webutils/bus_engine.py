@@ -131,9 +131,12 @@ def is_tiaozhua_config(data: Any) -> bool:
         return False
     if "version" in data or "edits" in data:
         return False
+    rules = data["rules"]
+    if not rules:
+        return False
     return all(
         isinstance(rule, dict) and "action" in rule
-        for rule in data["rules"]
+        for rule in rules
     )
 
 
@@ -176,7 +179,7 @@ def parse_bus_path(path: str) -> tuple[BusToken, ...]:
 
 def _compile_file_matcher(value: Any, field_name: str) -> CompiledFileMatcher:
     if isinstance(value, str) and value:
-        return CompiledFileMatcher(kind="glob", value=value)
+        return CompiledFileMatcher(kind="glob", value=value.replace("\\", "/"))
     if not isinstance(value, dict):
         raise RuleValidationError(f"{field_name} 必须是非空 glob 字符串或匹配对象")
     if isinstance(value.get("exact"), str) and value["exact"]:
@@ -369,6 +372,61 @@ def _iter_string_leaf_paths(data: Any) -> tuple[JsonPath, ...]:
     return tuple(paths)
 
 
+class _PathResolver:
+    def __init__(self, data: Any):
+        self._data = data
+        self._resolve_cache: dict[
+            tuple[tuple[BusToken, ...], bool],
+            tuple[JsonPath, ...],
+        ] = {}
+        self._leaf_cache: Optional[tuple[JsonPath, ...]] = None
+        self._structure_changed = False
+
+    def _invalidate(self) -> None:
+        self._resolve_cache.clear()
+        self._leaf_cache = None
+
+    def resolve(
+        self,
+        tokens: tuple[BusToken, ...],
+        *,
+        allow_missing_final: bool,
+    ) -> tuple[JsonPath, ...]:
+        if self._structure_changed:
+            self._structure_changed = False
+            self._invalidate()
+        cache_key = (tokens, allow_missing_final)
+        cached = self._resolve_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        result = _resolve_paths(
+            self._data,
+            tokens,
+            allow_missing_final=allow_missing_final,
+        )
+        self._resolve_cache[cache_key] = result
+        return result
+
+    def string_leaf_paths(self) -> tuple[JsonPath, ...]:
+        if self._structure_changed:
+            self._structure_changed = False
+            self._invalidate()
+        if self._leaf_cache is None:
+            self._leaf_cache = _iter_string_leaf_paths(self._data)
+        return self._leaf_cache
+
+    def note_structural_change(self) -> None:
+        self._structure_changed = True
+
+
+def _is_structural_change(old_value: Any, new_value: Any) -> bool:
+    return (
+        old_value is MISSING
+        or isinstance(old_value, (dict, list))
+        or isinstance(new_value, (dict, list))
+    )
+
+
 def _safe_replace(text: str, old: str, new: str) -> str:
     if not old:
         return text.replace(old, new)
@@ -419,13 +477,14 @@ def apply_bus(data: Any, compiled: CompiledBus, relative_path: str) -> BusApplyR
     matched_rules = 0
     failed_rules = 0
     errors: list[str] = []
+    resolver = _PathResolver(data)
 
     for rule in rules:
         allow_missing_final = any(item.kind == "set" for item in rule.replacements)
         target_paths = (
-            _iter_string_leaf_paths(data)
+            resolver.string_leaf_paths()
             if rule.all_string_leaves
-            else _resolve_paths(data, rule.path, allow_missing_final=allow_missing_final)
+            else resolver.resolve(rule.path, allow_missing_final=allow_missing_final)
         )
         if not target_paths:
             if rule.required:
@@ -441,6 +500,8 @@ def apply_bus(data: Any, compiled: CompiledBus, relative_path: str) -> BusApplyR
             if target_path not in original_values:
                 original_values[target_path] = old_value
             data = _set_value(data, target_path, new_value)
+            if _is_structural_change(old_value, new_value):
+                resolver.note_structural_change()
             if target_path not in changed_seen:
                 changed_seen.add(target_path)
                 changed_paths.append(target_path)

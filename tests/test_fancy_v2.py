@@ -3,7 +3,7 @@ from pathlib import Path
 
 import webutils.function_rule_editor as rule_editor
 from webutils.builtinFancyFunc import SkillColorHandler
-from webutils.function_fancy import fancy_main
+from webutils.function_fancy import fancy_main, load_fancy_folder_rules
 from webutils.function_rule_editor import (
     apply_ruleset_to_content,
     build_rule_from_form,
@@ -135,6 +135,54 @@ def test_fancy_main_only_prepares_skill_cache_for_enabled_rulesets(monkeypatch, 
         {"skill-cache": True, "plain": False},
     )
     assert calls["count"] == 1
+
+
+def test_load_fancy_folder_rules_accepts_bom(tmp_path):
+    ruleset = make_ruleset({
+        "files": ["*.json"],
+        "scope": "",
+        "targets": ["name"],
+        "where": [],
+        "actions": [{"type": "replace", "mode": "literal", "from": "A", "to": "B"}],
+    })
+    ruleset["name"] = "bom-rules"
+    (tmp_path / "bom_rules.json").write_text(
+        json.dumps(ruleset, ensure_ascii=False),
+        encoding="utf-8-sig",
+    )
+    (tmp_path / "plain_rules.json").write_text(
+        json.dumps(ruleset, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    loaded = load_fancy_folder_rules(str(tmp_path))
+
+    assert [r["name"] for r in loaded] == ["bom-rules", "bom-rules"]
+
+
+def test_fancy_main_resets_stale_cache_hit_on_ready_shortcut(tmp_path):
+    package_dir = tmp_path / "LimbusCompany_Data" / "lang" / "LLC_zh-CN"
+    package_dir.mkdir(parents=True)
+    skill_ruleset = {
+        "version": 2,
+        "name": "skill-cache",
+        "rules": [{
+            "files": ["Skill*.json"],
+            "scope": "dataList[*]",
+            "targets": ["name"],
+            "where": [],
+            "actions": [{"type": "skill_color", "idPath": "id"}],
+        }],
+    }
+    from webutils.builtinFancyFunc import skillColorHandler
+
+    skillColorHandler.state = "ready"
+    skillColorHandler.last_cache_hit = True
+    try:
+        stats = fancy_main(str(tmp_path), "LLC_zh-CN", [skill_ruleset])
+        assert stats.resource_cache_hit is False
+    finally:
+        skillColorHandler.reset()
 
 
 def test_rule_editor_searches_bom_and_unparseable_file_content(monkeypatch, tmp_path):

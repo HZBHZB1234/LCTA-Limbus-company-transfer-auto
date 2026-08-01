@@ -849,6 +849,26 @@ function autoCheckUpdates() {
 // 添加一个变量来跟踪是否已经显示了更新窗口
 let updateModalShown = false;
 
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function sanitizeHtml(html) {
+    const template = document.createElement('div');
+    template.innerHTML = html;
+    template.querySelectorAll('script, iframe, object, embed, link, style, meta, form').forEach(el => el.remove());
+    template.querySelectorAll('*').forEach(el => {
+        Array.from(el.attributes).forEach(attr => {
+            if (attr.name.toLowerCase().startsWith('on')) {
+                el.removeAttribute(attr.name);
+            }
+        });
+    });
+    return template.innerHTML;
+}
+
 function doUpdate() {
             this.close();
             const progressModal = new ProgressModal('更新程序');
@@ -883,12 +903,12 @@ async function showUpdateInfo(update_info) {
     htmlMessage += `<p><strong>当前版本:</strong> v5.0.0</p>`;
     
     if (update_info.title) {
-        htmlMessage += `<p><strong>发布标题:</strong> ${update_info.title}</p>`;
+        htmlMessage += `<p><strong>发布标题:</strong> ${escapeHtml(update_info.title)}</p>`;
     }
     
     if (update_info.body) {
         let body = update_info.body.trim();
-        const bodyHtml = simpleMarkdownToHtml(body);
+        const bodyHtml = sanitizeHtml(simpleMarkdownToHtml(body));
         htmlMessage += `<div><strong>更新详情:</strong></div>`;
         htmlMessage += `<div class="markdown-body" id="update-markdown">${bodyHtml}</div>`;
     }
@@ -899,7 +919,7 @@ async function showUpdateInfo(update_info) {
     }
     
     if (update_info.html_url) {
-        htmlMessage += `<p><strong>发布页面:</strong> <a href="${update_info.html_url}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
+        htmlMessage += `<p><strong>发布页面:</strong> <a href="${escapeHtml(update_info.html_url)}" target="_blank" style="color: var(--color-primary); text-decoration: underline;">点击这里在浏览器中查看</a></p>`;
     }
     
     const modal = showConfirm(
@@ -1233,7 +1253,7 @@ async function refreshDashboard() {
             pywebview.api.get_config_batch([
                 'auto_check_update',
                 'game_path',
-                'launcher_work_update'
+                'launcher.work.update'
             ]).catch(() => null)
         ]);
 
@@ -1255,7 +1275,7 @@ async function refreshDashboard() {
         // === 启动器配置状态 ===
         if (launcherEl && launcherCard) {
             const configValues = configBatch && configBatch.success ? configBatch.config_values : {};
-            const launcherMode = configValues['launcher_work_update'];
+            const launcherMode = configValues['launcher.work.update'];
             const gamePath = configValues['game_path'];
             if (launcherMode && launcherMode !== 'no') {
                 launcherEl.textContent = '已配置（' + launcherMode + '）';

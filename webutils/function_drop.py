@@ -8,7 +8,8 @@ import zipfile
 
 from .function_install import install_translation_package
 from .function_fancy import import_bus_rules_file
-from .function_manage import get_mod_path
+from .function_manage import get_mod_path, safe_join_path
+from .function_clean import _sanitize_zip_member_name
 from .functions import extract_zip_smartly, decompress_7z
 from .update import Updater
 from .bus_engine import is_bus_ruleset, is_tiaozhua_config
@@ -39,6 +40,93 @@ NAMEREFER = {
     'busimport': '巴士替换规则配置',
 }
 
+def _is_full_pkg_items(items):
+    """判断条目集合是否符合汉化包结构（FOLDERLIST 特征全部出现）"""
+    return all(any(folder in item for item in items) for folder in FOLDERLIST)
+
+def _unwrap_dir(folder_path):
+    """剥开单根目录包裹：顶层仅一个目录（可有零散文件）且该目录内含汉化包特征时，
+    返回该目录作为包根；否则返回原路径。"""
+    items = os.listdir(folder_path)
+    dirs = [i for i in items if os.path.isdir(os.path.join(folder_path, i))]
+    if len(dirs) != 1:
+        return folder_path
+    only_path = os.path.join(folder_path, dirs[0])
+    if not _is_full_pkg_items(os.listdir(only_path)):
+        return folder_path
+    return only_path
+
+def _zip_top_items(namelist):
+    """返回 (顶层条目, 包条目)。顶层仅一个目录条目（可有零散文件）时，
+    包条目取其下一层，以识别单根目录包裹结构。"""
+    top_names = set()
+    dir_tops = set()
+    for name in namelist:
+        clean = name.replace('\\', '/').rstrip('/')
+        parts = clean.split('/')
+        top = parts[0] if parts else ''
+        if top:
+            top_names.add(top)
+        if len(parts) >= 2 and top:
+            dir_tops.add(top)
+    if len(dir_tops) != 1:
+        return top_names, top_names
+    only = next(iter(dir_tops))
+    prefix = only + '/'
+    sub_names = set()
+    for name in namelist:
+        clean = name.replace('\\', '/').rstrip('/')
+        if clean.startswith(prefix):
+            rest = clean[len(prefix):]
+            if rest:
+                sub_names.add(rest.split('/')[0])
+    if not sub_names:
+        return top_names, top_names
+    return top_names, sub_names
+
+def _validate_zip_members(zip_path):
+    """校验 zip 成员名安全性，拒绝含 `..` 段、绝对路径或盘符的成员，防止路径穿越"""
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        for info in zip_ref.infolist():
+            _sanitize_zip_member_name(info.filename)
+
+def _zip_extract_root(zip_path):
+    """返回 zip 按 extract_zip_smartly 解压后的实际根名（用于预删除对齐）。
+    单根目录返回该根名，多根目录返回 zip 文件名（不含扩展名）。"""
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        root_items = set()
+        for info in zip_ref.infolist():
+            _sanitize_zip_member_name(info.filename)
+            root_item = (info.filename.split('/')[0]
+                         if '/' in info.filename else info.filename)
+            if root_item:
+                root_items.add(root_item)
+        if not root_items:
+            return None
+    if len(root_items) == 1:
+        return next(iter(root_items))
+    return Path(zip_path).stem
+
+def _remove_existing(path):
+    """删除已存在的目标文件/文件夹（遵循项目惯例）"""
+    if os.path.exists(path):
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+
+def _collect_package_dirs(root_dir):
+    """收集 7z 解压目录中的汉化包根目录列表。
+    单根目录包裹时剥开包裹层；多顶层条目时仅目录项作为包根（文件项不构成汉化包结构，跳过）。"""
+    items = sorted(os.listdir(root_dir))
+    dirs = [os.path.join(root_dir, i) for i in items
+            if os.path.isdir(os.path.join(root_dir, i))]
+    if len(dirs) == 1:
+        inner = dirs[0]
+        if _is_full_pkg_items(os.listdir(inner)):
+            return [inner]
+    return dirs
+
 def evalZip(zip_path):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         namelist = zip_ref.namelist()
@@ -47,13 +135,8 @@ def evalZip(zip_path):
         notJsonAmount = len(notJson)
         hasFont = any('Font' in name for name in notJson)
 
-        top_names = set()
-        for name in namelist:
-            clean = name.replace('\\', '/').rstrip('/')
-            top = clean.split('/')[0]
-            if top:
-                top_names.add(top)
-        if all(any(folder in top for top in top_names) for folder in FOLDERLIST) and amount > 1500:
+        top_names, pkg_names = _zip_top_items(namelist)
+        if _is_full_pkg_items(pkg_names) and amount > 1500:
             if hasFont:
                 return 'full'
             return 'nofont'
@@ -66,9 +149,12 @@ def evalZip(zip_path):
         return 'invalid'
         
 def evalFolder(folder_path):
+    root = _unwrap_dir(folder_path)
     items = os.listdir(folder_path)
-    hasFont = any('Font' in item for item in items)
-    if all(any(folder in item for item in items) for folder in FOLDERLIST):
+    root_items = items if root == folder_path else os.listdir(root)
+
+    hasFont = any('Font' in item for item in root_items)
+    if _is_full_pkg_items(root_items):
         if hasFont:
             return 'full'
         return 'nofont'
@@ -76,7 +162,7 @@ def evalFolder(folder_path):
         return 'FLmod'
     if len(items) >= 3:
         return 'jsononly'
-    
+
     return 'invalid'
 
 def eval7zip(file_path):
@@ -199,12 +285,12 @@ def evalFiles(files_data, modal_id="false"):
                         _log_manager.log_modal_process(f"正在解压7z文件: {file_name}", modal_id)
                         if not decompress_7z(file_path, tmp_dir):
                             raise RuntimeError(f"7z解压失败: {file_name}")
-                        items = os.listdir(tmp_dir)
-                        if not items:
-                            raise RuntimeError(f"7z文件为空: {file_name}")
-                        package_dir = os.path.join(tmp_dir, items[0])
-                        install_translation_package(
-                            package_dir, game_path, modal_id=modal_id)
+                        package_dirs = _collect_package_dirs(tmp_dir)
+                        if not package_dirs:
+                            raise RuntimeError(f"7z解压后未找到有效的汉化包目录: {file_name}")
+                        for package_dir in package_dirs:
+                            install_translation_package(
+                                package_dir, game_path, modal_id=modal_id)
                     finally:
                         shutil.rmtree(tmp_dir, ignore_errors=True)
                 else:
@@ -221,21 +307,15 @@ def evalFiles(files_data, modal_id="false"):
                     f"安装模组 ({idx+1}/{total}): {file_name}",
                     modal_id)
 
-                target_name = (Path(file_path).stem
-                               if file_path.endswith('.zip')
-                               else Path(file_path).name)
-                target_path = os.path.join(str(mod_path), target_name)
-
-                # 覆盖前删除已有目标 (遵循项目惯例)
-                if os.path.exists(target_path):
-                    if os.path.isdir(target_path):
-                        shutil.rmtree(target_path)
-                    else:
-                        os.remove(target_path)
-
                 if file_path.endswith('.zip'):
+                    target_name = _zip_extract_root(file_path)
+                    if target_name:
+                        # 覆盖前删除已有目标，与实际解压位置保持一致 (遵循项目惯例)
+                        _remove_existing(safe_join_path(str(mod_path), target_name))
                     extract_zip_smartly(file_path, str(mod_path))
                 else:
+                    target_path = safe_join_path(str(mod_path), Path(file_path).name)
+                    _remove_existing(target_path)
                     shutil.copytree(file_path, target_path)
 
                 results["modded"] += 1
@@ -265,19 +345,13 @@ def evalFiles(files_data, modal_id="false"):
                     modal_id)
 
                 if file_path.endswith('.zip'):
-                    target_name = Path(file_path).stem
-                    target_path = os.path.join(str(mod_path), target_name)
-                    if os.path.exists(target_path):
-                        if os.path.isdir(target_path):
-                            shutil.rmtree(target_path)
-                        else:
-                            os.remove(target_path)
+                    target_name = _zip_extract_root(file_path)
+                    if target_name:
+                        _remove_existing(safe_join_path(str(mod_path), target_name))
                     extract_zip_smartly(file_path, str(mod_path))
                 else:
-                    target_name = Path(file_path).name
-                    target_path = os.path.join(str(mod_path), target_name)
-                    if os.path.exists(target_path) and os.path.isdir(target_path):
-                        shutil.rmtree(target_path)
+                    target_path = safe_join_path(str(mod_path), Path(file_path).name)
+                    _remove_existing(target_path)
                     shutil.copytree(file_path, target_path)
 
                 results["modded"] += 1
@@ -323,6 +397,7 @@ def evalFiles(files_data, modal_id="false"):
 
                 tmp_dir = tempfile.mkdtemp()
                 try:
+                    _validate_zip_members(file_path)
                     with zipfile.ZipFile(file_path, 'r') as zf:
                         zf.extractall(tmp_dir)
 

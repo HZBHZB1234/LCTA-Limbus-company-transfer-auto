@@ -64,6 +64,7 @@ FINALIST_COUNT = 5
 FINAL_ATTEMPTS = 3
 REQUIRED_FINAL_SUCCESSES = 2
 CLOUDFRONT_OVERALL_TIMEOUT = 45  # 匹配 LLC_BABEL DefaultOverallTimeout
+CFST_OVERALL_TIMEOUT = 900       # cfst 测速总超时（秒，15 分钟），防止子进程被挂起时无限等待
 
 # ---- CloudFront 探测失败分类（对应 LLC_BABEL CloudFrontProbeFailure 枚举） ----
 # 每种失败类型都有对应的用户可读消息，方便日志诊断。
@@ -153,6 +154,7 @@ def _ensure_cfst_available(log_cb=None) -> bool:
     if log_cb:
         log_cb("CFST 文件缺失，正在自动下载...")
 
+    zip_path = os.path.join(cfst_dir, "cfst_windows_amd64.zip")
     try:
         import zipfile
         import urllib.request
@@ -169,7 +171,6 @@ def _ensure_cfst_available(log_cb=None) -> bool:
         if not os.path.isfile(cfst_exe):
             if log_cb:
                 log_cb("下载 cfst.exe...")
-            zip_path = os.path.join(cfst_dir, "cfst_windows_amd64.zip")
             urllib.request.urlretrieve(CFST_DOWNLOAD_URL, zip_path)
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extract("cfst.exe", cfst_dir)
@@ -180,6 +181,12 @@ def _ensure_cfst_available(log_cb=None) -> bool:
         return True
 
     except Exception as e:
+        # 下载中断会残留 cfst_windows_amd64.zip（常见为 0 字节），删除避免残留垃圾文件
+        try:
+            if os.path.isfile(zip_path):
+                os.remove(zip_path)
+        except Exception:
+            pass
         if log_cb:
             log_cb(f"CFST 自动下载失败：{e}")
         return False
@@ -283,8 +290,9 @@ def run_cfst(
                     buf += ch
                     last_was_cr = False
 
-        # 共享状态：daemon 线程更新当前 cfst 阶段，主循环每 1s 轮询更新进度
+        # 共享状态：daemon 线程更新当前 cfst 阶段与真实进度，主循环每 1s 轮询统一上报
         cfst_phase = ["准备中"]
+        cfst_progress = [0.0]
 
         def _process_line(raw: bytes):
             # 解码并去除 ANSI escape codes
@@ -302,15 +310,16 @@ def run_cfst(
             # 检测是否为 cfst 进度条（抑制日志噪音）
             is_progress_bar = bool(progress_bar_re.search(line))
 
-            # 上报进度
+            # 上报进度：记录真实进度（已测 IP 数/总 IP 数），由主循环统一上报，
+            # 避免与计时器兜底进度交替调用 progress_cb 导致进度条倒退
             matches = list(progress_re.finditer(line))
             if matches:
                 m = matches[-1]
                 current = int(m.group(1))
                 total = int(m.group(2))
                 pct = (current / total * 100) if total > 0 else 0
-                if progress_cb:
-                    progress_cb(pct, line)
+                if pct > cfst_progress[0]:
+                    cfst_progress[0] = pct
             elif log_cb and not is_progress_bar:
                 log_cb(line)
 
@@ -319,19 +328,32 @@ def run_cfst(
         t_stdout.start()
         t_stderr.start()
 
-        # 等待进程结束（定期检查取消 + 推送阶段级进度计时器）
+        # 等待进程结束（定期检查取消 + 推送阶段级进度计时器 + 总超时保护）
         t_phase_start = time.perf_counter()
         last_tick = t_phase_start
+        timed_out = False
         while proc.poll() is None:
             if cancel_check:
                 cancel_check()
             now = time.perf_counter()
+            # 总超时保护：cfst 被安全软件/网络问题挂起时不能无限等待，超时后强制终止
+            if now - t_phase_start >= CFST_OVERALL_TIMEOUT:
+                timed_out = True
+                if log_cb:
+                    log_cb(f"CFST 测速超过 {CFST_OVERALL_TIMEOUT // 60} 分钟总超时，已强制终止。")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+                break
             # 每秒更新一次进度文本，让用户知道程序在运行
             if progress_cb and now - last_tick >= 1.0:
                 elapsed = int(now - t_phase_start)
                 elapsed_str = f"{elapsed // 60}m{elapsed % 60:02d}s" if elapsed >= 60 else f"{elapsed}s"
-                # 进度数值缓慢递增（0→95%，每 30s 一个循环），不倒退
-                tick_pct = min(95, (elapsed % 30) * 3)
+                # 兜底进度按运行时长单调递增（0→95%，约 32s 后封顶），不回绕；
+                # 与真实进度（已测 IP 数/总 IP 数）取较大值，保证进度条始终不倒退
+                tick_pct = max(cfst_progress[0], min(95, elapsed * 3))
                 progress_cb(tick_pct, f"Cloudflare {cfst_phase[0]}中... 已运行 {elapsed_str}")
                 last_tick = now
             time.sleep(0.25)
@@ -340,6 +362,12 @@ def run_cfst(
         t_stderr.join(timeout=2)
 
         proc.wait()
+
+        # 超时终止后结果文件必然缺失，直接返回并给出明确错误信息
+        if timed_out:
+            if log_cb:
+                log_cb(f"CFST 测速超时（{CFST_OVERALL_TIMEOUT} 秒），未获得结果。")
+            return None
 
         # 解析结果 CSV
         if not os.path.isfile(out_file):

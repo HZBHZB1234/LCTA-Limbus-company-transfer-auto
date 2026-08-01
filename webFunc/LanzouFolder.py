@@ -33,7 +33,11 @@ headers = {
 }
 
 def PrepareData(url,pwd,pg=1):
-    response = requests.get(url, headers=headers)
+    try:
+        response = requests.get(url, headers=headers, timeout=(10, 30))
+    except requests.RequestException as e:
+        print("PrepareData 请求失败：%s" % e)
+        return False
     # response = requests.get(url, headers=headers,verify=False)
     # script_content = '''
     # <script type="text/javascript">
@@ -64,6 +68,7 @@ def PrepareData(url,pwd,pg=1):
     # '''
     script_content=response.text
     # print(response.text)
+    t = None
     match = re.search(r"'t':([^,]+)", script_content)
     if match:
         t = match.group(1)
@@ -74,9 +79,11 @@ def PrepareData(url,pwd,pg=1):
             # print(t)
         else:
             print("没有找到 t 的值")
+            t = None
     else:
         print("没有找到 t(raw) 的值")
 
+    k = None
     match = re.search(r"'k':([^,]+)", script_content)
     if match:
         k = match.group(1)
@@ -87,9 +94,11 @@ def PrepareData(url,pwd,pg=1):
             # print(k)
         else:
             print("没有找到 k 的值")
+            k = None
     else:
         print("没有找到 k(raw) 的值")
 
+    fid = None
     match = re.search(r"'fid':(\d+)", script_content)
     if match:
         fid = match.group(1)
@@ -97,6 +106,7 @@ def PrepareData(url,pwd,pg=1):
     else:
         print("没有找到 fid 的值")
 
+    uid = None
     match = re.search(r"'uid':'([^']+)'", script_content)
     if match:
         uid = match.group(1)
@@ -104,6 +114,7 @@ def PrepareData(url,pwd,pg=1):
     else:
         print("没有找到 uid 的值")
 
+    lx = None
     match = re.search(r"'lx':(\d+)", script_content)
     if match:
         lx = match.group(1)
@@ -111,6 +122,7 @@ def PrepareData(url,pwd,pg=1):
     else:
         print("没有找到 lx 的值")
 
+    rep = None
     match = re.search(r"'rep':'([^']+)'", script_content)
     if match:
         rep = match.group(1)
@@ -118,6 +130,7 @@ def PrepareData(url,pwd,pg=1):
     else:
         print("没有找到 rep 的值")
 
+    up = None
     match = re.search(r"'up':(\d+)", script_content)
     if match:
         up = match.group(1)
@@ -125,12 +138,17 @@ def PrepareData(url,pwd,pg=1):
     else:
         print("没有找到 up 的值")
 
+    _is = None
     match = re.search(r"'ls':(\d+)", script_content)
     if match:
         _is = match.group(1)
         # print(_is)
     else:
         print("没有找到 is 的值")
+
+    if None in (t, k, fid, uid, lx, rep, up, _is):
+        print("PrepareData 失败：页面结构未匹配（t/k/fid/uid/lx/rep/up/ls 中有缺失）")
+        return False
 
     # 模拟的请求数据
     data = {
@@ -148,9 +166,14 @@ def PrepareData(url,pwd,pg=1):
     return data
 
 def Get_final_link(_id):
-    response = requests.get("https://wwjn.lanzout.com/tp/"+_id,headers=headers)
+    try:
+        response = requests.get("https://wwjn.lanzout.com/tp/"+_id,headers=headers,timeout=(10, 30))
+    except requests.RequestException as e:
+        print("Get_final_link 请求失败：%s" % e)
+        return None
     # response = requests.get("https://wwjn.lanzout.com/tp/"+_id,headers=headers,verify=False)
     # print("响应内容：", response.text)
+    vkjxld = None
     match = re.search(r"var vkjxld = '([^']+)';", response.text)
     if match:
         vkjxld = match.group(1)
@@ -158,6 +181,7 @@ def Get_final_link(_id):
     else:
         print("没有找到 vkjxld 的值")
 
+    hyggid = None
     match = re.search(r"var hyggid = '([^']+)';", response.text)
     if match:
         hyggid = match.group(1)
@@ -165,7 +189,14 @@ def Get_final_link(_id):
     else:
         print("没有找到 hyggid 的值")
 
-    response = requests.get(vkjxld+hyggid,headers=headers)
+    if vkjxld is None or hyggid is None:
+        return None
+
+    try:
+        response = requests.get(vkjxld+hyggid,headers=headers,timeout=(10, 30))
+    except requests.RequestException as e:
+        print("Get_final_link 请求失败：%s" % e)
+        return None
     # response = requests.get(vkjxld+hyggid,headers=headers,verify=False)
     # print(response.text)
 
@@ -183,10 +214,18 @@ def Get_final_link(_id):
 def GetFileListByData(data,pg):
     url = 'https://wwjn.lanzout.com/filemoreajax.php?file='+str(data["fid"])
     data["pg"] = pg
-    response = requests.post(url, data=data,headers=headers)
+    try:
+        response = requests.post(url, data=data,headers=headers,timeout=(10, 30))
+    except requests.RequestException as e:
+        print("GetFileListByData 请求失败：%s" % e)
+        return None
     if response.status_code==401:#因文件夹访问过频繁，蓝奏云会ban掉所有访问
         raise RuntimeError("401,请过段时间再试")
-    j=json.loads(response.text)
+    try:
+        j=json.loads(response.text)
+    except (ValueError, TypeError) as e:
+        print("GetFileListByData 响应解析失败：%s" % e)
+        return None
     # print(response.text)
     if j["zt"]==1:
         return j["text"]
@@ -197,18 +236,32 @@ def GetFileListByData(data,pg):
 
 def GetFileListByUrl(url,pwd='',pg=1):
     data=PrepareData(url, pwd,1)
+    if data is False:
+        print("GetFileListByUrl 失败：PrepareData 未返回有效数据")
+        return []
+    result = []
     for i in range(1,pg+1):
         for retry in range(0,3):  # 最多重试3次
             rate_limiter.wait_if_needed()  # 检查是否需要等待
-            l=GetFileListByData(data,pg)
+            l=GetFileListByData(data,i)
             if l is not None:
                 break
-    return l
+        if l is None:
+            print(f"获取第 {i} 页失败（已重试3次）")
+            break
+        if isinstance(l, list):
+            result += l
+        else:
+            print(f"获取第 {i} 页返回异常数据：{type(l).__name__}")
+    return result
 
 def GetAllFileListByUrl(url,pwd=''):
     lists=[]
     pg=1
     data=PrepareData(url, pwd)
+    if data is False:
+        print("GetAllFileListByUrl 失败：PrepareData 未返回有效数据")
+        return []
 
     retry=0
     while retry<=3:
@@ -221,12 +274,14 @@ def GetAllFileListByUrl(url,pwd=''):
             return lists
         if l is None:#失败
             retry+=1
-            l=GetFileListByData(data,pg)
+            print(f"获取第 {pg} 页失败（第 {retry} 次重试）")
             continue
         else:#成功
             lists+=l
             retry=0
             pg+=1
+    print("获取文件列表失败：已重试 3 次")
+    return []
 if __name__ == "__main__":
     print('\n\n')
 

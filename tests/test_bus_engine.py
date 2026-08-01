@@ -1,3 +1,4 @@
+import json
 import sys
 import time
 import types
@@ -33,6 +34,7 @@ from webutils.bus_engine import (
     compile_bus_ruleset,
     convert_edits_to_bus_ruleset,
     convert_tiaozhua_config,
+    is_tiaozhua_config,
     parse_bus_path,
 )
 from webutils.fancy_engine import RuleValidationError
@@ -221,6 +223,120 @@ def test_file_regex_uses_search_semantics_and_blacklist_is_case_insensitive():
     assert excluded.data["name"] == "A"
 
 
+def test_glob_pattern_backslashes_are_normalized():
+    ruleset = make_ruleset([
+        {
+            "files": ["Config\\Skills\\*.json"],
+            "path": "name",
+            "replacements": [{"from": "A", "to": "B"}],
+        }
+    ])
+    compiled = compile_bus_ruleset(ruleset)
+
+    matched = apply_bus({"name": "A"}, compiled, "Config/Skills/Skills.json")
+    excluded = apply_bus({"name": "A"}, compiled, "Config/Other/Skills.json")
+
+    assert matched.data["name"] == "B"
+    assert excluded.data["name"] == "A"
+
+
+def test_regex_pattern_backslashes_keep_escape_semantics():
+    ruleset = make_ruleset([
+        {
+            "files": [{"regex": r"^Skills\.json$"}],
+            "path": "name",
+            "replacements": [{"from": "A", "to": "B"}],
+        }
+    ])
+    compiled = compile_bus_ruleset(ruleset)
+
+    matched = apply_bus({"name": "A"}, compiled, "Skills.json")
+    escaped = apply_bus({"name": "A"}, compiled, "SkillsXjson")
+
+    assert matched.data["name"] == "B"
+    assert escaped.data["name"] == "A"
+
+
+def test_tiaozhua_empty_rules_is_not_detected():
+    assert not is_tiaozhua_config({"rules": []})
+    assert not is_tiaozhua_config({"rules": [], "name": "empty"})
+
+
+def test_path_cache_revalidates_after_structural_mutation():
+    ruleset = make_ruleset([
+        {
+            "path": "list[?id=5].name",
+            "replacements": [{"from": "A", "to": "A"}],
+        },
+        {
+            "path": "list",
+            "replacements": [{"set": [{"id": 1, "name": "A"}, {"id": 5, "name": "B"}]}],
+        },
+        {
+            "path": "list[?id=5].name",
+            "replacements": [{"from": "B", "to": "X"}],
+        },
+    ])
+
+    result = apply_bus(
+        {"list": [{"id": 5, "name": "A"}]},
+        compile_bus_ruleset(ruleset),
+        "Skills.json",
+    )
+
+    assert result.data["list"][0]["name"] == "A"
+    assert result.data["list"][1]["name"] == "X"
+
+
+def test_global_rules_share_string_leaf_traversal(monkeypatch):
+    from webutils import bus_engine
+
+    calls = []
+    original = bus_engine._iter_string_leaf_paths
+
+    def counting(data):
+        calls.append(True)
+        return original(data)
+
+    monkeypatch.setattr(bus_engine, "_iter_string_leaf_paths", counting)
+    rules = [
+        {"path": "", "replacements": [{"from": "x", "to": "y"}]}
+        for _ in range(100)
+    ]
+    data = {"dataList": [{"name": "x"} for _ in range(2000)]}
+
+    result = apply_bus(data, compile_bus_ruleset(make_ruleset(rules)), "Skills.json")
+
+    assert result.changed_count == 2000
+    assert len(calls) == 1
+
+
+def test_identical_path_rules_share_resolution(monkeypatch):
+    from webutils import bus_engine
+
+    calls = []
+    original = bus_engine._resolve_paths
+
+    def counting(data, tokens, *, allow_missing_final):
+        calls.append(tokens)
+        return original(data, tokens, allow_missing_final=allow_missing_final)
+
+    monkeypatch.setattr(bus_engine, "_resolve_paths", counting)
+    ruleset = make_ruleset([
+        {"path": "dataList[0].name", "replacements": [{"from": "A", "to": "B"}]},
+        {"path": "dataList[0].name", "replacements": [{"from": "B", "to": "C"}]},
+    ])
+
+    result = apply_bus(
+        {"dataList": [{"name": "A"}]},
+        compile_bus_ruleset(ruleset),
+        "Skills.json",
+    )
+
+    assert result.data["dataList"][0]["name"] == "C"
+    assert len(calls) == 1
+
+
 def test_selector_workload_growth_is_bounded():
     def run(size):
         data = {"dataList": [{"id": index, "name": "A"} for index in range(size)]}
@@ -299,7 +415,7 @@ def test_quick_editor_persists_bus_and_applies_exact_set(monkeypatch, tmp_path):
     edits = [{
         "file": "Skills.json",
         "path": "dataList.0.name",
-        "old": "old",
+        "old": "package changed",
         "new": "new",
     }]
 
@@ -312,6 +428,33 @@ def test_quick_editor_persists_bus_and_applies_exact_set(monkeypatch, tmp_path):
     assert stored["edits"] == edits
     assert applied == {"success": True, "applied": 1, "failed": 0, "errors": []}
     assert '"new"' in target.read_text(encoding="utf-8-sig")
+
+
+def test_quick_editor_applies_matching_edits_and_reports_stale_ones(monkeypatch, tmp_path):
+    fancy_dir = tmp_path / "fancy"
+    lang_dir = tmp_path / "lang"
+    lang_dir.mkdir()
+    target = lang_dir / "Skills.json"
+    target.write_text('{"dataList":[{"name":"original"}]}', encoding="utf-8")
+    monkeypatch.setattr(function_quick_editor, "_get_fancy_folder", lambda: fancy_dir)
+    monkeypatch.setattr(function_rule_editor, "_get_lang_dir", lambda: lang_dir)
+    edits = [
+        {"file": "Skills.json", "path": "dataList.0.name", "old": "original", "new": "patched"},
+        {"file": "Skills.json", "path": "dataList.0.added", "old": None, "new": "inserted"},
+        {"file": "Skills.json", "path": "dataList.0.name", "old": "stale", "new": "should-not-write"},
+    ]
+
+    saved = function_quick_editor.save_quick_edits(edits)
+    applied = function_quick_editor.apply_quick_edits()
+
+    assert saved["success"] is True
+    assert applied["success"] is False
+    assert applied["applied"] == 2
+    assert applied["failed"] == 1
+    assert "原值不匹配" in applied["errors"][0]
+    data = json.loads(target.read_text(encoding="utf-8-sig"))
+    assert data["dataList"][0]["name"] == "patched"
+    assert data["dataList"][0]["added"] == "inserted"
 
 
 def test_drag_drop_recognizes_bus_and_tiaozhua_json(tmp_path):

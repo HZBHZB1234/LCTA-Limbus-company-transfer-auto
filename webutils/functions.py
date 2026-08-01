@@ -113,6 +113,7 @@ def decompress_zip(file_path, output_dir='.'):
     try:
         with zipfile.ZipFile(file_path, 'r') as zip_ref:
             zip_ref.extractall(output_dir)
+        return True
     except Exception as e:
         _log_manager.log(f"解压失败: {e}")
         _log_manager.log_error(e)
@@ -217,11 +218,25 @@ def decompress_by_extension(file_path, output_dir='.'):
 # 下载
 # ============================================================
 
+def _iter_with_timeout(chunks, timeout=60):
+    """对响应分块迭代加超时保护：单个分块等待超过 timeout 秒视为下载停滞。"""
+    deadline = time.time() + timeout
+    for chunk in chunks:
+        if time.time() > deadline:
+            raise TimeoutError(f"下载数据超时（超过 {timeout} 秒未收到数据）")
+        deadline = time.time() + timeout
+        yield chunk
+
+
 def download_with(url, save_path, size=0, chunk_size=1024 * 100,
                   modal_id=None, progress_=[0, 100], headers={}, validate=True):
-    """从指定 URL 下载文件，支持进度回调。"""
+    """从指定 URL 下载文件，支持进度回调。
+
+    verify 固定开启 TLS 证书验证；validate 仅控制下载后的大小校验，两者互不影响。
+    """
     try:
-        with requests.get(url, stream=True, headers=headers, verify=validate) as r:
+        with requests.get(url, stream=True, headers=headers,
+                          timeout=(10, 60), verify=True) as r:
             r.raise_for_status()
 
             if size == 0:
@@ -234,7 +249,7 @@ def download_with(url, save_path, size=0, chunk_size=1024 * 100,
             _log_manager.log(f"开始下载文件，总大小: {total_size // 1024} KB")
 
             with open(save_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=chunk_size):
+                for chunk in _iter_with_timeout(r.iter_content(chunk_size=chunk_size)):
                     if modal_id:
                         _log_manager.check_running(modal_id, log=False)
                     f.write(chunk)
@@ -247,6 +262,13 @@ def download_with(url, save_path, size=0, chunk_size=1024 * 100,
                     )
 
             _log_manager.log("\n下载完成")
+
+        if validate and size > 0:
+            actual_size = os.path.getsize(save_path)
+            if actual_size != size:
+                _log_manager.log(
+                    f"文件校验失败: 期望大小 {size} 字节，实际大小 {actual_size} 字节")
+                return False
         return True
     except Exception as e:
         _log_manager.log(f"\n下载失败 ({url}): {e}")

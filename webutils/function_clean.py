@@ -8,6 +8,21 @@ from typing import List, Optional
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 from .functions import *
+from .function_manage import safe_join_path
+
+
+def _sanitize_zip_member_name(name: str) -> str:
+    """校验 zip 成员名安全性，拒绝含 `..` 段、绝对路径或盘符的成员，防止路径穿越"""
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"压缩包包含无效的文件名: {name!r}")
+    name = name.replace('\\', '/')
+    if name.startswith('/'):
+        raise ValueError(f"压缩包包含绝对路径成员: {name}")
+    if ':' in name:
+        raise ValueError(f"压缩包包含盘符成员: {name}")
+    if '..' in name.split('/'):
+        raise ValueError(f"压缩包包含不安全的路径成员: {name}")
+    return name
 
 
 def clean_config_main(modal_id: str, clean_progress: bool = False, clean_notice: bool = False, custom_files: List[str] = None):
@@ -124,18 +139,25 @@ def clear_by_mod(mod_path: str, modal_id: str) -> int:
             else:
                 path_del = Path(dir_path).parts[0] if Path(dir_path).parts else None
             
-            if path_del and path_del != 'Installation/':
-                target_path = unity_dir / path_del
-                if target_path.is_dir():
-                    try:
-                        rmtree(target_path)
-                        deleted_count += 1
-                        _log_manager.log_modal_process(f"已删除: {path_del}", modal_id)
-                    except Exception as e:
-                        _log_manager.log_modal_process(f"删除 {path_del} 失败: {str(e)}", modal_id)
-                        _log_manager.log_error(e)
-                else:
-                    _log_manager.log_modal_process(f"{path_del} 不是一个目录", modal_id)
+            # 过滤 Installation 目录本身（用 normpath 规范化后比较）
+            if not path_del or os.path.normpath(path_del) == 'Installation':
+                continue
+            try:
+                # 校验并解析目标路径，确保位于 unity_dir 内，防止路径穿越
+                target_path = safe_join_path(unity_dir, path_del)
+            except ValueError as e:
+                _log_manager.log_modal_process(f"跳过不安全的清理路径: {path_del}", modal_id)
+                continue
+            if target_path.is_dir():
+                try:
+                    rmtree(target_path)
+                    deleted_count += 1
+                    _log_manager.log_modal_process(f"已删除: {path_del}", modal_id)
+                except Exception as e:
+                    _log_manager.log_modal_process(f"删除 {path_del} 失败: {str(e)}", modal_id)
+                    _log_manager.log_error(e)
+            else:
+                _log_manager.log_modal_process(f"{path_del} 不是一个目录", modal_id)
         
         return deleted_count
         
@@ -156,6 +178,9 @@ def check_by_mod(mod_path: str) -> List[str]:
         with zipfile.ZipFile(mod_path, 'r') as zip_file:
             # 获取所有文件列表
             all_files = zip_file.namelist()
+            # 校验所有成员名安全，拒绝路径穿越类成员
+            for name in all_files:
+                _sanitize_zip_member_name(name)
             
             # 提取第一层目录结构
             first_level_dirs = set()
@@ -197,6 +222,8 @@ def check_by_mod(mod_path: str) -> List[str]:
                 
     except zipfile.BadZipFile:
         raise ValueError("无效的zip文件")
+    except ValueError:
+        raise
     except FileNotFoundError:
         raise FileNotFoundError("找不到指定的zip文件")
     except Exception as e:

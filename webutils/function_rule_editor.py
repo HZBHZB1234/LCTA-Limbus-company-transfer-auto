@@ -66,11 +66,16 @@ def get_file_content(relative_path: str) -> dict:
     lang_dir = _get_lang_dir()
     if not lang_dir:
         return {"error": "Lang 文件夹未配置"}
-    full_path = lang_dir / relative_path
+    resolved_lang_dir = lang_dir.resolve()
+    full_path = (resolved_lang_dir / relative_path).resolve()
+    try:
+        full_path.relative_to(resolved_lang_dir)
+    except ValueError:
+        return {"error": f"文件路径超出语言包目录: {relative_path}"}
     if not full_path.exists():
         return {"error": f"文件不存在: {relative_path}"}
     try:
-        raw = full_path.read_text(encoding='utf-8')
+        raw = full_path.read_text(encoding='utf-8-sig')
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
@@ -214,10 +219,7 @@ def validate_rule(rule_json: str) -> dict:
     if not isinstance(payload, dict):
         return {"valid": False, "errors": ["规则必须是 JSON 对象"]}
     try:
-        if "rules" in payload:
-            compile_rulesets([payload])
-        else:
-            compile_rulesets([payload])
+        compile_rulesets([payload])
     except RuleValidationError as exc:
         return {"valid": False, "errors": [str(exc)]}
     return {"valid": True, "errors": []}
@@ -225,33 +227,12 @@ def validate_rule(rule_json: str) -> dict:
 def _analyze_value_change(old_val, new_val) -> dict:
     if not isinstance(old_val, str) or not isinstance(new_val, str):
         return {"change_type": "UNKNOWN"}
-    lcp_len = 0
-    for a, b in zip(old_val, new_val):
-        if a == b:
-            lcp_len += 1
-        else:
-            break
-    old_rem = old_val[lcp_len:]
-    new_rem = new_val[lcp_len:]
-    lcs_len = 0
-    for a, b in zip(reversed(old_rem), reversed(new_rem)):
-        if a == b:
-            lcs_len += 1
-        else:
-            break
-    prefix_added = new_val[:lcp_len]
-    if lcs_len:
-        core_old = old_val[lcp_len:len(old_val)-lcs_len]
-        core_new = new_val[lcp_len:len(new_val)-lcs_len]
-    else:
-        core_old = old_val[lcp_len:]
-        core_new = new_val[lcp_len:]
-    if lcs_len:
-        suffix_added = new_val[len(new_val)-lcs_len:]
-    else:
-        suffix_added = ""
-
-    if core_old == core_new:
+    if old_val and old_val in new_val:
+        idx = new_val.index(old_val)
+        prefix_added = new_val[:idx]
+        suffix_added = new_val[idx + len(old_val):]
+        core_old = old_val
+        core_new = new_val
         if prefix_added and suffix_added:
             change_type = "PURE_WRAP"
         elif prefix_added:
@@ -261,10 +242,25 @@ def _analyze_value_change(old_val, new_val) -> dict:
         else:
             change_type = "PURE_REPLACE"
     else:
-        if prefix_added or suffix_added:
-            change_type = "REPLACE_WRAP"
-        else:
-            change_type = "PURE_REPLACE"
+        lcp_len = 0
+        for a, b in zip(old_val, new_val):
+            if a == b:
+                lcp_len += 1
+            else:
+                break
+        old_rem = old_val[lcp_len:]
+        new_rem = new_val[lcp_len:]
+        lcs_len = 0
+        for a, b in zip(reversed(old_rem), reversed(new_rem)):
+            if a == b:
+                lcs_len += 1
+            else:
+                break
+        prefix_added = ""
+        suffix_added = ""
+        core_old = old_val[lcp_len:len(old_val)-lcs_len]
+        core_new = new_val[lcp_len:len(new_val)-lcs_len]
+        change_type = "PURE_REPLACE"
 
     return {
         "change_type": change_type, "prefix_added": prefix_added,
@@ -280,24 +276,24 @@ def _cluster_changes(changes: list) -> list:
         analyzed.append(info)
     if not analyzed:
         return []
-    first_type = analyzed[0]["change_type"]
-    if first_type in ("PURE_REPLACE",):
-        sort_key = lambda a: (a["change_type"], a["core_old"], a["core_new"])
-    else:
-        sort_key = lambda a: (a["change_type"], a["prefix_added"], a["suffix_added"])
+    sort_key = lambda a: (
+        a["change_type"],
+        a.get("prefix_added", ""), a.get("suffix_added", ""),
+        a.get("core_old", ""), a.get("core_new", ""),
+    )
     analyzed.sort(key=sort_key)
     groups = []
     current = [analyzed[0]]
     for item in analyzed[1:]:
         prev = current[-1]
         if item["change_type"] in ("PURE_REPLACE",):
-            if item["core_old"] == prev["core_old"] and item["core_new"] == prev["core_new"]:
+            if item.get("core_old") == prev.get("core_old") and item.get("core_new") == prev.get("core_new"):
                 current.append(item)
             else:
                 groups.append(current)
                 current = [item]
         else:
-            if item["prefix_added"] == prev["prefix_added"] and item["suffix_added"] == prev["suffix_added"]:
+            if item.get("prefix_added") == prev.get("prefix_added") and item.get("suffix_added") == prev.get("suffix_added"):
                 current.append(item)
             else:
                 groups.append(current)
@@ -724,13 +720,17 @@ def analyze_changes_v3(changes: list) -> dict:
 
 def _make_scorable(changes: list) -> list:
     """Convert change dicts to the format _score_group expects."""
-    return [{
-        "change_type": "PURE_REPLACE",
-        "file": c["file"],
-        "item_id": c.get("item_id"),
-        "prefix_added": "",
-        "new_val": c.get("new_val", "")
-    } for c in changes]
+    out = []
+    for c in changes:
+        info = _analyze_value_change(c.get("old_val", ""), c.get("new_val", ""))
+        out.append({
+            "change_type": info.get("change_type", "PURE_REPLACE"),
+            "file": c["file"],
+            "item_id": c.get("item_id"),
+            "prefix_added": info.get("prefix_added", ""),
+            "new_val": c.get("new_val", "")
+        })
+    return out
 
 
 def save_file_content(relative_path: str, content: str) -> dict:
@@ -740,7 +740,12 @@ def save_file_content(relative_path: str, content: str) -> dict:
     lang_dir = _get_lang_dir()
     if not lang_dir:
         return {"success": False, "error": "Lang 文件夹未配置"}
-    full_path = lang_dir / relative_path
+    resolved_lang_dir = lang_dir.resolve()
+    full_path = (resolved_lang_dir / relative_path).resolve()
+    try:
+        full_path.relative_to(resolved_lang_dir)
+    except ValueError:
+        return {"success": False, "error": f"文件路径超出语言包目录: {relative_path}"}
     if not full_path.exists():
         return {"success": False, "error": f"文件不存在: {relative_path}"}
     try:
@@ -753,7 +758,7 @@ def save_file_content(relative_path: str, content: str) -> dict:
     except Exception as e:
         logger.warning("备份文件失败: %s", e)
     try:
-        full_path.write_text(content, encoding='utf-8')
+        full_path.write_text(content, encoding='utf-8-sig')
         return {"success": True, "path": str(full_path)}
     except Exception as e:
         return {"success": False, "error": str(e)}

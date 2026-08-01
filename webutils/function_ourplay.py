@@ -1,5 +1,6 @@
 import requests
 from globalManagers.LogManager import LogManager
+from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
 import tempfile
 from .functions import *
@@ -8,6 +9,15 @@ import json
 import base64
 import os
 from webFunc import Note
+
+
+def _get_output_dir():
+    """获取产物输出目录：优先使用配置的缓存目录，相对路径锚定到应用根目录"""
+    output_dir = ConfigManager().get('cache_path', 'tmp')
+    if not os.path.isabs(output_dir):
+        output_dir = os.path.join(os.getenv('path_', ''), output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
 
 def check_ver_ourplay():
     headers = {
@@ -25,7 +35,7 @@ def check_ver_ourplay():
     
     _log_manager.log("正在请求 OurPlay 汉化包信息")
     
-    r = requests.post(url, headers=headers, data=data_json)
+    r = requests.post(url, headers=headers, data=data_json, timeout=(10, 60))
     r.raise_for_status()
     response_data = r.json()
 
@@ -86,7 +96,7 @@ def download_ourplay():
     
     _log_manager.log("正在请求 OurPlay 汉化包信息")
     
-    r = requests.post(url, headers=headers, data=data_json)
+    r = requests.post(url, headers=headers, data=data_json, timeout=(10, 60))
     r.raise_for_status()
     response_data = r.json()
     
@@ -134,9 +144,10 @@ def _process_ourplay_package(temp_dir, modal_id, font_option, cache_path, hash_o
         _log_manager.log("已替换为缓存字体")
 
     _log_manager.log("正在压缩文件...")
-    if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua', 'ourplay.zip'):
+    if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua',
+                      os.path.join(_get_output_dir(), 'ourplay.zip')):
         _log_manager.log_modal_process("处理文件时出现错误", modal_id)
-        raise
+        raise Exception("打包文件时出现错误")
 
     _log_manager.log('格式化完成')
     _log_manager.log_modal_process("文件处理完成", modal_id)
@@ -163,7 +174,7 @@ def function_ourplay_main(modal_id, **kwargs):
         download_info = download_ourplay()
         if not download_info:
             _log_manager.log_modal_process("获取 OurPlay 下载信息失败", modal_id)
-            raise
+            raise Exception("获取 OurPlay 下载信息失败")
 
         url, expected_md5, size = download_info
         save_path = f"{temp_dir}/transfile.zip"
@@ -177,7 +188,7 @@ def function_ourplay_main(modal_id, **kwargs):
         if not download_with(url, save_path, size=size, chunk_size=1024*100,
                             modal_id=modal_id, progress_=[0, 50]):
             _log_manager.log_modal_process("下载 OurPlay 汉化包时出现错误", modal_id)
-            raise
+            raise Exception("下载 OurPlay 汉化包失败")
 
         _log_manager.log("OurPlay 汉化包下载完成")
         _log_manager.log_modal_process("OurPlay 汉化包下载完成", modal_id)
@@ -234,7 +245,7 @@ def function_ourplay_api(modal_id, **kwargs):
         if not download_with(url, save_path, chunk_size=1024*100,
                             modal_id=modal_id, progress_=[0, 50]):
             _log_manager.log_modal_process("下载 OurPlay 汉化包时出现错误", modal_id)
-            raise
+            raise Exception("下载 OurPlay 汉化包失败")
 
         _log_manager.log("OurPlay 汉化包下载完成")
         _log_manager.log_modal_process("OurPlay 汉化包下载完成", modal_id)

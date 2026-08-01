@@ -12,6 +12,15 @@ from collections import defaultdict, Counter
 from globalManagers.ConfigManager import ConfigManager
 from webFunc import Note
 
+
+def _get_output_dir():
+    """获取产物输出目录：优先使用配置的缓存目录，相对路径锚定到应用根目录"""
+    output_dir = ConfigManager().get('cache_path', 'tmp')
+    if not os.path.isabs(output_dir):
+        output_dir = os.path.join(os.getenv('path_', ''), output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
+
 def check_ver_ourplay_new(official: bool = True):
     headers = {
         'device-user': make_device(),
@@ -25,7 +34,7 @@ def check_ver_ourplay_new(official: bool = True):
     
     _log_manager.log("正在请求 OurPlay 汉化包信息")
     
-    r = requests.post(url, headers=headers, data=data_json)
+    r = requests.post(url, headers=headers, data=data_json, timeout=(10, 60))
     r.raise_for_status()
     response_data = r.json()
 
@@ -113,7 +122,7 @@ def download_ourplay(official: bool = True):
     
     _log_manager.log("正在请求 OurPlay 汉化包信息")
     
-    r = requests.post(url, headers=headers, data=data)
+    r = requests.post(url, headers=headers, data=data, timeout=(10, 60))
     r.raise_for_status()
     response_data = r.json()
     
@@ -141,8 +150,8 @@ def _resolve_refer_package(refer_package):
     2. ConfigManager().get("ourplay.refer_package", "")
     3. 自动检测: {game_path}/LimbusCompany_Data/Lang/LLC_zh-CN/
 
-    若是 zip → 解压到临时目录，返回解压后的根目录
-    若是目录 → 直接返回
+    若是 zip → 解压到临时目录，返回 (解压后的根目录, 需清理的临时目录)
+    若是目录 → 直接返回 (目录, None)
 
     若都不可用 → 抛出异常
     """
@@ -150,18 +159,23 @@ def _resolve_refer_package(refer_package):
     if refer_package and os.path.exists(refer_package):
         if os.path.isdir(refer_package):
             _log_manager.log(f"使用参考包目录: {refer_package}")
-            return refer_package
+            return refer_package, None
         elif refer_package.endswith('.zip'):
             # 解压到临时目录
             extract_dir = tempfile.mkdtemp(prefix='refer_pkg_')
             _log_manager.log(f"解压参考包 {refer_package} -> {extract_dir}")
-            with zipfile.ZipFile(refer_package, 'r') as zf:
-                zf.extractall(extract_dir)
+            try:
+                with zipfile.ZipFile(refer_package, 'r') as zf:
+                    zf.extractall(extract_dir)
+            except Exception:
+                # 解压失败时清理已创建的临时目录
+                shutil.rmtree(extract_dir, ignore_errors=True)
+                raise
             # 找到解压后的根目录（可能有一层包裹）
             entries = os.listdir(extract_dir)
             if len(entries) == 1 and os.path.isdir(os.path.join(extract_dir, entries[0])):
-                return os.path.join(extract_dir, entries[0])
-            return extract_dir
+                return os.path.join(extract_dir, entries[0]), extract_dir
+            return extract_dir, extract_dir
 
     # 优先级2：配置
     config_path = ConfigManager().get("ourplay.refer_package", "")
@@ -175,7 +189,7 @@ def _resolve_refer_package(refer_package):
         llc_dir = os.path.join(game_path, 'LimbusCompany_Data', 'Lang', 'LLC_zh-CN')
         if os.path.isdir(llc_dir):
             _log_manager.log(f"自动检测到参考包: {llc_dir}")
-            return llc_dir
+            return llc_dir, None
 
     raise Exception(
         "未找到参考包。请提供 refer_package 参数，或在配置中设置 ourplay.refer_package，"
@@ -357,82 +371,87 @@ def _convert_new_package(temp_dir, refer_package):
 
     返回: 输出目录的绝对路径（OurPlayHanHua 目录）
     """
-    # 1. 解析参考包
-    refer_root = _resolve_refer_package(refer_package)
+    # 1. 解析参考包（zip 会解压到临时目录，转换完成后清理）
+    refer_root, cleanup_dir = _resolve_refer_package(refer_package)
 
-    # 2. 构建索引
-    ref_files, id_to_paths = _build_reference_index(refer_root)
-    if not ref_files:
-        raise Exception("参考包中未找到任何有效的 JSON 文件")
+    try:
+        # 2. 构建索引
+        ref_files, id_to_paths = _build_reference_index(refer_root)
+        if not ref_files:
+            raise Exception("参考包中未找到任何有效的 JSON 文件")
 
-    # 3. 扫描 transfile
-    hash_dir = os.path.join(temp_dir, 'com.ProjectMoon.LimbusCompany')
-    hash_files, binary_count = _build_transfile_index(hash_dir)
-    _log_manager.log(f"transfile 统计: {len(hash_files)} JSON, {binary_count} 二进制文件已跳过")
+        # 3. 扫描 transfile
+        hash_dir = os.path.join(temp_dir, 'com.ProjectMoon.LimbusCompany')
+        hash_files, binary_count = _build_transfile_index(hash_dir)
+        _log_manager.log(f"transfile 统计: {len(hash_files)} JSON, {binary_count} 二进制文件已跳过")
 
-    # 4. 匹配
-    ref_to_hash = _match_ref_to_transfile(ref_files, hash_files, id_to_paths)
+        # 4. 匹配
+        ref_to_hash = _match_ref_to_transfile(ref_files, hash_files, id_to_paths)
 
-    # 5. 创建输出目录
-    output_root = os.path.join(temp_dir, 'output')
-    ourplay_root = os.path.join(output_root, 'OurPlayHanHua')
-    os.makedirs(ourplay_root, exist_ok=True)
+        # 5. 创建输出目录
+        output_root = os.path.join(temp_dir, 'output')
+        ourplay_root = os.path.join(output_root, 'OurPlayHanHua')
+        os.makedirs(ourplay_root, exist_ok=True)
 
-    # 确保 Font 目录存在（find_translation_packages 验证需要）
-    font_context_dir = os.path.join(ourplay_root, 'Font', 'Context')
-    font_title_dir = os.path.join(ourplay_root, 'Font', 'Title')
-    os.makedirs(font_context_dir, exist_ok=True)
-    os.makedirs(font_title_dir, exist_ok=True)
+        # 确保 Font 目录存在（find_translation_packages 验证需要）
+        font_context_dir = os.path.join(ourplay_root, 'Font', 'Context')
+        font_title_dir = os.path.join(ourplay_root, 'Font', 'Title')
+        os.makedirs(font_context_dir, exist_ok=True)
+        os.makedirs(font_title_dir, exist_ok=True)
 
-    # 6. 复制文件
-    from_transfile = 0
-    from_reference = 0
+        # 6. 复制文件
+        from_transfile = 0
+        from_reference = 0
 
-    for ref_path in ref_files:
-        dest = os.path.join(ourplay_root, ref_path.replace('/', os.sep))
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-
-        if ref_path in ref_to_hash:
-            # 使用 transfile hash 文件的内容
-            hash_name = ref_to_hash[ref_path]
-            src = os.path.join(hash_dir, hash_name)
-            shutil.copy2(src, dest)
-            from_transfile += 1
-        else:
-            # 回退：使用基板包原文件
-            src = os.path.join(refer_root, ref_path.replace('/', os.sep))
-            if os.path.exists(src):
-                shutil.copy2(src, dest)
-            from_reference += 1
-
-    # 7. 复制非 dataList 文件（Font、Info、没有 dataList 的 JSON 等）
-    for dirpath, dirnames, filenames in os.walk(refer_root):
-        for filename in filenames:
-            filepath = os.path.join(dirpath, filename)
-            rel_path = os.path.relpath(filepath, refer_root).replace('\\', '/')
-
-            # 跳过已在步骤 6 中处理的 JSON 文件
-            if rel_path in ref_files:
-                continue
-            # 跳过 manifest
-            if filename == 'manifest.json':
-                continue
-
-            dest = os.path.join(ourplay_root, rel_path.replace('/', os.sep))
+        for ref_path in ref_files:
+            dest = os.path.join(ourplay_root, ref_path.replace('/', os.sep))
             os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copy2(filepath, dest)
 
-    # 8. 统计日志
-    total = from_transfile + from_reference
-    match_rate = 100 * from_transfile / total if total > 0 else 0
-    _log_manager.log(
-        f"转换完成: 总计 {total} 个文件, "
-        f"来自 transfile: {from_transfile} ({match_rate:.1f}%), "
-        f"来自基板回退: {from_reference} ({100-match_rate:.1f}%), "
-        f"跳过二进制: {binary_count}"
-    )
+            if ref_path in ref_to_hash:
+                # 使用 transfile hash 文件的内容
+                hash_name = ref_to_hash[ref_path]
+                src = os.path.join(hash_dir, hash_name)
+                shutil.copy2(src, dest)
+                from_transfile += 1
+            else:
+                # 回退：使用基板包原文件
+                src = os.path.join(refer_root, ref_path.replace('/', os.sep))
+                if os.path.exists(src):
+                    shutil.copy2(src, dest)
+                from_reference += 1
 
-    return ourplay_root
+        # 7. 复制非 dataList 文件（Font、Info、没有 dataList 的 JSON 等）
+        for dirpath, dirnames, filenames in os.walk(refer_root):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                rel_path = os.path.relpath(filepath, refer_root).replace('\\', '/')
+
+                # 跳过已在步骤 6 中处理的 JSON 文件
+                if rel_path in ref_files:
+                    continue
+                # 跳过 manifest
+                if filename == 'manifest.json':
+                    continue
+
+                dest = os.path.join(ourplay_root, rel_path.replace('/', os.sep))
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                shutil.copy2(filepath, dest)
+
+        # 8. 统计日志
+        total = from_transfile + from_reference
+        match_rate = 100 * from_transfile / total if total > 0 else 0
+        _log_manager.log(
+            f"转换完成: 总计 {total} 个文件, "
+            f"来自 transfile: {from_transfile} ({match_rate:.1f}%), "
+            f"来自基板回退: {from_reference} ({100-match_rate:.1f}%), "
+            f"跳过二进制: {binary_count}"
+        )
+
+        return ourplay_root
+    finally:
+        # 清理 zip 参考包解压出的临时目录，避免泄漏
+        if cleanup_dir:
+            shutil.rmtree(cleanup_dir, ignore_errors=True)
 
 
 def _process_ourplay_package(temp_dir, modal_id, font_option, cache_path, hash_ok=True, refer_package=None):
@@ -479,9 +498,9 @@ def _process_ourplay_package(temp_dir, modal_id, font_option, cache_path, hash_o
     _log_manager.log("正在压缩文件...")
     _log_manager.update_modal_progress(95, "正在打包", modal_id)
 
-    if not zip_folder(ourplay_root, 'ourplay.zip'):
+    if not zip_folder(ourplay_root, os.path.join(_get_output_dir(), 'ourplay.zip')):
         _log_manager.log_modal_process("处理文件时出现错误", modal_id)
-        raise
+        raise Exception("打包文件时出现错误")
 
     _log_manager.log('格式化完成')
     _log_manager.log_modal_process("文件处理完成", modal_id)
@@ -508,7 +527,7 @@ def function_ourplay_new_main(modal_id, **kwargs):
         download_info = download_ourplay(official=kwargs.get("official", True))
         if not download_info:
             _log_manager.log_modal_process("获取 OurPlay 下载信息失败", modal_id)
-            raise
+            raise Exception("获取 OurPlay 下载信息失败")
 
         url, expected_md5, size = download_info
         save_path = f"{temp_dir}/transfile.zip"
@@ -522,7 +541,7 @@ def function_ourplay_new_main(modal_id, **kwargs):
         if not download_with(url, save_path, size=size, chunk_size=1024*100,
                             modal_id=modal_id, progress_=[0, 50]):
             _log_manager.log_modal_process("下载 OurPlay 汉化包时出现错误", modal_id)
-            raise
+            raise Exception("下载 OurPlay 汉化包失败")
 
         _log_manager.log("OurPlay 汉化包下载完成")
         _log_manager.log_modal_process("OurPlay 汉化包下载完成", modal_id)

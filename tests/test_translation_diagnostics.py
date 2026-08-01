@@ -516,3 +516,154 @@ def test_http_observer_is_reused_per_translator():
 
     assert first is second
     assert len(translator._session.hooks["response"]) == 1
+
+
+class _TwoBlockBuilder:
+    def __init__(self, *_args, **_kwargs):
+        self.unified_request = {
+            "metadata": {},
+            "reference": {},
+            "text_blocks": [
+                {"kr": "KR1", "jp": "JP1", "en": "EN1"},
+                {"kr": "KR2", "jp": "JP2", "en": "EN2"},
+            ],
+        }
+        self.split_requests = []
+
+    def build(self, prompt_format):
+        return None
+
+    def get_request_text(self, prompt_format):
+        return ["translate two blocks"]
+
+    def _get_request_text(self, request_data, prompt_format):
+        return json.dumps(request_data, ensure_ascii=False)
+
+    def deBuild(self, translations):
+        return translations
+
+
+class TestEmptyTranslationHandling:
+    """Bug 2: 空串/纯空白译文按 missing 处理，不当作有效翻译。"""
+
+    def test_whitespace_translation_falls_back_to_kr(self, tmp_path, monkeypatch):
+        """纯空白译文 → 视为缺失 → 回退 KR 原文，had_fallback=True。"""
+        response = json.dumps({
+            "translations": [{
+                "id": 1,
+                "translation": "   ",
+                "confidence": "high",
+            }],
+        })
+        recorder = TranslationRecorder(tmp_path / "dump.jsonl")
+        processor = _make_processor(tmp_path, _StaticTranslator(response), recorder)
+        processor._config = TranslateConfig(
+            translation_mode="multi_stage",
+            disambiguation_mode="llm",
+            enable_self_check=False,
+            fallback=False,
+        )
+        monkeypatch.setattr("translateFunc.processor.RequestBuilder", _IdentityBuilder)
+        monkeypatch.setattr("translateFunc.processor.StageStrategy", _IdentityStageStrategy)
+
+        translated, had_fallback = processor._translate({"dataList": []})
+
+        assert translated == ["LCE"]
+        assert had_fallback is True
+        assert processor._api_calls[0]["failure_kind"] == "missing_translation_ids"
+
+    def test_empty_translation_enters_supplemental_retry(self, tmp_path, monkeypatch):
+        """部分条目为空译文时触发 P1-2 补充翻译并修复。"""
+        response = json.dumps({
+            "translations": [
+                {"id": 1, "translation": "译一", "confidence": "high"},
+                {"id": 2, "translation": "", "confidence": "high"},
+            ],
+        })
+        recorder = TranslationRecorder(tmp_path / "dump.jsonl")
+        processor = _make_processor(tmp_path, _StaticTranslator(response), recorder)
+        processor._config = TranslateConfig(
+            translation_mode="multi_stage",
+            disambiguation_mode="llm",
+            enable_self_check=False,
+            fallback=False,
+        )
+        monkeypatch.setattr("translateFunc.processor.RequestBuilder", _TwoBlockBuilder)
+        monkeypatch.setattr("translateFunc.processor.StageStrategy", _IdentityStageStrategy)
+
+        translated, had_fallback = processor._translate({"dataList": []})
+
+        assert translated == ["译一", "译一"]
+        assert had_fallback is False
+        # 阶段 1 因空译文标记失败 → 补充翻译成功后恢复
+        assert [call["stage"] for call in processor._api_calls] == ["stage_1", "p1_2"]
+        assert processor._api_calls[0]["status"] == "recovered"
+
+    def test_apply_corrections_ignores_empty_correction(self, tmp_path):
+        """Bug 2b: 空串/纯空白修正不覆盖已有合法翻译。"""
+        processor = _make_processor(tmp_path, _StaticTranslator("{}"))
+        result = processor._apply_corrections(
+            ["译文一", "译文二"],
+            [
+                {"id": 1, "translation": "修正一", "changed": True},
+                {"id": 2, "translation": "", "changed": True},
+                {"id": 3, "translation": "   ", "changed": True},
+                {"id": 4, "translation": "不动", "changed": False},
+            ],
+        )
+        assert result == ["修正一", "译文二"]
+
+
+class TestSimpleBuilderDeBuild:
+    """Bug 3: _SimpleRequestBuilder.deBuild 缺失项按位置补 KR 原文。"""
+
+    @staticmethod
+    def _make_builder():
+        from translateFunc.processor import _SimpleRequestBuilder
+        request_text = {
+            "kr": {
+                1: {("text",): "KR1"},
+                2: {("text",): "KR2"},
+                3: {("text",): "KR3"},
+            },
+            "jp": {
+                1: {("text",): "JP1"},
+                2: {("text",): "JP2"},
+                3: {("text",): "JP3"},
+            },
+            "en": {
+                1: {("text",): "EN1"},
+                2: {("text",): "EN2"},
+                3: {("text",): "EN3"},
+            },
+        }
+        builder = _SimpleRequestBuilder(request_text)
+        builder.build()
+        return builder
+
+    def test_missing_tail_filled_with_positional_kr(self):
+        builder = self._make_builder()
+        result = builder.deBuild(["T1", "T2"])
+        assert result == {
+            1: {("text",): "T1"},
+            2: {("text",): "T2"},
+            3: {("text",): "KR3"},
+        }
+
+    def test_all_missing_but_first_filled_positionally(self):
+        builder = self._make_builder()
+        result = builder.deBuild(["T1"])
+        assert result == {
+            1: {("text",): "T1"},
+            2: {("text",): "KR2"},
+            3: {("text",): "KR3"},
+        }
+
+    def test_excess_translations_truncated(self):
+        builder = self._make_builder()
+        result = builder.deBuild(["T1", "T2", "T3", "EXTRA"])
+        assert result == {
+            1: {("text",): "T1"},
+            2: {("text",): "T2"},
+            3: {("text",): "T3"},
+        }

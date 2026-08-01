@@ -5,11 +5,11 @@ _log_manager = LogManager()
 import os
 import shutil
 import time
-import shlex
 from pathlib import Path
 from threading import Thread
 
 from launcher.modfolder import get_mod_folder
+from launcher.changes import extract_exe_path
 
 # -- 快速 PID 存活检查（与 webutils/function_speed.py 相同的模式） --
 _kernel32 = ctypes.windll.kernel32
@@ -60,10 +60,26 @@ def sound_data_paths():
 def smallest_sound_file():
     return min(sound_data_paths(), key=os.path.getsize)
 
-def wait_for_validation():
-    smallest = smallest_sound_file()
+def wait_for_validation(timeout: float = 120.0):
+    bank_files = list(sound_data_paths())
+    if not bank_files:
+        _log_manager.log("未找到 .bank 音频文件，跳过校验等待")
+        return
+    smallest = min(bank_files, key=os.path.getsize)
+    with open(smallest, "rb") as f:
+        backup = f.read()
     os.remove(smallest)
+
+    deadline = time.time() + timeout
     while not os.path.exists(smallest):
+        if time.time() > deadline:
+            _log_manager.log(f"等待游戏校验超时（{int(timeout)} 秒），恢复备份的音频文件: {smallest}")
+            try:
+                with open(smallest, "wb") as f:
+                    f.write(backup)
+            except Exception as e:
+                _log_manager.log_error(e)
+            return
         time.sleep(0.1)
 
 def sound_replace_thread(mod_folder: str):
@@ -72,7 +88,7 @@ def sound_replace_thread(mod_folder: str):
     _log_manager.log("Validation complete, replacing sound files")
     target_folder = sound_folder()
     for sound_file in Path(mod_folder).rglob("*.bank"):
-        _log_manager.log("Replacing %s", sound_file)
+        _log_manager.log(f"Replacing {sound_file}")
         target = os.path.join(target_folder, sound_file.name)
 
         if os.path.exists(target) and not os.path.exists(target + ".bak"):
@@ -124,8 +140,8 @@ def replace_sound(mod_folder: str, game_path: str = None):
     mod_zips_root_path = get_mod_folder()
     if game_path is not None:
         global _game_path
-        _game_path = shlex.split(game_path)[0]
+        _game_path = extract_exe_path(game_path)
     if any(file_name.endswith(".bank") for file_name in os.listdir(mod_zips_root_path)):
-        Thread(target=sound_replace_thread, args=(mod_folder,)).start()
+        Thread(target=sound_replace_thread, args=(mod_folder,), daemon=True).start()
     else:
         _log_manager.log("No .bank found, skip sound replacing process.")

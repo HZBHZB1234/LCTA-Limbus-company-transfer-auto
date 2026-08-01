@@ -176,8 +176,16 @@ class GitHubReleaseFetcher:
             warnings.filterwarnings('ignore', message='Unverified HTTPS request')
     
     def update_config(self, use_proxy: bool = True, ignore_ssl: bool = False):
+        proxy_changed = (use_proxy != self.use_proxy)
         self.use_proxy = use_proxy
         self.ignore_ssl = ignore_ssl
+
+        # use_proxy 状态变化时重建/初始化代理管理器
+        if proxy_changed or (self.use_proxy and not self.proxy_manager):
+            if self.use_proxy and not self.proxy_manager:
+                self.proxy_manager = ProxyManager(quiet=self.quiet)
+            elif not self.use_proxy:
+                self.proxy_manager = None
 
     def _log(self, message: str, level: str = "info"):
         """内部日志方法，根据 quiet 模式过滤输出
@@ -212,7 +220,7 @@ class GitHubReleaseFetcher:
         return api_url
     
     def _request_with_proxy(self, repo_owner: str, repo_name: str, endpoint: str, 
-                          proxy_url: str, timeout: float = None) -> Optional[Dict[str, Any]]:
+                          proxy_url: str, timeout: float = None, **kwargs) -> Optional[Dict[str, Any]]:
         """使用指定代理发送请求"""
         if timeout is None:
             timeout = self.request_timeout
@@ -220,7 +228,7 @@ class GitHubReleaseFetcher:
         api_url = self._build_api_url(repo_owner, repo_name, endpoint, proxy_url)
         
         try:
-            response = self.session.get(api_url, timeout=timeout)
+            response = self.session.get(api_url, timeout=timeout, **kwargs)
             if response.status_code == 200:
                 return response.json(), proxy_url
             else:
@@ -260,13 +268,16 @@ class GitHubReleaseFetcher:
         
         executor = ThreadPoolExecutor(max_workers=self.max_workers)
         
+        # 记录已提交的future，用于异常时兜底取消
+        future_to_proxy = {}
+        
         @contextmanager
         def auto_shutdown_pool():
             yield
             try:
                 executor.shutdown(wait=False, cancel_futures=True)
             except:
-                for _future in future:
+                for _future in future_to_proxy:
                     with suppress(Exception):
                         if not _future.done():
                             _future.cancel()
@@ -275,11 +286,10 @@ class GitHubReleaseFetcher:
         # 创建线程池
         with auto_shutdown_pool():
             # 提交所有代理请求任务
-            future_to_proxy = {}
             for proxy_url in proxies:
                 future = executor.submit(
                     self._request_with_proxy, 
-                    repo_owner, repo_name, endpoint, proxy_url
+                    repo_owner, repo_name, endpoint, proxy_url, **kwargs
                 )
                 future_to_proxy[future] = proxy_url
             
@@ -399,8 +409,9 @@ class GitHubReleaseFetcher:
 
             releases = []
             page = 1
+            max_pages = 50  # 防御性上限，防止代理/API异常导致分页死循环
 
-            while True:
+            while page <= max_pages:
                 params = {"per_page": per_page, "page": page}
 
                 data = self._make_request(repo_owner, repo_name, "releases", params=params)
@@ -418,6 +429,8 @@ class GitHubReleaseFetcher:
                 # 如果返回的数量小于per_page，说明已经到最后一页
                 if len(data) < per_page:
                     break
+            else:
+                self._log(f"分页超过上限 {max_pages} 页，停止获取", "debug")
 
             return releases
 

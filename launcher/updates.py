@@ -1,5 +1,6 @@
 """汉化包更新逻辑：更新类体系与工厂函数（从 launcher/main.py 拆分而来）"""
 import json
+import os
 import socket
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -67,15 +68,25 @@ class UpdateBase(ABC):
         last_config = ConfigManager().get("launcher", {}).get("last_install", {})
         return last_config.get(name, "0.0.0")
 
+    @staticmethod
+    def get_package_output_dir() -> str:
+        """获取汉化包产物目录：与 webutils 各下载模块的 _get_output_dir 保持一致"""
+        output_dir = ConfigManager().get('cache_path', 'tmp')
+        if not os.path.isabs(output_dir):
+            output_dir = os.path.join(os.getenv('path_', ''), output_dir)
+        return output_dir
+
     def download_and_install(self, zip_path: str) -> bool:
         """下载并安装更新包"""
-        package_list = find_translation_packages('.')
-        if zip_path not in package_list:
+        package_dir = self.get_package_output_dir()
+        package_list = find_translation_packages(package_dir)
+        full_path = zip_path if os.path.isabs(zip_path) else os.path.join(package_dir, zip_path)
+        if os.path.basename(full_path) not in package_list:
             _log_manager.log(f"更新包 {zip_path} 不在安装包列表中，请检查安装包")
             return False
 
         _log_manager.log(f"更新包 {zip_path} 已在安装包列表中")
-        install_translation_package(zip_path, ConfigManager().get("game_path", ""),
+        install_translation_package(full_path, ConfigManager().get("game_path", ""),
                                    f"update_install")
         return True
 
@@ -274,7 +285,7 @@ class OurPlayUpdate(UpdateBase):
                 check_hash=self.config.get("check_hash", True),
                 font_option=self.config.get("font_option", "simplify")
             )
-        return "ourplay.zip"
+        return os.path.join(self.get_package_output_dir(), "ourplay.zip")
 
 class LOUpdate(UpdateBase):
     """同时更新LLC和OurPlay（根据时间戳选择最新的一个）"""

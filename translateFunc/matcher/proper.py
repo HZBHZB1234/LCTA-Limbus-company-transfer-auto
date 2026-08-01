@@ -11,12 +11,16 @@ A. 相似度消歧：对正/负向上下文的 Jaccard 相似度计算
 B. LLM 消歧：轻量消歧提示词（约 300 tokens）
 """
 from __future__ import annotations
+import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from translateFunc.enums import MatchConfidence
 from translateFunc.get_proper import fetch as fetch_proper
 from translateFunc.proper.analyze import extract_contexts
+
+_logger = logging.getLogger("LCTA")  # 与 LogManager 一致的 logger，确保日志正确路由
 
 
 @dataclass
@@ -54,11 +58,28 @@ class ProperAnalyzer:
     def fetch_terms(self, min_len: int = 0, auto_fetch: bool = True,
                     proper_path: str = "") -> list[dict]:
         """从 paratranz API 或本地文件获取术语。"""
-        if auto_fetch:
-            return fetch_proper(min_len=min_len)
-        else:
-            import json
-            return json.loads(Path(proper_path).read_text(encoding="utf-8"))
+        if not auto_fetch:
+            return self._load_local_terms(proper_path)
+        return fetch_proper(min_len=min_len)
+
+    @staticmethod
+    def _load_local_terms(proper_path: str) -> list[dict]:
+        """从本地 JSON 文件加载术语。
+
+        路径为空时直接返回空列表（避免 Path("") 读当前目录报
+        IsADirectoryError）；文件缺失或解析失败时返回空列表并记录警告。
+        """
+        if not proper_path:
+            return []
+        path = Path(proper_path)
+        if not path.is_file():
+            _logger.warning(f"本地 proper 文件不存在: {proper_path}")
+            return []
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            _logger.warning(f"本地 proper 文件读取失败: {proper_path}: {e}")
+            return []
 
     # ----- 分析 -----
 

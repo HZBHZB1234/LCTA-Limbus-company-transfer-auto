@@ -155,6 +155,112 @@ def test_rule_editor_searches_bom_and_unparseable_file_content(monkeypatch, tmp_
     assert result["results_by_category"]["故事"] == [("Story_raw.json", 1)]
 
 
+def test_rule_editor_file_content_bom_roundtrip(monkeypatch, tmp_path):
+    target = tmp_path / "Skills.json"
+    target.write_text('{"dataList":[{"desc":"目标"}]}', encoding="utf-8-sig")
+    monkeypatch.setattr(rule_editor, "_get_lang_dir", lambda: tmp_path)
+
+    loaded = rule_editor.get_file_content("Skills.json")
+
+    assert "error" not in loaded
+    assert loaded["parsed"] == {"dataList": [{"desc": "目标"}]}
+    assert not loaded["raw"].startswith("\ufeff")
+
+    saved = rule_editor.save_file_content("Skills.json", '{"dataList":[{"desc":"新文本"}]}')
+
+    assert saved["success"] is True
+    assert target.read_bytes().startswith(b"\xef\xbb\xbf")
+    assert json.loads(target.read_text(encoding="utf-8-sig"))["dataList"][0]["desc"] == "新文本"
+
+
+def test_rule_editor_rejects_path_traversal(monkeypatch, tmp_path):
+    lang_dir = tmp_path / "lang"
+    lang_dir.mkdir()
+    outside = tmp_path / "evil.json"
+    outside.write_text('{"secret": true}', encoding="utf-8")
+    monkeypatch.setattr(rule_editor, "_get_lang_dir", lambda: lang_dir)
+
+    read_result = rule_editor.get_file_content("../evil.json")
+
+    assert read_result == {"error": "文件路径超出语言包目录: ../evil.json"}
+
+    save_result = rule_editor.save_file_content("../evil.json", '{"x": 1}')
+
+    assert save_result["success"] is False
+    assert "超出" in save_result["error"]
+
+    assert rule_editor.get_file_content(str(outside)).get("error") == "文件路径超出语言包目录: " + str(outside)
+    assert json.loads(outside.read_text(encoding="utf-8")) == {"secret": True}
+
+
+def test_rule_editor_analyze_value_change_classification():
+    wrapped = rule_editor._analyze_value_change("123", "<c>123</c>")
+    assert wrapped["change_type"] == "PURE_WRAP"
+    assert wrapped["prefix_added"] == "<c>"
+    assert wrapped["suffix_added"] == "</c>"
+    assert wrapped["core_old"] == "123"
+    assert wrapped["core_new"] == "<c>123</c>"
+
+    prefixed = rule_editor._analyze_value_change("目标", ">目标")
+    assert prefixed["change_type"] == "PREFIX_ONLY"
+    assert prefixed["prefix_added"] == ">"
+    assert prefixed["suffix_added"] == ""
+
+    suffixed = rule_editor._analyze_value_change("目标", "目标。")
+    assert suffixed["change_type"] == "SUFFIX_ONLY"
+    assert suffixed["prefix_added"] == ""
+    assert suffixed["suffix_added"] == "。"
+
+    replaced = rule_editor._analyze_value_change("大于", ">")
+    assert replaced["change_type"] == "PURE_REPLACE"
+    assert replaced["prefix_added"] == ""
+    assert replaced["suffix_added"] == ""
+    assert replaced["core_old"] == "大于"
+    assert replaced["core_new"] == ">"
+
+    middle = rule_editor._analyze_value_change("AB目标CD", "AB>CD")
+    assert middle["change_type"] == "PURE_REPLACE"
+    assert middle["prefix_added"] == ""
+    assert middle["suffix_added"] == ""
+    assert middle["core_old"] == "目标"
+    assert middle["core_new"] == ">"
+
+
+def test_rule_editor_analyze_changes_clusters_wraps(monkeypatch, tmp_path):
+    monkeypatch.setattr(rule_editor, "_get_lang_dir", lambda: tmp_path)
+    changes = [
+        {"file": "Skill_1.json", "field_path": "desc", "old_val": "123", "new_val": "<c>123</c>"},
+        {"file": "Skill_2.json", "field_path": "desc", "old_val": "45", "new_val": "<c>45</c>"},
+        {"file": "Skill_3.json", "field_path": "desc", "old_val": "大于", "new_val": ">"},
+    ]
+
+    result = rule_editor.analyze_changes(changes)
+
+    assert len(result["groups"]) == 2
+    wrap_group = next(g for g in result["groups"] if g["change_type"] == "PURE_WRAP")
+    replace_group = next(g for g in result["groups"] if g["change_type"] == "PURE_REPLACE")
+    assert wrap_group["occurrence_count"] == 2
+    assert wrap_group["action_preview"] == [
+        {"from": "123", "to": "<c>123</c>"},
+        {"from": "45", "to": "<c>45</c>"},
+    ]
+    assert replace_group["occurrence_count"] == 1
+    assert replace_group["score"]["s2_purity"] == 100
+    assert wrap_group["score"]["s2_purity"] == 95
+
+
+def test_rule_editor_validates_ruleset_payload():
+    ruleset = {"version": 2, "name": "t", "rules": [{
+        "files": ["*.json"],
+        "scope": "dataList[*]",
+        "targets": ["desc"],
+        "where": [],
+        "actions": [{"type": "replace", "mode": "literal", "from": "a", "to": "b"}],
+    }]}
+
+    assert validate_rule(json.dumps(ruleset, ensure_ascii=False))["valid"]
+
+
 def test_skill_color_fingerprint_cache(monkeypatch, tmp_path):
     resource_file = tmp_path / "__data"
     resource_file.write_bytes(b"resource")

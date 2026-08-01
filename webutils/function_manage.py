@@ -9,6 +9,26 @@ import json
 from .functions import *
 from globalManagers.ConfigManager import ConfigManager
 
+
+def safe_join_path(base_path, name):
+    """校验目录/包名安全性并返回 base 目录下的目标路径
+
+    拒绝绝对路径、包含 `..` 段、包含盘符的非法名称；
+    解析后的目标路径必须位于 base 目录解析后的子树内，否则抛出 ValueError。
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("无效的名称")
+    if os.path.isabs(name) or ':' in name:
+        raise ValueError(f"不允许使用绝对路径或盘符: {name}")
+    parts = Path(name).parts
+    if '..' in parts:
+        raise ValueError(f"路径不能包含 '..' 段: {name}")
+    base = Path(base_path).resolve()
+    target = (base / name).resolve()
+    if target == base or base not in target.parents:
+        raise ValueError(f"目标路径超出允许范围: {name}")
+    return target
+
 def check_lang_enabled(game_path:str) -> bool:
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
     if lang_path.exists():
@@ -59,7 +79,9 @@ def delete_installed_package(package_name: str):
     if not package_name or not game_path:
         raise ValueError("未选择汉化包或未设置游戏路径")
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
-    if not (lang_path / package_name).exists():
+    # 校验名称安全并解析目标路径，防止路径穿越
+    package_path = safe_join_path(lang_path, package_name)
+    if not package_path.exists():
         return {'success': False, "message": '当前汉化包不存在'}
     lang_config = lang_path / 'config.json'
     try:
@@ -69,7 +91,7 @@ def delete_installed_package(package_name: str):
     current_lang = config_lang.get('lang', '')
     if current_lang == package_name:
         return {'success': False, "message": '当前汉化包正在使用，无法删除'}
-    shutil.rmtree(lang_path / package_name)
+    shutil.rmtree(package_path)
     return {'success': True, "message": '已删除'}
 
 def toggle_install_package(enable):
@@ -117,6 +139,8 @@ def fing_mod():
 
 def toggle_mod(mod_name: str, enable):
     mod_path = get_mod_path()
+    # 校验 mod 名称安全，防止路径穿越
+    safe_join_path(mod_path, mod_name)
     mod = mod_path / (mod_name if not enable else f'{mod_name}_disable')
     if mod.exists():
         shutil.move(mod, mod_path / (mod_name if enable else f'{mod_name}_disable'))
@@ -126,6 +150,8 @@ def toggle_mod(mod_name: str, enable):
     
 def delete_mod(mod_name: str, enable):
     mod_path = get_mod_path()
+    # 校验 mod 名称安全，防止路径穿越
+    safe_join_path(mod_path, mod_name)
     mod = mod_path / (mod_name if enable else f'{mod_name}_disable')
     if mod.exists():
         if mod.is_dir():
@@ -138,7 +164,8 @@ def delete_mod(mod_name: str, enable):
 
 def open_mod_path():
     mod_path = get_mod_path()
-    os.system(f'explorer {mod_path}')
+    # 使用 subprocess 列表参数而非 os.system 拼接命令，避免路径含空格时被截断
+    subprocess.Popen(['explorer', str(mod_path)])
     
 LOCAL_BASE = Path.home() / 'AppData' / 'LocalLow'
 UNITY = LOCAL_BASE / 'Unity'

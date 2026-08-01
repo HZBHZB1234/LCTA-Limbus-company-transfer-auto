@@ -1,5 +1,4 @@
 import jsonpatch
-import shlex
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 from pathlib import Path
@@ -7,8 +6,23 @@ import json
 import shutil
 import os
 
+def extract_exe_path(cmdline: str) -> str:
+    """从 Windows 命令行中提取可执行文件路径。
+
+    兼容引号包裹的空格路径（Steam 传入）与无引号路径（config 回退）。
+    不做 POSIX 语义的 shlex 解析，避免反斜杠被当作转义符吞掉。
+    """
+    cmdline = cmdline.strip()
+    if not cmdline:
+        return ""
+    if cmdline.startswith('"'):
+        end = cmdline.find('"', 1)
+        if end != -1:
+            return cmdline[1:end]
+    return cmdline.split(maxsplit=1)[0]
+
 def apply_patch(mod_path, _path):
-    game_path = shlex.split(_path)[0]
+    game_path = extract_exe_path(_path)
     lang_path = Path(game_path).parent / "LimbusCompany_Data/lang"
     for lang_patch in Path(mod_path).rglob("*.json"):
         with open(lang_patch, "r") as f:
@@ -26,7 +40,7 @@ def apply_patch(mod_path, _path):
                     json.dump(patched_data, f)
 
 def cleanup_patch(_path):
-    game_path = shlex.split(_path)[0]
+    game_path = extract_exe_path(_path)
     lang_path = Path(game_path).parent / "LimbusCompany_Data/lang"
     for lang_file in lang_path.rglob("*.bak"):
         original_file = lang_file.with_suffix('.json')

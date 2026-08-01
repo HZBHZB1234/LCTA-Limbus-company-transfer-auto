@@ -42,16 +42,40 @@ $initCodeCSourcesCache = "$BuildCacheDir\initcode-c-sources"
 
 if (Test-Path $initScript) {
     # 计算缓存键：InitCode.py 读取的所有输入文件的 MD5（与 InitCode.py 的读取逻辑同步）
-    # InitCode.py 读取的文件: InitCode.py 自身, launcher.c, webui/index.html,
-    #   webui/assets/update.md, favicon.ico, README.md
+    # 输入集合:
+    #   InitCode.py 自身, launcher.c, favicon.ico, README.md
+    #   + webui/ 下全部源码（index.html / quick-editor.html / translation-log-viewer.html、
+    #     js/*.js、sections/preload.js、css/*.css、assets/update.md 等，递归收集）
+    # webui/ 下的下载产物与构建产物不参与哈希（InitCode 每次运行都会重新生成）:
+    #   node_modules/ __pycache__/ dist/ npm/ esm/ vendor/ marked/ webfonts/ nexus/
+    #   js/bundle.js css/bundle.css css/all.min.css css/github-markdown-light.min.css
+    #   favicon.ico assets/README.md
     $initInputFiles = @(
         @{Path=$initScript;                              Label="InitCode.py"},
         @{Path="$ProjectRoot\launcher.c";                Label="launcher.c"},
-        @{Path=$indexHtmlPath;                           Label="index.html"},
-        @{Path="$ProjectRoot\webui\assets\update.md";    Label="update.md"},
-        @{Path="$ProjectRoot\favicon.ico";              Label="favicon.ico"},
+        @{Path="$ProjectRoot\favicon.ico";               Label="favicon.ico"},
         @{Path="$ProjectRoot\README.md";                 Label="README.md"}
     )
+
+    # 递归收集 webui/ 下未被排除的输入文件（含未来新增源码）
+    $webuiRoot = "$ProjectRoot\webui"
+    $webuiExcludeDirs = @("node_modules", "__pycache__", "dist", "npm", "esm",
+                          "vendor", "marked", "webfonts", "nexus")
+    $webuiExcludeFiles = @("js\bundle.js", "css\bundle.css",
+                           "css\all.min.css", "css\github-markdown-light.min.css",
+                           "favicon.ico", "assets\README.md")
+    if (Test-Path $webuiRoot) {
+        $webuiInputFiles = [System.Collections.Generic.List[object]]::new()
+        foreach ($dir in (Get-ChildItem $webuiRoot -Directory -Force | Where-Object { $_.Name -notin $webuiExcludeDirs })) {
+            Get-ChildItem $dir.FullName -Recurse -File -Force | ForEach-Object { $webuiInputFiles.Add($_) }
+        }
+        Get-ChildItem $webuiRoot -File -Force | ForEach-Object { $webuiInputFiles.Add($_) }
+        foreach ($f in ($webuiInputFiles | Sort-Object FullName)) {
+            $rel = $f.FullName.Substring($webuiRoot.Length + 1)
+            if ($rel -in $webuiExcludeFiles) { continue }
+            $initInputFiles += @{Path=$f.FullName; Label="webui\$rel"}
+        }
+    }
 
     $hashParts = [System.Collections.Generic.List[string]]::new()
     foreach ($f in $initInputFiles) {

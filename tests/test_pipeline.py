@@ -273,3 +273,160 @@ class TestRegressionFixes:
         """prompt_version 字段应已从 TranslateConfig 中移除。"""
         config = TranslateConfig()
         assert not hasattr(config, "prompt_version")
+
+
+class TestCheckTranslated:
+    """Bug 1: _check_translated 必须基于 llc 真实键集判定，而非对齐后的键集。"""
+
+    @staticmethod
+    def _make_processor(tmp_path):
+        kr_base = tmp_path / "kr"
+        kr_base.mkdir(exist_ok=True)
+        kr_file = kr_base / "KR_test.json"
+        kr_file.write_text('{"dataList": []}', encoding="utf-8")
+        llc_base = tmp_path / "llc"
+        llc_base.mkdir(exist_ok=True)
+        (llc_base / "test.json").write_text('{"dataList": []}', encoding="utf-8")
+        paths = PathConfig(
+            target_path=tmp_path / "out",
+            llc_base_path=llc_base,
+            KR_base_path=kr_base,
+            JP_base_path=tmp_path / "jp",
+            EN_base_path=tmp_path / "en",
+        )
+        from translateFunc.processor import FileProcessor
+        return FileProcessor(
+            FilePathConfig(kr_file, paths),
+            engine=object(),
+            translate_config=TranslateConfig(),
+            translator=object(),
+        )
+
+    def test_partial_llc_coverage_not_already_translated(self, tmp_path):
+        """部分翻译的 LLC（缺少 KR 新增条目）不应被判定为已翻译。"""
+        processor = self._make_processor(tmp_path)
+        processor.kr_index = {i: {"id": i} for i in range(5)}
+        processor.llc_index = {i: {"id": i} for i in range(4)}  # 缺少 id=4
+        processor.jp_index = dict(processor.kr_index)
+        processor.en_index = dict(processor.kr_index)
+
+        outcome = processor._check_translated()
+
+        assert outcome is None
+        # llc_index 不应被 _align 补齐（真实键集保留）
+        assert set(processor.llc_index.keys()) == {0, 1, 2, 3}
+        # 不应复制旧 LLC 文件
+        assert not (tmp_path / "out" / "test.json").exists()
+
+    def test_full_llc_coverage_is_already_translated(self, tmp_path):
+        """llc 键集完整覆盖 kr 键集时应判定已翻译并复制 LLC 文件。"""
+        processor = self._make_processor(tmp_path)
+        processor.kr_index = {i: {"id": i} for i in range(5)}
+        processor.llc_index = {i: {"id": i} for i in range(5)}
+        processor.jp_index = dict(processor.kr_index)
+        processor.en_index = dict(processor.kr_index)
+
+        outcome = processor._check_translated()
+
+        assert outcome is not None
+        assert outcome.result == ProcessResult.ALREADY_TRANSLATED
+        assert (tmp_path / "out" / "test.json").exists()
+
+    def test_length_mismatch_does_not_align_llc_index(self, tmp_path):
+        """长度不一致触发 jp/en 对齐时，llc_index 仍保留真实键集。"""
+        processor = self._make_processor(tmp_path)
+        processor.kr_index = {i: {"id": i} for i in range(5)}
+        processor.llc_index = {i: {"id": i} for i in range(2)}
+        processor.jp_index = {i: {"id": i} for i in range(2)}
+        processor.en_index = {i: {"id": i} for i in range(2)}
+
+        outcome = processor._check_translated()
+
+        assert outcome is None
+        # 修复前：_align 会把 llc_index 补齐为 kr 键集，导致误判已翻译
+        assert set(processor.llc_index.keys()) == {0, 1}
+
+    def test_empty_llc_not_already_translated(self, tmp_path):
+        """空 LLC（无已翻译数据）不应生成虚假键或判定已翻译。"""
+        processor = self._make_processor(tmp_path)
+        processor.kr_index = {i: {"id": i} for i in range(3)}
+        processor.llc_index = {}
+        processor.jp_index = dict(processor.kr_index)
+        processor.en_index = dict(processor.kr_index)
+
+        outcome = processor._check_translated()
+
+        assert outcome is None
+        assert not (tmp_path / "out" / "test.json").exists()
+
+
+class TestProperFetchTerms:
+    """Bug 4: proper 术语获取的网络失败与本地读取容错。"""
+
+    def test_empty_proper_path_returns_empty(self):
+        """proper_path 为空时返回空列表，不抛 IsADirectoryError。"""
+        from translateFunc.matcher.proper import ProperAnalyzer
+        terms = ProperAnalyzer().fetch_terms(auto_fetch=False, proper_path="")
+        assert terms == []
+
+    def test_missing_local_file_returns_empty(self, tmp_path):
+        from translateFunc.matcher.proper import ProperAnalyzer
+        terms = ProperAnalyzer().fetch_terms(
+            auto_fetch=False,
+            proper_path=str(tmp_path / "not_exists.json"),
+        )
+        assert terms == []
+
+    def test_valid_local_file_loaded(self, tmp_path):
+        from translateFunc.matcher.proper import ProperAnalyzer
+        proper_file = tmp_path / "proper.json"
+        proper_file.write_text(
+            json.dumps([{"term": "이상", "translation": "李箱"}], ensure_ascii=False),
+            encoding="utf-8",
+        )
+        terms = ProperAnalyzer().fetch_terms(
+            auto_fetch=False, proper_path=str(proper_file),
+        )
+        assert terms == [{"term": "이상", "translation": "李箱"}]
+
+    def test_pipeline_degrades_on_fetch_network_failure(
+        self, tmp_path, monkeypatch, caplog,
+    ):
+        """paratranz API 不可达时 pipeline 降级为本地数据，不整体崩溃。"""
+        import requests
+        from translateFunc import TranslationPipeline
+
+        kr = tmp_path / "kr"
+        kr.mkdir()
+        (tmp_path / "jp").mkdir()
+        (tmp_path / "en").mkdir()
+
+        config = TranslateConfig(
+            game_path=tmp_path / "game",
+            output_dir=tmp_path / "out",
+            kr_path=str(kr),
+            enable_dev_settings=True,
+            enable_proper=True,
+            auto_fetch_proper=True,
+            proper_path="",
+            enable_concurrent=False,
+        )
+
+        def _boom(*_args, **_kwargs):
+            raise requests.ConnectionError("paratranz unreachable")
+
+        monkeypatch.setattr("translateFunc.matcher.proper.fetch_proper", _boom)
+        monkeypatch.setattr(
+            TranslationPipeline, "_build_translator", lambda self: object(),
+        )
+
+        # LogManager 单例会将 LCTA logger 的 propagate 置 False，
+        # 恢复传播以便 caplog 捕获警告记录
+        import logging
+        monkeypatch.setattr(logging.getLogger("LCTA"), "propagate", True)
+
+        with caplog.at_level("WARNING", logger="LCTA"):
+            summary = TranslationPipeline(config).run()
+
+        assert summary.total == 0  # 无崩溃，空术语表继续运行
+        assert any("专有名词远程抓取失败" in r.message for r in caplog.records)

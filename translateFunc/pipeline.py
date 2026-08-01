@@ -15,6 +15,7 @@ from pathlib import Path
 import json
 import logging
 import os
+import requests
 import sys
 import tempfile
 from itertools import zip_longest
@@ -125,10 +126,21 @@ class TranslationPipeline:
                 self._analyzer = ProperAnalyzer(kr_path, jp_path, en_path)
 
                 with profiler.phase("专有名词抓取"):
-                    raw_terms = self._analyzer.fetch_terms(
-                        auto_fetch=self._config.auto_fetch_proper,
-                        proper_path=self._config.proper_path,
-                    )
+                    try:
+                        raw_terms = self._analyzer.fetch_terms(
+                            auto_fetch=self._config.auto_fetch_proper,
+                            proper_path=self._config.proper_path,
+                        )
+                    except requests.RequestException as e:
+                        # paratranz API 不可达：降级为本地 proper 数据，
+                        # 避免异常冒泡导致整个 pipeline 崩溃
+                        self._log_bridge.warning(
+                            f"专有名词远程抓取失败: {e}，降级为本地 proper 数据"
+                        )
+                        raw_terms = self._analyzer.fetch_terms(
+                            auto_fetch=False,
+                            proper_path=self._config.proper_path,
+                        )
 
                 with profiler.phase("专有名词分析"):
                     proper_terms = self._analyzer.analyze(raw_terms)

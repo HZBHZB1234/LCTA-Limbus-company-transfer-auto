@@ -47,7 +47,7 @@ class ConfigManager:
             with open(self._config_path, "r", encoding="utf-8") as f:
                 self._data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            self._load_default()
+            self._data = self._load_default()
 
     def _load_default(self) -> Dict[str, Any]:
         """加载默认配置"""

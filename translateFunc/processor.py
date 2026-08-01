@@ -738,7 +738,14 @@ class FileProcessor:
                                     t = fallback_t
 
                             if t is not None and isinstance(t, dict):
-                                translation = t.get("translation", "")
+                                translation = t.get("translation", "") or ""
+                                # 空串/纯空白译文视为缺失，按 missing 处理，
+                                # 进入 P1-2 补充翻译重试（与 _retry_missing_entries 的
+                                # 空串检查保持一致，不把空译文当有效翻译）
+                                if not str(translation).strip():
+                                    part_result.append(block.get("kr", ""))
+                                    missing_ids.append(expected_id)
+                                    continue
                                 # 置信度检查：低于 min_confidence 的条目回退为 KR 原文
                                 conf = str(t.get("confidence", "medium")).lower()
                                 if _CONFIDENCE_ORDER.get(conf, 1) < threshold:
@@ -1327,7 +1334,11 @@ class FileProcessor:
             if item.get("changed", False):
                 idx = int(item.get("id", 0)) - 1  # 1-based → 0-based
                 if 0 <= idx < len(result):
-                    result[idx] = item.get("translation", result[idx])
+                    correction = item.get("translation", "") or ""
+                    # 空串/纯空白修正不覆盖已有翻译（阶段 2 空响应不能清空合法译文）
+                    if not str(correction).strip():
+                        continue
+                    result[idx] = correction
                     corrections += 1
 
         if corrections > 0:
@@ -1382,21 +1393,32 @@ class FileProcessor:
         return None
 
     def _check_translated(self) -> ProcessOutcome | None:
-        """检查是否已翻译。已翻译时返回 ProcessOutcome。"""
+        """检查是否已翻译。已翻译时返回 ProcessOutcome。
+
+        判定基于 llc_index 键集真实覆盖 kr_index 键集：仅当 LLC
+        缺失键数为 0（严格全覆盖）时才视为已翻译。
+        注意：llc_index 不参与 _align 对齐——对齐会为缺失键生成
+        KR 原文占位，使部分翻译的 LLC 键集恒与 KR 相等，导致 KR
+        新增条目被误判已翻译而静默丢失。_align 仅用于对齐显示
+        用索引（jp/en），不用于已翻译判定。
+        """
         if not len(self.jp_index) == len(self.kr_index) == len(self.en_index):
             def _align(d: dict, ref: dict) -> dict:
                 return {k: d.get(k, ref[k]) for k in ref}
             self.en_index = _align(self.en_index, self.kr_index)
             self.jp_index = _align(self.jp_index, self.kr_index)
-            # 仅当 llc_index 非空时才对齐；空 LLC 意味着没有已翻译数据，不应生成虚假键
-            if self.llc_index:
-                self.llc_index = _align(self.llc_index, self.kr_index)
 
-        # 验证 LLC 源文件确实存在，且索引键匹配
-        if self.llc_index and list(self.kr_index.keys()) == list(self.llc_index.keys()):
-            if self.path_config.LLC_path.exists():
+        # 验证 LLC 源文件确实存在，且 llc 键集真实覆盖 kr 键集
+        if self.llc_index and self.path_config.LLC_path.exists():
+            missing_keys = set(self.kr_index.keys()) - set(self.llc_index.keys())
+            if not missing_keys:
                 self._save_llc()
                 return ProcessOutcome(ProcessResult.ALREADY_TRANSLATED, self.file_name)
+            _logger.info(
+                f"[{self.file_name}] LLC 缺少 {len(missing_keys)} 个条目"
+                f"（如 {sorted(missing_keys)[:5]}...），"
+                f"将翻译缺失条目并与 LLC 合并"
+            )
         return None
 
     # ========== 初始化 ==========
@@ -1549,7 +1571,7 @@ class _SimpleRequestBuilder:
                     expected_count += 1
                     kr_fallbacks.append(kr_val)
 
-        # 韧性处理：数量不匹配时用 KR 原文补齐或截断
+        # 韧性处理：数量不匹配时按位置补齐或截断
         actual_count = len(translated_texts)
         if actual_count < expected_count:
             shortfall = expected_count - actual_count
@@ -1557,7 +1579,12 @@ class _SimpleRequestBuilder:
                 f"译文数量不足: 预期 {expected_count}, 实际 {actual_count}"
                 f"（{shortfall} 个文本块回退为 KR 原文）"
             )
-            translated_texts = list(translated_texts) + kr_fallbacks[-shortfall:]
+            # 逐位置补齐：缺失位置使用该位置对应的 KR 原文，
+            # 避免尾部追加（kr_fallbacks[-shortfall:]）导致后续译文整体错位
+            translated_texts = [
+                translated_texts[pos] if pos < actual_count else kr_fallbacks[pos]
+                for pos in range(expected_count)
+            ]
         elif actual_count > expected_count:
             excess = actual_count - expected_count
             _logger.warning(

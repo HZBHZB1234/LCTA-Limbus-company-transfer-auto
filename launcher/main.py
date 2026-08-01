@@ -39,7 +39,8 @@ def resolve_steam_argv() -> str:
         _log_manager.log("unexpectedly missing steam_argv environment variable")
         _log_manager.log("use path in config instead")
 
-        steam_argv = ConfigManager().get("game_path", "") + 'LimbusCompany.exe'
+        fallback_game = os.path.join(ConfigManager().get("game_path", ""), 'LimbusCompany.exe')
+        steam_argv = f'"{fallback_game}"' if ' ' in fallback_game else fallback_game
     _log_manager.log(f"steam_argv: {steam_argv}")
     return steam_argv
 
@@ -98,6 +99,19 @@ def _hide_launcher_console():
     hwnd = kernel32.GetConsoleWindow()
     if hwnd:
         user32.ShowWindow(hwnd, 0)
+
+
+def _close_progress_window(progress, game_process, exit_code, cancel_event):
+    if not (progress and progress.is_alive()):
+        return
+    try:
+        if game_process is None or exit_code != -1 or cancel_event.is_set():
+            progress.close()
+        else:
+            time.sleep(float(ConfigManager().get("launcher.work.exit_delay", 3.0)))
+            progress.close()
+    except Exception:
+        pass
 
 
 def main():
@@ -208,12 +222,7 @@ def main():
         except Exception:
             pass
 
-    if progress and progress.is_alive():
-        try:
-            time.sleep(3.0)
-            progress.close()
-        except Exception:
-            pass
+    _close_progress_window(progress, game_process, exit_code, pipeline.cancel_event)
 
 
 if __name__ == '__main__':

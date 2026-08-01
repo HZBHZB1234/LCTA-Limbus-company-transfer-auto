@@ -10,6 +10,7 @@ import winreg
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 from .functions import *
+from .function_manage import safe_join_path
 
 
 def find_translation_packages(target_dir):
@@ -47,11 +48,16 @@ def find_translation_packages(target_dir):
 def delete_translation_package(package_name, target_path):
     """删除指定的汉化包"""
     try:
-        package_path = os.path.join(target_path, package_name)
-        if os.path.isdir(package_name):
+        # 校验名称安全并解析目标路径，防止路径穿越
+        package_path = safe_join_path(target_path, package_name)
+        if os.path.isdir(package_path):
             shutil.rmtree(package_path)
-        elif os.path.isfile(package_name):
+        elif os.path.isfile(package_path):
             os.remove(package_path)
+        else:
+            error_msg = f"汉化包不存在: {package_name}"
+            _log_manager.log(error_msg)
+            return {"success": False, "message": error_msg}
         
         _log_manager.log(f"已删除汉化包: {package_name}")
         

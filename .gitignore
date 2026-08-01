@@ -31,3 +31,5 @@ translatekit
 LLc-CN_LCTA
 webui/assets/README.md
 CFST/
+/*.zip
+/tmp/*

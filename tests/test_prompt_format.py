@@ -471,6 +471,222 @@ class TestFormatAwareSplit:
         )
 
 
+class TestSplitOverLimitRefinement:
+    """分割到上限后仍超限的 part 应进一步切分而非原样发送。"""
+
+    @staticmethod
+    def _make_builder(blocks, max_length):
+        from translateFunc.builder.request import RequestBuilder
+        from unittest.mock import MagicMock
+        engine = MagicMock()
+        engine.match_all.return_value = MagicMock(
+            proper_matches=[], role_matches=[],
+            affect_id_matches=[], affect_name_matches=[],
+        )
+        engine.role_data = []
+        engine.affect_data = []
+        builder = RequestBuilder(
+            request_text={"kr": {0: {("text",): "x"}}},
+            matcher_engine=engine,
+            max_length=max_length,
+        )
+        builder.unified_request = {
+            "metadata": {"total_text_blocks": len(blocks),
+                         "proper_terms_count": 0, "affects_count": 0,
+                         "models_count": 0, "file_type": "STORY"},
+            "reference": {"proper_terms": [], "affects": [],
+                          "models": [], "model_docs": [], "skill_doc": ""},
+            "text_blocks": blocks,
+        }
+        return builder
+
+    def test_over_limit_parts_are_split_to_fit(self):
+        """50 份封顶后仍超限的 part 应被继续切分，所有 part 均不超限。"""
+        blocks = [
+            {"kr": f"테스트_{i}_" + "가나다라마바사아자차카타파하" * 200,
+             "jp": f"テスト_{i}", "en": f"Test_{i}"}
+            for i in range(500)
+        ]
+        builder = self._make_builder(blocks, max_length=20000)
+        builder._split_by_length(prompt_format="xml_json")
+
+        # 50 份（每份 10 block ≈ 21k chars）仍超限 → 应继续切分出更多 part
+        assert len(builder.split_requests) > 50, (
+            f"超限 part 应继续切分，实际只有 {len(builder.split_requests)} 部分"
+        )
+        for p in builder.split_requests:
+            for fmt in ["xml_json", "xml_xml", "json_json"]:
+                assert len(builder._get_request_text(p, fmt)) <= 20000, (
+                    f"part 超限: fmt={fmt}"
+                )
+
+    def test_split_keeps_block_alignment(self):
+        """切分后所有 part 的 text_blocks 拼接应等于原始顺序。"""
+        blocks = [{"kr": f"텍스트_{i}" * 5, "jp": "J", "en": "E"} for i in range(300)]
+        builder = self._make_builder(blocks, max_length=15000)
+        builder._split_by_length(prompt_format="xml_json")
+
+        merged = []
+        for p in builder.split_requests:
+            merged.extend(p.get("text_blocks", []))
+        assert merged == blocks
+        assert len(builder.get_request_text("xml_json")) == len(builder.split_requests)
+
+    def test_single_block_over_limit_kept(self):
+        """单个 block 仍超限时保留原样（无法再切分）。"""
+        blocks = [{"kr": "가" * 30000, "jp": "J", "en": "E"}]
+        builder = self._make_builder(blocks, max_length=20000)
+        builder._split_by_length(prompt_format="xml_json")
+        assert len(builder.split_requests) == 1
+        assert builder.split_requests[0]["text_blocks"] == blocks
+
+
+class TestRoleDocsMapping:
+    """_get_role_docs 兼容韩文 id 与英文模型码 id。"""
+
+    def _make_builder(self):
+        from translateFunc.builder.request import RequestBuilder
+        b = RequestBuilder.__new__(RequestBuilder)
+        b.is_story = True
+        return b
+
+    def test_korean_ids_map_via_rloe_compare(self):
+        b = self._make_builder()
+        role_list = {"이상": {"id": "이상", "kr": "이상"}, "단테2": {"id": "단테2", "kr": "단테"}}
+        docs = b._get_role_docs(role_list)
+        assert [d["角色"] for d in docs] == ["李箱", "但丁"]
+
+    def test_english_ids_match_style_keys_directly(self):
+        b = self._make_builder()
+        role_list = {"Yisang": {"id": "Yisang", "kr": "이상"}, "Faust": {"id": "Faust", "kr": "파우스트"}}
+        docs = b._get_role_docs(role_list)
+        assert [d["角色"] for d in docs] == ["李箱", "浮士德"]
+
+    def test_english_id_with_suffix_and_case(self):
+        b = self._make_builder()
+        role_list = {"Dante2": {"id": "Dante2", "kr": "단테"},
+                     "YISANG": {"id": "YISANG", "kr": "이상"}}
+        docs = b._get_role_docs(role_list)
+        assert [d["角色"] for d in docs] == ["但丁", "李箱"]
+
+    def test_kr_field_fallback(self):
+        b = self._make_builder()
+        role_list = {"char_01": {"id": "char_01", "kr": "이상"}}
+        docs = b._get_role_docs(role_list)
+        assert [d["角色"] for d in docs] == ["李箱"]
+
+    def test_unknown_id_returns_empty_defensive(self):
+        b = self._make_builder()
+        assert b._get_role_docs({"unknown": {"id": "unknown", "kr": "?"}}) == []
+        b.is_story = False
+        assert b._get_role_docs({"이상": {}}) == []
+
+    def test_duplicate_style_deduped(self):
+        b = self._make_builder()
+        role_list = {"이상": {"id": "이상", "kr": "이상"}, "Yisang": {"id": "Yisang", "kr": "이상"}}
+        docs = b._get_role_docs(role_list)
+        assert len(docs) == 1
+
+
+class TestSplitEstimatorExact:
+    """长度估算应与真实渲染精确一致（保证分割边界不漂移）。"""
+
+    def test_estimate_matches_real_render(self):
+        import json
+        import random
+        from translateFunc.builder.request import RequestBuilder
+
+        b = RequestBuilder.__new__(RequestBuilder)
+        b.is_story = True
+        b.is_skill = True
+
+        random.seed(42)
+        blocks = []
+        for i in range(120):
+            d = {"kr": f"테스트_{i}_" + "가나다라마바사아자차카타파하" * random.randint(1, 5),
+                 "jp": f"テスト_{i}", "en": f"Test_{i}"}
+            if i % 7 == 0:
+                d["proper_refs"] = [f"term{i % 20}", f"term{i % 20 + 1}"]
+            if i % 5 == 0:
+                d["affect_refs"] = [f"[{1000 + i % 15}]"]
+            if i % 9 == 0:
+                d["model"] = f"m{i}"
+            blocks.append(d)
+
+        terms = [{"term": f"term{i}", "kr": f"용어{i}", "cn": f"中文{i}",
+                  "note": f"备注{i}" if i % 3 == 0 else ""} for i in range(20)]
+        affects = [{"id": str(1000 + i), "kr": f"버프{i}", "cn": f"效果{i}"} for i in range(15)]
+        docs = [{"角色": f"角色{i}", "语言风格": f"风格{i}"} for i in range(3)]
+        skill = "技能文档" * 5
+
+        block_lens = b._precompute_block_lens(blocks)
+        random.seed(7)
+        for _ in range(50):
+            n = random.randint(0, 120)
+            chunk = blocks[:n]
+            k, a, d = random.randint(0, 20), random.randint(0, 15), random.randint(0, 3)
+            skill_use = skill if random.random() < 0.5 else ""
+            part = {"reference": {"proper_terms": terms[:k], "affects": affects[:a],
+                                  "models": [], "model_docs": docs[:d],
+                                  "skill_doc": skill_use},
+                    "text_blocks": chunk}
+            for fmt in ["xml_json", "xml_xml", "json_json"]:
+                est = b._estimate_prompt_len(part, fmt, block_lens)
+                real = len(b._get_request_text(part, fmt))
+                assert est == real, f"estimator drift: fmt={fmt} est={est} real={real}"
+
+
+class TestDeBuildPositionalFill:
+    """deBuild 缺失项按位置补 KR 原文，避免中间缺失导致尾部错位。"""
+
+    def _make_builder(self):
+        from translateFunc.builder.request import RequestBuilder
+        builder = RequestBuilder.__new__(RequestBuilder)
+        builder.kr_text = {
+            1: {("text",): "KR1"},
+            2: {("text",): "KR2"},
+            3: {("text",): "KR3"},
+        }
+        builder.jp_text = {
+            1: {("text",): "JP1"},
+            2: {("text",): "JP2"},
+            3: {("text",): "JP3"},
+        }
+        builder.en_text = {
+            1: {("text",): "EN1"},
+            2: {("text",): "EN2"},
+            3: {("text",): "EN3"},
+        }
+        return builder
+
+    def test_missing_middle_filled_positionally(self):
+        builder = self._make_builder()
+        result = builder.deBuild(["T1", "T2"])
+        assert result == {
+            1: {("text",): "T1"},
+            2: {("text",): "T2"},
+            3: {("text",): "KR3"},
+        }
+
+    def test_all_missing_but_first_filled_positionally(self):
+        builder = self._make_builder()
+        result = builder.deBuild(["T1"])
+        assert result == {
+            1: {("text",): "T1"},
+            2: {("text",): "KR2"},
+            3: {("text",): "KR3"},
+        }
+
+    def test_excess_translations_truncated(self):
+        builder = self._make_builder()
+        result = builder.deBuild(["T1", "T2", "T3", "EXTRA"])
+        assert result == {
+            1: {("text",): "T1"},
+            2: {("text",): "T2"},
+            3: {("text",): "T3"},
+        }
+
+
 class TestStageInputSplit:
     """Stage 0/2 requests are split using their rendered user prompt length."""
 

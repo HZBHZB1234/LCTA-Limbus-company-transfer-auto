@@ -1,10 +1,8 @@
 import os
 from pathlib import Path
-import tempfile
 import UnityPy
 import UnityPy.config
 UnityPy.config.FALLBACK_UNITY_VERSION = "6000.3.12f1"
-from copy import deepcopy
 import logging
 from UnityPy.enums import ClassIDType
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -126,19 +124,3 @@ def load_text_assets(
     if remaining:
         logger.warning('未完全找到文件，还差%s', sorted(remaining))
     return loaded, sorted(remaining)
-
-def function_resources(target: list, logger: logging.Logger= logging.getLogger('resourcer')):
-    _tmp = tempfile.mkdtemp()
-    files = get_limbus_resource_files()
-    logger.debug(f'找到{len(files)}个文件')
-    customTarget = deepcopy(target)
-    for file in files:
-        result = extract_files_from_resource(str(file), customTarget, _tmp)
-        if result:
-            logger.debug(f'在文件{file}中找到文件{result}')
-        customTarget = [i for i in customTarget if i not in result]
-        if not customTarget:
-            break
-    if customTarget:
-        logger.warning(f'未完全找到文件，还差{customTarget}')
-    return _tmp, customTarget

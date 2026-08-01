@@ -18,6 +18,9 @@ WEBNOTE_HEADERS={
     }
 API_URL = "https://api.txttool.cn/netcut/note"
 
+# 网络请求超时：(连接超时, 读超时)
+REQUEST_TIMEOUT = (10, 60)
+
 class Note():
     ONE_HOUR = 3600
     SIX_HOUR = 21600
@@ -35,18 +38,33 @@ class Note():
         self.pwd = pwd
         self.note_url = f'webnote.cc/{self.note_name}'
         self.read_only = read_only
+        # 预初始化属性，网络失败时 fetch 返回 False 也不会 AttributeError
+        self.created_time = None
+        self.expire_time = None
+        self.last_read_time = None
+        self.log_list = []
+        self.note_content = None
+        self.note_id = None
+        self.note_token = None
+        self.read_count = 0
+        self.updated_time = None
         
     def fetch_note_info(self):
         if self.read_only:
-            self._fetch_note_info_ReadOnly()
+            return self._fetch_note_info_ReadOnly()
         else:
-            self._fetch_note_info_write()
+            return self._fetch_note_info_write()
     
     def _fetch_note_info_write(self):
-        fetch_request = requests.post(f'{API_URL}/info',
-                                     headers=WEBNOTE_HEADERS, data={'note_name': self.note_name, "note_pwd": self.pwd})
-        fetch_request.raise_for_status()
-        note_info = fetch_request.json()
+        try:
+            fetch_request = requests.post(f'{API_URL}/info',
+                                         headers=WEBNOTE_HEADERS, data={'note_name': self.note_name, "note_pwd": self.pwd},
+                                         timeout=REQUEST_TIMEOUT)
+            fetch_request.raise_for_status()
+            note_info = fetch_request.json()
+        except requests.RequestException as e:
+            print(f"无法获取笔记信息（网络错误）: {e}")
+            return False
         
         if not str(note_info['status']) == '1':
             raise ValueError(f"无法获取笔记信息，状态码: {note_info['status']}")
@@ -65,10 +83,15 @@ class Note():
         return note_data
 
     def _fetch_note_info_ReadOnly(self):
-        fetch_request = requests.post(f'{API_URL}/info',
-                                     headers=WEBNOTE_HEADERS, data={'note_id': self.note_name, "note_pwd": self.pwd})
-        fetch_request.raise_for_status()
-        note_info = fetch_request.json()
+        try:
+            fetch_request = requests.post(f'{API_URL}/info',
+                                         headers=WEBNOTE_HEADERS, data={'note_id': self.note_name, "note_pwd": self.pwd},
+                                         timeout=REQUEST_TIMEOUT)
+            fetch_request.raise_for_status()
+            note_info = fetch_request.json()
+        except requests.RequestException as e:
+            print(f"无法获取笔记信息（网络错误）: {e}")
+            return False
         
         if not str(note_info['status']) == '1':
             raise ValueError(f"无法获取笔记信息，状态码: {note_info['status']}")
@@ -83,18 +106,23 @@ class Note():
         
         return note_data
     def update_note_content(self, new_content):
-        update_request = requests.post(f'{API_URL}/save',
-                                       headers=WEBNOTE_HEADERS,
-                                       data={
-                                           'note_name': self.note_name,
-                                           'note_id': self.note_id,
-                                           'note_token': self.note_token,
-                                           'expire_time': self.expire_time,
-                                           'note_content': new_content,
-                                           'note_pwd': self.pwd
-                                       })
-        update_request.raise_for_status()
-        update_response = update_request.json()
+        try:
+            update_request = requests.post(f'{API_URL}/save',
+                                           headers=WEBNOTE_HEADERS,
+                                           data={
+                                               'note_name': self.note_name,
+                                               'note_id': self.note_id,
+                                               'note_token': self.note_token,
+                                               'expire_time': self.expire_time,
+                                               'note_content': new_content,
+                                               'note_pwd': self.pwd
+                                           },
+                                           timeout=REQUEST_TIMEOUT)
+            update_request.raise_for_status()
+            update_response = update_request.json()
+        except requests.RequestException as e:
+            print(f"无法更新笔记内容（网络错误）: {e}")
+            return False
         
         if not str(update_response['status']) == '1':
             raise ValueError(f"无法更新笔记内容，状态码: {update_response['status']}")

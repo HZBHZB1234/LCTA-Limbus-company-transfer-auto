@@ -3,11 +3,24 @@ import time
 from pathlib import Path
 from globalManagers.LogManager import LogManager
 
+# 网络请求超时：(连接超时, 读超时)
+REQUEST_TIMEOUT = (10, 60)
+
+_log_manager = LogManager()
+
 
 def _default_log(message):
     print(message)
     try:
-        LogManager().log(message)
+        _log_manager.log(message)
+    except Exception:
+        pass
+
+
+def _log_error(error):
+    print(error)
+    try:
+        _log_manager.log_error(error)
     except Exception:
         pass
 
@@ -33,7 +46,7 @@ class UpFileClient:
             'file_name': file_name
         }
         
-        response = self.session.post(url, data=data)
+        response = self.session.post(url, data=data, timeout=REQUEST_TIMEOUT)
         if response.status_code == 200:
             result = response.json()
             if result.get('status') == 1:
@@ -47,16 +60,14 @@ class UpFileClient:
         """实际上传文件到云存储"""
         file_name = Path(file_path).name
         
-        with open(file_path, 'rb') as file:
-            file_content = file.read()
-        
         headers = {
             'Content-Type': 'application/octet-stream',
             'Content-Disposition': f'attachment; filename="{file_name}"'
         }
         
-        # 注意：这里使用PUT方法
-        response = requests.put(upload_url, data=file_content, headers=headers)
+        # 注意：这里使用PUT方法，以文件对象流式上传，避免整文件读入内存
+        with open(file_path, 'rb') as file:
+            response = requests.put(upload_url, data=file, headers=headers, timeout=REQUEST_TIMEOUT)
         
         # 云存储通常返回204或200，但没有响应体是正常的
         if response.status_code in [200, 204]:
@@ -73,7 +84,7 @@ class UpFileClient:
             'file_key': file_key
         }
         
-        response = self.session.post(url, data=data)
+        response = self.session.post(url, data=data, timeout=REQUEST_TIMEOUT)
         if response.status_code == 200:
             result = response.json()
             if result.get('status') == 1:
@@ -91,7 +102,7 @@ class UpFileClient:
             '_': int(time.time() * 1000)  # 添加时间戳防止缓存
         }
         
-        response = self.session.get(url, params=params)
+        response = self.session.get(url, params=params, timeout=REQUEST_TIMEOUT)
         if response.status_code == 200:
             result = response.json()
             if result.get('status') == 1:
@@ -116,11 +127,14 @@ class UpFileClient:
             # 2. 获取下载重定向链接
             download_url = f"{self.base_url}/download/{file_id}/"
 
-            response = self.session.get(download_url, allow_redirects=True)
+            response = self.session.get(download_url, allow_redirects=True, stream=True, timeout=REQUEST_TIMEOUT)
             
             if response.status_code == 200:
+                # 分块写入磁盘，避免整文件载入内存
                 with open(save_path, 'wb') as file:
-                    file.write(response.content)
+                    for chunk in response.iter_content(chunk_size=1024 * 100):
+                        if chunk:
+                            file.write(chunk)
                 
                 file_size = Path(save_path).stat().st_size
                 
@@ -134,6 +148,7 @@ class UpFileClient:
                 raise Exception(f"下载失败，状态码: {response.status_code}")
                 
         except Exception as e:
+            _log_error(e)
             return {
                 'success': False,
                 'error': str(e)
@@ -147,7 +162,7 @@ class UpFileClient:
                 'file_id': file_id
             }
             
-            response = self.session.post(url, data=data)
+            response = self.session.post(url, data=data, timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 result = response.json()
                 if result.get('status') == 1:
@@ -161,6 +176,7 @@ class UpFileClient:
                 raise Exception(f"HTTP错误: {response.status_code}")
                 
         except Exception as e:
+            _log_error(e)
             return {
                 'success': False,
                 'error': str(e)
@@ -207,6 +223,7 @@ class UpFileClient:
             }
             
         except Exception as e:
+            _log_error(e)
             return {
                 'success': False,
                 'error': str(e)

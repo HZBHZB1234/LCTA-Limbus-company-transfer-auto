@@ -104,7 +104,7 @@ launcher/ 的模组功能基于 LimbusModLoader（GPL-3.0），因此该子目�
 - 注册所有功能方法到 pywebview API（包括 `perform_update_from_file()` 手动更新功能）
 - 管理模态窗口的生命周期（创建、更新进度、关闭）
 - 处理前端与后端的双向通信（回调、事件）
-- 拖放文件处理：接收 JS 传递的文件路径列表，交由 `function_drop.py` 分析执行
+- 拖放文件处理：接收 JS 传递的文件路径列表，交由 `webutils/drop/` 包分析执行
 
 **webui/ 前端** 是一个单页应用（SPA），使用原生 HTML/CSS/JS 构建，不依赖 React/Vue 等框架。选择原生方案的原因是减少依赖、降低打包体积。9 个 JS 模块按功能领域拆分。
 

@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-08-01 -->
+<!-- Last updated: 2026-08-02 -->
 
 ## Project Purpose
 
@@ -79,7 +79,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Factory** | `launcher/updates.py` | Update objects for LLC, OurPlay, Machine translation — each implements a common interface |
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |
 | **Pipeline** | `launcher/pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline (init→check_update→cdn→prepare_mod→launch→running→exit). Modules register callbacks per phase via `on(phase, callback)`; `cancel_event` supports GUI-initiated shutdown.
-| **Chain of Responsibility** | `webutils/function_drop.py` | `FileFormatDetectionChain` and `FileFormatExecutionChain` pass requests through ordered format handlers; the first matching handler performs detection or execution |
+| **Registry + Interface** | `webutils/drop/` | `DropFileHandler` 接口（检测 + 执行 + 显示名收敛于单类）; `DropFileHandlerRegistry` 按容器类型（zip/folder/json/path）有序检测、按类型分派执行，兜底 `invalid` |
 
 ## Key Interfaces
 
@@ -93,7 +93,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `CompiledRules` / `ApplyResult` | `webutils/fancy_engine.py` | Immutable compiled beautification rules plus per-file changed-path results; exposes `requires_skill_color` so resource extraction is prepared only when an enabled rule needs it |
 | `CompiledBus` / `BusApplyResult` | `webutils/bus_engine.py` | Immutable bus rules with per-ruleset directory exclusions, ordered path execution, exact quick-edit success/failure counts, and changed-path reporting |
 | `FancyRunStats` | `webutils/function_fancy.py` | Reports scanned, matched and changed files/values, elapsed time, and skill-color resource cache hits; files are rewritten atomically only when content changes |
-| `FileFormatDetector` / `FileFormatExecutor` | `webutils/function_drop.py` | Interfaces for ordered drag-and-drop format detection and execution; concrete handlers can be appended without changing `evalFile()` or `evalFiles()` |
+| `DropFileHandler` / `DropFileHandlerRegistry` | `webutils/drop/handler.py` | 接口：每个分支类实现 `detect()`（快照/路径 → 类型字符串）与 `execute()`（上下文 → 结果键），声明 `file_type`/`label`; 注册表维护各容器类型的检测顺序（如 zip: full → nofont → FLmod → update → jsononly），并按类型查处理器执行，无需改动 `evalFile()` / `evalFiles()` 即可扩展新分支 |
 | `LogManager` | `globalManagers/LogManager.py` | Singleton logger: file rotation, console, webview modal callbacks |
 
 ## Polyglot Boundaries

@@ -25,7 +25,7 @@ from .function_manage import (find_installed_packages,
 from .builtinFancy import fancy as builtinFancyConfig
 from .function_fancy import fancy_main
 from .eiderConst import updateList, bindRefer, relyList
-from .function_drop import evalFile, makeMessage, evalFiles
+from .drop import evalFile, makeMessage, evalFiles
 from .function_cdn import (
     run_cfst,
     resolve_cloudfront_dns,

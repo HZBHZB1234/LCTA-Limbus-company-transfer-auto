@@ -39,7 +39,7 @@ from webutils.bus_engine import (
 )
 from webutils.fancy_engine import RuleValidationError
 from webutils.function_fancy import fancy_main, load_fancy_folder_rules, save_ruleset_to_folder
-from webutils.function_drop import evalJson
+from webutils.drop import evalJson
 from webutils import function_fancy, function_quick_editor, function_rule_editor
 
 

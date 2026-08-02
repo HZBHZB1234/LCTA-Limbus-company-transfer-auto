@@ -1,4 +1,4 @@
-"""webutils/function_drop.py 的类型识别与安装逻辑测试
+"""webutils/drop/ 包的类型识别与安装逻辑测试
 
 覆盖：
 - evalZip / evalFolder / eval7zip 对单根目录包裹（LimbusLocalize_xxx/StoryData/...）的识别
@@ -6,12 +6,34 @@
 - FLmod / jsononly 预删除与实际解压目标对齐
 - update 分支 zip 成员名安全校验（路径穿越防护）
 """
+import sys
+import types
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from webutils import function_drop
+
+if "openspeedy" not in sys.modules:
+    openspeedy = types.ModuleType("openspeedy")
+    openspeedy.SpeedController = type("SpeedController", (), {})  # type: ignore[attr-defined]
+    openspeedy.ProcessInfo = type("ProcessInfo", (), {})  # type: ignore[attr-defined]
+    for exception_name in (
+        "OpenSpeedyError",
+        "PlatformNotSupportedError",
+        "DLLNotFoundError",
+        "ProcessAccessDeniedError",
+        "ProcessNotFoundError",
+        "ProcessArchitectureMismatch",
+        "InjectionError",
+        "EjectionError",
+        "SpeedRangeError",
+        "SpeedControlError",
+    ):
+        setattr(openspeedy, exception_name, type(exception_name, (Exception,), {}))
+    sys.modules["openspeedy"] = openspeedy
+
+from webutils.drop import detect, eval_files, handlers, inspect
 
 
 FOLDERLIST_DIRS = [
@@ -61,47 +83,23 @@ def _make_full_folder(base, wrapper=None, font=True, loose=None):
     return base
 
 
-class TestFormatChains:
-    def test_detection_chain_stops_at_first_matching_handler(self):
-        calls = []
-        chain = function_drop.FileFormatDetectionChain([
-            function_drop.PredicateFormatDetector(
-                lambda _: True,
-                lambda _: calls.append('first') or 'first',
-            ),
-            function_drop.PredicateFormatDetector(
-                lambda _: True,
-                lambda _: calls.append('second') or 'second',
-            ),
-        ])
-
-        assert chain.detect('file.bin') == 'first'
-        assert calls == ['first']
-
-    def test_execution_chain_passes_to_next_handler(self):
-        calls = []
-        chain = function_drop.FileFormatExecutionChain([
-            function_drop.PredicateFormatExecutor(
-                ('other',),
-                lambda _: calls.append('first') or 'first',
-            ),
-            function_drop.PredicateFormatExecutor(
-                ('target',),
-                lambda _: calls.append('second') or 'second',
-            ),
-        ])
-        context = function_drop.FileExecutionContext(
-            file_path='file.bin',
-            file_type='target',
-            modal_id='modal',
-            index=0,
-            total=1,
-            game_path='',
-            mod_path='mods',
+class TestRegistryOrder:
+    def test_update_zip_takes_priority_over_jsononly(self):
+        names = ('update_pkg/app.py', 'update_pkg/requirements.txt',
+                 'update_pkg/start_webui.py', 'update_pkg/readme.md')
+        inspection = inspect.ZipFormatInspection(
+            names=names,
+            non_json_names=tuple(n for n in names if '.json' not in n),
         )
+        assert handlers.REGISTRY.detect('zip', inspection) == 'update'
 
-        assert chain.execute(context) == 'second'
-        assert calls == ['second']
+    def test_every_refer_type_has_handler(self):
+        for file_type in (
+            'full', 'nofont', 'FLmod', 'jsononly', 'update',
+            'invalid', 'carra', 'bank', 'textFile', 'LCTAchange',
+            'FLchange', 'busimport',
+        ):
+            assert handlers.REGISTRY.handler_for(file_type) is not None
 
 
 # ========== evalZip：单根目录包裹识别 ==========
@@ -109,35 +107,35 @@ class TestFormatChains:
 class TestEvalZipWrapped:
     def test_wrapped_full(self, tmp_path):
         z = _make_full_zip(tmp_path / 'pkg.zip', wrapper='LimbusLocalize_w')
-        assert function_drop.evalZip(str(z)) == 'full'
+        assert detect.evalZip(str(z)) == 'full'
 
     def test_wrapped_nofont(self, tmp_path):
         z = _make_full_zip(tmp_path / 'pkg.zip', wrapper='LimbusLocalize_w', font=False)
-        assert function_drop.evalZip(str(z)) == 'nofont'
+        assert detect.evalZip(str(z)) == 'nofont'
 
     def test_wrapped_with_loose_file(self, tmp_path):
         z = _make_full_zip(tmp_path / 'pkg.zip', wrapper='LimbusLocalize_w', loose='说明.txt')
-        assert function_drop.evalZip(str(z)) == 'full'
+        assert detect.evalZip(str(z)) == 'full'
 
     def test_unwrapped_full(self, tmp_path):
         z = _make_full_zip(tmp_path / 'pkg.zip')
-        assert function_drop.evalZip(str(z)) == 'full'
+        assert detect.evalZip(str(z)) == 'full'
 
     def test_unwrapped_nofont(self, tmp_path):
         z = _make_full_zip(tmp_path / 'pkg.zip', font=False)
-        assert function_drop.evalZip(str(z)) == 'nofont'
+        assert detect.evalZip(str(z)) == 'nofont'
 
     def test_wrapped_small_package_still_invalid(self, tmp_path):
         z = _make_zip(tmp_path / 'small.zip', ['LimbusLocalize_w/StoryData/a.txt'])
-        assert function_drop.evalZip(str(z)) == 'invalid'
+        assert detect.evalZip(str(z)) == 'invalid'
 
     def test_flmod_unaffected(self, tmp_path):
         z = _make_zip(tmp_path / 'mod.zip', ['MyMod/mod_info.json', 'MyMod/data.json'])
-        assert function_drop.evalZip(str(z)) == 'FLmod'
+        assert detect.evalZip(str(z)) == 'FLmod'
 
     def test_jsononly_unaffected(self, tmp_path):
         z = _make_zip(tmp_path / 'j.zip', ['a.txt', 'b.txt', 'c.txt'])
-        assert function_drop.evalZip(str(z)) == 'jsononly'
+        assert detect.evalZip(str(z)) == 'jsononly'
 
 
 # ========== evalFolder：单根目录包裹识别 ==========
@@ -145,34 +143,34 @@ class TestEvalZipWrapped:
 class TestEvalFolderWrapped:
     def test_wrapped_full(self, tmp_path):
         base = _make_full_folder(tmp_path, wrapper='LimbusLocalize_w')
-        assert function_drop.evalFolder(str(base)) == 'full'
+        assert detect.evalFolder(str(base)) == 'full'
 
     def test_wrapped_nofont(self, tmp_path):
         base = _make_full_folder(tmp_path, wrapper='LimbusLocalize_w', font=False)
-        assert function_drop.evalFolder(str(base)) == 'nofont'
+        assert detect.evalFolder(str(base)) == 'nofont'
 
     def test_wrapped_with_loose_file(self, tmp_path):
         base = _make_full_folder(tmp_path, wrapper='LimbusLocalize_w', loose='说明.txt')
-        assert function_drop.evalFolder(str(base)) == 'full'
+        assert detect.evalFolder(str(base)) == 'full'
 
     def test_unwrapped_full(self, tmp_path):
         base = _make_full_folder(tmp_path / 'unwrapped')
-        assert function_drop.evalFolder(str(base)) == 'full'
+        assert detect.evalFolder(str(base)) == 'full'
 
     def test_flmod_unaffected(self, tmp_path):
         mod = tmp_path / 'MyMod'
         mod.mkdir()
         (mod / 'mod_info.json').write_text('{}', encoding='utf-8')
-        assert function_drop.evalFolder(str(mod)) == 'FLmod'
+        assert detect.evalFolder(str(mod)) == 'FLmod'
 
     def test_jsononly_unaffected(self, tmp_path):
         for i in range(3):
             (tmp_path / f'f{i}.txt').write_bytes(b'x')
-        assert function_drop.evalFolder(str(tmp_path)) == 'jsononly'
+        assert detect.evalFolder(str(tmp_path)) == 'jsononly'
 
     def test_invalid(self, tmp_path):
         (tmp_path / 'a.txt').write_bytes(b'x')
-        assert function_drop.evalFolder(str(tmp_path)) == 'invalid'
+        assert detect.evalFolder(str(tmp_path)) == 'invalid'
 
 
 # ========== eval7zip：单根目录包裹识别 ==========
@@ -186,16 +184,16 @@ class TestEval7zipWrapped:
         return True
 
     def test_wrapped_full(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(function_drop, 'decompress_7z', self._fake_decompress)
+        monkeypatch.setattr(detect, 'decompress_7z', self._fake_decompress)
         sevenz = tmp_path / 'pkg.7z'
         sevenz.write_bytes(b'fake')
-        assert function_drop.eval7zip(str(sevenz))[0] == 'full'
+        assert detect.eval7zip(str(sevenz)) == 'full'
 
     def test_decompress_failure_returns_invalid(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(function_drop, 'decompress_7z', lambda src, dst: False)
+        monkeypatch.setattr(detect, 'decompress_7z', lambda src, dst: False)
         sevenz = tmp_path / 'pkg.7z'
         sevenz.write_bytes(b'fake')
-        assert function_drop.eval7zip(str(sevenz))[0] == 'invalid'
+        assert detect.eval7zip(str(sevenz)) == 'invalid'
 
 
 # ========== _zip_extract_root：预删除目标判定 ==========
@@ -203,26 +201,26 @@ class TestEval7zipWrapped:
 class TestZipExtractRoot:
     def test_single_root_dir(self, tmp_path):
         z = _make_zip(tmp_path / 'm.zip', ['MyMod/mod_info.json', 'MyMod/data.json'])
-        assert function_drop._zip_extract_root(str(z)) == 'MyMod'
+        assert handlers.FLMOD._zip_extract_root(str(z)) == 'MyMod'
 
     def test_multi_root_returns_stem(self, tmp_path):
         z = _make_zip(tmp_path / 'm.zip', ['A/mod_info.json', 'B/x.json'])
-        assert function_drop._zip_extract_root(str(z)) == 'm'
+        assert handlers.FLMOD._zip_extract_root(str(z)) == 'm'
 
     def test_rejects_dotdot_member(self, tmp_path):
         z = _make_zip(tmp_path / 'evil.zip', ['../evil/mod_info.json'])
         with pytest.raises(ValueError):
-            function_drop._zip_extract_root(str(z))
+            handlers.FLMOD._zip_extract_root(str(z))
 
     def test_rejects_absolute_member(self, tmp_path):
         z = _make_zip(tmp_path / 'evil.zip', ['/etc/passwd'])
         with pytest.raises(ValueError):
-            function_drop._zip_extract_root(str(z))
+            handlers.FLMOD._zip_extract_root(str(z))
 
     def test_rejects_drive_member(self, tmp_path):
         z = _make_zip(tmp_path / 'evil.zip', ['C:/secret.txt'])
         with pytest.raises(ValueError):
-            function_drop._zip_extract_root(str(z))
+            handlers.FLMOD._zip_extract_root(str(z))
 
 
 # ========== evalFiles：full 7z 分支 ==========
@@ -238,14 +236,14 @@ class TestEvalFilesFull7z:
                 return self._values.get(key, default)
 
         monkeypatch.setattr(
-            function_drop, 'ConfigManager',
+            eval_files, 'ConfigManager',
             lambda: _FakeConfig({'game_path': str(tmp_path / 'game')}))
         return _FakeConfig
 
     def test_wrapped_single_install_call(self, tmp_path, monkeypatch, fake_config):
         calls = []
         monkeypatch.setattr(
-            function_drop, 'install_translation_package',
+            handlers.translation, 'install_translation_package',
             lambda pkg, game, modal_id=None: calls.append(str(pkg)))
 
         def _fake_decompress(src, dst):
@@ -254,11 +252,11 @@ class TestEvalFilesFull7z:
                 (pkg / folder).mkdir(parents=True)
             return True
 
-        monkeypatch.setattr(function_drop, 'decompress_7z', _fake_decompress)
+        monkeypatch.setattr(handlers.translation, 'decompress_7z', _fake_decompress)
         sevenz = tmp_path / 'pkg.7z'
         sevenz.write_bytes(b'fake')
 
-        result = function_drop.evalFiles({str(sevenz): 'full'}, 'modal')
+        result = eval_files.evalFiles({str(sevenz): 'full'}, 'modal')
         assert result['success'] is True
         assert result['installed'] == 1
         assert len(calls) == 1
@@ -267,7 +265,7 @@ class TestEvalFilesFull7z:
     def test_multi_top_entries_install_each_dir(self, tmp_path, monkeypatch, fake_config):
         calls = []
         monkeypatch.setattr(
-            function_drop, 'install_translation_package',
+            handlers.translation, 'install_translation_package',
             lambda pkg, game, modal_id=None: calls.append(str(pkg)))
 
         def _fake_decompress(src, dst):
@@ -276,11 +274,11 @@ class TestEvalFilesFull7z:
             (Path(dst) / '说明.txt').write_bytes(b'x')
             return True
 
-        monkeypatch.setattr(function_drop, 'decompress_7z', _fake_decompress)
+        monkeypatch.setattr(handlers.translation, 'decompress_7z', _fake_decompress)
         sevenz = tmp_path / 'pkg.7z'
         sevenz.write_bytes(b'fake')
 
-        result = function_drop.evalFiles({str(sevenz): 'nofont'}, 'modal')
+        result = eval_files.evalFiles({str(sevenz): 'nofont'}, 'modal')
         assert result['success'] is True
         assert len(calls) == 2
         assert sorted(Path(c).name for c in calls) == ['Font', 'StoryData']
@@ -290,11 +288,11 @@ class TestEvalFilesFull7z:
             (Path(dst) / '说明.txt').write_bytes(b'x')
             return True
 
-        monkeypatch.setattr(function_drop, 'decompress_7z', _fake_decompress)
+        monkeypatch.setattr(handlers.translation, 'decompress_7z', _fake_decompress)
         sevenz = tmp_path / 'pkg.7z'
         sevenz.write_bytes(b'fake')
 
-        result = function_drop.evalFiles({str(sevenz): 'full'}, 'modal')
+        result = eval_files.evalFiles({str(sevenz): 'full'}, 'modal')
         assert result['success'] is False
         assert result['errors'] == 1
 
@@ -306,11 +304,11 @@ class TestEvalFilesPreDelete:
     def mod_path(self, tmp_path, monkeypatch):
         mods = tmp_path / 'Mod Path'
         mods.mkdir()
-        monkeypatch.setattr(function_drop, 'get_mod_path', lambda: str(mods))
+        monkeypatch.setattr(eval_files, 'get_mod_path', lambda: str(mods))
         return mods
 
     def test_flmod_single_root_deletes_actual_target(self, tmp_path, mod_path, monkeypatch):
-        monkeypatch.setattr(function_drop, 'extract_zip_smartly', lambda src, dst: None)
+        monkeypatch.setattr(handlers.archive_mod, 'extract_zip_smartly', lambda src, dst: None)
         mod_zip = tmp_path / 'myflmod.zip'
         _make_zip(mod_zip, ['MyMod/mod_info.json', 'MyMod/data.json'])
 
@@ -320,13 +318,13 @@ class TestEvalFilesPreDelete:
         stem_dir = mod_path / 'myflmod'
         stem_dir.mkdir()
 
-        result = function_drop.evalFiles({str(mod_zip): 'FLmod'}, 'modal')
+        result = eval_files.evalFiles({str(mod_zip): 'FLmod'}, 'modal')
         assert result['success'] is True
         assert not actual.exists()
         assert stem_dir.exists()
 
     def test_flmod_multi_root_deletes_stem_dir(self, tmp_path, mod_path, monkeypatch):
-        monkeypatch.setattr(function_drop, 'extract_zip_smartly', lambda src, dst: None)
+        monkeypatch.setattr(handlers.archive_mod, 'extract_zip_smartly', lambda src, dst: None)
         mod_zip = tmp_path / 'multi.zip'
         _make_zip(mod_zip, ['A/mod_info.json', 'B/x.json'])
 
@@ -334,19 +332,19 @@ class TestEvalFilesPreDelete:
         target.mkdir()
         (target / 'old.txt').write_bytes(b'x')
 
-        result = function_drop.evalFiles({str(mod_zip): 'FLmod'}, 'modal')
+        result = eval_files.evalFiles({str(mod_zip): 'FLmod'}, 'modal')
         assert result['success'] is True
         assert not target.exists()
 
     def test_flmod_rejects_unsafe_member(self, tmp_path, mod_path):
         mod_zip = tmp_path / 'evil.zip'
         _make_zip(mod_zip, ['../evil/mod_info.json'])
-        result = function_drop.evalFiles({str(mod_zip): 'FLmod'}, 'modal')
+        result = eval_files.evalFiles({str(mod_zip): 'FLmod'}, 'modal')
         assert result['errors'] == 1
         assert result['success'] is False
 
     def test_jsononly_single_root_deletes_actual_target(self, tmp_path, mod_path, monkeypatch):
-        monkeypatch.setattr(function_drop, 'extract_zip_smartly', lambda src, dst: None)
+        monkeypatch.setattr(handlers.archive_mod, 'extract_zip_smartly', lambda src, dst: None)
         json_zip = tmp_path / 'textpack.zip'
         _make_zip(json_zip, ['TextPack/a.json', 'TextPack/b.json'])
 
@@ -354,7 +352,7 @@ class TestEvalFilesPreDelete:
         actual.mkdir()
         (actual / 'old.json').write_bytes(b'x')
 
-        result = function_drop.evalFiles({str(json_zip): 'jsononly'}, 'modal')
+        result = eval_files.evalFiles({str(json_zip): 'jsononly'}, 'modal')
         assert result['success'] is True
         assert not actual.exists()
 
@@ -368,13 +366,13 @@ class TestEvalFilesUpdate:
             def get(self, key, default=''):
                 return default
 
-        monkeypatch.setattr(function_drop, 'ConfigManager', _FakeConfig)
+        monkeypatch.setattr(handlers.update, 'ConfigManager', _FakeConfig)
         return _FakeConfig
 
     def test_rejects_unsafe_member(self, tmp_path, fake_config):
         up_zip = tmp_path / 'update.zip'
         _make_zip(up_zip, ['../evil/requirements.txt', '../evil/start_webui.py'])
-        result = function_drop.evalFiles({str(up_zip): 'update'}, 'modal')
+        result = eval_files.evalFiles({str(up_zip): 'update'}, 'modal')
         assert result['errors'] == 1
         assert result['success'] is False
 
@@ -389,13 +387,13 @@ class TestEvalFilesUpdate:
             def update_files(self, path):
                 return True
 
-        monkeypatch.setattr(function_drop, 'Updater', _FakeUpdater)
+        monkeypatch.setattr(handlers.update, 'Updater', _FakeUpdater)
         up_zip = tmp_path / 'update.zip'
         _make_zip(up_zip, [
             'update_pkg/requirements.txt',
             'update_pkg/start_webui.py',
             'update_pkg/app.py',
         ])
-        result = function_drop.evalFiles({str(up_zip): 'update'}, 'modal')
+        result = eval_files.evalFiles({str(up_zip): 'update'}, 'modal')
         assert result['updated'] == 1
         assert result['success'] is True

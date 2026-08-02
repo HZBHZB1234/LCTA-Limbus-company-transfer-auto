@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-08-01 -->
+<!-- Last updated: 2026-08-02 -->
 
 ## Directory Overview
 
@@ -88,7 +88,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `bus_engine.py` | Bus replacement engine and converters | Validates `format: lcta-bus`, `version: 1`; supports glob/regex/exact file matchers, case-insensitive directory exclusions, automatic list traversal, wildcard/index/key-value selector paths, ordered literal/regex/end/safe/set operations, 调爪 conversion, and quick-edit conversion |
 | `function_translate.py` | Translation orchestration | Connects webui to translateFunc pipeline |
 | `function_translation_logs.py` | Translation diagnostics viewer backend | Reads only the user-selected `.jsonl` within its selected parent directory; v2-only indexing, cached summaries/byte offsets, filtering, pagination, lazy record reads, and filtered JSONL export |
-| `function_drop.py` | Drag-and-drop | Drag-and-drop file installation with ordered `FileFormatDetector`/`FileFormatExecutor` chains, zip/7z extraction, mod installation, update package handling via Updater, plus bus/调爪 JSON recognition and shared import into `fancy/` |
+| `drop/` | Drag-and-drop | Former `function_drop.py` split into a package: `handler.py` (`DropFileHandler` 接口 ABC + `DropFileHandlerRegistry` 注册表 + `remove_existing`/进度辅助), `context.py` (`FileExecutionContext`), `inspect.py` (zip/folder/json 只读快照，供各处理器复用), `handlers/` (每个 NAMEREFER 类别一个处理器类：`translation.py` full/nofont 汉化包、`archive_mod.py` FLmod/jsononly 压缩模组包、`copy_mod.py` carra/bank/textFile/LCTAchange/FLchange 单文件复制、`bus_import.py`、`update.py`、`invalid.py`；`__init__.py` 按容器类型分组的有序检测注册表), `detect.py` (`evalZip`/`evalFolder`/`eval7zip`/`evalJson`/`evalFile` 门面), `message.py` (`makeMessage`，显示名来自注册表), `eval_files.py` (`evalFiles` 主流程，按类型查注册表执行); zip/7z extraction, mod installation, update package handling via Updater, plus bus/调爪 JSON recognition and shared import into `fancy/` |
 | `function_cdn.py` | CDN optimization | Cloudflare + CloudFront CDN speed testing and optimization |
 | `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection; `is_injected()` checks self-tracked injection state |
 | `builtinFancy.py` | Built-in text rules | Built-in text beautification rules |

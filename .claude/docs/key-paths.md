@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-01 -->
+<!-- Last updated: 2026-08-02 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -344,21 +344,20 @@ JS: user drags files onto window
   → js/features.js                  setupDragDropCallback() receives files
     → pywebview.api.handle_dropped_files(files)
   → webui/app.py                    LCTA_API.handle_dropped_files(files_data)
-    → webutils/function_drop.py     evalFile() per file, makeMessage() aggregation
+    → webutils/drop/              evalFile() per file (detect.py → REGISTRY.detect), makeMessage() aggregation (message.py)
     → confirm modal                 user confirms operation
   → webui/app.py                    LCTA_API.eval_dropped_files(file_info, modal_id)
-  → webutils/function_drop.py       evalFiles()
-    → execution chain:              FileFormatExecutionChain — ordered first-match handlers
-    → type detection:               FileFormatDetectionChain → evalZip/evalFolder/evalJson
-    → full/nofont:                  install_translation_package() (7z support)
-    → FLmod/jsononly:               extract_zip_smartly() or copytree to mod_path
-    → carra/bank and JSON formats:  copy to mod_path through format executors
-    → busimport:                    import_bus_rules_file() to fancy/
-    → update:                       Updater() via webutils/update.py
-    → progress:                     LogManager modal callbacks
+  → webutils/drop/eval_files.py evalFiles()
+    → handler lookup:             REGISTRY.handler_for(file_type) → 对应分支处理器类
+    → full/nofont:                handlers/translation.py install_translation_package() (7z support)
+    → FLmod/jsononly:             handlers/archive_mod.py extract_zip_smartly() or copytree to mod_path
+    → carra/bank/textFile/...:    handlers/copy_mod.py copy to mod_path
+    → busimport:                  handlers/bus_import.py import_bus_rules_file() to fancy/
+    → update:                     handlers/update.py Updater() via webutils/update.py
+    → progress:                   LogManager modal callbacks
 ```
 
-Files: `webui/js/features.js`, `webui/app.py`, `webutils/function_drop.py`, `webutils/function_fancy.py`, `webutils/bus_engine.py`, `webutils/update.py`
+Files: `webui/js/features.js`, `webui/app.py`, `webutils/drop/`, `webutils/function_fancy.py`, `webutils/bus_engine.py`, `webutils/update.py`
 
 ## 13. WebUI Startup Bootstrap
 

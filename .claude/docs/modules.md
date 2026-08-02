@@ -88,7 +88,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `bus_engine.py` | Bus replacement engine and converters | Validates `format: lcta-bus`, `version: 1`; supports glob/regex/exact file matchers, case-insensitive directory exclusions, automatic list traversal, wildcard/index/key-value selector paths, ordered literal/regex/end/safe/set operations, 调爪 conversion, and quick-edit conversion |
 | `function_translate.py` | Translation orchestration | Connects webui to translateFunc pipeline |
 | `function_translation_logs.py` | Translation diagnostics viewer backend | Reads only the user-selected `.jsonl` within its selected parent directory; v2-only indexing, cached summaries/byte offsets, filtering, pagination, lazy record reads, and filtered JSONL export |
-| `function_drop.py` | Drag-and-drop | Drag-and-drop file installation with zip/7z extraction, mod installation, update package handling via Updater, plus bus/调爪 JSON recognition and shared import into `fancy/` |
+| `function_drop.py` | Drag-and-drop | Drag-and-drop file installation with ordered `FileFormatDetector`/`FileFormatExecutor` chains, zip/7z extraction, mod installation, update package handling via Updater, plus bus/调爪 JSON recognition and shared import into `fancy/` |
 | `function_cdn.py` | CDN optimization | Cloudflare + CloudFront CDN speed testing and optimization |
 | `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection; `is_injected()` checks self-tracked injection state |
 | `builtinFancy.py` | Built-in text rules | Built-in text beautification rules |

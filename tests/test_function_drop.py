@@ -61,6 +61,49 @@ def _make_full_folder(base, wrapper=None, font=True, loose=None):
     return base
 
 
+class TestFormatChains:
+    def test_detection_chain_stops_at_first_matching_handler(self):
+        calls = []
+        chain = function_drop.FileFormatDetectionChain([
+            function_drop.PredicateFormatDetector(
+                lambda _: True,
+                lambda _: calls.append('first') or 'first',
+            ),
+            function_drop.PredicateFormatDetector(
+                lambda _: True,
+                lambda _: calls.append('second') or 'second',
+            ),
+        ])
+
+        assert chain.detect('file.bin') == 'first'
+        assert calls == ['first']
+
+    def test_execution_chain_passes_to_next_handler(self):
+        calls = []
+        chain = function_drop.FileFormatExecutionChain([
+            function_drop.PredicateFormatExecutor(
+                ('other',),
+                lambda _: calls.append('first') or 'first',
+            ),
+            function_drop.PredicateFormatExecutor(
+                ('target',),
+                lambda _: calls.append('second') or 'second',
+            ),
+        ])
+        context = function_drop.FileExecutionContext(
+            file_path='file.bin',
+            file_type='target',
+            modal_id='modal',
+            index=0,
+            total=1,
+            game_path='',
+            mod_path='mods',
+        )
+
+        assert chain.execute(context) == 'second'
+        assert calls == ['second']
+
+
 # ========== evalZip：单根目录包裹识别 ==========
 
 class TestEvalZipWrapped:

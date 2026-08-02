@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-07-31 -->
+<!-- Last updated: 2026-08-01 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -348,10 +348,11 @@ JS: user drags files onto window
     → confirm modal                 user confirms operation
   → webui/app.py                    LCTA_API.eval_dropped_files(file_info, modal_id)
   → webutils/function_drop.py       evalFiles()
-    → type detection:               evalZip() — top-level folder matching
+    → execution chain:              FileFormatExecutionChain — ordered first-match handlers
+    → type detection:               FileFormatDetectionChain → evalZip/evalFolder/evalJson
     → full/nofont:                  install_translation_package() (7z support)
-    → FLmod:                        extract_zip_smartly() or copytree to mod_path
-    → jsononly:                     extract to mod_path
+    → FLmod/jsononly:               extract_zip_smartly() or copytree to mod_path
+    → carra/bank and JSON formats:  copy to mod_path through format executors
     → busimport:                    import_bus_rules_file() to fancy/
     → update:                       Updater() via webutils/update.py
     → progress:                     LogManager modal callbacks

@@ -426,24 +426,6 @@ function downloadOurplay() {
         });
 }
 
-async function downloadBubble() {
-    const modal = new ProgressModal('开始下载');
-    modal.setStatus('正在初始化...');
-    modal.addLog('开始下载任务');
-    await configManager.updateConfigValues(configManager.collectConfigFromUI());
-    
-    pywebview.api.download_bubble(
-        modal.id).then(function(result) {
-        if (result.success) {
-            modal.complete(true, '下载任务已完成');
-        } else {
-            modal.complete(false, '下载失败: ' + result.message);
-        }
-    }).catch(function(error) {
-        modal.complete(false, '下载过程中发生错误: ' + error);
-    });
-}
-
 function cleanCache() {
     const modal = new ProgressModal('清除缓存');
     
@@ -1214,9 +1196,6 @@ const helpDrawer = {
                     <li>开启/关闭代理加速选项</li>
                     <li>手动下载汉化包放入程序目录，使用"安装已有汉化"功能</li>
                 </ul>
-
-                <h3>Q: 气泡文本不显示？</h3>
-                <p><strong>A:</strong> 每次切换或更新汉化包后需要重新安装气泡文本。如需自动安装，请在 Launcher 配置中启用"启用气泡文本"选项。</p>
             </div>
         `;
     }

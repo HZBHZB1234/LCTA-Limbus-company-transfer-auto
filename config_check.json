@@ -56,11 +56,6 @@
         "api_config": {
             "key": "str"
         },
-        "bubble": {
-            "color": "bool",
-            "llc": "bool",
-            "install": "bool"
-        },
         "manage": {
             "mod_path": "str"
         },
@@ -120,7 +115,6 @@
         "work": {
             "update": "str",
             "mod": "bool",
-            "bubble": "bool",
             "fancy": "bool",
             "cdn_optimize": "bool",
             "cdn_auto_apply": "bool",

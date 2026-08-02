@@ -1,6 +1,6 @@
 # 启动器配置
 
-使用 LCTA 作为启动器，游戏会在每次启动时自动检测汉化包更新，无需手动下载安装。同时支持 MOD 加载、更新汉化包后自动更新气泡文本模组，以及文本美化功能。
+使用 LCTA 作为启动器，游戏会在每次启动时自动检测汉化包更新，无需手动下载安装。同时支持 MOD 加载以及文本美化功能。
 
 <div data-version="415">
 
@@ -54,20 +54,6 @@
         <label class="checkbox-container">
             <input type="checkbox" id="elder-launcher-mod">
             <span class="checkmark"></span> 启用 MOD 支持
-        </label>
-    </div>
-</div>
-
-<div class="elder-option-card">
-    <div class="elder-option-icon"><i class="fas fa-comment-dots"></i></div>
-    <div class="elder-option-body">
-        <h4>气泡文本自动更新</h4>
-        <p>每次汉化包更新成功后自动安装气泡文本模组，让人格对话气泡显示彩色文本，并支持随机加载文本。</p>
-        <img src="assets/images/launcher-bubble-preview.png" alt="气泡文本效果" style="max-width:100%;border-radius:8px;margin:8px 0;">
-        <p class="elder-setting-hint"><a href="https://www.bilibili.com/video/BV1GVpszcEi9">B站视频介绍</a></p>
-        <label class="checkbox-container">
-            <input type="checkbox" id="elder-launcher-bubble">
-            <span class="checkmark"></span> 启用气泡文本自动更新
         </label>
     </div>
 </div>

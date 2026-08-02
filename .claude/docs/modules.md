@@ -78,7 +78,6 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `function_ourplay_pc.py` | OurPlay PC install | Download OurPlay PC translation packs |
 | `function_ourplay_android.py` | OurPlay Android install | Download OurPlay Android-origin translation packs |
 | `function_LCTA_auto.py` | Auto-translate download | Download from LCTA_auto_update repo |
-| `function_bubble.py` | Bubble language pack | One-click bubble text language pack download |
 | `packages/install.py` | Local package install | Install/delete/font-change for local translation packages |
 | `packages/manage.py` | Package management | Installed packages, mod management, symlink operations |
 | `packages/clean.py` | Cache cleaner | Clean game cache files |

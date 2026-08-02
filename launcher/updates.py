@@ -14,7 +14,7 @@ from webutils import (
     function_ourplay_main, function_ourplay_api, check_ver_ourplay,
     function_ourplay_new_main, check_ver_ourplay_new,
     check_ver_github_M,
-    function_bubble_main, fancy_main, builtinFancyConfig,
+    fancy_main, builtinFancyConfig,
 )
 import webutils.utils as func_utils
 from globalManagers.LogManager import LogManager
@@ -127,11 +127,6 @@ class UpdateBase(ABC):
 
         self.update_config()
         _log_manager.log(f"汉化包更新完成")
-
-        run_bubble = self.launcher_config.get('work', {}).get('bubble', False)
-        if run_bubble:
-            ConfigManager().set('ui_default.bubble.install', True)
-            function_bubble_main('安装气泡mod')
 
         run_fancy = self.launcher_config.get('work', {}).get('fancy', False)
         if run_fancy:

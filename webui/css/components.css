@@ -1222,7 +1222,7 @@ button {
     font-weight: 500;
 }
 
-/* 选项卡片 (launcher.md, bubble.md, translate.md) */
+/* 选项卡片 (launcher.md, translate.md) */
 .elder-option-card {
     display: flex;
     gap: var(--spacing-md);
@@ -1303,7 +1303,7 @@ button {
     line-height: 1.6;
 }
 
-/* 警告卡片 (bubble.md 重要提示) */
+/* 警告卡片 (重要提示) */
 .elder-warning-card {
     background: var(--color-bg-secondary);
     border-radius: var(--radius-md);

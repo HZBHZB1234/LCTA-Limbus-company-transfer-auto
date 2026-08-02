@@ -861,22 +861,7 @@ class LCTA_API():
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
-        
-    def download_bubble(self, modal_id= "false"):
-        """开始下载"""
-        try:
-            self.add_modal_log("开始下载...", modal_id)
-            function_bubble_main(modal_id)
-            self.add_modal_log("下载完成", modal_id)
-            return {"success": True, "message": "下载完成"}
-        except CancelRunning:
-            self.log('用户已取消下载流程')
-            self.del_modal_list(modal_id)
-            return {"success": False, "message": "已取消"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-        
+
     def startTest(self):
         self._window_test = webview.create_window("模组下载测试窗口", url="https://www.nexusmods.com/games/limbuscompany")
         

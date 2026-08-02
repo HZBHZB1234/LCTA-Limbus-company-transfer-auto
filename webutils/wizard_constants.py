@@ -8,7 +8,6 @@ updateList = {
     'launcher-source': '415',
     'translate': '415',
     'download': '415',
-    'bubble': '415',
     'mod': '415',
     'manage': '415',
 }
@@ -72,9 +71,6 @@ bindRefer = {
         ],
         'elder-launcher-mod': [
             'launcher-work-mod', 'launcher.work.mod',
-        ],
-        'elder-launcher-bubble': [
-            'launcher-work-bubble', 'launcher.work.bubble',
         ],
         'elder-launcher-fancy': [
             'launcher-work-fancy', 'launcher.work.fancy',
@@ -180,18 +176,6 @@ bindRefer = {
         ],
     },
 
-    'bubble': {
-        'elder-bubble-color': [
-            'bubble-color', 'ui_default.bubble.color',
-        ],
-        'elder-bubble-llc': [
-            'bubble-llc', 'ui_default.bubble.llc',
-        ],
-        'elder-bubble-install': [
-            'bubble-install', 'ui_default.bubble.install',
-        ],
-    },
-
     'mod': {},
 
     'manage': {
@@ -230,8 +214,6 @@ relyList = {
                         ['launcher.work.update', 'llc', 'ourplay', 'LCTA-AU', 'LO', 'LM-G', 'LM-A']],
     'translate': ['elder.character.translate'],
     'download': [],
-    'bubble': ['elder.character.launcher',
-               'elder.launcher.bubble'],
     'mod': ['elder.character.launcher',
             'elder.launcher.mod'],
     'manage': ['elder.character.manage'],

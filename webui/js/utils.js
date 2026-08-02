@@ -392,9 +392,6 @@ const TOOLTIP_DATA = {
     'llc-dump-default': '下载的汉化包将被解压并保留原始文件结构，而非保存为压缩包格式。此为历史遗留选项，一般无需开启。',
     'machine-download-source': 'LCTA-AU 汉化包的下载来源。LCTA-AU 翻译延迟仅 1-3 小时且翻译质量高于 OurPlay，建议优先使用。',
     'machine-use-proxy': '通过代理服务器加速 LCTA-AU 汉化包的 GitHub 下载。建议开启。',
-    'bubble-color': '下载彩色气泡文本模组，使游戏中的对话气泡显示不同颜色。效果参考相关视频链接。',
-    'bubble-llc': '下载包含随机加载文本的气泡文本版本，在战斗加载页面显示零协会曾使用的加载文本。',
-    'bubble-install': '下载完成后自动安装气泡文本到当前汉化包。建议开启，省去手动安装步骤。',
 
     // ===== 设置 =====
     'game-path': '游戏 Limbus Company 的安装根目录。选择正确的游戏路径后，程序才能自动定位游戏文件和汉化包安装位置。',
@@ -424,7 +421,6 @@ const TOOLTIP_DATA = {
     'launcher-work-update': '启动器自动更新模式。可选择不更新、仅更新指定汉化源，或组合更新多个汉化源。',
     'launcher-work-mod': '启动游戏时自动加载 MOD 支持。启用后可使用各类游戏模组。',
     'launcher-work-fancy': '更新汉化包后自动进行文本美化处理。相关美化选项请在"文本美化"页面配置。',
-    'launcher-work-bubble': '自动更新气泡文本模组，使游戏中的对话气泡显示特效。相关设置请在"汉化包下载"页面配置。',
     'launcher-work-cdn-optimize': '启动游戏前自动测试Cloudflare和CloudFront CDN节点速度，选择最快的IP用于游戏下载和API连接。',
     'launcher-work-cdn-auto-apply': 'CDN优选完成后自动将选出的最优IP写入系统hosts文件。需要管理员权限，如权限不足会尝试UAC提权。',
     'launcher-work-cdn-cache-ttl': 'CDN优选结果的有效时间（小时）。缓存有效期内跳过测速直接使用已有hosts。设为0表示每次启动都重新测速。',

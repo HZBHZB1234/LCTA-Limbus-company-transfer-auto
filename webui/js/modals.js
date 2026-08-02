@@ -83,7 +83,6 @@ class ElderManager {
         { key: 'launcher-source',  label: '启动器来源', icon: 'fa-download' },
         { key: 'translate',        label: '翻译设置',   icon: 'fa-language' },
         { key: 'download',         label: '下载设置',   icon: 'fa-cloud-download-alt' },
-        { key: 'bubble',           label: '气泡文本',   icon: 'fa-comment-dots' },
         { key: 'mod',              label: '模组',       icon: 'fa-puzzle-piece' },
         { key: 'manage',           label: '数据管理',   icon: 'fa-archive' },
         { key: 'final',            label: '完成',       icon: 'fa-flag-checkered' },
@@ -339,7 +338,6 @@ class ElderManager {
             const updateLabel = updateMap[updateVal] || updateVal;
             const extras = [];
             if (configManager.getCachedValue('launcher.work.mod')) extras.push('MOD');
-            if (configManager.getCachedValue('launcher.work.bubble')) extras.push('气泡文本');
             if (configManager.getCachedValue('launcher.work.fancy')) extras.push('文本美化');
             const extraStr = extras.length > 0 ? '（' + extras.join(' + ') + '）' : '';
             items.push({ icon: 'fa-rocket', title: '启动器模式', desc: '更新源：' + updateLabel + ' ' + extraStr });
@@ -413,7 +411,6 @@ class ElderManager {
         // 警告2：启动器已启用但未设置游戏路径
         const launcherEnabled = String(configManager.getCachedValue('launcher.work.update') || '') !== 'no' ||
             !!configManager.getCachedValue('launcher.work.mod') ||
-            !!configManager.getCachedValue('launcher.work.bubble') ||
             !!configManager.getCachedValue('launcher.work.fancy');
         if (launcherEnabled && !configManager.getCachedValue('game_path')) {
             warnings.push(`

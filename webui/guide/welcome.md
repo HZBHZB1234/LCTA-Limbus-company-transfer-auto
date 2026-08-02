@@ -10,7 +10,7 @@ LCTA (Limbus Company Transfer Auto) 是一款为《边狱公司》游戏打造�
 ### 我想要自动汉化更新
 配置 **Launcher配置** 页面：
 1. 选择更新模式（推荐 LCTA-AU）
-2. 按需启用 MOD支持、气泡文本、文本美化
+2. 按需启用 MOD支持、文本美化
 3. 保存配置，复制 Steam 启动命令
 4. 在 Steam 游戏属性中将命令粘贴到"启动选项"
 

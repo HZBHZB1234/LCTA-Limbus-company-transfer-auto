@@ -7,7 +7,7 @@ from typing import Any
 from ..context import FileExecutionContext
 from ..handler import DropFileHandler, remove_existing
 from ..inspect import JsonFormatInspection
-from ...function_manage import safe_join_path
+from ...packages.manage import safe_join_path
 from globalManagers.LogManager import LogManager
 
 _log_manager = LogManager()

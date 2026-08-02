@@ -33,7 +33,7 @@ def run_cdn_optimization(project_root: Path, cancel_event: threading.Event = Non
 
     _log_manager.log("开始CDN优选...")
     try:
-        from webutils import function_cdn
+        from webutils import cdn
         cdn_dir = os.path.join(str(project_root), 'CFST')
         if not os.path.isdir(cdn_dir):
             _log_manager.log("CFST目录不存在，跳过CDN优选")
@@ -49,7 +49,7 @@ def run_cdn_optimization(project_root: Path, cancel_event: threading.Event = Non
             if cancel_event and cancel_event.is_set():
                 raise RuntimeError("cancelled")
 
-        result = function_cdn.cdn_full_optimization_simple(
+        result = cdn.cdn_full_optimization_simple(
             cfst_dir=cdn_dir,
             log_cb=launcher_log,
             progress_cb=launcher_progress,
@@ -67,7 +67,7 @@ def run_cdn_optimization(project_root: Path, cancel_event: threading.Event = Non
             _log_manager.log("CDN优选完成（未自动写入hosts）")
             return
 
-        success, err_msg = function_cdn.elevate_write_hosts(
+        success, err_msg = cdn.elevate_write_hosts(
             cf_ip=result.get('cf_ip'),
             cloudfront_mappings=result.get('cloudfront_mappings'),
             log_cb=launcher_log

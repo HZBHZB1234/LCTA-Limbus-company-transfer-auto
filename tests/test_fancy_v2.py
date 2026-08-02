@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
 
-import webutils.function_rule_editor as rule_editor
-from webutils.builtinFancyFunc import SkillColorHandler
+from webutils.rule_editor import browser as rule_editor
+from webutils.rule_editor import generate as rule_editor_generate
+from webutils.fancy.builtin_func import SkillColorHandler
 from webutils.function_fancy import fancy_main, load_fancy_folder_rules
-from webutils.function_rule_editor import (
+from webutils.rule_editor import (
     apply_ruleset_to_content,
     build_rule_from_form,
     validate_rule,
@@ -118,7 +119,7 @@ def test_fancy_main_only_prepares_skill_cache_for_enabled_rulesets(monkeypatch, 
         calls["count"] += 1
         return True
 
-    monkeypatch.setattr("webutils.builtinFancyFunc.skillColorHandler.prepare", prepare)
+    monkeypatch.setattr("webutils.fancy.builtin_func.skillColorHandler.prepare", prepare)
 
     fancy_main(
         str(tmp_path),
@@ -174,7 +175,7 @@ def test_fancy_main_resets_stale_cache_hit_on_ready_shortcut(tmp_path):
             "actions": [{"type": "skill_color", "idPath": "id"}],
         }],
     }
-    from webutils.builtinFancyFunc import skillColorHandler
+    from webutils.fancy.builtin_func import skillColorHandler
 
     skillColorHandler.state = "ready"
     skillColorHandler.last_cache_hit = True
@@ -242,31 +243,31 @@ def test_rule_editor_rejects_path_traversal(monkeypatch, tmp_path):
 
 
 def test_rule_editor_analyze_value_change_classification():
-    wrapped = rule_editor._analyze_value_change("123", "<c>123</c>")
+    wrapped = rule_editor_generate._analyze_value_change("123", "<c>123</c>")
     assert wrapped["change_type"] == "PURE_WRAP"
     assert wrapped["prefix_added"] == "<c>"
     assert wrapped["suffix_added"] == "</c>"
     assert wrapped["core_old"] == "123"
     assert wrapped["core_new"] == "<c>123</c>"
 
-    prefixed = rule_editor._analyze_value_change("目标", ">目标")
+    prefixed = rule_editor_generate._analyze_value_change("目标", ">目标")
     assert prefixed["change_type"] == "PREFIX_ONLY"
     assert prefixed["prefix_added"] == ">"
     assert prefixed["suffix_added"] == ""
 
-    suffixed = rule_editor._analyze_value_change("目标", "目标。")
+    suffixed = rule_editor_generate._analyze_value_change("目标", "目标。")
     assert suffixed["change_type"] == "SUFFIX_ONLY"
     assert suffixed["prefix_added"] == ""
     assert suffixed["suffix_added"] == "。"
 
-    replaced = rule_editor._analyze_value_change("大于", ">")
+    replaced = rule_editor_generate._analyze_value_change("大于", ">")
     assert replaced["change_type"] == "PURE_REPLACE"
     assert replaced["prefix_added"] == ""
     assert replaced["suffix_added"] == ""
     assert replaced["core_old"] == "大于"
     assert replaced["core_new"] == ">"
 
-    middle = rule_editor._analyze_value_change("AB目标CD", "AB>CD")
+    middle = rule_editor_generate._analyze_value_change("AB目标CD", "AB>CD")
     assert middle["change_type"] == "PURE_REPLACE"
     assert middle["prefix_added"] == ""
     assert middle["suffix_added"] == ""
@@ -282,7 +283,7 @@ def test_rule_editor_analyze_changes_clusters_wraps(monkeypatch, tmp_path):
         {"file": "Skill_3.json", "field_path": "desc", "old_val": "大于", "new_val": ">"},
     ]
 
-    result = rule_editor.analyze_changes(changes)
+    result = rule_editor_generate.analyze_changes(changes)
 
     assert len(result["groups"]) == 2
     wrap_group = next(g for g in result["groups"] if g["change_type"] == "PURE_WRAP")
@@ -317,8 +318,8 @@ def test_skill_color_fingerprint_cache(monkeypatch, tmp_path):
         "list": [{"id": 123, "skillData": [{"attributeType": "CRIMSON"}]}]
     }).encode("utf-8")
 
-    monkeypatch.setattr("webutils.builtinFancyFunc.get_limbus_resource_files", lambda: [resource_file])
-    monkeypatch.setattr("webutils.builtinFancyFunc.load_text_assets", lambda *args: ({"personality-skill-01.json": asset}, []))
+    monkeypatch.setattr("webutils.fancy.builtin_func.get_limbus_resource_files", lambda: [resource_file])
+    monkeypatch.setattr("webutils.fancy.builtin_func.load_text_assets", lambda *args: ({"personality-skill-01.json": asset}, []))
 
     first = SkillColorHandler()
     monkeypatch.setattr(first, "_cache_file", lambda: cache_file)
@@ -329,7 +330,7 @@ def test_skill_color_fingerprint_cache(monkeypatch, tmp_path):
     def fail_loader(*args):
         raise AssertionError("cache hit should not reload Unity resources")
 
-    monkeypatch.setattr("webutils.builtinFancyFunc.load_text_assets", fail_loader)
+    monkeypatch.setattr("webutils.fancy.builtin_func.load_text_assets", fail_loader)
     second = SkillColorHandler()
     monkeypatch.setattr(second, "_cache_file", lambda: cache_file)
     assert second.prepare()
@@ -340,13 +341,13 @@ def test_skill_color_fingerprint_cache(monkeypatch, tmp_path):
 def test_skill_color_failure_is_not_retried(monkeypatch):
     calls = {"count": 0}
 
-    monkeypatch.setattr("webutils.builtinFancyFunc.get_limbus_resource_files", lambda: [])
+    monkeypatch.setattr("webutils.fancy.builtin_func.get_limbus_resource_files", lambda: [])
 
     def failing_loader(*args):
         calls["count"] += 1
         raise RuntimeError("broken resource")
 
-    monkeypatch.setattr("webutils.builtinFancyFunc.load_text_assets", failing_loader)
+    monkeypatch.setattr("webutils.fancy.builtin_func.load_text_assets", failing_loader)
     handler = SkillColorHandler()
     monkeypatch.setattr(handler, "_cache_file", lambda: None)
 

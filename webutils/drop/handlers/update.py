@@ -9,7 +9,7 @@ from typing import Any
 from ..context import FileExecutionContext
 from ..handler import DropFileHandler
 from ..inspect import ZipFormatInspection
-from ...function_clean import _sanitize_zip_member_name
+from ...packages.clean import _sanitize_zip_member_name
 from ...update import Updater
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager

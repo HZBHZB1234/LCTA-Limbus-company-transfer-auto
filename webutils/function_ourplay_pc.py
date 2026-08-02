@@ -3,7 +3,9 @@ from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
 import tempfile
-from .functions import *
+import zipfile
+from .utils.io import calculate_md5, zip_folder
+from .utils.net import download_with
 import shutil
 import json
 import base64

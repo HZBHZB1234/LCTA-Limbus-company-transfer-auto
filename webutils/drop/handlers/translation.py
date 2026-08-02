@@ -9,8 +9,8 @@ from collections.abc import Iterable
 from ..context import FileExecutionContext
 from ..handler import DropFileHandler
 from ..inspect import FolderFormatInspection, ZipFormatInspection
-from ...function_install import install_translation_package
-from ...functions import decompress_7z
+from ...packages.install import install_translation_package
+from ...utils.io import decompress_7z
 from globalManagers.LogManager import LogManager
 
 _log_manager = LogManager()

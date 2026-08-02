@@ -25,7 +25,7 @@ if "openspeedy" not in sys.modules:
         setattr(openspeedy, exception_name, type(exception_name, (Exception,), {}))
     sys.modules["openspeedy"] = openspeedy
 
-from webutils.bus_engine import (
+from webutils.fancy.bus import (
     IndexToken,
     KeyToken,
     SelectorToken,
@@ -37,10 +37,12 @@ from webutils.bus_engine import (
     is_tiaozhua_config,
     parse_bus_path,
 )
-from webutils.fancy_engine import RuleValidationError
+from webutils.fancy.engine import RuleValidationError
 from webutils.function_fancy import fancy_main, load_fancy_folder_rules, save_ruleset_to_folder
 from webutils.drop import evalJson
-from webutils import function_fancy, function_quick_editor, function_rule_editor
+from webutils import function_fancy
+from webutils.rule_editor import quick as function_quick_editor
+from webutils.rule_editor import browser as function_rule_editor
 
 
 def make_ruleset(rules, **extra):
@@ -289,7 +291,7 @@ def test_path_cache_revalidates_after_structural_mutation():
 
 
 def test_global_rules_share_string_leaf_traversal(monkeypatch):
-    from webutils import bus_engine
+    from webutils.fancy import bus as bus_engine
 
     calls = []
     original = bus_engine._iter_string_leaf_paths
@@ -312,7 +314,7 @@ def test_global_rules_share_string_leaf_traversal(monkeypatch):
 
 
 def test_identical_path_rules_share_resolution(monkeypatch):
-    from webutils import bus_engine
+    from webutils.fancy import bus as bus_engine
 
     calls = []
     original = bus_engine._resolve_paths

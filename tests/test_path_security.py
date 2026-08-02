@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-import webutils.function_clean as function_clean
-import webutils.function_install as function_install
-import webutils.function_manage as function_manage
+import webutils.packages.clean as function_clean
+import webutils.packages.install as function_install
+import webutils.packages.manage as function_manage
 
 
 class _FakeConfig:
@@ -26,7 +26,7 @@ def _make_zip(path, members):
 
 
 class TestDeleteTranslationPackage:
-    """webutils/function_install.py::delete_translation_package"""
+    """webutils/packages/install.py::delete_translation_package"""
 
     def test_delete_folder_package(self, tmp_path):
         pkg = tmp_path / '汉化包A'
@@ -66,7 +66,7 @@ class TestDeleteTranslationPackage:
 
 
 class TestDeleteInstalledPackage:
-    """webutils/function_manage.py::delete_installed_package"""
+    """webutils/packages/manage.py::delete_installed_package"""
 
     @pytest.fixture
     def lang_path(self, tmp_path, monkeypatch):
@@ -105,7 +105,7 @@ class TestDeleteInstalledPackage:
 
 
 class TestModManage:
-    """webutils/function_manage.py::toggle_mod / delete_mod / open_mod_path"""
+    """webutils/packages/manage.py::toggle_mod / delete_mod / open_mod_path"""
 
     @pytest.fixture
     def mod_path(self, tmp_path, monkeypatch):
@@ -171,7 +171,7 @@ class TestModManage:
 
 
 class TestCleanByMod:
-    """webutils/function_clean.py::check_by_mod / clear_by_mod"""
+    """webutils/packages/clean.py::check_by_mod / clear_by_mod"""
 
     @pytest.fixture
     def unity_dir(self, tmp_path, monkeypatch):

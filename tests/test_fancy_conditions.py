@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from webutils.fancy_engine import RuleValidationError, apply_rules, compile_rulesets
+from webutils.fancy.engine import RuleValidationError, apply_rules, compile_rulesets
 from webutils.function_fancy import exec_json
 
 

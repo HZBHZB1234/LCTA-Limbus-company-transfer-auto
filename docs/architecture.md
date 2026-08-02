@@ -3,6 +3,8 @@
 > 面向开发者的详细架构说明，包含技术决策理由和权衡分析。
 > AI 快速参考请见 `.claude/docs/architecture.md`
 
+<!-- Last updated: 2026-08-02 -->
+
 ## 项目概述
 
 LCTA（Limbus Company Transfer Auto / 边狱公司工具箱）是一个面向游戏《边狱公司》(Limbus Company) 的综合性桌面工具箱。项目始于对游戏汉化管理的需求，逐步扩展为集翻译管理、CDN 优化、游戏启动器、模组支持于一体的多功能工具。
@@ -112,7 +114,7 @@ launcher/ 的模组功能基于 LimbusModLoader（GPL-3.0），因此该子目�
 
 **webutils/** 是业务逻辑的集中地。每个 `function_*.py` 文件封装一个完整的功能领域，例如：
 - `function_llc.py` — 零协会汉化包的下载、解压、安装全流程
-- `function_cdn.py` — CDN 测速和优化（含缓存 TTL 机制，避免启动器模式重复测速）
+- `cdn/` 包 — CDN 测速和优化（含缓存 TTL 机制，避免启动器模式重复测速）
 - `function_translate.py` — 翻译功能的编排入口
 
 所有功能模块通过 `webutils/__init__.py` 统一导出，形成稳定的公共 API。`webui/app.py` 只依赖 `__init__.py` 的导出，不直接导入具体功能模块。这种间接层允许功能模块内部重构而不影响表示层。

@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
-from webutils.functions import download_with
+from webutils.utils.net import download_with
 from webFunc.LanzouFolder import GetAllFileListByUrl
 
 BASE_LANZOU_URL = "https://wwyi.lanzoub.com/"

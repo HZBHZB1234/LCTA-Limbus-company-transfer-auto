@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import zipfile
 import shutil
@@ -9,8 +11,8 @@ import winreg
 
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
-from .functions import *
-from .function_manage import safe_join_path
+from ..utils.io import extract_zip_smartly, zip_folder
+from .manage import safe_join_path
 
 
 def find_translation_packages(target_dir):

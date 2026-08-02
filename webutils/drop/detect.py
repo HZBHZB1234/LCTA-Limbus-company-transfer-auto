@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import os
 import tempfile
@@ -6,7 +8,7 @@ from pathlib import Path
 
 from .handlers import REGISTRY
 from .inspect import FolderFormatInspection, JsonFormatInspection, ZipFormatInspection
-from ..functions import decompress_7z
+from ..utils.io import decompress_7z
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 

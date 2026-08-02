@@ -11,7 +11,7 @@ import webFunc.GithubDownload as GithubDownload
 from webFunc.GithubDownload import ReleaseInfo, ReleaseAsset, GitHubReleaseFetcher
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
-from .functions import download_with_github
+from .utils.net import download_with_github
 
 APPLICATION_PATH = Path(__file__).parent.parent
 

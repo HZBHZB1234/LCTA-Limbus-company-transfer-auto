@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import zipfile
 from shutil import rmtree
@@ -7,8 +9,7 @@ from typing import List, Optional
 
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
-from .functions import *
-from .function_manage import safe_join_path
+from .manage import safe_join_path
 
 
 def _sanitize_zip_member_name(name: str) -> str:
@@ -228,4 +229,3 @@ def check_by_mod(mod_path: str) -> List[str]:
         raise FileNotFoundError("找不到指定的zip文件")
     except Exception as e:
         raise Exception(f"处理zip文件时发生错误: {str(e)}")
-

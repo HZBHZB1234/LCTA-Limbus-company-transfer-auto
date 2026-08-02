@@ -7,7 +7,7 @@
 | Directory | Role | Key Files |
 |-----------|------|-----------|
 | `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 15 + sections |
-| `webutils/` | Business logic layer (feature modules + beautification engines) | 33 Python files |
+| `webutils/` | Business logic layer (feature modules + beautification engines) | 62 Python files |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
 | `globalManagers/` | Cross-cutting singletons | 2 |
@@ -70,36 +70,30 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | File | Feature | Key Points |
 |------|---------|------------|
 | `__init__.py` | Public API surface | Re-exports all feature functions consumed by `webui/app.py` |
-| `functions.py` | Shared utilities | zip/unzip, hashing, downloads, 7z integration, symlinks, font handling |
+| `utils/` | Shared utility package | `io.py` zip/unzip, hashing, 7z integration; `net.py` downloads; `shell.py` Windows Shell API; `font.py` font caching; `misc.py` steam command/icon; facade re-exported via `utils/__init__.py` |
 | `load.py` | Config & game detection | Config loading/validation, Steam registry game path detection |
 | `update.py` | Self-updater | GitHub Releases-based auto-update |
-| `const_apiConfig.py` | API provider configs | TranslateKit provider definitions (Baidu, Google, DeepL, etc.) |
+| `translator_constants.py` | API provider configs | TranslateKit provider definitions (Baidu, Google, DeepL, etc.) |
 | `function_llc.py` | LLC/零协会 install | Download & install Zero Association translation packs |
-| `function_ourplay.py` | OurPlay PC install | Download OurPlay PC translation packs |
-| `function_ourplay_new.py` | OurPlay Android install | Download OurPlay Android-origin translation packs |
+| `function_ourplay_pc.py` | OurPlay PC install | Download OurPlay PC translation packs |
+| `function_ourplay_android.py` | OurPlay Android install | Download OurPlay Android-origin translation packs |
 | `function_LCTA_auto.py` | Auto-translate download | Download from LCTA_auto_update repo |
 | `function_bubble.py` | Bubble language pack | One-click bubble text language pack download |
-| `function_install.py` | Local package install | Install/delete/font-change for local translation packages |
-| `function_manage.py` | Package management | Installed packages, mod management, symlink operations |
-| `function_clean.py` | Cache cleaner | Clean game cache files |
+| `packages/install.py` | Local package install | Install/delete/font-change for local translation packages |
+| `packages/manage.py` | Package management | Installed packages, mod management, symlink operations |
+| `packages/clean.py` | Cache cleaner | Clean game cache files |
 | `function_fetch.py` | Proper noun scrape | Fetch proper nouns from remote sources |
 | `function_fancy.py` | Text effects orchestration | Selects enabled v2/bus rulesets, preserves ruleset order across both engines, prepares skill-color resources only when required, scans UTF-8-SIG language JSON, atomically rewrites final changes, and returns `FancyRunStats`. Also owns validated `fancy/` load/save/delete and shared bus/调爪 import helpers |
-| `fancy_engine.py` | Compiled v2 beautification engine | Validates and compiles file globs, structured JSON paths, AND conditions (`equals`, `in`, `contains`, `regex`) and typed actions (`replace`, `wrap`, `gradient`, `skill_color`); filters rules per file and returns exact changed paths through `ApplyResult` |
-| `bus_engine.py` | Bus replacement engine and converters | Validates `format: lcta-bus`, `version: 1`; supports glob/regex/exact file matchers, case-insensitive directory exclusions, automatic list traversal, wildcard/index/key-value selector paths, ordered literal/regex/end/safe/set operations, 调爪 conversion, and quick-edit conversion |
+| `fancy/` | Rule engine family | `engine.py` (compiled v2 beautification engine: validates/compiles file globs, structured JSON paths, AND conditions and typed actions, filters rules per file, returns exact changed paths via `ApplyResult`), `bus.py` (bus replacement engine + converters: `format: lcta-bus`/`version: 1`, glob/regex/exact matchers, case-insensitive dir exclusions, list traversal, wildcard/index/selector paths, ordered literal/regex/end/safe/set operations, 调爪 & quick-edit conversion), `builtin_data.py` (built-in rule data: `fancy`, `TEXT_REPLACEMENTS`, `EGO_WARNING_ACTIONS`, `EGO_NORMAL_ACTIONS`, `SKILL_COLOR_ACTIONS`), `builtin_func.py` (`SkillColorHandler` lazily extracts skill attributes from Unity resources, fingerprints source files, caches color mappings in `tmp/fancy/skill-colors.json`, records cache hits, suppresses retries after init failure), `faust.py` (Faust character-specific fancy text rules). Facade re-exports all public symbols |
 | `function_translate.py` | Translation orchestration | Connects webui to translateFunc pipeline |
 | `function_translation_logs.py` | Translation diagnostics viewer backend | Reads only the user-selected `.jsonl` within its selected parent directory; v2-only indexing, cached summaries/byte offsets, filtering, pagination, lazy record reads, and filtered JSONL export |
 | `drop/` | Drag-and-drop | Former `function_drop.py` split into a package: `handler.py` (`DropFileHandler` 接口 ABC + `DropFileHandlerRegistry` 注册表 + `remove_existing`/进度辅助), `context.py` (`FileExecutionContext`), `inspect.py` (zip/folder/json 只读快照，供各处理器复用), `handlers/` (每个 NAMEREFER 类别一个处理器类：`translation.py` full/nofont 汉化包、`archive_mod.py` FLmod/jsononly 压缩模组包、`copy_mod.py` carra/bank/textFile/LCTAchange/FLchange 单文件复制、`bus_import.py`、`update.py`、`invalid.py`；`__init__.py` 按容器类型分组的有序检测注册表), `detect.py` (`evalZip`/`evalFolder`/`eval7zip`/`evalJson`/`evalFile` 门面), `message.py` (`makeMessage`，显示名来自注册表), `eval_files.py` (`evalFiles` 主流程，按类型查注册表执行); zip/7z extraction, mod installation, update package handling via Updater, plus bus/调爪 JSON recognition and shared import into `fancy/` |
-| `function_cdn.py` | CDN optimization | Cloudflare + CloudFront CDN speed testing and optimization |
+| `cdn/` | CDN optimization | Former `function_cdn.py` split into a package: `constants.py` (常量定义，对应 LLC_BABEL CdnTarget.cs), `classify.py` (CloudFront 探测失败分类), `cfst.py` (CloudflareSpeedTest 子进程 + CSV 解析), `cloudfront.py` (CloudFront DNS 候选发现与 HTTPS 端点探测), `selector.py` (CloudFront 两阶段 IP 选择), `hosts.py` (hosts 文件管理), `elevate.py` (管理员提权写入/移除 hosts 与提权子进程入口), `optimize.py` (完整优选流程编排，含缓存 TTL 避免重复测速); facade re-exports all public API |
 | `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection; `is_injected()` checks self-tracked injection state |
-| `builtinFancy.py` | Built-in text rules | Built-in text beautification rules |
-| `builtinFancyFunc.py` | Fancy skill-color resources | `SkillColorHandler` lazily extracts skill attributes from Unity resources, fingerprints source files, caches color mappings in `tmp/fancy/skill-colors.json`, records cache hits, and suppresses repeated retries after an initialization failure |
 | `function_resource.py` | Unity resource reader | Locates Limbus resource files and extracts text assets in batches through UnityPy; sets fallback Unity version `6000.3.12f1` for resources without usable version metadata |
-| `eiderConst.py` | Update constants | Translation pack update lists, dependency chains; `bindRefer` wizard control bindings (incl. launcher CDN options, game source), `relyList` step dependencies (base always shown; launcher-source depends on `launcher.work.update != no`) |
-| `Faust_fancy.py` | Faust rules | Faust character-specific fancy text rules |
-| `function_rule_editor.py` | Rule editor backend | File browser (`get_lang_files`, `get_file_content`, `search_files`); content search counts raw text occurrences with `utf-8-sig`, so BOM and temporarily invalid JSON files remain searchable. Also provides ruleset CRUD, v2 rule validation/building, V1/V2/V3 smart analysis, 5-dimension scoring, and JSON-validated file saving with backup |
-| `rule_editor_constants.py` | Rule editor shared data | Single-source-of-truth for `FILE_PREFIX_RULES`, `CATEGORY_FILE_PATTERNS`, `COMMON_REPLACEMENTS`, `TEMPLATES`. Imported by `function_rule_editor.py` and `app.py` (RuleEditorAPI). JS fetches via `get_editor_constants()` API with hardcoded fallback. |
-| `function_quick_editor.py` | Quick editor backend | Tracks deep JSON diffs as `{file, path, old, new}`, persists edits plus derived bus `set` rules to `fancy/_quick_edits.json`, migrates legacy edits-only files in memory, and applies through `bus_engine` with per-edit path failures and atomic writes |
-| `test.py` | Debug utilities | Internal testing/debug helpers |
+| `wizard_constants.py` | Update constants | Translation pack update lists, dependency chains; `bindRefer` wizard control bindings (incl. launcher CDN options, game source), `relyList` step dependencies (base always shown; launcher-source depends on `launcher.work.update != no`) |
+| `rule_editor/` | Rule editor backend | `browser.py` (file browser: `_get_lang_dir`, `get_lang_files`, `get_category`, `get_file_content`, `search_files` — raw text occurrence counts with `utf-8-sig`, so BOM and temporarily invalid JSON files remain searchable — and JSON-validated `save_file_content` with backup), `rules.py` (ruleset CRUD: `get_ruleset_list`, `get_ruleset`, `save_ruleset`, `create_ruleset`, `delete_ruleset`, `apply_ruleset_to_content` + form helpers `build_rule_from_form`, `validate_rule`), `generate.py` (V1/V2/V3 smart analysis, change clustering, 5-dimension scoring, merge-candidate detection), `quick.py` (quick editor backend: deep JSON diffs `{file, path, old, new}`, persistence of edits plus derived bus `set` rules to `fancy/_quick_edits.json`, legacy migration, per-edit path failures and atomic writes), `constants.py` (single-source-of-truth `FILE_PREFIX_RULES`, `CATEGORY_FILE_PATTERNS`, `COMMON_REPLACEMENTS`, `TEMPLATES`; JS fetches via `get_editor_constants()` API with hardcoded fallback). Facade re-exports all public API |
+| `scripts/test_environment.py` | Debug utilities | Internal testing/debug helpers (moved out of webutils) |
 | `debug_environ_test.py` | Environment diag | Environment diagnostics on startup failure |
 
 ## webFunc/ — Infrastructure Layer
@@ -179,18 +173,19 @@ webui/app.py
     → translateFunc/ (translation pipeline)
     → webFunc/ (GitHub downloads, file transfer)
   → globalManagers/ (ConfigManager, LogManager)
-  → webutils/function_rule_editor.py (RuleEditorAPI: file browser, rules CRUD)
+  → webutils/rule_editor/ (RuleEditorAPI: file browser, rules CRUD; QuickEditorAPI)
   → webutils/function_fancy.py (load_fancy_folder_rules, fancy_main)
 
-webutils/function_rule_editor.py
+webutils/rule_editor/
   → webutils/function_fancy.py (load_fancy_folder_rules, save_ruleset_to_folder, etc.)
-  → webutils/fancy_engine.py (shared v2 validation)
-  → globalManagers/ConfigManager.py (_get_lang_dir)
+  → webutils/fancy/engine.py (shared v2 validation)
+  → webutils/fancy/bus.py (compile_bus_ruleset, is_bus_ruleset)
+  → globalManagers/ConfigManager.py (browser._get_lang_dir)
 
 webutils/function_fancy.py
-  → webutils/fancy_engine.py (compile_rulesets, apply_rules)
-  → webutils/bus_engine.py (compile_bus_ruleset, apply_bus, import conversion)
-  → webutils/builtinFancyFunc.py (lazy skill-color preparation when required)
+  → webutils/fancy/engine.py (compile_rulesets, apply_rules)
+  → webutils/fancy/bus.py (compile_bus_ruleset, apply_bus, import conversion)
+  → webutils/fancy/builtin_func.py (lazy skill-color preparation when required)
     → webutils/function_resource.py (Unity text asset extraction)
 
 launcher/updates.py

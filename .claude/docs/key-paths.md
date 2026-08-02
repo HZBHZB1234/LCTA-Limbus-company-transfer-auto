@@ -14,7 +14,7 @@ JS: user clicks install button
   → webui/app.py                   LCTA_API.install_llc()
   → webutils/function_llc.py       download & install LLC pack
     → webFunc/GithubDownload.py    fetch from GitHub Releases API
-    → webutils/functions.py        zip extraction, 7z integration
+    → webutils/utils/io.py          zip extraction, 7z integration
   → webui/app.py                   callback: progress → JS modal update
 ```
 
@@ -23,10 +23,10 @@ JS: user clicks install button
 ```
 JS: user clicks install button (PC or Android source)
   → webui/app.py                   LCTA_API.install_ourplay() or .install_ourplay_new()
-  → webutils/function_ourplay.py   PC source download
-    OR webutils/function_ourplay_new.py  Android source download
+  → webutils/function_ourplay_pc.py   PC source download
+    OR webutils/function_ourplay_android.py  Android source download
     → webFunc/GithubDownload.py    fetch from GitHub
-    → webutils/functions.py        extract & apply
+    → webutils/utils/io.py         extract & apply
 ```
 
 ## 3. LLM Auto-Translation (核心功能)
@@ -104,7 +104,7 @@ The viewer does not scan directories or provide content search. It only accepts 
 JS: user clicks "test speed" or "optimize"
   → webui/js/cdn.js                UI logic, progress display
   → webui/app.py                   LCTA_API.cdn_test() / .cdn_optimize()
-  → webutils/function_cdn.py       CDN logic
+  → webutils/cdn/                  CDN logic (package)
     → subprocess: CFST/cfst.exe    CloudflareSpeedTest binary
     → parse: CFST/result_cf.csv    speed test results
     → modify: system hosts file    apply optimal CDN IP
@@ -115,7 +115,7 @@ Launcher mode (auto-start):
     → ConfigManager.set()          store last_cdn_test_time on success
 ```
 
-Files: `webui/js/cdn.js`, `webui/app.py`, `webutils/function_cdn.py`, `launcher/cdn.py`, `CFST/cfst.exe`, `CFST/ip.txt`
+Files: `webui/js/cdn.js`, `webui/app.py`, `webutils/cdn/`, `launcher/cdn.py`, `CFST/cfst.exe`, `CFST/ip.txt`
 
 ## 5. Game Launch (with Mods)
 
@@ -196,14 +196,14 @@ User opens rule editor
 User browses files in sidebar, double-clicks a file
   → api.get_file_content(path)                      read JSON from game Lang dir
   → webui/app.py RuleEditorAPI.get_file_content()
-    → webutils/function_rule_editor.py get_file_content()
+    → webutils/rule_editor/browser.py get_file_content()
 
 User types in sidebar search input
   → filterFilesByKeyword(keyword)                    local filename/category filter only
 User presses Enter or clicks "搜索"
   → performSearch()                                  increments searchRequestId; disables button
     → api.search_files(keyword, caseSensitive)
-      → function_rule_editor.py search_files()       raw UTF-8-SIG text occurrence count
+      → webutils/rule_editor/browser.py search_files()   raw UTF-8-SIG text occurrence count
                                                      (BOM and invalid JSON remain searchable)
     → ignore response if a newer search/clear occurred
     → renderSearchCategories()                       grouped content-search results
@@ -224,21 +224,21 @@ User edits text in CodeMirror, clicks "比较变更"
 User clicks "保存到游戏" (optional direct save)
   → saveEditedFile()
     → api.save_file_content(path, raw)              writes to game Lang file
-    → webutils/function_rule_editor.py save_file_content()
+    → webutils/rule_editor/browser.py save_file_content()
 
 User clicks "智能生成规则集" (from changes panel or ruleset-edit tab)
   → generateRulesFromChanges()
     → state.smartChanges = state.pendingChanges
     → openSmartGeneration()                         existing smart gen dialog
       → api.analyze_changes(changes)                LCS grouping + 5-dimension scoring
-      → webutils/function_rule_editor.py analyze_changes()
+      → webutils/rule_editor/generate.py analyze_changes()
       → showSmartGenDialog(groups)                  L1-L4 tiered scope selectors
     → user selects scope → applySmartGroup()
       → builds rule → pushes to state.currentRuleset.rules
       → api.save_ruleset()                          persists to fancy/{name}.json
 ```
 
-Key files: `webui/rule-editor.html`, `webui/js/rule-editor.js`, `webui/app.py` (RuleEditorAPI), `webutils/function_rule_editor.py`
+Key files: `webui/rule-editor.html`, `webui/js/rule-editor.js`, `webui/app.py` (RuleEditorAPI), `webutils/rule_editor/`
 
 ## 8. Text Beautification — Compile and Apply Rules
 
@@ -257,10 +257,10 @@ Both paths
   → webutils/function_fancy.py fancy_main(gamePath, package, rulesets, enableMap)
     → _select_enabled_rulesets()                    discard disabled rules before compilation
     → compile each enabled ruleset in original order
-      → webutils/fancy_engine.py compile_rulesets()  v2 conditions/actions
-      → webutils/bus_engine.py compile_bus_ruleset() bus selectors/replacements
+      → webutils/fancy/engine.py compile_rulesets()  v2 conditions/actions
+      → webutils/fancy/bus.py compile_bus_ruleset() bus selectors/replacements
       → CompiledRules.requires_skill_color
-        → builtinFancyFunc.SkillColorHandler.prepare() only when an enabled rule needs it
+        → webutils/fancy/builtin_func.py SkillColorHandler.prepare() only when an enabled rule needs it
           → function_resource.py load_text_assets()
           → fingerprinted tmp/fancy/skill-colors.json cache
     → scan language-package *.json files
@@ -276,12 +276,12 @@ Bus import button
   → webui/js/features.js importBusRules()
   → webui/app.py LCTA_API.import_bus_rules()
   → webutils/function_fancy.py import_bus_rules_file()
-    → bus_engine.is_bus_ruleset() or is_tiaozhua_config()
+    → webutils/fancy/bus.py is_bus_ruleset() or is_tiaozhua_config()
     → validate or mechanically convert
     → save disabled-by-default user ruleset under fancy/
 ```
 
-Key files: `webui/js/features.js`, `webui/app.py`, `launcher/updates.py`, `webutils/function_fancy.py`, `webutils/fancy_engine.py`, `webutils/bus_engine.py`, `webutils/builtinFancyFunc.py`, `webutils/function_resource.py`
+Key files: `webui/js/features.js`, `webui/app.py`, `launcher/updates.py`, `webutils/function_fancy.py`, `webutils/fancy/engine.py`, `webutils/fancy/bus.py`, `webutils/fancy/builtin_func.py`, `webutils/function_resource.py`
 
 ## 9. Config Management
 
@@ -357,7 +357,7 @@ JS: user drags files onto window
     → progress:                   LogManager modal callbacks
 ```
 
-Files: `webui/js/features.js`, `webui/app.py`, `webutils/drop/`, `webutils/function_fancy.py`, `webutils/bus_engine.py`, `webutils/update.py`
+Files: `webui/js/features.js`, `webui/app.py`, `webutils/drop/`, `webutils/function_fancy.py`, `webutils/fancy/bus.py`, `webutils/update.py`
 
 ## 13. WebUI Startup Bootstrap
 

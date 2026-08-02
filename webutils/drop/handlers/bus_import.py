@@ -5,7 +5,7 @@ from typing import Any
 from ..context import FileExecutionContext
 from ..handler import DropFileHandler
 from ..inspect import JsonFormatInspection
-from ...bus_engine import is_bus_ruleset, is_tiaozhua_config
+from ...fancy.bus import is_bus_ruleset, is_tiaozhua_config
 from ...function_fancy import import_bus_rules_file
 from globalManagers.LogManager import LogManager
 

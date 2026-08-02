@@ -16,7 +16,7 @@ from webutils import (
     check_ver_github_M,
     function_bubble_main, fancy_main, builtinFancyConfig,
 )
-import webutils.functions as func_utils
+import webutils.utils as func_utils
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 

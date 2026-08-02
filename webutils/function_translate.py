@@ -14,7 +14,8 @@ from typing import Callable
 from translateFunc import TranslationPipeline, TranslateConfig
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
-from webutils.functions import get_cache_font, zip_folder
+from webutils.utils.font import get_cache_font
+from webutils.utils.io import zip_folder
 
 _log_manager = LogManager()
 

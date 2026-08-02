@@ -9,9 +9,9 @@ from typing import Any
 from ..context import FileExecutionContext
 from ..handler import DropFileHandler, remove_existing
 from ..inspect import FolderFormatInspection, ZipFormatInspection
-from ...function_clean import _sanitize_zip_member_name
-from ...function_manage import safe_join_path
-from ...functions import extract_zip_smartly
+from ...packages.clean import _sanitize_zip_member_name
+from ...packages.manage import safe_join_path
+from ...utils.io import extract_zip_smartly
 from globalManagers.LogManager import LogManager
 
 _log_manager = LogManager()

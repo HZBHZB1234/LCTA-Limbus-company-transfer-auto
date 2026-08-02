@@ -1,5 +1,7 @@
 """简易翻译编辑器后端 API — diff 追踪、路径导航、持久化、应用"""
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -9,9 +11,8 @@ from pathlib import Path
 from collections import defaultdict
 from typing import Optional
 
-from webutils.bus_engine import apply_bus, compile_bus_ruleset, convert_edits_to_bus_ruleset
-from webutils.function_fancy import _get_fancy_folder
-from webutils.rule_editor_constants import FILE_PREFIX_RULES
+from ..fancy.bus import apply_bus, compile_bus_ruleset, convert_edits_to_bus_ruleset
+from ..function_fancy import _get_fancy_folder
 
 logger = logging.getLogger('quick_editor')
 
@@ -174,7 +175,7 @@ def apply_quick_edits() -> dict:
     （与文本美化行为保持一致）。
     应用前逐条校验 edit 的 old 值是否与文件当前值匹配；
     列表索引漂移导致的原值不匹配会被报告并跳过，而不是静默写错对象。"""
-    from webutils.function_rule_editor import _get_lang_dir
+    from .browser import _get_lang_dir
 
     lang_dir = _get_lang_dir()
     if not lang_dir:
@@ -240,7 +241,7 @@ def apply_quick_edits() -> dict:
             fail_count += result.failed_rules
             errors.extend(result.errors)
             if result.changed_count:
-                from webutils.function_fancy import _write_json_atomic
+                from ..function_fancy import _write_json_atomic
 
                 _write_json_atomic(full_path, result.data)
         except json.JSONDecodeError as e:

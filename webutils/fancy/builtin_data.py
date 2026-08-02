@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 TEXT_REPLACEMENTS = [
     {"type": "replace", "mode": "literal", "from": "大于", "to": ">"},
     {"type": "replace", "mode": "literal", "from": "小于", "to": "<"},

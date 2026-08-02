@@ -1,228 +1,14 @@
-"""美化规则编辑器后端 API — 文件浏览、规则 CRUD、智能生成"""
+from __future__ import annotations
 
-import json
-import os
 import re
-import shutil
-import logging
-from pathlib import Path
-from typing import Optional
 
-from globalManagers.ConfigManager import ConfigManager
-from webutils.function_fancy import (
-    load_fancy_folder_rules, save_ruleset_to_folder,
-    delete_ruleset_from_folder, _get_fancy_folder, _sanitize_filename,
-)
-from webutils.bus_engine import compile_bus_ruleset, is_bus_ruleset
-from webutils.fancy_engine import RuleValidationError, apply_rules, compile_rulesets
-from webutils.rule_editor_constants import FILE_PREFIX_RULES, CATEGORY_FILE_PATTERNS
+from .browser import get_category
+from .constants import COMMON_REPLACEMENTS
 
-logger = logging.getLogger('rule_editor')
+_KNOWN_COMPARISON_REPLACEMENTS = {
+    item["from"]: item["to"] for item in COMMON_REPLACEMENTS[:4]
+}
 
-
-_lang_dir_cache = None
-
-def _get_lang_dir() -> Optional[Path]:
-    global _lang_dir_cache
-    if _lang_dir_cache is not None:
-        return _lang_dir_cache
-    config = ConfigManager()
-    game_path = config.get('game_path', '')
-    if not game_path:
-        return None
-    lang_path = Path(game_path) / 'LimbusCompany_Data' / 'Lang'
-    try:
-        config_json = lang_path / 'config.json'
-        if config_json.exists():
-            lang_name = json.loads(config_json.read_text(encoding='utf-8')).get('lang', '')
-            lang_path = lang_path / lang_name
-    except Exception:
-        pass
-    _lang_dir_cache = lang_path if lang_path.exists() else None
-    return _lang_dir_cache
-
-def get_lang_files() -> list:
-    lang_dir = _get_lang_dir()
-    if not lang_dir:
-        return []
-    json_files = []
-    for root, dirs, files in os.walk(lang_dir):
-        for f in files:
-            if f.endswith('.json'):
-                full_path = Path(root) / f
-                try:
-                    json_files.append(str(full_path.relative_to(lang_dir)))
-                except ValueError:
-                    json_files.append(str(full_path))
-    return sorted(json_files)
-
-def get_category(relative_path: str) -> str:
-    for prefix, category in FILE_PREFIX_RULES:
-        if relative_path.startswith(prefix) or prefix in relative_path:
-            return category
-    return 'Other'
-
-def get_file_content(relative_path: str) -> dict:
-    lang_dir = _get_lang_dir()
-    if not lang_dir:
-        return {"error": "Lang 文件夹未配置"}
-    resolved_lang_dir = lang_dir.resolve()
-    full_path = (resolved_lang_dir / relative_path).resolve()
-    try:
-        full_path.relative_to(resolved_lang_dir)
-    except ValueError:
-        return {"error": f"文件路径超出语言包目录: {relative_path}"}
-    if not full_path.exists():
-        return {"error": f"文件不存在: {relative_path}"}
-    try:
-        raw = full_path.read_text(encoding='utf-8-sig')
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            parsed = None
-        return {"raw": raw, "parsed": parsed, "file_classification": get_category(relative_path)}
-    except Exception as e:
-        return {"error": str(e), "raw": None, "parsed": None}
-
-def search_files(keyword: str, case_sensitive: bool = False) -> dict:
-    lang_dir = _get_lang_dir()
-    if not lang_dir or not isinstance(keyword, str) or not keyword:
-        return {"results_by_category": {}, "total_matches": 0}
-    results_by_category = {}
-    total_matches = 0
-    search_keyword = keyword if case_sensitive else keyword.lower()
-
-    for root, dirs, files in os.walk(lang_dir):
-        for f in files:
-            if not f.endswith('.json'):
-                continue
-            full_path = Path(root) / f
-            try:
-                rel_path = str(full_path.relative_to(lang_dir))
-            except ValueError:
-                rel_path = str(full_path)
-            try:
-                content = full_path.read_text(encoding='utf-8-sig')
-                searchable_content = content if case_sensitive else content.lower()
-                matches = searchable_content.count(search_keyword)
-                if matches > 0:
-                    category = get_category(rel_path)
-                    if category not in results_by_category:
-                        results_by_category[category] = []
-                    results_by_category[category].append((rel_path, matches))
-                    total_matches += matches
-            except (OSError, UnicodeError) as exc:
-                logger.debug("搜索文件内容失败 %s: %s", full_path, exc)
-    return {"results_by_category": results_by_category, "total_matches": total_matches}
-
-def get_ruleset_list() -> list:
-    rulesets = [ruleset for ruleset in load_fancy_folder_rules() if ruleset.get('version') == 2]
-    return [
-        {"name": rs["name"], "desc": rs.get("desc", ""), "rule_count": len(rs.get("rules", []))}
-        for rs in rulesets
-    ]
-
-def get_ruleset(name: str) -> dict:
-    folder = _get_fancy_folder()
-    filename = _sanitize_filename(name) + '.json'
-    filepath = folder / filename
-    if not filepath.exists():
-        return {"error": f"规则集不存在: {name}"}
-    try:
-        return json.loads(filepath.read_text(encoding='utf-8'))
-    except Exception as e:
-        return {"error": str(e)}
-
-def save_ruleset(name: str, data: dict) -> dict:
-    try:
-        if 'name' not in data:
-            data['name'] = name
-        if is_bus_ruleset(data):
-            compile_bus_ruleset(data)
-        else:
-            data['version'] = 2
-            errors = validate_rule(json.dumps(data, ensure_ascii=False)).get('errors', [])
-            if errors:
-                return {"success": False, "error": "; ".join(errors)}
-        filepath = save_ruleset_to_folder(name, data)
-        return {"success": True, "path": str(filepath)}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-def create_ruleset(name: str) -> dict:
-    template = {"version": 2, "name": name, "desc": "", "rules": []}
-    return save_ruleset(name, template)
-
-def delete_ruleset(name: str) -> dict:
-    success = delete_ruleset_from_folder(name)
-    if success:
-        return {"success": True}
-    return {"success": False, "error": f"规则集不存在或删除失败: {name}"}
-
-def _file_pattern_from_selection(selection: str) -> str:
-    if selection in CATEGORY_FILE_PATTERNS:
-        return CATEGORY_FILE_PATTERNS[selection]
-    return selection or '*.json'
-
-def build_rule_from_form(form_data: dict) -> dict:
-    aim_file = _file_pattern_from_selection(form_data.get("file_pattern", ""))
-    item_ids = form_data.get("item_ids", [])
-    scope = form_data.get("scope", "dataList[*]")
-    target_paths = form_data.get("target_paths") or [form_data.get("field_path", "desc")]
-    operations = form_data.get("operations", [])
-    extra_conditions = form_data.get("extra_conditions", [])
-
-    conditions = []
-    if item_ids:
-        normalized_ids = [int(item) if str(item).isdigit() else item for item in item_ids]
-        conditions.append({
-            "path": "id",
-            "operator": "in",
-            "value": normalized_ids,
-        })
-
-    for ec in extra_conditions:
-        path = ec.get("path") or ec.get("field")
-        operator = ec.get("operator", "regex")
-        value = ec.get("value", ec.get("pattern"))
-        if not path or value in (None, ""):
-            continue
-        if operator == "in" and isinstance(value, str):
-            value = [part.strip() for part in value.split(',') if part.strip()]
-            value = [int(part) if str(part).isdigit() else part for part in value]
-        conditions.append({"path": path, "operator": operator, "value": value})
-
-    actions = []
-    for operation in operations:
-        if operation.get('type'):
-            actions.append(operation)
-        elif operation.get('from') is not None and operation.get('to') is not None:
-            actions.append({
-                "type": "replace",
-                "mode": operation.get("mode", "literal"),
-                "from": operation["from"],
-                "to": operation["to"],
-            })
-    return {
-        "files": [aim_file],
-        "scope": scope,
-        "targets": target_paths,
-        "where": conditions,
-        "actions": actions,
-    }
-
-def validate_rule(rule_json: str) -> dict:
-    try:
-        payload = json.loads(rule_json)
-    except json.JSONDecodeError as e:
-        return {"valid": False, "errors": [f"JSON 语法错误: {e}"]}
-    if not isinstance(payload, dict):
-        return {"valid": False, "errors": ["规则必须是 JSON 对象"]}
-    try:
-        compile_rulesets([payload])
-    except RuleValidationError as exc:
-        return {"valid": False, "errors": [str(exc)]}
-    return {"valid": True, "errors": []}
 
 def _analyze_value_change(old_val, new_val) -> dict:
     if not isinstance(old_val, str) or not isinstance(new_val, str):
@@ -405,8 +191,7 @@ def analyze_changes(changes: list) -> dict:
         suggestions = []
         if first["change_type"] == "PURE_REPLACE":
             compare_terms = [c["core_old"] for c in group]
-            known = {"大于": ">", "小于": "<", "不低于": "≥", "不高于": "≤"}
-            for term, sym in known.items():
+            for term, sym in _KNOWN_COMPARISON_REPLACEMENTS.items():
                 if term not in compare_terms:
                     suggestions.append(f"你也可以添加: {term} → {sym}")
 
@@ -473,8 +258,7 @@ def analyze_changes_v2(changes: list, bias: str = 'conservative') -> dict:
         suggestions = []
         if first["change_type"] == "PURE_REPLACE":
             compare_terms = [c["core_old"] for c in group]
-            known = {"大于": ">", "小于": "<", "不低于": "≥", "不高于": "≤"}
-            for term, sym in known.items():
+            for term, sym in _KNOWN_COMPARISON_REPLACEMENTS.items():
                 if term not in compare_terms:
                     suggestions.append(f"你也可以添加: {term} → {sym}")
 
@@ -731,71 +515,3 @@ def _make_scorable(changes: list) -> list:
             "new_val": c.get("new_val", "")
         })
     return out
-
-
-def save_file_content(relative_path: str, content: str) -> dict:
-    """Save edited file content back to the game Lang directory.
-    Validates JSON, creates a .bak backup, and writes the file.
-    """
-    lang_dir = _get_lang_dir()
-    if not lang_dir:
-        return {"success": False, "error": "Lang 文件夹未配置"}
-    resolved_lang_dir = lang_dir.resolve()
-    full_path = (resolved_lang_dir / relative_path).resolve()
-    try:
-        full_path.relative_to(resolved_lang_dir)
-    except ValueError:
-        return {"success": False, "error": f"文件路径超出语言包目录: {relative_path}"}
-    if not full_path.exists():
-        return {"success": False, "error": f"文件不存在: {relative_path}"}
-    try:
-        json.loads(content)
-    except json.JSONDecodeError as e:
-        return {"success": False, "error": f"JSON 格式错误: {e}"}
-    try:
-        backup_path = full_path.with_suffix('.json.bak')
-        shutil.copy2(full_path, backup_path)
-    except Exception as e:
-        logger.warning("备份文件失败: %s", e)
-    try:
-        full_path.write_text(content, encoding='utf-8-sig')
-        return {"success": True, "path": str(full_path)}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def apply_ruleset_to_content(ruleset_name: str, file_path: str, content: str) -> dict:
-    """将规则集应用到单个文件的内存内容，返回修改后的内容（不写磁盘）"""
-    rulesets = load_fancy_folder_rules()
-    ruleset = None
-    for r in rulesets:
-        if r.get('name') == ruleset_name:
-            ruleset = r
-            break
-    if not ruleset:
-        return {"success": False, "error": "规则集不存在"}
-
-    try:
-        matching_rules = compile_rulesets([ruleset]).for_file(file_path)
-    except RuleValidationError as exc:
-        return {"success": False, "error": f"规则验证失败: {exc}"}
-    if not matching_rules.rules:
-        return {"success": True, "modified_content": content, "rules_applied": 0}
-
-    try:
-        data = json.loads(content)
-    except json.JSONDecodeError as e:
-        return {"success": False, "error": f"JSON 格式错误: {e}"}
-
-    try:
-        result = apply_rules(data, matching_rules)
-    except Exception as e:
-        return {"success": False, "error": f"规则执行异常: {e}"}
-
-    modified = json.dumps(result.data, ensure_ascii=False, indent=4)
-    return {
-        "success": True,
-        "modified_content": modified,
-        "rules_applied": len(matching_rules.rules),
-        "values_changed": result.changed_count,
-    }

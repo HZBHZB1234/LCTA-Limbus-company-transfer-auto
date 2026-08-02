@@ -1,6 +1,6 @@
 import time
 
-from webutils.fancy_engine import apply_rules, compile_rulesets
+from webutils.fancy.engine import apply_rules, compile_rulesets
 
 
 def _run_case(size):

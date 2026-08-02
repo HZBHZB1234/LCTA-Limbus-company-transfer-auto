@@ -5,7 +5,8 @@ webui/nexus/*.js
 tmp
 native
 *\example/
-fancy
+fancy/
+!webutils/fancy
 .rmv
 *.pyc
 *.pyo

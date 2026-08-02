@@ -1,6 +1,6 @@
 """
 tests/test_webutils_functions.py
-webutils/functions.py 的下载与解压工具函数单元测试。
+webutils/utils 的下载与解压工具函数单元测试。
 覆盖：download_with 的 verify/validate 语义分离、超时设置、
 下载后大小校验、decompress_zip 返回值契约。
 """
@@ -9,7 +9,8 @@ import zipfile
 
 import pytest
 
-from webutils import functions as funcs
+from webutils.utils import io as utils_io
+from webutils.utils import net as utils_net
 
 
 # ========== decompress_zip 返回值契约 ==========
@@ -26,16 +27,16 @@ class TestDecompressZip:
         zip_path = tmp_path / "test.zip"
         out_dir = tmp_path / "out"
         self._make_zip(zip_path)
-        assert funcs.decompress_zip(str(zip_path), str(out_dir)) is True
+        assert utils_io.decompress_zip(str(zip_path), str(out_dir)) is True
         assert (out_dir / "a.txt").exists()
 
     def test_missing_file_returns_false(self, tmp_path):
-        assert funcs.decompress_zip(str(tmp_path / "nope.zip"), str(tmp_path)) is False
+        assert utils_io.decompress_zip(str(tmp_path / "nope.zip"), str(tmp_path)) is False
 
     def test_corrupted_zip_returns_false(self, tmp_path):
         bad_zip = tmp_path / "bad.zip"
         bad_zip.write_bytes(b"not a real zip file")
-        assert funcs.decompress_zip(str(bad_zip), str(tmp_path)) is False
+        assert utils_io.decompress_zip(str(bad_zip), str(tmp_path)) is False
 
 
 # ========== download_with verify / validate 语义 ==========
@@ -76,7 +77,7 @@ def fake_get(monkeypatch):
     calls['content_length'] = 100
     calls['error'] = None
 
-    monkeypatch.setattr(funcs.requests, 'get', _fake_get)
+    monkeypatch.setattr(utils_net.requests, 'get', _fake_get)
     return calls
 
 
@@ -86,7 +87,7 @@ class TestDownloadWith:
     def test_request_verify_true_and_timeout_set(self, fake_get, tmp_path):
         """verify 必须固定为 True，且必须携带 (connect, read) 超时。"""
         save_path = tmp_path / "dl.bin"
-        assert funcs.download_with("https://example.com/f", str(save_path)) is True
+        assert utils_net.download_with("https://example.com/f", str(save_path)) is True
         kwargs = fake_get['kwargs']
         assert kwargs['verify'] is True
         assert kwargs['timeout'] == (10, 60)
@@ -97,7 +98,7 @@ class TestDownloadWith:
         """validate=False 时即使大小不匹配也应视为成功。"""
         fake_get['content_length'] = 100
         save_path = tmp_path / "dl.bin"
-        assert funcs.download_with(
+        assert utils_net.download_with(
             "https://example.com/f", str(save_path),
             size=999, validate=False
         ) is True
@@ -106,7 +107,7 @@ class TestDownloadWith:
         """validate=True 且下载大小与期望不符时返回 False。"""
         fake_get['content_length'] = 100
         save_path = tmp_path / "dl.bin"
-        assert funcs.download_with(
+        assert utils_net.download_with(
             "https://example.com/f", str(save_path), size=999
         ) is False
 
@@ -114,7 +115,7 @@ class TestDownloadWith:
         """validate=True 且大小匹配时返回 True。"""
         fake_get['content_length'] = 100
         save_path = tmp_path / "dl.bin"
-        assert funcs.download_with(
+        assert utils_net.download_with(
             "https://example.com/f", str(save_path), size=100
         ) is True
 
@@ -122,7 +123,7 @@ class TestDownloadWith:
         """服务器返回错误状态码时返回 False 且不产生文件。"""
         fake_get['error'] = RuntimeError("404 Not Found")
         save_path = tmp_path / "dl.bin"
-        assert funcs.download_with("https://example.com/f", str(save_path)) is False
+        assert utils_net.download_with("https://example.com/f", str(save_path)) is False
 
 
 # ========== 响应迭代超时保护 ==========
@@ -132,7 +133,7 @@ class TestIterWithTimeout:
 
     def test_fast_chunks_pass_through(self):
         chunks = iter([b'1', b'2', b'3'])
-        assert list(funcs._iter_with_timeout(chunks, timeout=10)) == [b'1', b'2', b'3']
+        assert list(utils_net._iter_with_timeout(chunks, timeout=10)) == [b'1', b'2', b'3']
 
     def test_stalled_chunk_raises_timeout(self):
         def slow_chunks():
@@ -141,4 +142,4 @@ class TestIterWithTimeout:
             yield b'2'
 
         with pytest.raises(TimeoutError):
-            list(funcs._iter_with_timeout(slow_chunks(), timeout=0.05))
+            list(utils_net._iter_with_timeout(slow_chunks(), timeout=0.05))

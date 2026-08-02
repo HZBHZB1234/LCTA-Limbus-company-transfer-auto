@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from globalManagers.LogManager import LogManager
-from webutils.bus_engine import (
+from webutils.fancy.bus import (
     BUS_FORMAT,
     BUS_VERSION,
     CompiledBus,
@@ -21,7 +21,7 @@ from webutils.bus_engine import (
     is_bus_ruleset,
     is_tiaozhua_config,
 )
-from webutils.fancy_engine import ApplyResult, CompiledRules, apply_rules, compile_rulesets
+from webutils.fancy.engine import ApplyResult, CompiledRules, apply_rules, compile_rulesets
 
 _log_manager = LogManager()
 
@@ -110,7 +110,7 @@ def fancy_main(
         item.kind == "v2" and item.compiled.requires_skill_color
         for item in compiled_rulesets
     ):
-        from webutils.builtinFancyFunc import skillColorHandler
+        from webutils.fancy.builtin_func import skillColorHandler
 
         skillColorHandler.last_cache_hit = False
         skillColorHandler.prepare()

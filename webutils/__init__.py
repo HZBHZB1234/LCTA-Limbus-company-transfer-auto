@@ -1,7 +1,7 @@
 from .function_llc import function_llc_main, check_ver_github
-from .function_ourplay import function_ourplay_main, check_ver_ourplay, function_ourplay_api
-from .function_ourplay_new import function_ourplay_new_main, check_ver_ourplay_new
-from .function_install import (
+from .function_ourplay_pc import function_ourplay_main, check_ver_ourplay, function_ourplay_api
+from .function_ourplay_android import function_ourplay_new_main, check_ver_ourplay_new
+from .packages import (
     find_translation_packages,
     delete_translation_package,
     change_font_for_package,
@@ -12,8 +12,8 @@ from .function_install import (
 from .function_fetch import function_fetch_main
 from .function_LCTA_auto import function_LCTA_auto_main, check_ver_github_M
 from .function_bubble import function_bubble_main
-from .function_clean import clean_config_main
-from .function_manage import (find_installed_packages,
+from .packages import clean_config_main
+from .packages import (find_installed_packages,
                               use_translation_package,
                               delete_installed_package,
                               check_lang_enabled,
@@ -22,11 +22,11 @@ from .function_manage import (find_installed_packages,
                               open_mod_path, check_symlink,create_symlink_for,
                               evaluate_path, open_explorer, UNITY, PM,
                               remove_symlink_for)
-from .builtinFancy import fancy as builtinFancyConfig
+from .fancy.builtin_data import fancy as builtinFancyConfig
 from .function_fancy import fancy_main
-from .eiderConst import updateList, bindRefer, relyList
+from .wizard_constants import updateList, bindRefer, relyList
 from .drop import evalFile, makeMessage, evalFiles
-from .function_cdn import (
+from .cdn import (
     run_cfst,
     resolve_cloudfront_dns,
     probe_cloudfront_endpoint,
@@ -38,6 +38,7 @@ from .function_cdn import (
     cdn_optimize_cloudfront,
     cdn_full_optimization,
     cdn_full_optimization_simple,
+    elevate_remove_hosts,
 )
 from .function_speed import SpeedManager
 
@@ -94,5 +95,6 @@ __all__ = [
     'cdn_optimize_cloudfront',
     'cdn_full_optimization',
     'cdn_full_optimization_simple',
+    'elevate_remove_hosts',
     'SpeedManager',
 ]

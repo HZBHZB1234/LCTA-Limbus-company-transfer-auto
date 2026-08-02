@@ -4,7 +4,7 @@ from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
 from webFunc import GithubDownload
 from webFunc import Note
-from webutils.functions import download_with_github, download_with
+from webutils.utils.net import download_with_github, download_with
 
 def check_ver_github_M(from_proxy):
     GithubDownload.GithubRequester.update_config(from_proxy)

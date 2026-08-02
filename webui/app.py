@@ -26,13 +26,13 @@ from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 import webutils.load as load_util
 import webutils.function_llc as function_llc
-from webutils.functions import get_cache_font, get_steam_command, change_icon, _move_folders
+from webutils.utils import get_cache_font, get_steam_command, change_icon, _move_folders
 from webutils.update import Updater, get_app_version
-from webutils.const_apiConfig import (
+from webutils.translator_constants import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
 )
 from webutils.function_translate import translate_main
-import webutils.function_cdn as function_cdn
+import webutils.cdn as function_cdn
 from webutils import *
 from webutils.function_speed import (
     ProcessNotFoundError,
@@ -1653,7 +1653,7 @@ class LCTA_API():
 
 class RuleEditorAPI:
     def __init__(self):
-        from webutils.function_rule_editor import (
+        from webutils.rule_editor import (
             get_lang_files, get_file_content, search_files,
             get_ruleset_list, get_ruleset, save_ruleset,
             create_ruleset, delete_ruleset,
@@ -1688,7 +1688,7 @@ class RuleEditorAPI:
             game_path = ConfigManager().get('game_path')
             lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang'
             config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
-            from webutils.function_rule_editor import get_ruleset
+            from webutils.rule_editor import get_ruleset
             ruleset = get_ruleset(name)
             if 'error' in ruleset:
                 return {"success": False, "message": ruleset['error']}
@@ -1698,18 +1698,18 @@ class RuleEditorAPI:
             return {"success": False, "message": str(e)}
 
     def get_autocomplete_data(self) -> dict:
-        from webutils.rule_editor_constants import CATEGORY_FILE_PATTERNS, COMMON_REPLACEMENTS
+        from webutils.rule_editor.constants import CATEGORY_FILE_PATTERNS, COMMON_REPLACEMENTS
         return {
             "file_patterns": [{"label": k, "value": v} for k, v in CATEGORY_FILE_PATTERNS.items()],
             "common_replacements": COMMON_REPLACEMENTS,
         }
 
     def get_templates(self) -> list:
-        from webutils.rule_editor_constants import TEMPLATES
+        from webutils.rule_editor.constants import TEMPLATES
         return TEMPLATES
 
     def get_editor_constants(self) -> dict:
-        from webutils.rule_editor_constants import FILE_PREFIX_RULES, CATEGORY_FILE_PATTERNS, COMMON_REPLACEMENTS, TEMPLATES
+        from webutils.rule_editor.constants import FILE_PREFIX_RULES, CATEGORY_FILE_PATTERNS, COMMON_REPLACEMENTS, TEMPLATES
         return {
             "file_prefix_rules": FILE_PREFIX_RULES,
             "category_file_patterns": {k: v for k, v in CATEGORY_FILE_PATTERNS.items()},
@@ -1722,11 +1722,11 @@ class QuickEditorAPI:
     """简易翻译编辑器的 JS-API 桥接"""
 
     def __init__(self):
-        from webutils.function_rule_editor import (
+        from webutils.rule_editor import (
             get_lang_files, get_file_content, search_files,
             save_file_content, get_category,
         )
-        from webutils.function_quick_editor import (
+        from webutils.rule_editor import (
             diff_json, load_quick_edits, save_quick_edits,
             apply_quick_edits,
         )

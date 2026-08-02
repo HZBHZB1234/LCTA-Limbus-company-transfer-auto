@@ -321,11 +321,11 @@ def _apply_actions(
         elif action.type == "wrap":
             result = f"{action.prefix}{result}{action.suffix}"
         elif action.type == "gradient":
-            from webutils.Faust_fancy import process_dlg_text
+            from webutils.fancy.faust import process_dlg_text
 
             result = process_dlg_text(result, action.rate)
         elif action.type == "skill_color":
-            from webutils.builtinFancyFunc import skillColorHandler
+            from webutils.fancy.builtin_func import skillColorHandler
 
             id_paths = resolver.resolve(scope_path, action.id_path)
             if id_paths:

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional, Union
 
-from webutils.fancy_engine import ApplyResult, RuleValidationError
+from .engine import ApplyResult, RuleValidationError
 
 
 BUS_FORMAT = "lcta-bus"

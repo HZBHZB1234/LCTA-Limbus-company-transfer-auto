@@ -2,7 +2,9 @@ from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
 import tempfile
-from .functions import *
+import os
+from .utils.io import decompress_by_extension, zip_folder
+from .utils.net import download_with, download_with_github
 import shutil
 from webFunc import *
 import webFunc.GithubDownload as GithubFunc

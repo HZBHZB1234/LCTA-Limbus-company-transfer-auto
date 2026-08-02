@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import shutil
 import sys
 import os
@@ -6,7 +8,6 @@ from pathlib import Path
 from typing import Tuple
 import json
 
-from .functions import *
 from globalManagers.ConfigManager import ConfigManager
 
 

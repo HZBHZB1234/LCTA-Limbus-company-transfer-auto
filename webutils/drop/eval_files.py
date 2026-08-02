@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 from .context import FileExecutionContext
 from .handlers import REGISTRY
-from ..function_manage import get_mod_path
+from ..packages.manage import get_mod_path
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()

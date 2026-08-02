@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 FILE_PREFIX_RULES = [
     ('BattleSpeechBubbleDlg', '战斗气泡'), ('BattleResultHint', '战斗结果提示'),
     ('BattleKeywords', '战斗关键词'), ('BattlePass', '通行证'),

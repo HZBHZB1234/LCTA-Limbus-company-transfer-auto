@@ -33,8 +33,10 @@ from webutils.fancy.bus import (
     apply_bus,
     compile_bus_ruleset,
     convert_edits_to_bus_ruleset,
+    convert_fl_config,
     convert_lcje_config,
     convert_tiaozhua_config,
+    is_fl_config,
     is_lcje_config,
     is_tiaozhua_config,
     parse_bus_path,
@@ -365,6 +367,143 @@ def test_import_bus_rules_file_accepts_lcje(monkeypatch, tmp_path):
     assert imported["stats"]["converted_rules"] == 1
     assert loaded[0]["format"] == "lcta-bus"
     assert loaded[0]["rules"][0]["replacements"] == [{"set": "新名字"}]
+
+
+FL_SOURCE = {
+    "LLC_zh-CN\\Personalities.json": {
+        "dataList": [
+            {"id": 10212, "changes": {"title": "小 - 黑兽 - 卯 魁首"}},
+        ]
+    },
+    "LLC_zh-CN\\Skills_personality-02.json": {
+        "dataList": [
+            {"id": 1021201, "changes": {"levelList": [
+                {"name": "顺..步?"},
+                {"name": "顺..步?"},
+                {"name": "顺..步?"},
+            ]}},
+            {"id": 1021202, "changes": {"levelList": [
+                {"name": "窝将开批前路，原长。"},
+                {"name": "窝将开批前路，原长。"},
+            ]}},
+            {"id": 1021206, "changes": {"levelList": [
+                {"name": "嗯嗯！", "desc": "[CanDuelGuard]\n[SupportProtect]专用技能"},
+                {"name": "嗯嗯！", "desc": "[CanDuelGuard]\n[SupportProtect]专用技能<style=\"highlight\"></style>"},
+            ]}},
+        ]
+    },
+}
+
+
+def test_fl_config_detection():
+    assert is_fl_config(FL_SOURCE)
+    assert not is_fl_config({})
+    assert not is_fl_config({"dataList": [{"name": "x"}]})
+    assert not is_fl_config({"Skills.json": "not a map"})
+    assert not is_fl_config({
+        "format": "lcta-bus",
+        "version": 1,
+        "name": "bus",
+        "rules": [],
+    })
+    assert not is_fl_config({"rules": [{"action": []}]})
+    assert not is_fl_config({"LLC_zh-CN\\Skills.json": {}})
+    assert not is_fl_config({
+        "LLC_zh-CN\\Skills.json": {"dataList[0].levelList": [{"name": "x"}]},
+    })
+    assert not is_fl_config({
+        "Skills.json": {
+            "dataList": [
+                {"id": 1, "changes": {"name": "x"}},
+                {"name": "未包裹项"},
+            ],
+        },
+    })
+    assert not is_lcje_config(FL_SOURCE)
+
+
+def test_fl_conversion_preserves_paths_and_sets():
+    ruleset, stats = convert_fl_config(FL_SOURCE, name="converted")
+
+    assert ruleset["desc"] == "由浮士德启动器自定义汉化补丁机械转换导入"
+    assert ruleset["files"] == ["*.json"]
+    assert ruleset["exclude_dirs"] == []
+    assert stats["source_rules"] == 10
+    assert stats["converted_rules"] == 10
+    assert stats["converted_actions"] == 10
+    assert stats["skipped"] == 0
+    assert ruleset["rules"][0]["files"] == [{"exact": "Personalities.json"}]
+    assert ruleset["rules"][0]["path"] == "dataList[?id=10212].title"
+    assert ruleset["rules"][0]["replacements"] == [{"set": "小 - 黑兽 - 卯 魁首"}]
+    assert ruleset["rules"][1]["files"] == [
+        {"exact": "Skills_personality-02.json"}
+    ]
+    assert ruleset["rules"][1]["path"] == "dataList[?id=1021201].levelList[0].name"
+    assert ruleset["rules"][3]["path"] == "dataList[?id=1021201].levelList[2].name"
+    assert ruleset["rules"][4]["path"] == "dataList[?id=1021202].levelList[0].name"
+    assert ruleset["rules"][6]["path"] == "dataList[?id=1021206].levelList[0].name"
+    assert ruleset["rules"][9]["path"] == "dataList[?id=1021206].levelList[1].desc"
+    assert ruleset["rules"][9]["replacements"] == [
+        {"set": "[CanDuelGuard]\n[SupportProtect]专用技能<style=\"highlight\"></style>"}
+    ]
+
+
+def test_fl_conversion_applies_exact_matches():
+    ruleset, _ = convert_fl_config(FL_SOURCE, name="converted")
+    compiled = compile_bus_ruleset(ruleset)
+
+    lang_data = {
+        "dataList": [
+            {
+                "id": 10212,
+                "title": "旧标题",
+            },
+            {
+                "id": 1021206,
+                "levelList": [
+                    {"name": "旧名", "desc": "旧描述"},
+                    {"name": "旧名", "desc": "旧描述"},
+                    {"name": "未改动", "desc": "保持"},
+                ],
+            },
+        ]
+    }
+    result = apply_bus(lang_data, compiled, "Skills_personality-02.json")
+
+    target = next(item for item in result.data["dataList"] if item["id"] == 1021206)
+    assert target["levelList"][0]["name"] == "嗯嗯！"
+    assert target["levelList"][1]["desc"].endswith("<style=\"highlight\"></style>")
+    assert target["levelList"][2]["name"] == "未改动"
+    assert result.changed_count == 4
+    assert result.data["dataList"][0]["title"] == "旧标题"
+
+
+def test_drag_drop_recognizes_fl_json(tmp_path):
+    source_path = tmp_path / "changes.json"
+    source_path.write_text(
+        json.dumps(FL_SOURCE, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    assert evalJson(str(source_path)) == "busimport"
+
+
+def test_import_bus_rules_file_accepts_fl(monkeypatch, tmp_path):
+    fancy_dir = tmp_path / "fancy"
+    source_path = tmp_path / "changes.json"
+    source_path.write_text(
+        json.dumps(FL_SOURCE, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(function_fancy, "_get_fancy_folder", lambda: fancy_dir)
+
+    imported = function_fancy.import_bus_rules_file(str(source_path))
+    loaded = load_fancy_folder_rules(str(fancy_dir))
+
+    assert imported["stats"]["converted_rules"] == 10
+    assert loaded[0]["format"] == "lcta-bus"
+    assert loaded[0]["rules"][0]["path"] == "dataList[?id=10212].title"
+    assert loaded[0]["rules"][1]["path"] == "dataList[?id=1021201].levelList[0].name"
 
 
 def test_path_cache_revalidates_after_structural_mutation():

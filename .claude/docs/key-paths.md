@@ -276,8 +276,8 @@ Bus import button
   → webui/js/features.js importBusRules()
   → webui/app.py LCTA_API.import_bus_rules()
   → webutils/function_fancy.py import_bus_rules_file()
-    → webutils/fancy/bus.py is_bus_ruleset() or is_tiaozhua_config() or is_lcje_config()
-    → validate or mechanically convert (LCJE补丁按文件→路径→set 整值替换转换)
+    → webutils/fancy/bus.py is_bus_ruleset() or is_tiaozhua_config() or is_fl_config() or is_lcje_config()
+    → validate or mechanically convert (LCJE补丁按文件→路径→set 整值替换、FL补丁按文件→id匹配/逐位→set 整值替换转换)
     → save disabled-by-default user ruleset under fancy/
 ```
 

@@ -140,6 +140,33 @@ def is_tiaozhua_config(data: Any) -> bool:
     )
 
 
+def _has_fl_wrapper_list(value: Any) -> bool:
+    """递归检测 FL 签名：某处存在非空列表且全部项为含 id+changes 的 dict。"""
+    if isinstance(value, list):
+        if value and all(
+            isinstance(item, dict) and "id" in item and "changes" in item
+            for item in value
+        ):
+            return True
+        return any(_has_fl_wrapper_list(item) for item in value)
+    if isinstance(value, dict):
+        return any(_has_fl_wrapper_list(item) for item in value.values())
+    return False
+
+
+def is_fl_config(data: Any) -> bool:
+    if not isinstance(data, dict) or not data:
+        return False
+    if not all(
+        isinstance(key, str) and key.lower().endswith(".json")
+        for key in data
+    ):
+        return False
+    if not all(isinstance(value, dict) for value in data.values()):
+        return False
+    return any(_has_fl_wrapper_list(value) for value in data.values())
+
+
 def is_lcje_config(data: Any) -> bool:
     if not isinstance(data, dict) or not data:
         return False
@@ -149,6 +176,8 @@ def is_lcje_config(data: Any) -> bool:
     ):
         return False
     if not all(isinstance(value, dict) for value in data.values()):
+        return False
+    if any(_has_fl_wrapper_list(value) for value in data.values()):
         return False
     return any(bool(value) for value in data.values())
 
@@ -708,6 +737,77 @@ def convert_lcje_config(
     compile_bus_ruleset(ruleset)
     return ruleset, {
         "source_rules": sum(len(file_map) for file_map in data.values()),
+        "converted_rules": len(converted_rules),
+        "converted_actions": action_count,
+        "skipped": skipped,
+        "warnings": warnings,
+    }
+
+
+def convert_fl_config(
+    data: dict,
+    *,
+    name: Optional[str] = None,
+) -> tuple[dict, dict]:
+    if not is_fl_config(data):
+        raise RuleValidationError("不是可识别的 FL 补丁配置")
+    converted_rules: list[dict] = []
+    action_count = 0
+    skipped = 0
+    warnings: list[str] = []
+    for file_index, (raw_file, file_map) in enumerate(data.items()):
+        relative_path = _convert_lcje_file_matcher(raw_file)
+        if not relative_path:
+            warnings.append(f"文件 {raw_file} 无法解析路径，跳过")
+            skipped += 1
+            continue
+        file_matchers: list[Any] = [{"exact": relative_path}]
+        pending: list[tuple[list[tuple[str, Any]], Any]] = []
+
+        def walk(node: Any, tokens: list[tuple[str, Any]]) -> None:
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    walk(value, tokens + [("key", key)])
+            elif isinstance(node, list):
+                if node and all(
+                    isinstance(item, dict) and "id" in item and "changes" in item
+                    for item in node
+                ):
+                    for item in node:
+                        walk(
+                            item["changes"],
+                            tokens + [("selector", ("id", str(item["id"])))],
+                        )
+                else:
+                    for index, item in enumerate(node):
+                        walk(item, tokens + [("index", index)])
+            else:
+                pending.append((tokens, node))
+
+        walk(file_map, [])
+        for leaf_index, (tokens, value) in enumerate(pending):
+            path = _serialize_bus_path(tokens)
+            converted_rules.append({
+                "name": f"{relative_path} / {path}",
+                "files": file_matchers,
+                "path": path,
+                "replacements": [{"set": value}],
+                "_source_order": [file_index, leaf_index],
+            })
+            action_count += 1
+
+    ruleset = {
+        "format": BUS_FORMAT,
+        "version": BUS_VERSION,
+        "name": name or str(data.get("name") or "导入的文本替换规则"),
+        "desc": "由浮士德启动器自定义汉化补丁机械转换导入",
+        "files": ["*.json"],
+        "exclude_dirs": [],
+        "rules": converted_rules,
+    }
+    compile_bus_ruleset(ruleset)
+    return ruleset, {
+        "source_rules": action_count,
         "converted_rules": len(converted_rules),
         "converted_actions": action_count,
         "skipped": skipped,

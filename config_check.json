@@ -56,6 +56,9 @@
         "api_config": {
             "key": "str"
         },
+        "tiaozhua": {
+            "install": "bool"
+        },
         "manage": {
             "mod_path": "str"
         },
@@ -115,6 +118,7 @@
         "work": {
             "update": "str",
             "mod": "bool",
+            "tiaozhua": "bool",
             "fancy": "bool",
             "cdn_optimize": "bool",
             "cdn_auto_apply": "bool",

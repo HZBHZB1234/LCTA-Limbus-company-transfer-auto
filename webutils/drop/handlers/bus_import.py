@@ -13,10 +13,10 @@ _log_manager = LogManager()
 
 
 class BusImportHandler(DropFileHandler):
-    """巴士替换规则配置导入。"""
+    """文本替换规则配置导入。"""
 
     file_type = 'busimport'
-    label = '巴士替换规则配置'
+    label = '文本替换规则配置'
 
     def detect(self, item: Any) -> str | None:
         if isinstance(item, JsonFormatInspection):
@@ -26,7 +26,7 @@ class BusImportHandler(DropFileHandler):
 
     def execute(self, context: FileExecutionContext) -> str:
         _log_manager.log_modal_process(
-            f"正在导入巴士规则: {context.file_name}", context.modal_id)
+            f"正在导入文本替换规则: {context.file_name}", context.modal_id)
         imported = import_bus_rules_file(context.file_path)
         stats = imported['stats']
         _log_manager.log_modal_process(

@@ -264,6 +264,9 @@ class ConfigManager {
             'machine-download-source': 'ui_default.machine.download_source',
             'machine-use-proxy': 'ui_default.machine.use_proxy',
 
+            // 调爪文本修改包配置
+            'tiaozhua-install': 'ui_default.tiaozhua.install',
+
             // 安装数据管理设置
             'installed-mod-directory': 'ui_default.manage.mod_path',
             
@@ -300,6 +303,7 @@ class ConfigManager {
             'launcher-ourplay-refer-package': 'launcher.ourplay.refer_package',
             'launcher-work-update': 'launcher.work.update',
             'launcher-work-mod': 'launcher.work.mod',
+            'launcher-work-tiaozhua': 'launcher.work.tiaozhua',
             'launcher-work-fancy': 'launcher.work.fancy',
             'launcher-work-cdn-optimize': 'launcher.work.cdn_optimize',
             'launcher-work-cdn-auto-apply': 'launcher.work.cdn_auto_apply',

@@ -20,7 +20,7 @@ LCTA 是一个综合性工具箱，涵盖启动器、翻译、MOD 管理等多�
     <div class="elder-feature-icon"><i class="fas fa-rocket"></i></div>
     <div class="elder-feature-body">
         <h4>启动器模式</h4>
-        <p>每次启动游戏时自动检查并更新汉化包，支持 MOD 加载和文本美化。一劳永逸。</p>
+        <p>每次启动游戏时自动检查并更新汉化包，支持 MOD 加载、调爪文本和文本美化。一劳永逸。</p>
         <details>
             <summary>与 Faust Launcher 对比</summary>
             <ul>

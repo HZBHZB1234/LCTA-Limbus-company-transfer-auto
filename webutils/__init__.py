@@ -11,6 +11,7 @@ from .packages import (
 )
 from .function_fetch import function_fetch_main
 from .function_LCTA_auto import function_LCTA_auto_main, check_ver_github_M
+from .function_lanzou_tiaozhua import function_lanzou_tiaozhua_main
 from .packages import clean_config_main
 from .packages import (find_installed_packages,
                               use_translation_package,
@@ -59,6 +60,7 @@ __all__ = [
     'function_LCTA_auto_main',
     'check_ver_github_M',
     'clean_config_main',
+    'function_lanzou_tiaozhua_main',
     'find_installed_packages',
     'use_translation_package',
     'delete_installed_package',

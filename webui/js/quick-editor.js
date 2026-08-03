@@ -408,7 +408,7 @@
             }
             var warnings = result.report && result.report.warnings ? result.report.warnings : [];
             if (warnings.length) {
-                alert('部分修改无法转换为巴士规则:\n' + warnings.slice(0, 10).join('\n'));
+                alert('部分修改无法转换为文本替换规则:\n' + warnings.slice(0, 10).join('\n'));
             }
             return result;
         } catch (e) {

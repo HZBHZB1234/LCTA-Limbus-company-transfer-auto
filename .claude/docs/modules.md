@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-08-02 -->
+<!-- Last updated: 2026-08-03 -->
 
 ## Directory Overview
 
@@ -78,6 +78,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `function_ourplay_pc.py` | OurPlay PC install | Download OurPlay PC translation packs |
 | `function_ourplay_android.py` | OurPlay Android install | Download OurPlay Android-origin translation packs |
 | `function_LCTA_auto.py` | Auto-translate download | Download from LCTA_auto_update repo |
+| `function_lanzou_tiaozhua.py` | 调爪 text package | One-click 调爪 text modification package download via qaiu API (getFileList + parser) and import as bus rulesets |
 | `packages/install.py` | Local package install | Install/delete/font-change for local translation packages |
 | `packages/manage.py` | Package management | Installed packages, mod management, symlink operations |
 | `packages/clean.py` | Cache cleaner | Clean game cache files |

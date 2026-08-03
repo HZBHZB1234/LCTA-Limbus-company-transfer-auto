@@ -8,6 +8,7 @@ updateList = {
     'launcher-source': '415',
     'translate': '415',
     'download': '415',
+    'tiaozhua': '415',
     'mod': '415',
     'manage': '415',
 }
@@ -71,6 +72,9 @@ bindRefer = {
         ],
         'elder-launcher-mod': [
             'launcher-work-mod', 'launcher.work.mod',
+        ],
+        'elder-launcher-tiaozhua': [
+            'launcher-work-tiaozhua', 'launcher.work.tiaozhua',
         ],
         'elder-launcher-fancy': [
             'launcher-work-fancy', 'launcher.work.fancy',
@@ -176,6 +180,12 @@ bindRefer = {
         ],
     },
 
+    'tiaozhua': {
+        'elder-tiaozhua-install': [
+            'tiaozhua-install', 'ui_default.tiaozhua.install',
+        ],
+    },
+
     'mod': {},
 
     'manage': {
@@ -214,6 +224,8 @@ relyList = {
                         ['launcher.work.update', 'llc', 'ourplay', 'LCTA-AU', 'LO', 'LM-G', 'LM-A']],
     'translate': ['elder.character.translate'],
     'download': [],
+    'tiaozhua': ['elder.character.launcher',
+                 'elder.launcher.tiaozhua'],
     'mod': ['elder.character.launcher',
             'elder.launcher.mod'],
     'manage': ['elder.character.manage'],

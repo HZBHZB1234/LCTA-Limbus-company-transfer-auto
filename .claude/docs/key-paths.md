@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-02 -->
+<!-- Last updated: 2026-08-03 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -398,3 +398,27 @@ start_webui.py main()
 ```
 
 Files: `start_webui.py`, `webui/app.py`, `webui/index.html`, `webui/js/init.js`, `webui/js/core.js`, `webui/js/features.js`, `webui/js/modals.js`, `webui/sections/preload.js`, `webui/js/utils.js`
+
+## 14. 调爪 Text Package Download & Import
+
+```
+User clicks 「下载(导入)调爪文本修改包」(download.html)
+  → js/features.js downloadTiaozhua()
+    → ProgressModal
+    → configManager.updateConfigValues(collectConfigFromUI())   persist tiaozhua-install
+    → pywebview.api.download_lanzou_tiaozhua(modal.id)
+      → webui/app.py LCTA_API.download_lanzou_tiaozhua()
+        → webutils/function_lanzou_tiaozhua.py function_lanzou_tiaozhua_main(modal_id)
+          → fetch_file_list()                     qaiu /v2/getFileList?url=wwyi.lanzoub.com/b014wpn02j&pwd=fib6
+          → check_tiaozhua()                      version = date in "0.xxx26.7.25.7z" filename
+          → cache guard (cache_path/tiaozhua_version.txt, tiaozhua.7z)
+          → download_tiaozhua()                   get_direct_download(fileId with ?webpage= token)
+                                                 → download_with(parser url 302) → cache_path/tiaozhua.7z
+          → if install: install_tiaozhua()        decompress_7z (7-Zip exe) → temp dir
+              → scan root *.json → is_tiaozhua_config/is_bus_ruleset
+              → import_bus_rules_file()           save as ruleset in fancy ruleset folder
+```
+
+Launcher auto path: `launcher/updates.py UpdateBase.post_update` → `run_tiaozhua` (launcher.work.tiaozhua) → sets `ui_default.tiaozhua.install` → `function_lanzou_tiaozhua_main('安装调爪JSON')`.
+
+Files: `webutils/function_lanzou_tiaozhua.py`, `webutils/utils/io.py` (decompress_7z), `webutils/utils/net.py` (download_with), `webutils/function_fancy.py` (import_bus_rules_file), `webui/app.py`, `webui/js/features.js`, `webui/sections/download.html`, `webui/sections/launcher-config.html`, `launcher/updates.py`

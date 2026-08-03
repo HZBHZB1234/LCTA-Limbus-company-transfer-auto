@@ -426,6 +426,24 @@ function downloadOurplay() {
         });
 }
 
+async function downloadTiaozhua() {
+    const modal = new ProgressModal('开始下载');
+    modal.setStatus('正在初始化...');
+    modal.addLog('开始下载任务');
+    await configManager.updateConfigValues(configManager.collectConfigFromUI());
+    
+    pywebview.api.download_lanzou_tiaozhua(
+        modal.id).then(function(result) {
+        if (result.success) {
+            modal.complete(true, '下载任务已完成');
+        } else {
+            modal.complete(false, '下载失败: ' + result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '下载过程中发生错误: ' + error);
+    });
+}
+
 function cleanCache() {
     const modal = new ProgressModal('清除缓存');
     
@@ -1196,6 +1214,9 @@ const helpDrawer = {
                     <li>开启/关闭代理加速选项</li>
                     <li>手动下载汉化包放入程序目录，使用"安装已有汉化"功能</li>
                 </ul>
+
+                <h3>Q: 调爪文本修改包不会自动导入？</h3>
+                <p><strong>A:</strong> 如需在更新汉化包后自动下载导入调爪文本修改包，请在 Launcher 配置中启用"启用调爪文本"选项。</p>
             </div>
         `;
     }
@@ -1434,7 +1455,7 @@ async function importBusRules() {
         showMessage(result.success ? '导入完成' : '导入部分完成', lines.join('<br>') || '没有导入规则');
         await fancyManager.loadRulesets();
     } catch (error) {
-        showMessage('错误', '导入巴士规则失败: ' + error);
+        showMessage('错误', '导入文本替换规则失败: ' + error);
     }
 }
 

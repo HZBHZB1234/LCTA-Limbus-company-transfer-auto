@@ -621,7 +621,7 @@ def convert_tiaozhua_config(
     ruleset = {
         "format": BUS_FORMAT,
         "version": BUS_VERSION,
-        "name": name or str(data.get("name") or "导入的巴士替换规则"),
+        "name": name or str(data.get("name") or "导入的文本替换规则"),
         "desc": str(data.get("_note") or "由调爪配置机械转换导入"),
         "files": ["*.json"],
         "exclude_dirs": list(data.get("blacklist", [])),

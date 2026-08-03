@@ -243,9 +243,9 @@ def save_ruleset_to_folder(name: str, data: dict) -> Path:
 
 
 def _unique_ruleset_name(name: str) -> str:
-    base_name = name.strip() or '导入的巴士替换规则'
+    base_name = name.strip() or '导入的文本替换规则'
     if base_name == '_quick_edits':
-        base_name = '导入的巴士替换规则'
+        base_name = '导入的文本替换规则'
     existing_names = {
         ruleset.get('name', '')
         for ruleset in load_fancy_folder_rules()

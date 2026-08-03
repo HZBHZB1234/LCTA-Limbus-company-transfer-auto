@@ -33,7 +33,9 @@ from webutils.fancy.bus import (
     apply_bus,
     compile_bus_ruleset,
     convert_edits_to_bus_ruleset,
+    convert_lcje_config,
     convert_tiaozhua_config,
+    is_lcje_config,
     is_tiaozhua_config,
     parse_bus_path,
 )
@@ -262,6 +264,107 @@ def test_regex_pattern_backslashes_keep_escape_semantics():
 def test_tiaozhua_empty_rules_is_not_detected():
     assert not is_tiaozhua_config({"rules": []})
     assert not is_tiaozhua_config({"rules": [], "name": "empty"})
+
+
+def test_lcje_config_detection():
+    source = {
+        "LLC_zh-CN\\Skills_personality-12.json": {
+            "dataList[47].levelList[0].flavor": "天将拂晓",
+        },
+        "LLC_zh-CN\\PersonalityVoiceDlg\\Voice_Faust_Dawn_10216.json": {
+            "dataList[14].dlg": "锋刃，齐射。",
+        },
+    }
+    assert is_lcje_config(source)
+    assert not is_lcje_config({})
+    assert not is_lcje_config({"dataList": [{"name": "x"}]})
+    assert not is_lcje_config({"Skills.json": "not a map"})
+    assert not is_lcje_config({
+        "format": "lcta-bus",
+        "version": 1,
+        "name": "bus",
+        "rules": [],
+    })
+    assert not is_lcje_config({"rules": [{"action": []}]})
+    assert not is_lcje_config({"LLC_zh-CN\\Skills.json": {}})
+
+
+def test_lcje_conversion_preserves_paths_and_sets():
+    source = {
+        "LLC_zh-CN\\Skills_personality-12.json": {
+            "dataList[47].levelList[0].flavor": "天将拂晓",
+            "dataList[45].levelList[1].desc": "撕开黎明之剑",
+        },
+        "LLC_zh-CN\\PersonalityVoiceDlg\\Voice_Faust_Dawn_10216.json": {
+            "dataList[14].dlg": "锋刃，齐射。",
+        },
+    }
+
+    ruleset, stats = convert_lcje_config(source, name="converted")
+
+    assert ruleset["desc"] == "由LCJE补丁配置机械转换导入"
+    assert ruleset["files"] == ["*.json"]
+    assert ruleset["exclude_dirs"] == []
+    assert stats["source_rules"] == 3
+    assert stats["converted_rules"] == 3
+    assert stats["converted_actions"] == 3
+    assert stats["skipped"] == 0
+    assert ruleset["rules"][0]["files"] == [{"exact": "Skills_personality-12.json"}]
+    assert ruleset["rules"][0]["path"] == "dataList[47].levelList[0].flavor"
+    assert ruleset["rules"][0]["replacements"] == [{"set": "天将拂晓"}]
+    assert ruleset["rules"][2]["files"] == [
+        {"exact": "PersonalityVoiceDlg/Voice_Faust_Dawn_10216.json"}
+    ]
+
+
+def test_lcje_conversion_applies_exact_matches():
+    source = {
+        "LLC_zh-CN\\Skills_personality-12.json": {
+            "dataList[47].levelList[0].flavor": "天将拂晓",
+        },
+    }
+    ruleset, _ = convert_lcje_config(source, name="converted")
+    compiled = compile_bus_ruleset(ruleset)
+
+    lang_data = {
+        "dataList": [
+            {"id": index, "levelList": [{"flavor": "旧文本"}]}
+            for index in range(48)
+        ]
+    }
+    result = apply_bus(lang_data, compiled, "Skills_personality-12.json")
+
+    assert result.data["dataList"][47]["levelList"][0]["flavor"] == "天将拂晓"
+    assert result.data["dataList"][0]["levelList"][0]["flavor"] == "旧文本"
+    assert result.changed_count == 1
+
+
+def test_drag_drop_recognizes_lcje_json(tmp_path):
+    source_path = tmp_path / "patch.json"
+    source_path.write_text(
+        '{"LLC_zh-CN\\\\Skills_personality-12.json":'
+        '{"dataList[47].levelList[0].flavor":"天将拂晓"}}',
+        encoding="utf-8",
+    )
+
+    assert evalJson(str(source_path)) == "busimport"
+
+
+def test_import_bus_rules_file_accepts_lcje(monkeypatch, tmp_path):
+    fancy_dir = tmp_path / "fancy"
+    source_path = tmp_path / "source.json"
+    source_path.write_text(
+        '{"LLC_zh-CN\\\\Skills.json":{"dataList[0].name":"新名字"}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(function_fancy, "_get_fancy_folder", lambda: fancy_dir)
+
+    imported = function_fancy.import_bus_rules_file(str(source_path))
+    loaded = load_fancy_folder_rules(str(fancy_dir))
+
+    assert imported["stats"]["converted_rules"] == 1
+    assert loaded[0]["format"] == "lcta-bus"
+    assert loaded[0]["rules"][0]["replacements"] == [{"set": "新名字"}]
 
 
 def test_path_cache_revalidates_after_structural_mutation():

@@ -5,7 +5,7 @@ from typing import Any
 from ..context import FileExecutionContext
 from ..handler import DropFileHandler
 from ..inspect import JsonFormatInspection
-from ...fancy.bus import is_bus_ruleset, is_tiaozhua_config
+from ...fancy.bus import is_bus_ruleset, is_lcje_config, is_tiaozhua_config
 from ...function_fancy import import_bus_rules_file
 from globalManagers.LogManager import LogManager
 
@@ -20,7 +20,11 @@ class BusImportHandler(DropFileHandler):
 
     def detect(self, item: Any) -> str | None:
         if isinstance(item, JsonFormatInspection):
-            if is_bus_ruleset(item.data) or is_tiaozhua_config(item.data):
+            if (
+                is_bus_ruleset(item.data)
+                or is_tiaozhua_config(item.data)
+                or is_lcje_config(item.data)
+            ):
                 return self.file_type
         return None
 

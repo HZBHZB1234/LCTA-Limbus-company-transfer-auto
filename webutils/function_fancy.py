@@ -17,8 +17,10 @@ from webutils.fancy.bus import (
     apply_bus,
     compile_bus_ruleset,
     convert_edits_to_bus_ruleset,
+    convert_lcje_config,
     convert_tiaozhua_config,
     is_bus_ruleset,
+    is_lcje_config,
     is_tiaozhua_config,
 )
 from webutils.fancy.engine import ApplyResult, CompiledRules, apply_rules, compile_rulesets
@@ -264,6 +266,8 @@ def import_bus_rules_file(file_path: str, name: str = None) -> dict:
     target_name = _unique_ruleset_name(name or data.get('name') or source_path.stem)
     if is_tiaozhua_config(data):
         ruleset, stats = convert_tiaozhua_config(data, name=target_name)
+    elif is_lcje_config(data):
+        ruleset, stats = convert_lcje_config(data, name=target_name)
     elif is_bus_ruleset(data):
         ruleset = dict(data)
         ruleset['name'] = target_name
@@ -279,7 +283,7 @@ def import_bus_rules_file(file_path: str, name: str = None) -> dict:
             'warnings': [],
         }
     else:
-        raise ValueError('文件不是 bus 或调爪替换规则配置')
+        raise ValueError('文件不是 bus、调爪或 LCJE 替换规则配置')
     saved_path = save_ruleset_to_folder(target_name, ruleset)
     return {
         'file': source_path.name,

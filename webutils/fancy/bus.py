@@ -140,6 +140,19 @@ def is_tiaozhua_config(data: Any) -> bool:
     )
 
 
+def is_lcje_config(data: Any) -> bool:
+    if not isinstance(data, dict) or not data:
+        return False
+    if not all(
+        isinstance(key, str) and key.lower().endswith(".json")
+        for key in data
+    ):
+        return False
+    if not all(isinstance(value, dict) for value in data.values()):
+        return False
+    return any(bool(value) for value in data.values())
+
+
 def parse_bus_path(path: str) -> tuple[BusToken, ...]:
     if path == "":
         return ()
@@ -634,6 +647,71 @@ def convert_tiaozhua_config(
         "converted_actions": action_count,
         "skipped": 0,
         "warnings": [],
+    }
+
+
+def _convert_lcje_file_matcher(raw_file: str) -> str:
+    """将 LCJE 补丁文件键转为 bus exact 匹配路径。
+
+    剥离首段包名目录（如 LLC_zh-CN），保留其余相对路径（可能含子目录），
+    与 fancy_main 中的包内相对路径语义一致。
+    """
+    normalized = raw_file.replace("\\", "/").strip("/")
+    parts = normalized.split("/")
+    if parts and parts[0].lower().startswith("llc_"):
+        parts = parts[1:]
+    return "/".join(parts)
+
+
+def convert_lcje_config(
+    data: dict,
+    *,
+    name: Optional[str] = None,
+) -> tuple[dict, dict]:
+    if not is_lcje_config(data):
+        raise RuleValidationError("不是可识别的 LCJE 补丁配置")
+    converted_rules: list[dict] = []
+    action_count = 0
+    skipped = 0
+    warnings: list[str] = []
+    for file_index, (raw_file, file_map) in enumerate(data.items()):
+        relative_path = _convert_lcje_file_matcher(raw_file)
+        if not relative_path:
+            warnings.append(f"文件 {raw_file} 无法解析路径，跳过")
+            skipped += 1
+            continue
+        file_matchers: list[Any] = [{"exact": relative_path}]
+        for aim_index, (raw_aim, value) in enumerate(file_map.items()):
+            raw_aim = str(raw_aim).strip()
+            if not raw_aim:
+                warnings.append(f"{raw_file} 存在空路径条目，跳过")
+                skipped += 1
+                continue
+            converted_rules.append({
+                "name": f"{relative_path} / {raw_aim}",
+                "files": file_matchers,
+                "path": _serialize_bus_path(_parse_tiaozhua_path(raw_aim)),
+                "replacements": [{"set": value}],
+                "_source_order": [file_index, aim_index],
+            })
+            action_count += 1
+
+    ruleset = {
+        "format": BUS_FORMAT,
+        "version": BUS_VERSION,
+        "name": name or str(data.get("name") or "导入的文本替换规则"),
+        "desc": "由LCJE补丁配置机械转换导入",
+        "files": ["*.json"],
+        "exclude_dirs": [],
+        "rules": converted_rules,
+    }
+    compile_bus_ruleset(ruleset)
+    return ruleset, {
+        "source_rules": sum(len(file_map) for file_map in data.values()),
+        "converted_rules": len(converted_rules),
+        "converted_actions": action_count,
+        "skipped": skipped,
+        "warnings": warnings,
     }
 
 

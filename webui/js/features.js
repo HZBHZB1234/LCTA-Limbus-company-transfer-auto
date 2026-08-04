@@ -297,7 +297,7 @@ function applyFancy() {
     const modal = new ProgressModal('应用美化文本');
     modal.addLog(`开始执行美化`);
     modal.addLog(`应用规则集${fancyManager.enabledMap}`);
-    pywebview.api.fancy_main(fancyManager.rulesets, fancyManager.enabledMap).then(
+    pywebview.api.fancy_main(fancyManager.rulesets, fancyManager.enabledMap, modal.id).then(
         () => {
             modal.complete(true, '完成美化');
             setTimeout(() => {

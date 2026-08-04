@@ -2,6 +2,7 @@
 
 <!-- Last updated: 2026-08-04 -->
 
+
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
 ---
@@ -245,8 +246,8 @@ Key files: `webui/rule-editor.html`, `webui/js/rule-editor.js`, `webui/app.py` (
 ```
 WebUI user applies text beautification
   → webui/js/features.js FancyManager              collects built-in/user rules + enable map
-  → pywebview.api.fancy_main(configList, enableMap)
-  → webui/app.py LCTA_API.fancy_main()
+  → pywebview.api.fancy_main(configList, enableMap, modal.id)
+  → webui/app.py LCTA_API.fancy_main()             passes modal_id through to fancy_main
 
 Launcher finishes an enabled translation update
   → launcher/updates.py UpdateBase.run()
@@ -254,7 +255,7 @@ Launcher finishes an enabled translation update
     → read config fancy_allow                       default {}
 
 Both paths
-  → webutils/function_fancy.py fancy_main(gamePath, package, rulesets, enableMap)
+  → webutils/function_fancy.py fancy_main(gamePath, package, rulesets, enableMap, modal_id=None)
     → _select_enabled_rulesets()                    discard disabled rules before compilation
     → compile each enabled ruleset in original order
       → webutils/fancy/engine.py compile_rulesets()  v2 conditions/actions
@@ -262,14 +263,16 @@ Both paths
       → CompiledRules.requires_skill_color
         → webutils/fancy/builtin_func.py SkillColorHandler.prepare() only when an enabled rule needs it
           → function_resource.py load_text_assets() (skips objects with missing/None containers)
-          → fingerprinted tmp/fancy/skill-colors.json cache
+          → fingerprinted-by-folder-name tmp/fancy/skill-colors.json cache (top-level account folders only)
     → scan language-package *.json files
       → v2/bus per-file matching and bus directory exclusions
       → read UTF-8-SIG JSON
       → apply_rules()/apply_bus() in ruleset order
       → compare final JSON with original and atomically replace only when changed
     → FancyRunStats                                  scanned/matched/changed/value/time/cache data
-    → debug logs via `fancy` logger (enabled rulesets, per-file matches, changed counts) — wired to app.log by LogManager
+    → state-change logs via LogManager.log_modal_process() (规则集加载/编译完成/技能颜色缓存命中或重建/开始处理/完成汇总/每文件错误) —
+      pushed to the modal when modal_id is given, otherwise plain file/console INFO on app.log;
+      per-file error detail still logs to `fancy` logger with traceback
 ```
 
 ```

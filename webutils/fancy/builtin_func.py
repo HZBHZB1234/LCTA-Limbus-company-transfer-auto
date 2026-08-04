@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -15,7 +14,7 @@ logger = logging.getLogger('fancy')
 
 
 class SkillColorHandler:
-    CACHE_VERSION = 1
+    CACHE_VERSION = 2
     TARGET_FILES = tuple(f'personality-skill-{index:02}.json' for index in range(1, 13))
     COLOR_MAP = {
         "INDIGO": "#2020ED",
@@ -43,16 +42,8 @@ class SkillColorHandler:
 
     @staticmethod
     def _resource_fingerprint(resource_files: list[Path]) -> str:
-        digest = hashlib.sha256()
-        for resource_file in resource_files:
-            try:
-                stat = resource_file.stat()
-            except OSError:
-                continue
-            digest.update(str(resource_file.resolve()).encode('utf-8', errors='surrogatepass'))
-            digest.update(str(stat.st_size).encode('ascii'))
-            digest.update(str(stat.st_mtime_ns).encode('ascii'))
-        return digest.hexdigest()
+        folder_names = sorted({path.parent.parent.name for path in resource_files})
+        return "|".join(folder_names)
 
     def _load_cache(self, cache_file: Path, fingerprint: str) -> bool:
         try:
@@ -95,7 +86,7 @@ class SkillColorHandler:
         colors: Dict[str, str] = {}
         for file_name, raw_data in assets.items():
             try:
-                payload = json.loads(raw_data.decode('utf-8-sig'))
+                payload = json.loads(bytes(raw_data).decode('utf-8-sig'))
                 entries = payload['list']
             except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
                 logger.warning('解析技能资源 %s 失败: %s', file_name, exc)

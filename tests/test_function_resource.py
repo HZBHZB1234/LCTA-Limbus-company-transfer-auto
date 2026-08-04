@@ -18,6 +18,7 @@ from UnityPy.enums import ClassIDType
 
 from webutils.function_resource import (
     extract_files_from_resource,
+    get_limbus_resource_files,
     load_text_assets,
 )
 
@@ -86,6 +87,48 @@ class TestLoadTextAssets:
         assert "personality-skill-01.json" in loaded
         assert json.loads(loaded["personality-skill-01.json"]) == {"list": [{"id": 1}]}
         assert missing == ["personality-skill-02.json"]
+
+    def test_memoryview_script_is_converted_to_bytes(self, tmp_path):
+        """UnityPy 的 TextAsset.script 返回 memoryview，应转换为 bytes 后返回"""
+        resource_file = tmp_path / "resources.assets"
+        resource_file.write_bytes(b"fake")
+        payload = json.dumps({"list": [{"id": 1}]}).encode("utf-8")
+        target = FakeObj(container="assets/limbus/personality/personality-skill-01.json",
+                         type_=ClassIDType.TextAsset, script=memoryview(payload))
+        env = FakeEnv(objects=[target])
+        with patch("webutils.function_resource.UnityPy.load", return_value=env):
+            loaded, missing = load_text_assets(
+                ["personality-skill-01.json"],
+                logger=logging.getLogger("test_resource"),
+                resource_files=[resource_file],
+            )
+        assert isinstance(loaded["personality-skill-01.json"], bytes)
+        assert json.loads(loaded["personality-skill-01.json"]) == {"list": [{"id": 1}]}
+        assert missing == []
+
+
+class TestGetLimbusResourceFiles:
+    def test_only_top_level_folders_are_scanned(self, monkeypatch, tmp_path):
+        """只发现顶层文件夹下一层内的 __data 文件，忽略更深层级与无关文件"""
+        base = tmp_path / "AppData" / "LocalLow" / "Unity" / "ProjectMoon_LimbusCompany"
+        (base / "a" / "sub").mkdir(parents=True)
+        (base / "a" / "sub" / "__data").write_bytes(b"x")
+        (base / "b" / "sub").mkdir(parents=True)
+        (base / "b" / "sub" / "__data").write_bytes(b"x")
+        (base / "c" / "deep" / "even").mkdir(parents=True)
+        (base / "c" / "deep" / "even" / "__data").write_bytes(b"x")
+        (base / "no_data" / "sub").mkdir(parents=True)
+        (base / "plain_file").write_text("x")
+
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        found = get_limbus_resource_files()
+
+        assert sorted(path.parent.parent.name for path in found) == ["a", "b"]
+
+    def test_missing_root_returns_empty(self, monkeypatch, tmp_path):
+        root = tmp_path / "nonexistent"
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: root))
+        assert get_limbus_resource_files() == []
 
 
 class TestExtractFilesFromResource:

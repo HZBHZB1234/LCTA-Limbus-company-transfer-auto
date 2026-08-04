@@ -75,11 +75,16 @@ def get_limbus_resource_files() -> List[Path]:
     if not resource_path.exists():
         return []
     candidates = []
-    for path in resource_path.rglob('__data'):
-        try:
-            candidates.append((path.stat().st_ctime_ns, path))
-        except OSError:
+    for folder in resource_path.iterdir():
+        if not folder.is_dir():
             continue
+        for data_file in folder.glob('*/__data'):
+            if not data_file.is_file():
+                continue
+            try:
+                candidates.append((data_file.stat().st_ctime_ns, data_file))
+            except OSError:
+                continue
     candidates.sort(key=lambda item: item[0], reverse=True)
     return [path for _, path in candidates]
 
@@ -116,7 +121,7 @@ def load_text_assets(
             if target_name is None or obj.type != ClassIDType.TextAsset:
                 continue
             try:
-                loaded[target_name] = obj.read().script
+                loaded[target_name] = bytes(obj.read().script)
             except Exception as exc:
                 logger.warning('读取资源 %s 失败: %s', target_name, exc)
                 continue

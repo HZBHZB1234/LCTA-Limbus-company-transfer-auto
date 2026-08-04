@@ -319,7 +319,8 @@ def test_skill_color_fingerprint_cache(monkeypatch, tmp_path):
     }).encode("utf-8")
 
     monkeypatch.setattr("webutils.fancy.builtin_func.get_limbus_resource_files", lambda: [resource_file])
-    monkeypatch.setattr("webutils.fancy.builtin_func.load_text_assets", lambda *args: ({"personality-skill-01.json": asset}, []))
+    monkeypatch.setattr("webutils.fancy.builtin_func.load_text_assets",
+                        lambda *args: ({"personality-skill-01.json": memoryview(asset)}, []))
 
     first = SkillColorHandler()
     monkeypatch.setattr(first, "_cache_file", lambda: cache_file)
@@ -336,6 +337,17 @@ def test_skill_color_fingerprint_cache(monkeypatch, tmp_path):
     assert second.prepare()
     assert second.last_cache_hit
     assert second.apply("技能", 123) == "<color=#ED2525>技能</color>"
+
+
+def test_resource_fingerprint_uses_top_level_folder_names(tmp_path):
+    from webutils.fancy.builtin_func import SkillColorHandler
+
+    folder_a = tmp_path / "acct-a" / "sub" / "__data"
+    folder_b = tmp_path / "acct-b" / "sub" / "__data"
+    assert SkillColorHandler._resource_fingerprint([folder_a, folder_b]) == "acct-a|acct-b"
+    assert SkillColorHandler._resource_fingerprint([folder_b, folder_a]) == "acct-a|acct-b"
+    assert SkillColorHandler._resource_fingerprint([folder_a]) == "acct-a"
+    assert SkillColorHandler._resource_fingerprint([]) == ""
 
 
 def test_skill_color_failure_is_not_retried(monkeypatch):

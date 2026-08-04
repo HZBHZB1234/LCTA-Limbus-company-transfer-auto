@@ -100,19 +100,35 @@ def fancy_main(
     package_name: str,
     config: list,
     enable_map: Optional[Mapping] = None,
+    modal_id: Optional[str] = None,
 ) -> FancyRunStats:
     """
     处理语言包下的所有 JSON 文件。
     config: 规则集列表，每个元素包含 "rules" 列表。
     enable_map: 可选的规则集启用状态；传入时仅编译和执行明确启用的规则集。
+    modal_id: 可选的模态窗口 ID；传入时状态日志会同步推送到前端弹窗。
     """
     started_at = time.perf_counter()
     enabled_rulesets = _select_enabled_rulesets(config, enable_map)
+    _log_manager.log_modal_process(
+        f'加载规则集：共{len(config)}个，启用{len(enabled_rulesets)}个',
+        modal_id,
+    )
     logger.debug(
         '启用的规则集: %s',
         [{'name': rs.get('name', ''), 'rules': len(rs.get('rules', []))} for rs in enabled_rulesets],
     )
     compiled_rulesets = _compile_mixed_rulesets(enabled_rulesets)
+    v2_rule_count = sum(
+        len(item.compiled.rules) for item in compiled_rulesets if item.kind == "v2"
+    )
+    bus_rule_count = sum(
+        len(item.compiled.rules) for item in compiled_rulesets if item.kind == "bus"
+    )
+    _log_manager.log_modal_process(
+        f'编译规则完成：v2 {v2_rule_count} 条 / bus {bus_rule_count} 条',
+        modal_id,
+    )
     logger.debug(
         '已编译规则: %s',
         [f'{item.kind}/{len(item.compiled.rules)}' for item in compiled_rulesets],
@@ -124,13 +140,35 @@ def fancy_main(
     ):
         from webutils.fancy.builtin_func import skillColorHandler
 
+        was_ready = skillColorHandler.state == "ready"
         skillColorHandler.last_cache_hit = False
-        skillColorHandler.prepare()
+        ready = skillColorHandler.prepare()
         resource_cache_hit = skillColorHandler.last_cache_hit
+        color_count = len(skillColorHandler.data)
+        if not ready:
+            _log_manager.log_modal_process(
+                '技能颜色映射初始化失败，本次运行跳过技能着色',
+                modal_id,
+            )
+        elif was_ready:
+            _log_manager.log_modal_process(
+                f'使用已加载的技能颜色映射（{color_count} 条）',
+                modal_id,
+            )
+        elif resource_cache_hit:
+            _log_manager.log_modal_process(
+                f'命中技能颜色缓存（{color_count} 条）',
+                modal_id,
+            )
+        else:
+            _log_manager.log_modal_process(
+                f'重建技能颜色映射完成（{color_count} 条）',
+                modal_id,
+            )
 
     lang_path = Path(game_path) / 'LimbusCompany_Data' / 'lang' / package_name
     files = list(lang_path.rglob('*.json'))
-    logger.info(f'一共{len(files)}个文件')
+    _log_manager.log_modal_process(f'开始处理{len(files)}个语言文件', modal_id)
     files_matched = 0
     files_changed = 0
     values_changed = 0
@@ -165,7 +203,7 @@ def fancy_main(
                 values_changed += changed_count
         except Exception as e:
             logger.exception(f"处理文件 {file} 时出错: {e}")
-            _log_manager.log_error(e)
+            _log_manager.log_modal_process(f"处理文件 {file.name} 时出错: {e}", modal_id)
 
     stats = FancyRunStats(
         files_scanned=len(files),
@@ -175,13 +213,11 @@ def fancy_main(
         elapsed_seconds=time.perf_counter() - started_at,
         resource_cache_hit=resource_cache_hit,
     )
-    logger.info(
-        '文本美化完成：扫描%s，匹配%s，修改%s个文件/%s个字段，耗时%.3f秒',
-        stats.files_scanned,
-        stats.files_matched,
-        stats.files_changed,
-        stats.values_changed,
-        stats.elapsed_seconds,
+    _log_manager.log_modal_process(
+        f'美化完成：扫描{stats.files_scanned}，匹配{stats.files_matched}，'
+        f'修改{stats.files_changed}个文件/{stats.values_changed}个字段，'
+        f'耗时{stats.elapsed_seconds:.3f}秒',
+        modal_id,
     )
     return stats
 

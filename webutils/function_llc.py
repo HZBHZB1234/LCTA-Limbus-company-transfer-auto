@@ -1,5 +1,4 @@
 from globalManagers.LogManager import LogManager
-from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
 import tempfile
 import os
@@ -12,14 +11,6 @@ from pathlib import Path
 import json
 
 
-def _get_output_dir():
-    """获取产物输出目录：优先使用配置的缓存目录，相对路径锚定到应用根目录"""
-    output_dir = ConfigManager().get('cache_path', 'tmp')
-    if not os.path.isabs(output_dir):
-        output_dir = os.path.join(os.getenv('path_', ''), output_dir)
-    os.makedirs(output_dir, exist_ok=True)
-    return output_dir
-
 font_assets_raw = ReleaseAsset(
     name="ChineseFont.ttf",size=23870096,content_type='',
     download_url="https://github.com/LocalizeLimbusCompany/LocalizeLimbusCompany/raw/refs/heads/main/Fonts/ChineseFont.ttf",
@@ -28,7 +19,7 @@ font_assets_raw = ReleaseAsset(
 
 font_assets_seven = ReleaseAsset(
     name="LLCCN-Font.7z",size=9625672,content_type='',
-    download_url="https://github.com/LocalizeLimbusCompany/LocalizeLimbusCompany/raw/refs/heads/main/Fonts/ChineseFont.ttf",
+    download_url="https://github.com/LocalizeLimbusCompany/LocalizeLimbusCompany/raw/refs/heads/main/Fonts/LLCCN-Font.7z",
     download_count=0, proxys=None
 )
 
@@ -41,14 +32,13 @@ def check_ver_github(from_proxy):
 def _process_llc_package(temp_dir, modal_id, save_path_text, save_path_font,
                          final_name, use_cache, cache_path, dump_default):
     """处理已下载的 LLC 包：解压/保存、字体处理、重新打包"""
-    output_dir = _get_output_dir()
     if dump_default:
         _log_manager.log("dump_default")
         _log_manager.log_modal_process("检测到设置：保存原文件", modal_id)
-        shutil.copy2(save_path_text, os.path.join(output_dir, final_name))
+        shutil.copy2(save_path_text, final_name)
         _log_manager.log_modal_process("保存文本文件成功", modal_id)
         if not use_cache:
-            shutil.copy2(save_path_font, os.path.join(output_dir, "LLCCN-Font.7z"))
+            shutil.copy2(save_path_font, "LLCCN-Font.7z")
             _log_manager.log_modal_process("保存字体文件成功", modal_id)
         _log_manager.update_modal_progress(100, "文件保存完成", modal_id)
     else:
@@ -71,7 +61,7 @@ def _process_llc_package(temp_dir, modal_id, save_path_text, save_path_font,
             font_path = f"{font_path}\\{Path(cache_path).name}"
             shutil.copy2(cache_path, font_path)
         _log_manager.log_modal_status("正在打包文件", modal_id)
-        final_zip_path = os.path.join(output_dir, final_name.replace(".7z", ".zip"))
+        final_zip_path = final_name.replace(".7z", ".zip")
         _log_manager.log_modal_process("开始重新打包文件", modal_id)
         lang_path = f'{temp_dir}\\LimbusCompany_Data\\Lang\\LLC_zh-CN'
         if not zip_folder(lang_path, final_zip_path):

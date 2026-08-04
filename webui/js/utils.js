@@ -68,8 +68,8 @@ function initNavigation() {
                     const sectionName = button.id.replace('-btn', '');
                     await loadSection(sectionName);
 
-                    if (sectionId === 'elder-section' && typeof elderManager !== 'undefined') {
-                        elderManager.initPage();
+                    if (sectionId === 'elder-section' && typeof quickStartManager !== 'undefined') {
+                        quickStartManager.initPage();
                     }
 
                     section.classList.add('active');
@@ -390,7 +390,7 @@ const TOOLTIP_DATA = {
     'llc-use-proxy': '通过代理服务器加速 GitHub 下载请求。建议开启，解决国内访问 GitHub 不稳定、下载慢的问题。',
     'llc-use-cache': '使用本地已缓存的字体文件而非重新下载。缓存路径可在"设置"页面配置。',
     'llc-dump-default': '下载的汉化包将被解压并保留原始文件结构，而非保存为压缩包格式。此为历史遗留选项，一般无需开启。',
-    'machine-download-source': 'LCTA-AU 汉化包的下载来源。LCTA-AU 翻译延迟仅 1-3 小时且翻译质量高于 OurPlay，建议优先使用。',
+    'machine-download-source': 'LCTA-AU 汉化包的下载来源。可选择 GitHub 或公益镜像，实际可用性取决于当前网络环境。',
     'machine-use-proxy': '通过代理服务器加速 LCTA-AU 汉化包的 GitHub 下载。建议开启。',
     'tiaozhua-install': '下载完成后自动将调爪文本修改包导入为文本替换规则集。建议开启，省去手动导入步骤。',
 

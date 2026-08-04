@@ -14,14 +14,6 @@ from globalManagers.ConfigManager import ConfigManager
 from webFunc import Note
 
 
-def _get_output_dir():
-    """获取产物输出目录：优先使用配置的缓存目录，相对路径锚定到应用根目录"""
-    output_dir = ConfigManager().get('cache_path', 'tmp')
-    if not os.path.isabs(output_dir):
-        output_dir = os.path.join(os.getenv('path_', ''), output_dir)
-    os.makedirs(output_dir, exist_ok=True)
-    return output_dir
-
 def check_ver_ourplay_new(official: bool = True):
     headers = {
         'device-user': make_device(),
@@ -499,7 +491,7 @@ def _process_ourplay_package(temp_dir, modal_id, font_option, cache_path, hash_o
     _log_manager.log("正在压缩文件...")
     _log_manager.update_modal_progress(95, "正在打包", modal_id)
 
-    if not zip_folder(ourplay_root, os.path.join(_get_output_dir(), 'ourplay.zip')):
+    if not zip_folder(ourplay_root, 'ourplay.zip'):
         _log_manager.log_modal_process("处理文件时出现错误", modal_id)
         raise Exception("打包文件时出现错误")
 

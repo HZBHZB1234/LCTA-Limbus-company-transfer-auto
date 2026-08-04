@@ -101,9 +101,8 @@ function onSectionLoaded(name) {
             break;
         case 'elder':
             console.log('[LCTA] Init section: elder');
-            if (typeof elderManager !== 'undefined') {
-                elderManager.targetDiv = document.querySelector('.quetion-content');
-                elderManager._setupEventDelegation();
+            if (typeof quickStartManager !== 'undefined') {
+                quickStartManager.targetDiv = document.querySelector('.quick-start-content');
             }
             break;
         case 'welcome':

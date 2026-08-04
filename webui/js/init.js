@@ -108,7 +108,7 @@ window.addEventListener('pywebviewready', function() {
                 fancyManager = new FancyManager();
                 fancyManager.init();
                 
-                elderManager.init();
+                quickStartManager.init();
 
             }
             checkGamePath();

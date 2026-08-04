@@ -71,9 +71,6 @@ class LCTA_API():
         self.TKIT_MACHINE = TKIT_MACHINE
         self.TKIT_MACHINE_OBJECT = TKIT_MACHINE_OBJECT
         self.LLM_TRANSLATOR = LLM_TRANSLATOR
-        self.updateList= updateList
-        self.bindRefer = bindRefer
-        self.relyList = relyList
         self.set_function()
         self.init_config()
 
@@ -166,20 +163,8 @@ class LCTA_API():
                     else:flag = True
                 r.append(i)
             r = '\n'.join(r)
-            r += '''\n<button class="primary-btn" onclick="goAndShow('elder');">
-    <i class="fas fa-play"></i>
-    进入设置向导来配置更新的内容
-</button>
-'''
             return {'show': True, 'message': r}
         return {'show': False}
-
-    def resetElder(self):
-        defaultConfig = self.load_config_default()
-        if defaultConfig:
-            ConfigManager().set('elder', defaultConfig.get('elder', {}))
-        else:
-            raise Exception("无法加载内置默认配置，重置设置向导失败")
 
     def use_inner(self):
         """使用默认配置并保存"""
@@ -710,6 +695,11 @@ class LCTA_API():
             'enabled': json.loads(ConfigManager().get('fancy_allow',
                  "{\"技能文本美化(FL Like)\": true,\"气泡文本渐变(FL Like)\": true,\"EGO文本渐变(FL Like)\": true}"))
         }}
+
+    def save_ruleset(self, name: str, data: dict) -> dict:
+        """将规则集保存到 fancy/ 文件夹（主窗口文本美化页保存当前/全部）"""
+        from webutils.rule_editor import save_ruleset as _save_ruleset
+        return _save_ruleset(name, data)
 
     def import_bus_rules(self, name=None):
         from webutils.function_fancy import import_bus_rules_file

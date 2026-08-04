@@ -4,7 +4,8 @@ webutils 下载模块（function_llc / function_ourplay_pc / function_ourplay_an
 覆盖：
 - 裸 raise（无 except 上下文）修复：错误必须带真实上下文消息
 - OurPlay 新旧 API 请求体格式与超时设置
-- 产物输出到配置的缓存目录（而非不可控的 CWD）
+- 产物输出到当前工作目录（相对路径），与 1dc040c 之前的下载行为一致
+- LLC 字体直链必须指向 .7z 文件（防止再次误指为 ttf）
 - zip 参考包临时解压目录的清理
 """
 import json
@@ -63,11 +64,9 @@ def _write_refer_zip(zip_path):
 
 
 @pytest.fixture
-def cache_dir_config(monkeypatch, tmp_path):
-    """将配置的缓存目录指向临时目录，用于断言产物输出位置。"""
-    monkeypatch.setattr(ConfigManager, "get",
-                        lambda self, key, default=None:
-                        str(tmp_path) if key == "cache_path" else default)
+def cwd_tmp(monkeypatch, tmp_path):
+    """将当前工作目录切到临时目录，断言产物写入 CWD（相对路径）。"""
+    monkeypatch.chdir(tmp_path)
     return tmp_path
 
 
@@ -170,7 +169,7 @@ class TestBareRaiseWithContext:
         with pytest.raises(Exception, match="下载 OurPlay 汉化包失败"):
             function_ourplay_android.function_ourplay_new_main("test", check_hash=False)
 
-    def test_ourplay_new_zip_failure(self, cache_dir_config, monkeypatch, tmp_path):
+    def test_ourplay_new_zip_failure(self, cwd_tmp, monkeypatch, tmp_path):
         _write_workdir_zip(tmp_path)
         monkeypatch.setattr(function_ourplay_android, "_convert_new_package",
                             lambda td, rp: str(tmp_path / "ourplay"))
@@ -183,7 +182,7 @@ class TestBareRaiseWithContext:
         monkeypatch.setattr(function_ourplay_android, "zip_folder", fake_zip_folder)
         with pytest.raises(Exception, match="打包文件时出现错误"):
             function_ourplay_android._process_ourplay_package(str(tmp_path), "test", "keep", "")
-        assert captured["out"] == os.path.join(str(tmp_path), "ourplay.zip")
+        assert captured["out"] == "ourplay.zip"
 
 
 # ========== 修复2：请求体格式与超时 ==========
@@ -231,12 +230,12 @@ class TestOurplayRequestFormat:
         assert captured == [(10, 60), (10, 60)]
 
 
-# ========== 修复3：产物输出到配置的缓存目录 ==========
+# ========== 修复3：产物输出到当前工作目录（CWD） ==========
 
-class TestOutputToConfiguredDir:
-    """产物不得写入不可控的 CWD，必须落在配置的缓存目录下。"""
+class TestOutputToCwd:
+    """产物写入当前工作目录（相对路径），与 1dc040c 之前的下载行为一致。"""
 
-    def test_llc_dump_default_writes_to_cache_dir(self, cache_dir_config, tmp_path, monkeypatch):
+    def test_llc_dump_default_writes_to_cwd(self, cwd_tmp, tmp_path, monkeypatch):
         text = tmp_path / "text.7z"
         font = tmp_path / "font.7z"
         text.write_bytes(b"t")
@@ -252,11 +251,11 @@ class TestOutputToConfiguredDir:
         function_llc._process_llc_package(str(tmp_path), "test", str(text), str(font),
                                           "pkg.7z", False, "", True)
         assert len(captured) == 2
-        assert captured[0] == os.path.join(str(tmp_path), "pkg.7z")
-        assert captured[1] == os.path.join(str(tmp_path), "LLCCN-Font.7z")
+        assert captured[0] == "pkg.7z"
+        assert captured[1] == "LLCCN-Font.7z"
         assert os.path.exists(captured[0]) and os.path.exists(captured[1])
 
-    def test_llc_repack_outputs_to_cache_dir(self, cache_dir_config, tmp_path, monkeypatch):
+    def test_llc_repack_outputs_to_cwd(self, cwd_tmp, tmp_path, monkeypatch):
         text = tmp_path / "text.7z"
         font = tmp_path / "font.7z"
         text.write_bytes(b"t")
@@ -271,10 +270,10 @@ class TestOutputToConfiguredDir:
         monkeypatch.setattr(function_llc, "zip_folder", fake_zip_folder)
         result = function_llc._process_llc_package(str(tmp_path), "test", str(text), str(font),
                                                    "pkg.7z", True, str(font), False)
-        assert captured["out"] == os.path.join(str(tmp_path), "pkg.zip")
+        assert captured["out"] == "pkg.zip"
         assert result == captured["out"]
 
-    def test_ourplay_pc_outputs_to_cache_dir(self, cache_dir_config, tmp_path, monkeypatch):
+    def test_ourplay_pc_outputs_to_cwd(self, cwd_tmp, tmp_path, monkeypatch):
         _write_workdir_zip(tmp_path)
         captured = {}
 
@@ -284,7 +283,17 @@ class TestOutputToConfiguredDir:
 
         monkeypatch.setattr(function_ourplay_pc, "zip_folder", fake_zip_folder)
         function_ourplay_pc._process_ourplay_package(str(tmp_path), "test", "keep", "")
-        assert captured["out"] == os.path.join(str(tmp_path), "ourplay.zip")
+        assert captured["out"] == "ourplay.zip"
+
+
+# ========== 修复3b：LLC 字体直链必须指向 7z 文件 ==========
+
+class TestLlcFontAsset:
+    """font_assets_seven 用于下载并解压 LLCCN-Font.7z，URL 必须指向 .7z 文件。"""
+
+    def test_font_assets_seven_url_points_to_7z(self):
+        assert function_llc.font_assets_seven.name.endswith(".7z")
+        assert function_llc.font_assets_seven.download_url.endswith("LLCCN-Font.7z")
 
 
 # ========== 修复4：zip 参考包临时目录清理 ==========

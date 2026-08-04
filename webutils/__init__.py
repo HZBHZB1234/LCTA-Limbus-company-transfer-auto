@@ -24,7 +24,6 @@ from .packages import (find_installed_packages,
                               remove_symlink_for)
 from .fancy.builtin_data import fancy as builtinFancyConfig
 from .function_fancy import fancy_main
-from .wizard_constants import updateList, bindRefer, relyList
 from .drop import evalFile, makeMessage, evalFiles
 from .cdn import (
     run_cfst,
@@ -78,9 +77,6 @@ __all__ = [
     'remove_symlink_for',
     'builtinFancyConfig',
     'fancy_main',
-    'updateList',
-    'bindRefer',
-    'relyList',
     'evalFile',
     'makeMessage',
     'evalFiles',

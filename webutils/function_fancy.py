@@ -108,7 +108,15 @@ def fancy_main(
     """
     started_at = time.perf_counter()
     enabled_rulesets = _select_enabled_rulesets(config, enable_map)
+    logger.debug(
+        '启用的规则集: %s',
+        [{'name': rs.get('name', ''), 'rules': len(rs.get('rules', []))} for rs in enabled_rulesets],
+    )
     compiled_rulesets = _compile_mixed_rulesets(enabled_rulesets)
+    logger.debug(
+        '已编译规则: %s',
+        [f'{item.kind}/{len(item.compiled.rules)}' for item in compiled_rulesets],
+    )
     resource_cache_hit = False
     if any(
         item.kind == "v2" and item.compiled.requires_skill_color

@@ -2,7 +2,7 @@
    扩展样式：模态窗口、抽屉、响应式、拖拽
    ============================ */
 
-/* 设置向导 — 按钮增强 */
+/* 快速上手引导 — 按钮增强 */
 .question-container .about-card .primary-btn {
     display: inline-flex;
     align-items: center;
@@ -31,28 +31,8 @@
     transform: translateY(0);
 }
 
-.question-container .about-card .elder-btn-reset {
-    font-size: 12px;
-    padding: 8px 18px;
-    opacity: 0.6;
-    background: transparent;
-    color: var(--color-text-secondary);
-    border: 1px solid var(--color-border);
-    box-shadow: none;
-    margin-top: var(--spacing-sm);
-}
-
-.question-container .about-card .elder-btn-reset:hover {
-    opacity: 1;
-    background: var(--color-bg-secondary);
-    color: var(--color-text-primary);
-    border-color: var(--color-border-dark);
-    transform: none;
-    box-shadow: none;
-}
-
 /* ============================================
-   设置向导 — 响应式适配
+   快速上手引导 — 响应式适配
    ============================================ */
 @media (max-width: 768px) {
     .question-container .about-card {
@@ -66,6 +46,16 @@
     .question-container .about-card h2 {
         font-size: 18px;
     }
+
+    .quick-start-stage {
+        padding: 22px;
+    }
+
+    .quick-start-goal-grid,
+    .quick-start-explain-grid,
+    .quick-start-destination-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 600px) {
@@ -73,16 +63,36 @@
         grid-template-columns: 1fr;
     }
 
-    .elder-option-card {
-        flex-direction: column;
-    }
-
-    .elder-theme-switch {
-        flex-direction: column;
-    }
-
     .elder-path-input {
         flex-direction: column;
+    }
+
+    .quick-start-progress-item {
+        flex-direction: column;
+        gap: 5px;
+        padding: 12px 6px;
+        font-size: 11px;
+    }
+
+    .quick-start-stage {
+        padding: 18px;
+    }
+
+    .quick-start-heading h3 {
+        font-size: 20px;
+    }
+
+    .quick-start-path-row,
+    .quick-start-actions,
+    .quick-start-actions > div {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .quick-start-actions .action-btn,
+    .quick-start-actions .primary-btn {
+        width: 100%;
+        justify-content: center;
     }
 }
 

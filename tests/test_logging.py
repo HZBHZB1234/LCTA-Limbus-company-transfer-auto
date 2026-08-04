@@ -155,3 +155,44 @@ class TestLoggingExceptionCalls:
         assert "_logger.exception" in source, (
             "TranslationPipeline._update_roles() 应包含 _logger.exception() 调用"
         )
+
+
+class TestFancyLoggerConfiguration:
+    """fancy / rule_editor 子日志器应接入 LogManager 的 handler，避免调试日志丢失。"""
+
+    def _log_manager(self):
+        from globalManagers.LogManager import LogManager
+        return LogManager()
+
+    def test_fancy_logger_is_configured(self):
+        manager = self._log_manager()
+        main_logger = manager._logger
+        fancy = logging.getLogger("fancy")
+        assert fancy.level == main_logger.level
+        assert fancy.propagate is False
+        assert len(fancy.handlers) >= len(main_logger.handlers)
+
+    def test_rule_editor_logger_is_configured(self):
+        manager = self._log_manager()
+        main_logger = manager._logger
+        rule_editor = logging.getLogger("rule_editor")
+        assert rule_editor.level == main_logger.level
+        assert rule_editor.propagate is False
+        assert len(rule_editor.handlers) >= len(main_logger.handlers)
+
+    def test_fancy_debug_message_reaches_shared_handlers(self):
+        """通过 fancy 日志器发送的 DEBUG 消息应被其自身 handler 捕获。"""
+        manager = self._log_manager()
+        records = []
+        class CaptureHandler(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        capture = CaptureHandler(level=logging.DEBUG)
+        fancy = logging.getLogger("fancy")
+        fancy.addHandler(capture)
+        try:
+            fancy.debug("fancy 调试日志测试")
+        finally:
+            fancy.removeHandler(capture)
+        assert any("fancy 调试日志测试" in record.getMessage() for record in records)

@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-03 -->
+<!-- Last updated: 2026-08-04 -->
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
@@ -261,7 +261,7 @@ Both paths
       → webutils/fancy/bus.py compile_bus_ruleset() bus selectors/replacements
       → CompiledRules.requires_skill_color
         → webutils/fancy/builtin_func.py SkillColorHandler.prepare() only when an enabled rule needs it
-          → function_resource.py load_text_assets()
+          → function_resource.py load_text_assets() (skips objects with missing/None containers)
           → fingerprinted tmp/fancy/skill-colors.json cache
     → scan language-package *.json files
       → v2/bus per-file matching and bus directory exclusions
@@ -269,6 +269,15 @@ Both paths
       → apply_rules()/apply_bus() in ruleset order
       → compare final JSON with original and atomically replace only when changed
     → FancyRunStats                                  scanned/matched/changed/value/time/cache data
+    → debug logs via `fancy` logger (enabled rulesets, per-file matches, changed counts) — wired to app.log by LogManager
+```
+
+```
+Fancy page 保存当前 / 保存全部
+  → webui/js/features.js FancyManager.saveCurrent()/saveAll()
+  → pywebview.api.save_ruleset(name, payload)        main-window LCTA_API method
+  → webutils/rule_editor/rules.py save_ruleset()
+    → validate + compile, then save_ruleset_to_folder() → fancy/{name}.json
 ```
 
 ```
@@ -381,7 +390,7 @@ start_webui.py main()
       → _pendingWelcomeContent                 deferred rendering for welcome section
       → configManager.applyConfigToUI()        null-guarded, skips unloaded sections
       → toggle functions                       all null-guarded
-      → fancyManager.init() / elderManager.init()  null-guarded DOM access
+      → fancyManager.init() / quickStartManager.init()  null-guarded DOM access
       → check_show() / init_github() / init_log()
       → fire-and-forget:                       change_icon, init_cache, set_attr(http_port)
 
@@ -422,3 +431,24 @@ User clicks 「下载(导入)调爪文本修改包」(download.html)
 Launcher auto path: `launcher/updates.py UpdateBase.post_update` → `run_tiaozhua` (launcher.work.tiaozhua) → sets `ui_default.tiaozhua.install` → `function_lanzou_tiaozhua_main('安装调爪JSON')`.
 
 Files: `webutils/function_lanzou_tiaozhua.py`, `webutils/utils/io.py` (decompress_7z), `webutils/utils/net.py` (download_with), `webutils/function_fancy.py` (import_bus_rules_file), `webui/app.py`, `webui/js/features.js`, `webui/sections/download.html`, `webui/sections/launcher-config.html`, `launcher/updates.py`
+
+## 15. Three-Step Quick Start
+
+```
+User opens 「快速上手」
+  → webui/js/utils.js                    lazy-load elder section route
+  → webui/sections/elder.html            lightweight quick-start mount point
+  → webui/js/quick-start.js              QuickStartManager.initPage()
+    Step 1: choose one primary goal       package / launcher / translate / customize
+    Step 2: render goal-only checks       game path, Launcher mode/options,
+                                          API status, or customization destinations
+      → ConfigManager.updateConfigValues() save ordinary config only when required
+      → pywebview.api.browse_folder('')   optional game-folder selection
+    Step 3: render action summary
+      → goAndShow(target)                 download/install/launcher-config/config/
+                                          translate/manage/fancy destination
+```
+
+No Markdown page parser, version tracking, dependency graph, reset API, or wizard-only config is involved.
+
+Files: `webui/js/quick-start.js`, `webui/sections/elder.html`, `webui/js/utils.js`, `webui/sections/preload.js`, `webui/js/core.js`, `webui/assets/firstUse.md`, `webui/guide/elder.md`

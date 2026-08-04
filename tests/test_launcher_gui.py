@@ -932,3 +932,24 @@ class TestEditorWindowsCleanup:
         window.evaluate_js.reset_mock()
         api.sync_theme_to_rule_editor("dark")
         window.evaluate_js.assert_not_called()
+
+
+class TestSaveRulesetExposure:
+    """主窗口 LCTA_API 必须暴露 save_ruleset（文本美化 保存当前/保存全部 依赖）。"""
+
+    def test_save_ruleset_is_class_method(self):
+        from webui.app import LCTA_API
+
+        assert callable(getattr(LCTA_API, "save_ruleset", None))
+
+    def test_save_ruleset_persists_to_fancy_folder(self, tmp_path, monkeypatch):
+        from webutils import function_fancy
+
+        monkeypatch.setattr(function_fancy, "_get_fancy_folder", lambda: tmp_path)
+        api = _make_api()
+        result = api.save_ruleset(
+            "__pytest_save_ruleset__",
+            {"name": "__pytest_save_ruleset__", "desc": "测试", "rules": []},
+        )
+        assert result.get("success") is True
+        assert (tmp_path / "__pytest_save_ruleset__.json").exists()

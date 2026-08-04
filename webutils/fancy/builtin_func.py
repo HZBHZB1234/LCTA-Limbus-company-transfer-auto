@@ -139,7 +139,7 @@ class SkillColorHandler:
         except Exception as exc:
             self.data = {}
             self.state = "failed"
-            logger.error('初始化技能颜色资源失败，本次运行不再重试: %s', exc)
+            logger.exception('初始化技能颜色资源失败，本次运行不再重试: %s', exc)
             return False
 
         self.state = "ready"

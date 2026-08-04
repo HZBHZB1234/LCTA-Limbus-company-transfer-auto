@@ -70,19 +70,9 @@
             "output_type": "str"
         }
     },
-    "elder": {
-        "game_source": "str",
-        "character": {
-            "base": "bool",
-            "launcher": "bool",
-            "translate": "bool",
-            "manage": "bool"
-        }
-    },
     "api_config": "str",
     "api_crypto": "bool",
     "fancy_allow": "str",
-    "elder_list": "str",
     "theme": "str",
     "game_path": "str",
     "debug": "bool",

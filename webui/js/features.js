@@ -1122,8 +1122,8 @@ const helpDrawer = {
                     </div>
                     <div class="setting-card" style="padding:16px;cursor:pointer;margin:0;"
                          onclick="goAndShow('elder');helpDrawer.close();">
-                        <h4 style="margin-top:0;"><i class="fas fa-play-circle"></i> 设置向导</h4>
-                        <p style="font-size:13px;color:var(--color-text-secondary);">分步引导完成初始配置</p>
+                        <h4 style="margin-top:0;"><i class="fas fa-play-circle"></i> 快速上手</h4>
+                        <p style="font-size:13px;color:var(--color-text-secondary);">三步选择目标并直接开始</p>
                     </div>
                 </div>
             </div>

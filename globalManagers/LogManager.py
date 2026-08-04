@@ -62,6 +62,14 @@ class LogManager:
         self._logger.addHandler(fh)
         self._logger.addHandler(ch)
 
+        # -- 子日志器（fancy 引擎等）共享同一套 handler，避免调试日志丢失 --
+        for child_name in ("fancy", "rule_editor"):
+            child = logging.getLogger(child_name)
+            child.setLevel(log_level)
+            child.propagate = False
+            for handler in (fh, ch):
+                child.addHandler(handler)
+
         # -- 模态回调存储（供 webview JS 桥接使用） --
         self._modal_status_callback: Optional[Callable] = None
         self._modal_log_callback: Optional[Callable] = None

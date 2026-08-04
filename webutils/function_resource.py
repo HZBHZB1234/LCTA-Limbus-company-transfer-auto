@@ -37,6 +37,8 @@ def extract_files_from_resource(resource_path: str, file_names: List[str], outpu
             container = obj.container
         except (AttributeError, TypeError):
             continue
+        if not isinstance(container, str):
+            continue
         file_name = next((name for name in remaining if container.endswith(name)), None)
         if file_name is None:
             continue
@@ -107,6 +109,8 @@ def load_text_assets(
             try:
                 container = obj.container
             except (AttributeError, TypeError):
+                continue
+            if not isinstance(container, str):
                 continue
             target_name = next((name for name in remaining if container.endswith(name)), None)
             if target_name is None or obj.type != ClassIDType.TextAsset:

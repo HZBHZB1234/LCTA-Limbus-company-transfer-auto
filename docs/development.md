@@ -3,7 +3,7 @@
 > 面向开发者的完整开发环境搭建、构建、调试和发布指南。
 > AI 快速参考请见 `.claude/docs/dev-guide.md`
 
-<!-- Last updated: 2026-08-02 -->
+<!-- Last updated: 2026-08-04 -->
 
 ## 前置条件
 
@@ -76,15 +76,13 @@ LCTA-Limbus-company-transfer-auto/
 │   ├── app.py                  # LCTA_API 核心桥接类 (~1450 行)
 │   ├── index.html              # SPA 外壳 (103KB)
 │   ├── css/                    # 样式表 (3 文件)
-│   ├── js/                     # JS 模块 (9 文件)
+│   ├── js/                     # JS 模块（含独立 quick-start 三步引导）
 │   ├── guide/                  # 应用内用户指南 (16 md 页面)
-│   └── elder/                  # 设置向导 (14 md 页面)
 │
 ├── webutils/                   # 业务逻辑层
 │   ├── __init__.py             # 公共 API 聚合（门面）
 │   ├── function_*.py           # 功能模块 (11 文件)
 │   ├── translator_constants.py # 翻译 API 供应商配置
-│   ├── wizard_constants.py     # 更新/向导常量
 │   ├── load.py                 # 配置加载 / Steam 注册表检测
 │   ├── update.py               # 自更新
 │   ├── debug_environ_test.py   # 环境诊断

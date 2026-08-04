@@ -8,7 +8,7 @@ let modalWindows = [];
 let apiConfigManager;
 let fancyManager;
 let themeManager;
-let elderManager;
+let quickStartManager;
 let dragDropManager;
 let first_use;
 
@@ -206,14 +206,6 @@ class ConfigManager {
             'enable-storage': 'enable_storage',
             'storage-path': 'storage_path',
             '--theme': 'theme',
-
-            // 老年人模式设置
-            '--elder': 'elder_list',
-            '--elder-character-base': 'elder.character.base',
-            '--elder-character-launcher': 'elder.character.launcher',
-            '--elder-character-translate': 'elder.character.translate',
-            '--elder-character-manage': 'elder.character.manage',
-            '--elder-game-source': 'elder.game_source',
 
             // 翻译设置
             "translator-service-select": "ui_default.translator.translator",

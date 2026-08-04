@@ -118,7 +118,13 @@ def fancy_main(
         '启用的规则集: %s',
         [{'name': rs.get('name', ''), 'rules': len(rs.get('rules', []))} for rs in enabled_rulesets],
     )
+    compile_started = time.perf_counter()
     compiled_rulesets = _compile_mixed_rulesets(enabled_rulesets)
+    logger.debug(
+        '已编译规则: %s，编译耗时 %.3f 秒',
+        [f'{item.kind}/{len(item.compiled.rules)}' for item in compiled_rulesets],
+        time.perf_counter() - compile_started,
+    )
     v2_rule_count = sum(
         len(item.compiled.rules) for item in compiled_rulesets if item.kind == "v2"
     )
@@ -128,10 +134,6 @@ def fancy_main(
     _log_manager.log_modal_process(
         f'编译规则完成：v2 {v2_rule_count} 条 / bus {bus_rule_count} 条',
         modal_id,
-    )
-    logger.debug(
-        '已编译规则: %s',
-        [f'{item.kind}/{len(item.compiled.rules)}' for item in compiled_rulesets],
     )
     resource_cache_hit = False
     if any(
@@ -172,6 +174,8 @@ def fancy_main(
     files_matched = 0
     files_changed = 0
     values_changed = 0
+    apply_elapsed = 0.0
+    write_elapsed = 0.0
 
     for file in files:
         relative_path = file.relative_to(lang_path).as_posix()
@@ -181,29 +185,38 @@ def fancy_main(
                 file_rules = entry.compiled.for_file(relative_path)
                 if file_rules.rules:
                     matched_entries.append((entry.kind, file_rules))
-            elif entry.compiled.for_file(relative_path):
-                matched_entries.append((entry.kind, entry.compiled))
+            else:
+                bus_rules = entry.compiled.for_file(relative_path)
+                if bus_rules:
+                    matched_entries.append((entry.kind, (entry.compiled, bus_rules)))
         if not matched_entries:
             continue
         files_matched += 1
         try:
+            apply_started = time.perf_counter()
             data = json.loads(file.read_text(encoding='utf-8-sig'))
             file_changed_paths: set[tuple] = set()
             for kind, matched_rules in matched_entries:
                 if kind == "v2":
                     result = apply_rules(data, matched_rules)
                 else:
-                    result = apply_bus(data, matched_rules, relative_path)
+                    compiled, bus_rules = matched_rules
+                    result = apply_bus(data, compiled, relative_path, rules=bus_rules)
                 data = result.data
                 file_changed_paths.update(result.changed_paths)
             changed_count = len(file_changed_paths)
+            apply_elapsed += time.perf_counter() - apply_started
             if changed_count:
+                write_started = time.perf_counter()
                 _write_json_atomic(file, data)
+                write_elapsed += time.perf_counter() - write_started
                 files_changed += 1
                 values_changed += changed_count
         except Exception as e:
             logger.exception(f"处理文件 {file} 时出错: {e}")
             _log_manager.log_modal_process(f"处理文件 {file.name} 时出错: {e}", modal_id)
+
+    logger.debug('规则应用耗时 %.3f 秒，文件写回耗时 %.3f 秒', apply_elapsed, write_elapsed)
 
     stats = FancyRunStats(
         files_scanned=len(files),

@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
+from webutils.fancy.faust import process_dlg_text
+
 
 class RuleValidationError(ValueError):
     pass
@@ -301,6 +303,18 @@ def _condition_matches(condition: CompiledCondition, values: Iterable[Any]) -> b
     return any(condition.pattern.search(str(value)) for value in values if isinstance(value, (str, int, float, bool)))
 
 
+_skill_color_handler = None
+
+
+def _get_skill_color_handler():
+    global _skill_color_handler
+    if _skill_color_handler is None:
+        from webutils.fancy.builtin_func import skillColorHandler
+
+        _skill_color_handler = skillColorHandler
+    return _skill_color_handler
+
+
 def _apply_actions(
     value: Any,
     actions: tuple[CompiledAction, ...],
@@ -321,15 +335,11 @@ def _apply_actions(
         elif action.type == "wrap":
             result = f"{action.prefix}{result}{action.suffix}"
         elif action.type == "gradient":
-            from webutils.fancy.faust import process_dlg_text
-
             result = process_dlg_text(result, action.rate)
         elif action.type == "skill_color":
-            from webutils.fancy.builtin_func import skillColorHandler
-
             id_paths = resolver.resolve(scope_path, action.id_path)
             if id_paths:
-                result = skillColorHandler.apply(result, get_value(data, id_paths[0]))
+                result = _get_skill_color_handler().apply(result, get_value(data, id_paths[0]))
     return result
 
 

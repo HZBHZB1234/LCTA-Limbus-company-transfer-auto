@@ -81,6 +81,81 @@ def test_parse_bus_path_rejects_invalid_syntax(path):
         parse_bus_path(path)
 
 
+def test_apply_bus_accepts_prematched_rules():
+    ruleset = make_ruleset([{
+        "path": "name",
+        "replacements": [{"from": "A", "to": "B"}],
+    }])
+    compiled = compile_bus_ruleset(ruleset)
+    prematched = compiled.for_file("Skills.json")
+
+    result = apply_bus({"name": "A"}, compiled, "Skills.json", rules=prematched)
+
+    assert result.data == {"name": "B"}
+    assert result.matched_rules == 1
+
+
+def test_apply_bus_prematched_excluded_dir_is_noop():
+    ruleset = make_ruleset(
+        [{"path": "name", "replacements": [{"from": "A", "to": "B"}]}],
+        exclude_dirs=["Config"],
+    )
+    compiled = compile_bus_ruleset(ruleset)
+    prematched = compiled.for_file("Config/Skills.json")
+
+    result = apply_bus({"name": "A"}, compiled, "Config/Skills.json", rules=prematched)
+
+    assert result.data == {"name": "A"}
+    assert result.matched_rules == 0
+
+
+def test_compiled_bus_deduplicates_file_matchers_and_preserves_rule_order(monkeypatch):
+    from webutils.fancy import bus as bus_engine
+
+    calls = []
+    original = bus_engine.CompiledFileMatcher.matches_normalized
+
+    def counting(self, normalized, filename):
+        calls.append((self.kind, self.value))
+        return original(self, normalized, filename)
+
+    ruleset = make_ruleset([
+        {
+            "name": "regex-first",
+            "files": [{"regex": "^Skills\\.json$"}],
+            "path": "name",
+            "replacements": [{"from": "A", "to": "B"}],
+        },
+        {
+            "name": "exact-middle",
+            "files": [{"exact": "Skills.json"}],
+            "path": "name",
+            "replacements": [{"from": "B", "to": "C"}],
+        },
+        {
+            "name": "regex-last",
+            "files": [{"regex": "^Skills\\.json$"}],
+            "path": "name",
+            "replacements": [{"from": "C", "to": "D"}],
+        },
+    ])
+    compiled = compile_bus_ruleset(ruleset)
+    monkeypatch.setattr(
+        bus_engine.CompiledFileMatcher,
+        "matches_normalized",
+        counting,
+    )
+
+    matched = compiled.for_file("Skills.json")
+
+    assert [rule.name for rule in matched] == [
+        "regex-first",
+        "exact-middle",
+        "regex-last",
+    ]
+    assert calls == [("regex", "^Skills\\.json$")]
+
+
 def test_tiaozhua_conversion_preserves_regex_and_path_semantics():
     source = {
         "blacklist": ["Config"],
@@ -291,6 +366,21 @@ def test_lcje_config_detection():
     assert not is_lcje_config({"LLC_zh-CN\\Skills.json": {}})
 
 
+def test_lcje_mods_config_detection_from_reference_editor():
+    source = {
+        "mods": [{
+            "file": "LLC_zh-CN\\Skills.json",
+            "path": "dataList[0].name",
+            "old": "旧名字",
+            "new": "新名字",
+        }],
+    }
+
+    assert is_lcje_config(source)
+    assert not is_lcje_config({"mods": []})
+    assert not is_lcje_config({"mods": [{"file": "Skills.json"}]})
+
+
 def test_lcje_conversion_preserves_paths_and_sets():
     source = {
         "LLC_zh-CN\\Skills_personality-12.json": {
@@ -317,6 +407,42 @@ def test_lcje_conversion_preserves_paths_and_sets():
     assert ruleset["rules"][2]["files"] == [
         {"exact": "PersonalityVoiceDlg/Voice_Faust_Dawn_10216.json"}
     ]
+
+
+def test_lcje_mods_conversion_preserves_reference_editor_entries():
+    source = {
+        "mods": [
+            {
+                "file": "LLC_zh-CN\\Skills.json",
+                "path": "dataList[0].name",
+                "old": "旧名字",
+                "new": "新名字",
+            },
+            {
+                "file": "LLC_zh-CN\\Skills.json",
+                "path": "dataList[0].desc",
+                "old": "旧描述",
+                "new": "新描述",
+            },
+        ],
+    }
+
+    ruleset, stats = convert_lcje_config(source, name="converted")
+    result = apply_bus(
+        {"dataList": [{"name": "旧名字", "desc": "旧描述"}]},
+        compile_bus_ruleset(ruleset),
+        "Skills.json",
+    )
+
+    assert stats["source_rules"] == 2
+    assert stats["converted_rules"] == 2
+    assert stats["converted_actions"] == 2
+    assert ruleset["rules"][0]["files"] == [{"exact": "Skills.json"}]
+    assert ruleset["rules"][0]["path"] == "dataList[0].name"
+    assert result.data == {
+        "dataList": [{"name": "新名字", "desc": "新描述"}],
+    }
+    assert result.changed_count == 2
 
 
 def test_lcje_conversion_applies_exact_matches():
@@ -367,6 +493,30 @@ def test_import_bus_rules_file_accepts_lcje(monkeypatch, tmp_path):
     assert imported["stats"]["converted_rules"] == 1
     assert loaded[0]["format"] == "lcta-bus"
     assert loaded[0]["rules"][0]["replacements"] == [{"set": "新名字"}]
+
+
+def test_import_bus_rules_file_accepts_lcje_mods(monkeypatch, tmp_path):
+    fancy_dir = tmp_path / "fancy"
+    source_path = tmp_path / "mod_config.json"
+    source_path.write_text(
+        json.dumps({
+            "mods": [{
+                "file": "LLC_zh-CN\\Skills.json",
+                "path": "dataList[0].name",
+                "old": "旧名字",
+                "new": "新名字",
+            }],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(function_fancy, "_get_fancy_folder", lambda: fancy_dir)
+
+    imported = function_fancy.import_bus_rules_file(str(source_path))
+    loaded = load_fancy_folder_rules(str(fancy_dir))
+
+    assert imported["stats"]["converted_rules"] == 1
+    assert loaded[0]["rules"][0]["files"] == [{"exact": "Skills.json"}]
+    assert loaded[0]["rules"][0]["path"] == "dataList[0].name"
 
 
 FL_SOURCE = {
@@ -532,6 +682,31 @@ def test_path_cache_revalidates_after_structural_mutation():
     assert result.data["list"][1]["name"] == "X"
 
 
+def test_selector_cache_revalidates_after_selector_field_change():
+    ruleset = make_ruleset([
+        {
+            "path": "dataList[?id=1].name",
+            "replacements": [{"from": "A", "to": "B"}],
+        },
+        {
+            "path": "dataList[0].id",
+            "replacements": [{"set": 2}],
+        },
+        {
+            "path": "dataList[?id=2].name",
+            "replacements": [{"from": "B", "to": "C"}],
+        },
+    ])
+
+    result = apply_bus(
+        {"dataList": [{"id": 1, "name": "A"}]},
+        compile_bus_ruleset(ruleset),
+        "Skills.json",
+    )
+
+    assert result.data == {"dataList": [{"id": 2, "name": "C"}]}
+
+
 def test_global_rules_share_string_leaf_traversal(monkeypatch):
     from webutils.fancy import bus as bus_engine
 
@@ -561,9 +736,14 @@ def test_identical_path_rules_share_resolution(monkeypatch):
     calls = []
     original = bus_engine._resolve_paths
 
-    def counting(data, tokens, *, allow_missing_final):
+    def counting(data, tokens, *, allow_missing_final, selector_cache=None):
         calls.append(tokens)
-        return original(data, tokens, allow_missing_final=allow_missing_final)
+        return original(
+            data,
+            tokens,
+            allow_missing_final=allow_missing_final,
+            selector_cache=selector_cache,
+        )
 
     monkeypatch.setattr(bus_engine, "_resolve_paths", counting)
     ruleset = make_ruleset([

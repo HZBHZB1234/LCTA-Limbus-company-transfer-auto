@@ -55,7 +55,7 @@ bus 格式用于顺序文本替换、调爪规则导入和简易翻译编辑：
 - `replacements` 严格按数组顺序执行。文本替换支持 `literal`、`regex`、`end` 三种 mode；`safe` 是与 mode 正交的布尔标志，用于防止新串包含旧串时替换结果被反复命中；`set` 可直接将目标设为任意 JSON 值。
 - `exclude_dirs` 对相对路径中的目录组件执行大小写不敏感的子串排除。
 
-在美化页面点击“导入其他文本替换规则”可多选 bus JSON、调爪 JSON、LCJE 补丁 JSON（形如 `{"LLC_zh-CN\\Skills.json": {"dataList[0].name": "新文本"}}`，按文件→路径→整值替换导入）或 FL 补丁 JSON（FaustLauncher 自定义汉化工具生成的 changes.json，形如 `{"LLC_zh-CN\\Personalities.json": {"dataList": [{"id": 10212, "changes": {"title": "新文本"}}]}}`，按文件→`id` 匹配或列表逐位→整值替换导入）。也可以直接拖入文件并确认导入。导入会生成独立用户规则集，默认保持禁用，检查内容后再手动启用。
+在美化页面点击“导入其他文本替换规则”可多选 bus JSON、调爪 JSON、LCJE 补丁 JSON或 FL 补丁 JSON。LCJE 同时支持编辑器导出的 `{"mods":[{"file":"LLC_zh-CN\\Skills.json","path":"dataList[0].name","old":"旧文本","new":"新文本"}]}`，以及旧版 `{"LLC_zh-CN\\Skills.json":{"dataList[0].name":"新文本"}}` 文件→路径映射，两者都会转换为精确文件、精确路径的整值替换。FL 使用 FaustLauncher 自定义汉化工具生成的 changes.json（形如 `{"LLC_zh-CN\\Personalities.json":{"dataList":[{"id":10212,"changes":{"title":"新文本"}}]}}`），按文件→`id` 匹配或列表逐位导入。也可以直接拖入文件并确认导入。导入会生成独立用户规则集，默认保持禁用，检查内容后再手动启用。
 
 简易翻译编辑器将 `_quick_edits.json` 保存为带 `edits` 和 bus `set` 规则的派生规则集。它会显示在美化列表中，但必须继续通过简易翻译编辑器维护，因此主页面将其设为只读（删除按钮未对其禁用，请勿删除 `_quick_edits` 规则集）。
 

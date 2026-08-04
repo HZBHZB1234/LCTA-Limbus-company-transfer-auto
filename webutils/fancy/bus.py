@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional, Union
 
@@ -48,6 +48,9 @@ class CompiledFileMatcher:
     def matches(self, relative_path: str) -> bool:
         normalized = relative_path.replace("\\", "/")
         filename = normalized.rsplit("/", 1)[-1]
+        return self.matches_normalized(normalized, filename)
+
+    def matches_normalized(self, normalized: str, filename: str) -> bool:
         if self.kind == "exact":
             return normalized == self.value
         if self.kind == "regex":
@@ -86,20 +89,81 @@ class CompiledBus:
     name: str
     rules: tuple[CompiledBusRule, ...]
     exclude_dirs: tuple[str, ...]
+    _exclude_keywords: tuple[str, ...] = field(
+        default=(), init=False, repr=False, compare=False, hash=False
+    )
+    _exact_rule_indices: dict[str, tuple[int, ...]] = field(
+        default_factory=dict, init=False, repr=False, compare=False, hash=False
+    )
+    _dynamic_matcher_rules: tuple[
+        tuple[CompiledFileMatcher, tuple[int, ...]], ...
+    ] = field(default=(), init=False, repr=False, compare=False, hash=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "_exclude_keywords",
+            tuple(keyword.casefold() for keyword in self.exclude_dirs),
+        )
+        exact_rule_indices: dict[str, list[int]] = {}
+        dynamic_matchers: dict[
+            tuple[str, str, int],
+            tuple[CompiledFileMatcher, list[int]],
+        ] = {}
+        for rule_index, rule in enumerate(self.rules):
+            for matcher in rule.files:
+                if matcher.kind == "exact":
+                    exact_rule_indices.setdefault(matcher.value, []).append(rule_index)
+                    continue
+                matcher_key = (
+                    matcher.kind,
+                    matcher.value,
+                    matcher.pattern.flags if matcher.pattern is not None else 0,
+                )
+                grouped = dynamic_matchers.get(matcher_key)
+                if grouped is None:
+                    dynamic_matchers[matcher_key] = (matcher, [rule_index])
+                else:
+                    grouped[1].append(rule_index)
+        object.__setattr__(
+            self,
+            "_exact_rule_indices",
+            {
+                path: tuple(indices)
+                for path, indices in exact_rule_indices.items()
+            },
+        )
+        object.__setattr__(
+            self,
+            "_dynamic_matcher_rules",
+            tuple(
+                (matcher, tuple(indices))
+                for matcher, indices in dynamic_matchers.values()
+            ),
+        )
 
     def is_excluded(self, relative_path: str) -> bool:
+        if not self._exclude_keywords:
+            return False
         directory_parts = Path(relative_path.replace("\\", "/")).parts[:-1]
-        lowered_keywords = tuple(keyword.casefold() for keyword in self.exclude_dirs)
         return any(
             keyword in part.casefold()
             for part in directory_parts
-            for keyword in lowered_keywords
+            for keyword in self._exclude_keywords
         )
 
     def for_file(self, relative_path: str) -> tuple[CompiledBusRule, ...]:
         if self.is_excluded(relative_path):
             return ()
-        return tuple(rule for rule in self.rules if rule.matches_file(relative_path))
+        normalized = relative_path.replace("\\", "/")
+        filename = normalized.rsplit("/", 1)[-1]
+        matched_indices = set(self._exact_rule_indices.get(normalized, ()))
+        for matcher, rule_indices in self._dynamic_matcher_rules:
+            if matcher.matches_normalized(normalized, filename):
+                matched_indices.update(rule_indices)
+        if not matched_indices:
+            return ()
+        return tuple(self.rules[index] for index in sorted(matched_indices))
 
 
 @dataclass(frozen=True)
@@ -167,7 +231,24 @@ def is_fl_config(data: Any) -> bool:
     return any(_has_fl_wrapper_list(value) for value in data.values())
 
 
-def is_lcje_config(data: Any) -> bool:
+def _is_lcje_mods_config(data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    mods = data.get("mods")
+    if not isinstance(mods, list) or not mods:
+        return False
+    return any(
+        isinstance(mod, dict)
+        and isinstance(mod.get("file"), str)
+        and bool(mod.get("file"))
+        and isinstance(mod.get("path"), str)
+        and bool(mod.get("path"))
+        and "new" in mod
+        for mod in mods
+    )
+
+
+def _is_lcje_path_map_config(data: Any) -> bool:
     if not isinstance(data, dict) or not data:
         return False
     if not all(
@@ -180,6 +261,10 @@ def is_lcje_config(data: Any) -> bool:
     if any(_has_fl_wrapper_list(value) for value in data.values()):
         return False
     return any(bool(value) for value in data.values())
+
+
+def is_lcje_config(data: Any) -> bool:
+    return _is_lcje_mods_config(data) or _is_lcje_path_map_config(data)
 
 
 def parse_bus_path(path: str) -> tuple[BusToken, ...]:
@@ -356,6 +441,9 @@ def _resolve_paths(
     tokens: tuple[BusToken, ...],
     *,
     allow_missing_final: bool,
+    selector_cache: Optional[
+        dict[tuple[JsonPath, str], dict[str, int]]
+    ] = None,
 ) -> tuple[JsonPath, ...]:
     paths: list[JsonPath] = []
 
@@ -388,10 +476,34 @@ def _resolve_paths(
                 walk(current[token.index], token_index + 1, current_path + (token.index,))
             return
         if isinstance(current, list):
-            for list_index, item in enumerate(current):
-                if isinstance(item, dict) and str(item.get(token.field)) == token.value:
-                    walk(item, token_index + 1, current_path + (list_index,))
-                    break
+            list_index = None
+            if selector_cache is not None:
+                cache_key = (current_path, token.field)
+                value_indices = selector_cache.get(cache_key)
+                if value_indices is None:
+                    value_indices = {}
+                    for item_index, item in enumerate(current):
+                        if isinstance(item, dict):
+                            value_indices.setdefault(
+                                str(item.get(token.field)),
+                                item_index,
+                            )
+                    selector_cache[cache_key] = value_indices
+                list_index = value_indices.get(token.value)
+            else:
+                for item_index, item in enumerate(current):
+                    if (
+                        isinstance(item, dict)
+                        and str(item.get(token.field)) == token.value
+                    ):
+                        list_index = item_index
+                        break
+            if list_index is not None:
+                walk(
+                    current[list_index],
+                    token_index + 1,
+                    current_path + (list_index,),
+                )
 
     walk(data, 0, ())
     return tuple(paths)
@@ -422,11 +534,16 @@ class _PathResolver:
             tuple[JsonPath, ...],
         ] = {}
         self._leaf_cache: Optional[tuple[JsonPath, ...]] = None
+        self._selector_cache: dict[
+            tuple[JsonPath, str],
+            dict[str, int],
+        ] = {}
         self._structure_changed = False
 
     def _invalidate(self) -> None:
         self._resolve_cache.clear()
         self._leaf_cache = None
+        self._selector_cache.clear()
 
     def resolve(
         self,
@@ -445,6 +562,7 @@ class _PathResolver:
             self._data,
             tokens,
             allow_missing_final=allow_missing_final,
+            selector_cache=self._selector_cache,
         )
         self._resolve_cache[cache_key] = result
         return result
@@ -457,8 +575,16 @@ class _PathResolver:
             self._leaf_cache = _iter_string_leaf_paths(self._data)
         return self._leaf_cache
 
-    def note_structural_change(self) -> None:
-        self._structure_changed = True
+    def note_change(self, path: JsonPath, *, structural: bool) -> None:
+        if structural:
+            self._structure_changed = True
+            return
+        if (
+            len(path) >= 2
+            and isinstance(path[-2], int)
+            and (path[:-2], path[-1]) in self._selector_cache
+        ):
+            self._structure_changed = True
 
 
 def _is_structural_change(old_value: Any, new_value: Any) -> bool:
@@ -469,6 +595,9 @@ def _is_structural_change(old_value: Any, new_value: Any) -> bool:
     )
 
 
+_safe_replace_cache: dict[tuple[str, str], re.Pattern[str]] = {}
+
+
 def _safe_replace(text: str, old: str, new: str) -> str:
     if not old:
         return text.replace(old, new)
@@ -476,19 +605,13 @@ def _safe_replace(text: str, old: str, new: str) -> str:
         return text
     if old not in new:
         return text.replace(old, new)
-    result: list[str] = []
-    position = 0
-    while position < len(text):
-        if text[position:position + len(new)] == new:
-            result.append(new)
-            position += len(new)
-        elif text[position:position + len(old)] == old:
-            result.append(new)
-            position += len(old)
-        else:
-            result.append(text[position])
-            position += 1
-    return "".join(result)
+    pattern = _safe_replace_cache.get((old, new))
+    if pattern is None:
+        pattern = re.compile(
+            "(?:{}|{})".format(re.escape(new), re.escape(old))
+        )
+        _safe_replace_cache[(old, new)] = pattern
+    return pattern.sub(lambda _match: new, text)
 
 
 def _apply_replacements(value: Any, replacements: tuple[CompiledReplacement, ...]) -> Any:
@@ -511,8 +634,14 @@ def _apply_replacements(value: Any, replacements: tuple[CompiledReplacement, ...
     return result
 
 
-def apply_bus(data: Any, compiled: CompiledBus, relative_path: str) -> BusApplyResult:
-    rules = compiled.for_file(relative_path)
+def apply_bus(
+    data: Any,
+    compiled: CompiledBus,
+    relative_path: str,
+    rules: Optional[tuple[CompiledBusRule, ...]] = None,
+) -> BusApplyResult:
+    if rules is None:
+        rules = compiled.for_file(relative_path)
     changed_paths: list[JsonPath] = []
     changed_seen: set[JsonPath] = set()
     original_values: dict[JsonPath, Any] = {}
@@ -542,8 +671,10 @@ def apply_bus(data: Any, compiled: CompiledBus, relative_path: str) -> BusApplyR
             if target_path not in original_values:
                 original_values[target_path] = old_value
             data = _set_value(data, target_path, new_value)
-            if _is_structural_change(old_value, new_value):
-                resolver.note_structural_change()
+            resolver.note_change(
+                target_path,
+                structural=_is_structural_change(old_value, new_value),
+            )
             if target_path not in changed_seen:
                 changed_seen.add(target_path)
                 changed_paths.append(target_path)
@@ -703,27 +834,68 @@ def convert_lcje_config(
     action_count = 0
     skipped = 0
     warnings: list[str] = []
-    for file_index, (raw_file, file_map) in enumerate(data.items()):
-        relative_path = _convert_lcje_file_matcher(raw_file)
-        if not relative_path:
-            warnings.append(f"文件 {raw_file} 无法解析路径，跳过")
-            skipped += 1
-            continue
-        file_matchers: list[Any] = [{"exact": relative_path}]
-        for aim_index, (raw_aim, value) in enumerate(file_map.items()):
-            raw_aim = str(raw_aim).strip()
-            if not raw_aim:
-                warnings.append(f"{raw_file} 存在空路径条目，跳过")
+    source_rule_count = 0
+    if _is_lcje_mods_config(data):
+        mods = data["mods"]
+        source_rule_count = len(mods)
+        for mod_index, mod in enumerate(mods):
+            if not isinstance(mod, dict):
+                warnings.append(f"第 {mod_index + 1} 条 LCJE 修改不是对象，跳过")
                 skipped += 1
                 continue
+            raw_file = mod.get("file")
+            raw_aim = mod.get("path")
+            if not isinstance(raw_file, str) or not raw_file.strip():
+                warnings.append(f"第 {mod_index + 1} 条 LCJE 修改缺少 file，跳过")
+                skipped += 1
+                continue
+            if not isinstance(raw_aim, str) or not raw_aim.strip():
+                warnings.append(f"第 {mod_index + 1} 条 LCJE 修改缺少 path，跳过")
+                skipped += 1
+                continue
+            if "new" not in mod:
+                warnings.append(f"第 {mod_index + 1} 条 LCJE 修改缺少 new，跳过")
+                skipped += 1
+                continue
+            relative_path = _convert_lcje_file_matcher(raw_file)
+            if not relative_path:
+                warnings.append(f"文件 {raw_file} 无法解析路径，跳过")
+                skipped += 1
+                continue
+            normalized_aim = _serialize_bus_path(
+                _parse_tiaozhua_path(raw_aim.strip())
+            )
             converted_rules.append({
-                "name": f"{relative_path} / {raw_aim}",
-                "files": file_matchers,
-                "path": _serialize_bus_path(_parse_tiaozhua_path(raw_aim)),
-                "replacements": [{"set": value}],
-                "_source_order": [file_index, aim_index],
+                "name": f"{relative_path} / {normalized_aim}",
+                "files": [{"exact": relative_path}],
+                "path": normalized_aim,
+                "replacements": [{"set": mod["new"]}],
+                "_source_order": [mod_index, 0],
             })
             action_count += 1
+    else:
+        source_rule_count = sum(len(file_map) for file_map in data.values())
+        for file_index, (raw_file, file_map) in enumerate(data.items()):
+            relative_path = _convert_lcje_file_matcher(raw_file)
+            if not relative_path:
+                warnings.append(f"文件 {raw_file} 无法解析路径，跳过")
+                skipped += 1
+                continue
+            file_matchers: list[Any] = [{"exact": relative_path}]
+            for aim_index, (raw_aim, value) in enumerate(file_map.items()):
+                raw_aim = str(raw_aim).strip()
+                if not raw_aim:
+                    warnings.append(f"{raw_file} 存在空路径条目，跳过")
+                    skipped += 1
+                    continue
+                converted_rules.append({
+                    "name": f"{relative_path} / {raw_aim}",
+                    "files": file_matchers,
+                    "path": _serialize_bus_path(_parse_tiaozhua_path(raw_aim)),
+                    "replacements": [{"set": value}],
+                    "_source_order": [file_index, aim_index],
+                })
+                action_count += 1
 
     ruleset = {
         "format": BUS_FORMAT,
@@ -736,7 +908,7 @@ def convert_lcje_config(
     }
     compile_bus_ruleset(ruleset)
     return ruleset, {
-        "source_rules": sum(len(file_map) for file_map in data.values()),
+        "source_rules": source_rule_count,
         "converted_rules": len(converted_rules),
         "converted_actions": action_count,
         "skipped": skipped,

@@ -259,15 +259,17 @@ Both paths
     → _select_enabled_rulesets()                    discard disabled rules before compilation
     → compile each enabled ruleset in original order
       → webutils/fancy/engine.py compile_rulesets()  v2 conditions/actions
-      → webutils/fancy/bus.py compile_bus_ruleset() bus selectors/replacements
+      → webutils/fancy/bus.py compile_bus_ruleset() bus selectors/replacements + exact/dynamic file index
       → CompiledRules.requires_skill_color
         → webutils/fancy/builtin_func.py SkillColorHandler.prepare() only when an enabled rule needs it
           → function_resource.py load_text_assets() (skips objects with missing/None containers)
           → fingerprinted-by-folder-name tmp/fancy/skill-colors.json cache (top-level account folders only)
     → scan language-package *.json files
       → v2/bus per-file matching and bus directory exclusions
+        → bus reuses deduplicated matcher results and exact-file indexes
       → read UTF-8-SIG JSON
       → apply_rules()/apply_bus() in ruleset order
+        → bus reuses resolved paths/string leaves and selector indexes within each file
       → compare final JSON with original and atomically replace only when changed
     → FancyRunStats                                  scanned/matched/changed/value/time/cache data
     → state-change logs via LogManager.log_modal_process() (规则集加载/编译完成/技能颜色缓存命中或重建/开始处理/完成汇总/每文件错误) —
@@ -289,7 +291,7 @@ Bus import button
   → webui/app.py LCTA_API.import_bus_rules()
   → webutils/function_fancy.py import_bus_rules_file()
     → webutils/fancy/bus.py is_bus_ruleset() or is_tiaozhua_config() or is_fl_config() or is_lcje_config()
-    → validate or mechanically convert (LCJE补丁按文件→路径→set 整值替换、FL补丁按文件→id匹配/逐位→set 整值替换转换)
+    → validate or mechanically convert (LCJE accepts both 文件→路径 maps and `{mods:[{file,path,old,new}]}` records, converting each path to an exact-file `set`; FL converts file diffs through id matching/list positions to `set` rules)
     → save disabled-by-default user ruleset under fancy/
 ```
 

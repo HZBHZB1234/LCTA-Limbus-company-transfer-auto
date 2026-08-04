@@ -6,6 +6,8 @@ from typing import List, Tuple
 TAG_PATTERN = re.compile(r'(<[^>]+>)')
 COLOR_PATTERN = re.compile(r'<color=#([a-fA-F0-9]{3,6})>(.*?)</color>', re.DOTALL)
 
+HEX_LUT = tuple(f'{value:02x}' for value in range(256))
+
 def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
     """将十六进制颜色转换为RGB值"""
     hex_color = hex_color.lstrip('#')
@@ -72,46 +74,67 @@ def apply_color_gradient_custom(text: str, start_color: str, end_color: str, gra
     """
     if not text:
         return text
-    
-    # 提取文本和标签
-    parts = extract_text_and_tags(text)
-    
-    # 计算需要渐变的字符数量（不包括标签和特殊字符）
-    char_count = sum(1 for part_type, _ in parts if part_type == 'char')
-    
-    if char_count == 0:
-        return f"<color={start_color}>{text}</color>"
-    
-    # 转换颜色
+
     start_rgb = hex_to_rgb(start_color)
     end_rgb = hex_to_rgb(end_color)
-    
-    # 构建渐变后的文本
+    sr, sg, sb = start_rgb
+    er, eg, eb = end_rgb
+
+    # 分割文本和标签
+    segments = TAG_PATTERN.split(text)
+
+    # 统计需要渐变的字符数量（不包括标签和特殊字符）
+    char_count = 0
+    for segment in segments:
+        if segment and not (segment.startswith('<') and segment.endswith('>')):
+            char_count += len(segment) - segment.count('\n') - segment.count('\t') - segment.count('\r')
+
+    if char_count == 0:
+        return f"<color={start_color}>{text}</color>"
+
+    if char_count == 1:
+        # 只有一个字符时使用起始颜色
+        hex_color = '#%02x%02x%02x' % (sr, sg, sb)
+        result_parts = []
+        for segment in segments:
+            if not segment:
+                continue
+            if segment.startswith('<') and segment.endswith('>'):
+                result_parts.append(segment)
+                continue
+            for char in segment:
+                if char in '\n\t\r':
+                    result_parts.append(char)
+                else:
+                    result_parts.append(f"<color={hex_color}>{char}</color>")
+        return ''.join(result_parts)
+
+    # 使用十六进制查找表，避免每字符执行格式说明符解析
     result_parts = []
     char_index = 0
-    
-    for part_type, content in parts:
-        if part_type == 'tag' or part_type == 'special':
-            # 直接添加标签和特殊字符
-            result_parts.append(content)
-        else:
-            # 对普通字符应用渐变
-            if char_count > 1:
-                # 使用指数函数控制渐变速度，gradient_rate越大渐变越快
-                linear_ratio = char_index / (char_count - 1)
-                # 应用渐变度参数：gradient_rate越大，ratio增长越快
-                ratio = 1 - (1 - linear_ratio) ** gradient_rate
-            else:
-                ratio = 0  # 只有一个字符时使用起始颜色
-            
-            # 计算当前字符的颜色
-            current_rgb = interpolate_color(start_rgb, end_rgb, ratio)
-            current_color = rgb_to_hex(current_rgb)
-            
-            # 为每个字符单独包装颜色标签
-            result_parts.append(f"<color={current_color}>{content}</color>")
+    denominator = char_count - 1
+
+    for segment in segments:
+        if not segment:
+            continue
+        if segment.startswith('<') and segment.endswith('>'):
+            # 标签直接添加
+            result_parts.append(segment)
+            continue
+        for char in segment:
+            if char in '\n\t\r':
+                # 特殊字符直接添加
+                result_parts.append(char)
+                continue
+            # 使用指数函数控制渐变速度，gradient_rate越大渐变越快
+            ratio = 1 - (1 - char_index / denominator) ** gradient_rate
+            r = int(sr + (er - sr) * ratio)
+            g = int(sg + (eg - sg) * ratio)
+            b = int(sb + (eb - sb) * ratio)
+            hex_color = '#' + HEX_LUT[r] + HEX_LUT[g] + HEX_LUT[b]
+            result_parts.append(f"<color={hex_color}>{char}</color>")
             char_index += 1
-    
+
     # 合并所有部分
     return ''.join(result_parts)
 

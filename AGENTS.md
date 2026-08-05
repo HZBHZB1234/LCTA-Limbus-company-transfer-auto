@@ -22,4 +22,5 @@ After completing a task with significant code changes (new/renamed files, new fe
 
 - When trying to editing `build.ps1`, go to `\prompts\build.ps1.md` to check the rules. Do not read it when not trying to editing `build.ps1`.
 - When modifying the build process (compile flags, linker options, C source structure, etc.), you MUST update both `build.ps1` AND `.github/workflows/release.yml` in sync. These two files share the same gcc compile commands and should always stay consistent.
+- When adding a new JS file under `webui/` (or moving it into the bundle scope), you MUST add it to the `js_files` list in `.github/InitCode.py` (the `js/bundle.js` bundling step). Files missing from this list are silently excluded from the packaged app, causing undefined reference errors at runtime (e.g. `quickStartManager` was undefined because `quick-start.js` was not bundled). Keep the order consistent with `<script>` order in `webui/index.html`.
 - When adding or modifying configuration items that need hover tooltips, go to `\prompts\tooltip.md` to check the rules. Do not read it when not working on tooltip-related changes.

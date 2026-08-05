@@ -235,9 +235,11 @@ js_files = [
     'js/utils.js',
     'js/api-config.js',
     'js/modals.js',
+    'js/quick-start.js',
     'js/list-managers.js',
     'js/features.js',
     'js/init.js',
+    'js/resource-updater.js',
     'js/cdn.js',
     'js/speed.js',
 ]

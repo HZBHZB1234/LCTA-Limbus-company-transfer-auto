@@ -18,9 +18,9 @@
                     <span id="ru-path-chip" class="resource-state-chip neutral">等待检测</span>
                 </div>
                 <div class="resource-path-row">
-                    <input id="ru-game-path" type="text" placeholder="请选择 Limbus Company 安装目录">
-                    <button id="ru-browse" type="button" class="action-btn">
-                        <i class="fas fa-folder-open"></i> 浏览
+                    <input id="ru-game-path" type="text" readonly placeholder="未设置，请前往设置页配置游戏目录">
+                    <button id="ru-go-settings" type="button" class="action-btn secondary">
+                        <i class="fas fa-gear"></i> 前往设置
                     </button>
                     <button id="ru-probe" type="button" class="action-btn secondary">
                         <i class="fas fa-magnifying-glass"></i> 检测
@@ -28,7 +28,7 @@
                 </div>
                 <div id="ru-probe-result" class="resource-inline-notice neutral">
                     <i class="fas fa-circle-info"></i>
-                    <span>选择目录后将验证游戏文件并读取当前 CDN 令牌。</span>
+                    <span>游戏目录与主程序共用，可在设置页修改。配置后点击检测验证游戏文件并读取当前 CDN 令牌。</span>
                 </div>
             </div>
 

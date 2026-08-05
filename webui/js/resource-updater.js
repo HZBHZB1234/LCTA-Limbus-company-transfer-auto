@@ -39,15 +39,11 @@ class ResourceUpdaterPage {
     }
 
     bindEvents() {
-        this.element('ru-browse').addEventListener('click', () => this.selectFolder());
+        this.element('ru-go-settings').addEventListener('click', () => goAndShow('settings'));
         this.element('ru-probe').addEventListener('click', () => this.probe());
         this.element('ru-start').addEventListener('click', () => this.start());
         this.element('ru-cancel').addEventListener('click', () => this.cancel());
 
-        this.element('ru-game-path').addEventListener('change', async () => {
-            await this.saveOptions();
-            this.setProbeState('neutral', '等待检测', '游戏目录已变更，请重新检测。');
-        });
         this.element('ru-localize').addEventListener('change', () => this.syncScopeState());
         this.element('ru-bundle').addEventListener('change', () => this.syncScopeState());
 
@@ -88,8 +84,12 @@ class ResourceUpdaterPage {
     }
 
     collectOptions() {
+        let gamePath = '';
+        if (typeof configManager !== 'undefined' && configManager) {
+            gamePath = configManager.getCachedValue('game_path') || '';
+        }
         return {
-            game_path: this.element('ru-game-path').value.trim(),
+            game_path: gamePath,
             enabled: this.element('ru-enabled').checked,
             localize: this.element('ru-localize').checked,
             bundle: this.element('ru-bundle').checked,
@@ -113,7 +113,6 @@ class ResourceUpdaterPage {
 
     syncConfigCache(options) {
         const values = {
-            game_path: options.game_path,
             'launcher.resource_update.enabled': options.enabled,
             'launcher.resource_update.localize': options.localize,
             'launcher.resource_update.bundle': options.bundle,
@@ -128,7 +127,6 @@ class ResourceUpdaterPage {
         }
 
         const linkedControls = {
-            'game-path': options.game_path,
             'launcher-resource-update-enabled': options.enabled,
             'launcher-resource-update-localize': options.localize,
             'launcher-resource-update-bundle': options.bundle,
@@ -142,18 +140,10 @@ class ResourceUpdaterPage {
         });
     }
 
-    async selectFolder() {
-        const selected = await pywebview.api.resource_updater_select_game_folder();
-        if (!selected) return;
-        this.element('ru-game-path').value = selected;
-        await this.saveOptions();
-        await this.probe();
-    }
-
     async probe() {
         const gamePath = this.element('ru-game-path').value.trim();
         if (!gamePath) {
-            this.setProbeState('error', '目录缺失', '请先选择 Limbus Company 安装目录。');
+            this.setProbeState('error', '目录缺失', '请先在设置页配置游戏目录。');
             return false;
         }
 
@@ -286,7 +276,7 @@ class ResourceUpdaterPage {
         this.running = value;
         this.element('ru-start').disabled = value;
         this.element('ru-cancel').disabled = !value;
-        this.element('ru-browse').disabled = value;
+        this.element('ru-go-settings').disabled = value;
         this.element('ru-probe').disabled = value;
         this.element('resource-updater-page').querySelectorAll('input, select').forEach((element) => {
             element.disabled = value;

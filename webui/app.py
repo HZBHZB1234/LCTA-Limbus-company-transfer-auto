@@ -1590,9 +1590,6 @@ class LCTA_API():
     def resource_updater_get_initial_state(self):
         return self.resource_updater_api.get_initial_state()
 
-    def resource_updater_select_game_folder(self):
-        return self.resource_updater_api.select_game_folder()
-
     def resource_updater_probe_game_dir(self, game_dir):
         return self.resource_updater_api.probe_game_dir(game_dir)
 

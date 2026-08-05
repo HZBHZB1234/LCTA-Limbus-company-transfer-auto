@@ -3,8 +3,6 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import webview
-
 from globalManagers.ConfigManager import ConfigManager
 from globalManagers.LogManager import LogManager
 
@@ -58,12 +56,6 @@ class ResourceUpdaterAPI:
             "status_text": self.status_text,
         }
 
-    def select_game_folder(self) -> str:
-        if not self._window:
-            return ""
-        selected = self._window.create_file_dialog(webview.FileDialog.FOLDER)
-        return selected[0] if selected else ""
-
     def probe_game_dir(self, game_dir: str) -> Dict[str, Any]:
         try:
             _log_manager.log("[游戏资源更新/UI] 检测游戏目录: {}".format(game_dir))
@@ -90,9 +82,6 @@ class ResourceUpdaterAPI:
             "launcher.resource_update.jobs": max(1, min(int(options.get("jobs", 8)), 32)),
             "launcher.resource_update.engine": options.get("engine", "auto"),
         }
-        game_path = str(options.get("game_path", "")).strip()
-        if game_path:
-            updates["game_path"] = game_path
         count = ConfigManager().set_batch(updates)
         _log_manager.debug(
             "[游戏资源更新/UI] 已保存页面配置: {}".format(updates)
@@ -102,7 +91,10 @@ class ResourceUpdaterAPI:
     def start_update(self, options: Dict[str, Any]) -> Dict[str, Any]:
         if self.worker and self.worker.is_alive():
             return {"success": False, "message": "更新任务正在运行"}
-        game_path = Path(str(options.get("game_path", "")).strip())
+        game_path_str = str(options.get("game_path", "")).strip()
+        if not game_path_str:
+            game_path_str = str(ConfigManager().get("game_path", "")).strip()
+        game_path = Path(game_path_str)
         update_localize = bool(options.get("localize", True))
         update_bundle = bool(options.get("bundle", True))
         languages = selected_languages(options)

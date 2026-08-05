@@ -5,6 +5,7 @@
 $ErrorActionPreference = "Continue"
 $APP_NAME = "LCTA"
 $PYTHON_VERSION = "3.9.6"
+$ARIA2_VERSION = "1.37.0"
 
 Set-Location -Path $PSScriptRoot
 $ProjectRoot = (Get-Location).Path
@@ -16,6 +17,10 @@ $PythonZipCache = "$BuildCacheDir\python-$PYTHON_VERSION-embed-amd64.zip"
 $PythonEmbedCache = "$BuildCacheDir\python-embed"
 $CCompileCache = "$BuildCacheDir\c"
 $WebuiBuildCache = "$BuildCacheDir\webui-build"
+$Aria2ZipCache = "$BuildCacheDir\aria2-$ARIA2_VERSION-win-64bit-build1.zip"
+$Aria2CacheDir = "$BuildCacheDir\aria2-$ARIA2_VERSION"
+$Aria2ExeCache = "$Aria2CacheDir\aria2c.exe"
+$Aria2LicenseCache = "$Aria2CacheDir\COPYING"
 
 foreach ($d in @($BuildCacheDir, $PythonEmbedCache, $CCompileCache)) {
     if (-not (Test-Path $d)) {
@@ -172,6 +177,44 @@ if (Test-Path $initScript) {
     }
 } else {
     Write-Host "  WARNING: InitCode.py 未找到，跳过" -ForegroundColor Yellow
+}
+
+# ---- 下载并缓存 aria2c ----
+if (-not (Test-Path $Aria2ExeCache)) {
+    Write-Host "  下载 aria2c $ARIA2_VERSION..."
+    $aria2Url = "https://github.com/aria2/aria2/releases/download/release-$ARIA2_VERSION/aria2-$ARIA2_VERSION-win-64bit-build1.zip"
+    if (-not (Test-Path $Aria2ZipCache) -or (Get-Item $Aria2ZipCache).Length -lt 1000000) {
+        Remove-Item $Aria2ZipCache -Force -ErrorAction SilentlyContinue
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $aria2Url -OutFile $Aria2ZipCache
+                if ((Get-Item $Aria2ZipCache).Length -lt 1000000) {
+                    throw "aria2 下载文件大小异常"
+                }
+                break
+            } catch {
+                Remove-Item $Aria2ZipCache -Force -ErrorAction SilentlyContinue
+                if ($attempt -eq 3) { throw }
+                Start-Sleep -Seconds (2 * $attempt)
+            }
+        }
+    }
+    $aria2ExtractTemp = "$BuildCacheDir\aria2-extract"
+    if (Test-Path $aria2ExtractTemp) { Remove-Item $aria2ExtractTemp -Recurse -Force }
+    Expand-Archive -Path $Aria2ZipCache -DestinationPath $aria2ExtractTemp -Force
+    $aria2Exe = Get-ChildItem $aria2ExtractTemp -Recurse -Filter "aria2c.exe" -File | Select-Object -First 1
+    if (-not $aria2Exe) {
+        Write-Host "  ERROR: aria2 压缩包中未找到 aria2c.exe" -ForegroundColor Red
+        exit 1
+    }
+    New-Item -ItemType Directory -Path $Aria2CacheDir -Force | Out-Null
+    Copy-Item $aria2Exe.FullName $Aria2ExeCache -Force
+    $aria2License = Get-ChildItem $aria2ExtractTemp -Recurse -Filter "COPYING" -File | Select-Object -First 1
+    if ($aria2License) { Copy-Item $aria2License.FullName $Aria2LicenseCache -Force }
+    Remove-Item $aria2ExtractTemp -Recurse -Force
+    Write-Host "  aria2c 已缓存" -ForegroundColor Green
+} else {
+    Write-Host "  aria2c 缓存命中" -ForegroundColor Green
 }
 
 # ============================================================
@@ -504,6 +547,18 @@ if (Test-Path $cfstSource) {
 } else {
     Write-Host "  WARNING: CFST/ 目录不存在，跳过（请先运行 InitCode）" -ForegroundColor Yellow
 }
+
+# ---- 复制 aria2c（官方资源预下载用） ----
+Write-Host "  复制 aria2c..."
+foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+    $destAria2 = "$dest\tools\aria2"
+    New-Item -ItemType Directory -Path $destAria2 -Force | Out-Null
+    Copy-Item $Aria2ExeCache "$destAria2\aria2c.exe" -Force
+    if (Test-Path $Aria2LicenseCache) {
+        Copy-Item $Aria2LicenseCache "$destAria2\COPYING" -Force
+    }
+}
+Write-Host "  aria2c 复制完成" -ForegroundColor Green
 
 # ---- 复制 venv（嵌入式 Python + site-packages + Scripts） ----
 Write-Host "  复制嵌入式 Python venv..."

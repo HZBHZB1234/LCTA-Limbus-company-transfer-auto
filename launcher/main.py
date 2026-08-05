@@ -167,6 +167,26 @@ def main():
             except Exception as e:
                 _log_manager.log_error(e)
 
+            try:
+                if progress and progress.is_alive():
+                    progress.update_status("正在检查游戏资源更新...")
+                from resource_updater.service import run_launcher_resource_update
+                resource_result = run_launcher_resource_update(
+                    cancel_event=pipeline.cancel_event
+                )
+                if resource_result.get("skipped"):
+                    _log_manager.log(
+                        "游戏资源预下载已跳过: {}".format(
+                            resource_result.get("reason", "unknown")
+                        )
+                    )
+                else:
+                    _log_manager.log(
+                        "游戏资源预下载结果: {}".format(resource_result)
+                    )
+            except Exception as e:
+                _log_manager.log_error(e)
+
         if not pipeline.cancel_event.is_set():
             if progress and progress.is_alive():
                 progress.update_status("正在进行CDN优选...")

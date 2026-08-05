@@ -306,7 +306,12 @@ class ConfigManager {
             'launcher-speed-factor': 'launcher.work.speed_factor',
 
             // GUI进度窗口
-            'launcher-work-gui-mode': 'launcher.work.gui_mode'
+            'launcher-work-gui-mode': 'launcher.work.gui_mode',
+            // 游戏官方资源预下载
+            'launcher-resource-update-enabled': 'launcher.resource_update.enabled',
+            'launcher-resource-update-localize': 'launcher.resource_update.localize',
+            'launcher-resource-update-bundle': 'launcher.resource_update.bundle',
+            'launcher-resource-update-engine': 'launcher.resource_update.engine'
         };
         
         this.configCache = {}; // 配置缓存

@@ -53,6 +53,12 @@ function onSectionLoaded(name) {
             if (typeof onLauncherOurplaySourceChange === 'function')
                 onLauncherOurplaySourceChange();
             break;
+        case 'resource-updater':
+            console.log('[LCTA] Init section: resource-updater');
+            if (typeof resourceUpdaterPage !== 'undefined') {
+                resourceUpdaterPage.init();
+            }
+            break;
         case 'download':
             console.log('[LCTA] Init section: download');
             if (typeof onOurplaySourceChange === 'function')

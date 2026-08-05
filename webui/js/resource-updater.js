@@ -1,0 +1,322 @@
+class ResourceUpdaterPage {
+    constructor() {
+        this.initialized = false;
+        this.initializing = false;
+        this.running = false;
+    }
+
+    element(id) {
+        return document.getElementById(id);
+    }
+
+    async init() {
+        if (this.initializing || !this.element('resource-updater-page')) return;
+        if (!window.pywebview || !window.pywebview.api) {
+            window.addEventListener('pywebviewready', () => this.init(), { once: true });
+            return;
+        }
+
+        if (this.initialized) {
+            await this.refreshState();
+            return;
+        }
+
+        this.initializing = true;
+        this.bindEvents();
+        try {
+            await this.refreshState();
+            this.initialized = true;
+        } catch (error) {
+            this.setStatus('初始化失败', 'error', error.message || String(error));
+        } finally {
+            this.initializing = false;
+        }
+    }
+
+    async refreshState() {
+        const state = await pywebview.api.resource_updater_get_initial_state();
+        this.applyInitialState(state);
+    }
+
+    bindEvents() {
+        this.element('ru-browse').addEventListener('click', () => this.selectFolder());
+        this.element('ru-probe').addEventListener('click', () => this.probe());
+        this.element('ru-start').addEventListener('click', () => this.start());
+        this.element('ru-cancel').addEventListener('click', () => this.cancel());
+
+        this.element('ru-game-path').addEventListener('change', async () => {
+            await this.saveOptions();
+            this.setProbeState('neutral', '等待检测', '游戏目录已变更，请重新检测。');
+        });
+        this.element('ru-localize').addEventListener('change', () => this.syncScopeState());
+        this.element('ru-bundle').addEventListener('change', () => this.syncScopeState());
+
+        this.element('resource-updater-page').querySelectorAll('input, select').forEach((element) => {
+            if (element.id === 'ru-game-path') return;
+            element.addEventListener('change', () => {
+                this.syncScopeState();
+                this.saveOptions();
+            });
+        });
+    }
+
+    applyInitialState(state) {
+        const config = state.config || {};
+        this.element('ru-game-path').value = state.game_path || '';
+        ['enabled', 'localize', 'bundle', 'lang_jp', 'lang_en', 'lang_kr'].forEach((key) => {
+            const element = this.element(`ru-${key.replace('_', '-')}`);
+            if (element) element.checked = !!config[key];
+        });
+        this.element('ru-jobs').value = config.jobs || 8;
+        this.element('ru-engine').value = config.engine || 'auto';
+
+        const ariaMessage = state.aria2_available
+            ? '已找到 aria2c，自动模式将优先使用。'
+            : '未找到 aria2c，自动模式将回退到内置下载器。';
+        this.element('ru-aria-status').textContent = ariaMessage;
+        this.setEngineChip(state.aria2_available);
+        this.syncScopeState();
+
+        const running = state.status === 'running';
+        this.setRunning(running);
+        this.setStatus(
+            state.status_text || '等待操作',
+            state.status || 'idle',
+            running ? '资源更新正在后台执行，请保持工具箱开启。' : '配置更新范围后即可开始手动预下载。'
+        );
+        if (this.element('ru-game-path').value && !running) this.probe();
+    }
+
+    collectOptions() {
+        return {
+            game_path: this.element('ru-game-path').value.trim(),
+            enabled: this.element('ru-enabled').checked,
+            localize: this.element('ru-localize').checked,
+            bundle: this.element('ru-bundle').checked,
+            lang_jp: this.element('ru-lang-jp').checked,
+            lang_en: this.element('ru-lang-en').checked,
+            lang_kr: this.element('ru-lang-kr').checked,
+            jobs: parseInt(this.element('ru-jobs').value, 10) || 8,
+            engine: this.element('ru-engine').value,
+        };
+    }
+
+    async saveOptions() {
+        try {
+            const options = this.collectOptions();
+            const result = await pywebview.api.resource_updater_save_options(options);
+            if (result.success) this.syncConfigCache(options);
+        } catch (error) {
+            console.error('保存资源更新配置失败:', error);
+        }
+    }
+
+    syncConfigCache(options) {
+        const values = {
+            game_path: options.game_path,
+            'launcher.resource_update.enabled': options.enabled,
+            'launcher.resource_update.localize': options.localize,
+            'launcher.resource_update.bundle': options.bundle,
+            'launcher.resource_update.lang_jp': options.lang_jp,
+            'launcher.resource_update.lang_en': options.lang_en,
+            'launcher.resource_update.lang_kr': options.lang_kr,
+            'launcher.resource_update.jobs': options.jobs,
+            'launcher.resource_update.engine': options.engine,
+        };
+        if (typeof configManager !== 'undefined' && configManager) {
+            Object.entries(values).forEach(([key, value]) => configManager.setCachedValue(key, value));
+        }
+
+        const linkedControls = {
+            'game-path': options.game_path,
+            'launcher-resource-update-enabled': options.enabled,
+            'launcher-resource-update-localize': options.localize,
+            'launcher-resource-update-bundle': options.bundle,
+            'launcher-resource-update-engine': options.engine,
+        };
+        Object.entries(linkedControls).forEach(([id, value]) => {
+            const element = document.getElementById(id);
+            if (!element) return;
+            if (element.type === 'checkbox') element.checked = !!value;
+            else element.value = value;
+        });
+    }
+
+    async selectFolder() {
+        const selected = await pywebview.api.resource_updater_select_game_folder();
+        if (!selected) return;
+        this.element('ru-game-path').value = selected;
+        await this.saveOptions();
+        await this.probe();
+    }
+
+    async probe() {
+        const gamePath = this.element('ru-game-path').value.trim();
+        if (!gamePath) {
+            this.setProbeState('error', '目录缺失', '请先选择 Limbus Company 安装目录。');
+            return false;
+        }
+
+        this.setProbeState('running', '检测中', '正在验证游戏文件并读取 CDN 令牌…');
+        try {
+            const result = await pywebview.api.resource_updater_probe_game_dir(gamePath);
+            this.setProbeState(
+                result.success ? 'success' : 'error',
+                result.success ? '目录有效' : '检测失败',
+                result.message
+            );
+            return !!result.success;
+        } catch (error) {
+            this.setProbeState('error', '检测失败', error.message || String(error));
+            return false;
+        }
+    }
+
+    async start() {
+        if (!(await this.probe())) return;
+        this.resetProgress();
+        this.setRunning(true);
+        this.setStatus('正在启动更新', 'running', '正在创建资源清单并准备下载任务。');
+
+        try {
+            const result = await pywebview.api.resource_updater_start_update(this.collectOptions());
+            if (!result.success) {
+                this.setRunning(false);
+                this.setStatus(result.message, 'error', '请检查更新范围、游戏目录和下载设置。');
+            }
+        } catch (error) {
+            this.setRunning(false);
+            this.setStatus('启动失败', 'error', error.message || String(error));
+        }
+    }
+
+    async cancel() {
+        try {
+            const result = await pywebview.api.resource_updater_cancel_update();
+            if (result.success) this.setStatus('正在取消', 'running', '正在等待当前下载任务安全停止。');
+        } catch (error) {
+            this.setStatus('取消失败', 'error', error.message || String(error));
+        }
+    }
+
+    handleEvent(event) {
+        if (!event) return;
+        if (event.type === 'progress') {
+            this.setProgress(event.channel, event.fraction, event.message);
+            this.setStatus(event.message, 'running', '资源更新正在后台执行，请保持工具箱开启。');
+            return;
+        }
+
+        if (event.type === 'complete') {
+            this.setRunning(false);
+            const status = event.status || 'error';
+            const description = status === 'success'
+                ? this.formatResult(event.result)
+                : status === 'cancelled'
+                    ? '任务已停止，已完成的文件会保留并可在下次继续使用。'
+                    : '部分资源未能完成，请前往日志页面查看详情后重试。';
+            this.setStatus(event.message, status, description);
+        }
+    }
+
+    formatResult(result) {
+        if (!result || !result.results) return '';
+        const parts = [];
+        const localize = result.results.localize;
+        const bundle = result.results.bundle;
+        if (localize) parts.push(`Localize：${localize.updated || 0} 个已更新，${localize.failed || 0} 个失败`);
+        if (bundle) parts.push(`Bundle：${bundle.updated || 0} 个已更新，${bundle.skipped || 0} 个跳过，${bundle.failed || 0} 个失败`);
+        return parts.join('；');
+    }
+
+    setEngineChip(available) {
+        const chip = this.element('ru-engine-chip');
+        chip.className = `resource-state-chip ${available ? 'success' : 'neutral'}`;
+        chip.innerHTML = available
+            ? '<i class="fas fa-bolt"></i> aria2c 已就绪'
+            : '<i class="fas fa-download"></i> 使用内置下载器';
+    }
+
+    setProbeState(type, label, message) {
+        const chip = this.element('ru-path-chip');
+        chip.className = `resource-state-chip ${type}`;
+        chip.textContent = label;
+
+        const notice = this.element('ru-probe-result');
+        notice.className = `resource-inline-notice ${type}`;
+        notice.querySelector('span').textContent = message;
+    }
+
+    setStatus(text, type, description) {
+        const normalized = ['idle', 'running', 'success', 'error', 'cancelled'].includes(type) ? type : 'idle';
+        const icons = {
+            idle: 'fa-pause',
+            running: 'fa-spinner fa-spin',
+            success: 'fa-check',
+            error: 'fa-triangle-exclamation',
+            cancelled: 'fa-ban',
+        };
+        const badge = this.element('ru-status-badge');
+        badge.className = `resource-status-badge ${normalized}`;
+        badge.innerHTML = `<i class="fas ${icons[normalized]}"></i><span>${this.escapeHtml(text)}</span>`;
+        this.element('ru-status-description').textContent = description || '';
+    }
+
+    setProgress(channel, fraction, message) {
+        if (!['manifest', 'localize', 'bundle'].includes(channel)) return;
+        if (fraction != null) {
+            const percent = Math.max(0, Math.min(100, Math.round(fraction * 100)));
+            this.element(`ru-${channel}-bar`).style.width = `${percent}%`;
+            this.element(`ru-${channel}-text`).textContent = `${percent}%`;
+        }
+        if (message) this.element(`ru-${channel}-message`).textContent = message;
+    }
+
+    resetProgress() {
+        ['manifest', 'localize', 'bundle'].forEach((channel) => {
+            this.element(`ru-${channel}-bar`).style.width = '0%';
+            this.element(`ru-${channel}-text`).textContent = '0%';
+        });
+        this.element('ru-manifest-message').textContent = '正在准备资源清单';
+        this.element('ru-localize-message').textContent = '等待下载本地化资源';
+        this.element('ru-bundle-message').textContent = '等待下载 Bundle 缓存';
+    }
+
+    setRunning(value) {
+        this.running = value;
+        this.element('ru-start').disabled = value;
+        this.element('ru-cancel').disabled = !value;
+        this.element('ru-browse').disabled = value;
+        this.element('ru-probe').disabled = value;
+        this.element('resource-updater-page').querySelectorAll('input, select').forEach((element) => {
+            element.disabled = value;
+        });
+        if (!value) this.syncScopeState();
+    }
+
+    syncScopeState() {
+        const localizeEnabled = this.element('ru-localize').checked;
+        ['ru-lang-jp', 'ru-lang-en', 'ru-lang-kr'].forEach((id) => {
+            this.element(id).disabled = this.running || !localizeEnabled;
+        });
+        this.element('ru-language-options').classList.toggle('disabled', !localizeEnabled);
+
+        const scopes = [];
+        if (localizeEnabled) scopes.push('Localize');
+        if (this.element('ru-bundle').checked) scopes.push('Bundle');
+        this.element('ru-selection-summary').textContent = scopes.length ? scopes.join(' + ') : '未选择更新内容';
+        this.element('ru-selection-summary').classList.toggle('warning', scopes.length === 0);
+    }
+
+    escapeHtml(value) {
+        const element = document.createElement('span');
+        element.textContent = value || '';
+        return element.innerHTML;
+    }
+}
+
+const resourceUpdaterPage = new ResourceUpdaterPage();
+
+window.onResourceUpdaterEvent = function (event) {
+    resourceUpdaterPage.handleEvent(event);
+};

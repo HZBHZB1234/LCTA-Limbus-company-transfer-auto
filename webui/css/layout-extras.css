@@ -384,6 +384,371 @@
     grid-column: 1 / -1;
 }
 
+/* 游戏资源更新 */
+.resource-updater-page {
+    max-width: 1320px;
+    margin: 0 auto;
+}
+
+.resource-updater-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.85fr);
+    gap: var(--spacing-lg);
+    align-items: start;
+    margin-bottom: var(--spacing-lg);
+}
+
+.resource-updater-config-column {
+    display: grid;
+    gap: var(--spacing-lg);
+    min-width: 0;
+}
+
+.resource-updater-card,
+.resource-updater-task-card {
+    overflow: hidden;
+}
+
+.resource-updater-card:hover,
+.resource-updater-task-card:hover {
+    transform: none;
+}
+
+.resource-card-heading,
+.resource-task-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.resource-card-heading .setting-title,
+.resource-task-header .setting-title {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: 0;
+}
+
+.resource-card-heading .setting-title i {
+    color: var(--color-primary);
+}
+
+.resource-card-eyebrow {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.resource-state-chip,
+.resource-selection-summary,
+.resource-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-primary);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.resource-state-chip.success,
+.resource-status-badge.success {
+    color: var(--color-success);
+    border-color: color-mix(in srgb, var(--color-success) 40%, var(--color-border));
+    background: color-mix(in srgb, var(--color-success) 10%, var(--color-bg-card));
+}
+
+.resource-state-chip.error,
+.resource-status-badge.error,
+.resource-selection-summary.warning {
+    color: var(--color-danger);
+    border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border));
+    background: color-mix(in srgb, var(--color-danger) 10%, var(--color-bg-card));
+}
+
+.resource-state-chip.running,
+.resource-status-badge.running {
+    color: var(--color-primary);
+    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+    background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-card));
+}
+
+.resource-status-badge.cancelled {
+    color: var(--color-warning);
+    border-color: color-mix(in srgb, var(--color-warning) 40%, var(--color-border));
+    background: color-mix(in srgb, var(--color-warning) 10%, var(--color-bg-card));
+}
+
+.resource-path-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--spacing-sm);
+}
+
+.resource-inline-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: var(--spacing-sm);
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-primary);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.resource-inline-notice.success {
+    color: var(--color-success);
+    border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-border));
+}
+
+.resource-inline-notice.error {
+    color: var(--color-danger);
+    border-color: color-mix(in srgb, var(--color-danger) 35%, var(--color-border));
+}
+
+.resource-inline-notice.running {
+    color: var(--color-primary);
+    border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+}
+
+.resource-scope-list {
+    display: grid;
+    gap: var(--spacing-sm);
+}
+
+.resource-scope-item {
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-primary);
+}
+
+.resource-scope-check {
+    align-items: flex-start;
+}
+
+.resource-scope-check .checkmark {
+    top: 2px;
+}
+
+.resource-scope-check strong,
+.resource-automation-row strong {
+    display: block;
+    color: var(--color-text-primary);
+    font-size: 14px;
+}
+
+.resource-scope-check small,
+.resource-automation-row small {
+    display: block;
+    margin-top: 4px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+.resource-language-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+    padding-left: 28px;
+    transition: opacity var(--transition-speed) var(--transition-easing);
+}
+
+.resource-language-grid.disabled {
+    opacity: 0.45;
+}
+
+.resource-language-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin: 0;
+    padding: 9px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-card);
+    cursor: pointer;
+}
+
+.resource-language-option input {
+    width: 15px;
+    height: 15px;
+}
+
+.resource-language-option span {
+    color: var(--color-primary);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.resource-settings-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(140px, 0.6fr);
+    gap: var(--spacing-md);
+}
+
+.resource-settings-grid .form-group {
+    margin-bottom: 0;
+}
+
+.resource-automation-row {
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--color-border-light);
+}
+
+.resource-automation-row .checkbox-container {
+    align-items: flex-start;
+}
+
+.resource-automation-row .checkmark {
+    top: 2px;
+}
+
+.resource-updater-task-card {
+    position: sticky;
+    top: 0;
+}
+
+.resource-task-description {
+    margin: -4px 0 var(--spacing-lg);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.resource-progress-list {
+    display: grid;
+    gap: var(--spacing-md);
+}
+
+.resource-progress-item {
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-primary);
+}
+
+.resource-progress-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-bottom: 9px;
+    color: var(--color-text-primary);
+    font-size: 13px;
+}
+
+.resource-progress-heading span {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.resource-progress-heading i {
+    color: var(--color-primary);
+}
+
+.resource-progress-heading strong {
+    color: var(--color-primary);
+    font-size: 12px;
+}
+
+.resource-progress-track {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-border-light);
+}
+
+.resource-progress-bar {
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+    transition: width 0.25s var(--transition-easing);
+}
+
+.resource-progress-item small {
+    display: block;
+    min-height: 18px;
+    margin-top: 8px;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.resource-task-actions {
+    display: grid;
+    grid-template-columns: auto minmax(150px, 1fr);
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-lg);
+}
+
+.resource-task-actions .action-btn,
+.resource-task-actions .primary-btn {
+    justify-content: center;
+}
+
+.resource-task-actions button:disabled,
+.resource-path-row button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+@media (max-width: 1120px) {
+    .resource-updater-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .resource-updater-task-card {
+        position: static;
+    }
+}
+
+@media (max-width: 720px) {
+    .resource-path-row,
+    .resource-settings-grid,
+    .resource-task-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .resource-path-row button,
+    .resource-task-actions button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .resource-language-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .resource-card-heading,
+    .resource-task-header {
+        flex-direction: column;
+    }
+}
+
 @media (max-width: 768px) {
     .settings-grid .card-wide,
     .settings-grid .card-full {

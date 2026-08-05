@@ -223,6 +223,49 @@
             </div>
         </div>
     </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">游戏官方资源预下载</h3>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-resource-update-enabled">
+                <span class="checkmark"></span>
+                游戏版本更新后自动预下载资源
+            </label>
+            <small class="form-hint">Launcher 会比较 LimbusCompany.exe 的 SHA-256，仅在游戏版本变化后执行，不需要联网检查版本。</small>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-resource-update-localize" checked>
+                <span class="checkmark"></span>
+                更新 localize
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-resource-update-bundle" checked>
+                <span class="checkmark"></span>
+                更新 Bundle 缓存
+            </label>
+        </div>
+        <div class="form-group">
+            <label for="launcher-resource-update-engine">下载引擎:</label>
+            <div class="select-wrapper">
+                <select id="launcher-resource-update-engine">
+                    <option value="auto">自动（优先随包 aria2c）</option>
+                    <option value="aria2">强制 aria2c</option>
+                    <option value="builtin">Python 内置下载器</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="form-group">
+            <button type="button" class="action-btn secondary" onclick="goAndShow('resource-updater')">
+                <i class="fas fa-arrow-right"></i> 前往资源更新页面
+            </button>
+            <small class="form-hint">可手动选择语言、并发数和更新内容，手动更新不受版本指纹限制。</small>
+        </div>
+    </div>
 </div>
 
 <div class="action-area">

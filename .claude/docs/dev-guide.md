@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-07-28 -->
+<!-- Last updated: 2026-08-05 -->
 
 ## How to Run
 
@@ -21,7 +21,7 @@ python start_webui.py -launcher
 .\build.ps1
 ```
 
-6-step pipeline: InitCode → C compilation (MinGW-w64) → embedded Python → dist assembly → update package clean → ZIP packaging.
+6-step pipeline: InitCode + pinned aria2c acquisition → C compilation (MinGW-w64) → embedded Python → dist assembly → update package clean → ZIP packaging.
 
 Outputs:
 - `LCTA-Portable-Full.zip` — normal release
@@ -29,6 +29,8 @@ Outputs:
 - `LCTA-update.zip` — source update package
 
 Requirements: PowerShell 5.0+, MinGW-w64 (optional, skips if unavailable), Python 3.9.6, network.
+
+The build downloads aria2 1.37.0 from the official GitHub release, retries and rejects undersized responses, then places `aria2c.exe` (and `COPYING` when present) under `tools/aria2/` in all three artifacts. Runtime `engine=auto` falls back to urllib when aria2c is unavailable in a source checkout.
 
 ## How to Test
 
@@ -41,9 +43,12 @@ pytest tests/test_config.py
 
 # Run text-beautification engine coverage
 pytest tests/test_fancy_conditions.py tests/test_fancy_v2.py tests/test_fancy_performance.py
+
+# Run official-resource updater coverage
+pytest tests/test_resource_updater.py
 ```
 
-Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`
+Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`, `tests/test_resource_updater.py`
 
 ## Project Conventions
 
@@ -53,6 +58,9 @@ Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_w
 - **Bridge pattern**: New JS-accessible methods go in `webui/app.py` `LCTA_API` class; JS calls via `pywebview.api.<method>()`
 - **Public API**: New webutils functions must be exported in `webutils/__init__.py`
 - **Launcher license scope**: `launcher/` is GPL-3.0-licensed, but its Python modules currently reuse shared `webutils/`, `webFunc/`, and `globalManagers/` code; do not assume import isolation
+- **Official resource state**: Launcher uses the local SHA-256 of `LimbusCompany.exe`; fingerprints and token-scoped download caches live under `%LOCALAPPDATA%/LCTA/resource-updater/`, not the packaged code directory
+- **Official resource logging**: Backend resource-update diagnostics must go through the `LogManager` singleton; the updater page shows task status/progress but does not maintain a separate UI log card
+- **Official resource UI**: Keep the manual updater inside the main SPA (`sections/resource-updater.html` + `js/resource-updater.js`); `LCTA_API` delegates prefixed bridge calls to the shared `ResourceUpdaterAPI`
 - **Knowledge-base maintenance**: Significant features, files, entry points, dependencies, or structural changes must update the relevant `.claude/docs/*.md` file and its `Last updated` date
 - **Agent instruction source**: Edit `CLAUDE.md`, then synchronize the identical content to `AGENTS.md`
 
@@ -115,4 +123,5 @@ Release workflow: windows-latest runner, MSYS2/MinGW-w64 for C compilation, mirr
 - **Build/release sync** — changes to gcc flags or C structure must update BOTH `build.ps1` AND `.github/workflows/release.yml`
 - **Instruction-file sync** — `CLAUDE.md` and `AGENTS.md` must remain byte-for-byte identical; use the repository hook or copy manually before commit
 - **etcpak==0.9.8 pinned** — version 0.9.9 crashes
+- **aria2 1.37.0 pinned** — local and CI builds must keep the same official release URL, retry/size validation, and `tools/aria2/` artifact layout
 - **GPL-3.0 launcher scope** — treat `launcher/` as separately licensed even though its Python implementation imports shared root modules

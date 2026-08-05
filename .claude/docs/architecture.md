@@ -1,10 +1,10 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-08-03 -->
+<!-- Last updated: 2026-08-05 -->
 
 ## Project Purpose
 
-LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive desktop toolkit for the game *Limbus Company*. Core feature: **Chinese localization/translation management** with automatic LLM-based translation updates. Also provides CDN optimization (with cache TTL to avoid redundant speed tests), an integrated game launcher with mod support, 调爪 text modification package download/import, manual update from local zip, and various game optimization tools. Version 5.0.0, MIT-licensed (launcher/ is GPL-3.0).
+LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive desktop toolkit for the game *Limbus Company*. Core feature: **Chinese localization/translation management** with automatic LLM-based translation updates. Also provides CDN optimization (with cache TTL to avoid redundant speed tests), an integrated game launcher with mod support, official localize/AssetBundle pre-download, 调爪 text modification package download/import, manual update from local zip, and various game optimization tools. Version 5.0.0, MIT-licensed (launcher/ is GPL-3.0).
 
 ## Tech Stack
 
@@ -44,6 +44,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │  webutils/fancy/engine.py compiled v2 rule engine    │
 │  webutils/fancy/bus.py     bus/import rule engine     │
 │  webutils/function_fancy.py file orchestration/stats │
+│  resource_updater/         official resource updater  │
 ├─────────────────────────────────────────────────────┤
 │                INFRASTRUCTURE                        │
 │  webFunc/                 GitHub API, file upload,   │
@@ -56,7 +57,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 └─────────────────────────────────────────────────────┘
 ```
 
-## The 6 Source Directories
+## The 7 Source Directories
 
 | Directory | Role |
 |-----------|------|
@@ -66,6 +67,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `translateFunc/` | Translation engine: multi-stage LLM pipeline with proper noun matching |
 | `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py` |
 | `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey, optional WinForms GUI progress window |
+| `resource_updater/` | Official game resource updater: CDN token extraction, localize ZIP deployment, Unity Bundle cache population, aria2 RPC, Launcher fingerprint state, and the main-window page API |
 
 ## Design Patterns
 
@@ -79,15 +81,18 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Factory** | `launcher/updates.py` | Update objects for LLC, OurPlay, Machine translation — each implements a common interface |
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |
 | **Pipeline** | `launcher/pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline (init→check_update→cdn→prepare_mod→launch→running→exit). Modules register callbacks per phase via `on(phase, callback)`; `cancel_event` supports GUI-initiated shutdown.
+| **Fingerprint Gate** | `resource_updater/service.py` | Local SHA-256 of `LimbusCompany.exe` gates Launcher pre-download without an online version check; successful resource scopes are persisted and merged so partial manual runs do not suppress missing work |
 | **Registry + Interface** | `webutils/drop/` | `DropFileHandler` 接口（检测 + 执行 + 显示名收敛于单类）; `DropFileHandlerRegistry` 按容器类型（zip/folder/json/path）有序检测、按类型分派执行，兜底 `invalid` |
 
 ## Key Interfaces
 
 | Interface | File | Role |
 |-----------|------|------|
-| `LCTA_API` | `webui/app.py` | Central hub: ~1570 lines, bridges all backend features to JS frontend. Includes `get_startup_data()` for consolidated frontend init, `open_rule_editor()` / `open_quick_editor()` to spawn editor windows with theme injection, `sync_theme_to_rule_editor()` for live cross-window theme sync, and redesigned drag-drop file handling |
+| `LCTA_API` | `webui/app.py` | Central hub: bridges backend features to the SPA, owns the main-window `ResourceUpdaterAPI`, includes `get_startup_data()` for consolidated frontend init, opens editor windows with theme injection, and handles redesigned drag-drop file flows |
 | `RuleEditorAPI` | `webui/app.py` | Secondary pywebview bridge for the rule editor window: wraps `webutils/rule_editor/` methods (file browser, rules CRUD, rule building, validation, smart analysis), plus `get_config_value()` for cross-window config queries (e.g. theme). Instantiated as `js_api=RuleEditorAPI()` in a separate `webview.create_window()` call |
 | `QuickEditorAPI` | `webui/app.py` | Pywebview bridge for the quick editor window: wraps `webutils/rule_editor/quick.py` methods (diff_json, load/save/apply_quick_edits) plus shared methods from `webutils/rule_editor/browser.py` (file browser, search). Instantiated as `js_api=QuickEditorAPI()` in `open_quick_editor()` |
+| `ResourceUpdaterAPI` | `resource_updater/web_api.py` | Resource-update controller owned by `LCTA_API`. Probes game files, persists updater options, runs/cancels the worker thread, and emits per-channel progress into the main SPA's `resource-updater.js` controller |
+| `ResourceUpdater` | `resource_updater/core.py` | Extracts S/L CDN tokens, downloads token-scoped localize ZIPs, parses remote/fallback catalog data, populates Unity cache entries, and selects bundled aria2c or the built-in downloader |
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |
 | `TranslationPipeline` | `translateFunc/pipeline.py` | Orchestrates the 6-stage LLM translation pipeline |
 | `CompiledRules` / `ApplyResult` | `webutils/fancy/engine.py` | Immutable compiled beautification rules plus per-file changed-path results; exposes `requires_skill_color` so resource extraction is prepared only when an enabled rule needs it |
@@ -101,13 +106,14 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 - **Python ↔ JS**: `pywebview` exposes `LCTA_API` instance as `window.pywebview.api` in JS. JS calls Python methods, Python calls JS via `webview.windows[0].evaluate_js()`
 - **HTML <> JS**: Section HTML fragments in `webui/sections/*.html` are lazy-loaded by `preload.js` via `loadSection()` on first navigation; `onSectionLoaded()` callback re-runs per-section initialization (config, tooltips, toggle funcs, list manager DOM refs, select box values). Markdown assets loaded on-demand with fetch-caching via `_loadedMarkdowns`; welcome content deferred via `_pendingWelcomeContent`
 - **C → Python**: Native `launcher.c` compiled with `-mwindows` (GUI subsystem, no console). Python process always started with `CREATE_NO_WINDOW`; stdout/stderr captured via pipe. If Python exits with non-zero code, C layer allocates an error console to display captured output. Console management (AllocConsole for legacy mode, GUI window for gui_mode) handled by `start_webui.py` before importing launcher modules.
-- **Python → C binaries**: Subprocess calls to `CFST/cfst.exe` (CloudflareSpeedTest) and `7z.exe` (7-Zip)
+- **Python → C binaries**: Subprocess calls to `CFST/cfst.exe` (CloudflareSpeedTest), `tools/aria2/aria2c.exe` (official resource downloads), and `7z.exe` (7-Zip)
 
 ## External Binaries
 
 | Binary | Source | Purpose |
 |--------|--------|---------|
 | `cfst.exe` v2.3.5 | Bundled in `CFST/` | Cloudflare CDN speed testing |
+| `aria2c.exe` v1.37.0 | Downloaded during build into `tools/aria2/` | Multi-connection localize and AssetBundle downloads through localhost JSON-RPC; built-in urllib fallback remains available |
 | `7z.exe` | Downloaded at runtime | Archive extraction |
 | Embedded Python 3.9.6 | Downloaded during build | Bundled into release packages |
 | `openspeedy` DLL | pip package | DLL injection for game speed acceleration |

@@ -1,0 +1,187 @@
+<div id="resource-updater-page" class="resource-updater-page">
+    <div class="section-header">
+        <h2 class="section-title">
+            <i class="fas fa-cubes"></i>
+            游戏资源更新
+        </h2>
+        <p class="section-subtitle">提前下载官方 Localize 与 AssetBundle，减少游戏版本更新后的首次加载等待。</p>
+    </div>
+
+    <div class="resource-updater-layout">
+        <div class="resource-updater-config-column">
+            <div class="setting-card resource-updater-card">
+                <div class="resource-card-heading">
+                    <div>
+                        <span class="resource-card-eyebrow">目标位置</span>
+                        <h3 class="setting-title"><i class="fas fa-folder-open"></i> 游戏目录</h3>
+                    </div>
+                    <span id="ru-path-chip" class="resource-state-chip neutral">等待检测</span>
+                </div>
+                <div class="resource-path-row">
+                    <input id="ru-game-path" type="text" placeholder="请选择 Limbus Company 安装目录">
+                    <button id="ru-browse" type="button" class="action-btn">
+                        <i class="fas fa-folder-open"></i> 浏览
+                    </button>
+                    <button id="ru-probe" type="button" class="action-btn secondary">
+                        <i class="fas fa-magnifying-glass"></i> 检测
+                    </button>
+                </div>
+                <div id="ru-probe-result" class="resource-inline-notice neutral">
+                    <i class="fas fa-circle-info"></i>
+                    <span>选择目录后将验证游戏文件并读取当前 CDN 令牌。</span>
+                </div>
+            </div>
+
+            <div class="setting-card resource-updater-card">
+                <div class="resource-card-heading">
+                    <div>
+                        <span class="resource-card-eyebrow">更新范围</span>
+                        <h3 class="setting-title"><i class="fas fa-layer-group"></i> 资源类型</h3>
+                    </div>
+                    <span id="ru-selection-summary" class="resource-selection-summary">Localize + Bundle</span>
+                </div>
+
+                <div class="resource-scope-list">
+                    <div class="resource-scope-item">
+                        <div class="resource-scope-main">
+                            <label class="checkbox-container resource-scope-check">
+                                <input id="ru-localize" type="checkbox" checked>
+                                <span class="checkmark"></span>
+                                <span>
+                                    <strong>Localize 本地化资源</strong>
+                                    <small>下载并部署官方语言文本资源。</small>
+                                </span>
+                            </label>
+                        </div>
+                        <div id="ru-language-options" class="resource-language-grid">
+                            <label class="resource-language-option">
+                                <input id="ru-lang-jp" type="checkbox" checked>
+                                <span>JP</span> 日文
+                            </label>
+                            <label class="resource-language-option">
+                                <input id="ru-lang-en" type="checkbox" checked>
+                                <span>EN</span> 英文
+                            </label>
+                            <label class="resource-language-option">
+                                <input id="ru-lang-kr" type="checkbox" checked>
+                                <span>KR</span> 韩文
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="resource-scope-item">
+                        <div class="resource-scope-main">
+                            <label class="checkbox-container resource-scope-check">
+                                <input id="ru-bundle" type="checkbox" checked>
+                                <span class="checkmark"></span>
+                                <span>
+                                    <strong>AssetBundle 缓存</strong>
+                                    <small>将官方 Bundle 预下载到 Unity 缓存，降低首次进入内容时的等待。</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="setting-card resource-updater-card">
+                <div class="resource-card-heading">
+                    <div>
+                        <span class="resource-card-eyebrow">下载策略</span>
+                        <h3 class="setting-title"><i class="fas fa-sliders"></i> 性能与自动化</h3>
+                    </div>
+                    <span id="ru-engine-chip" class="resource-state-chip neutral">
+                        <i class="fas fa-circle-notch"></i>
+                        检测下载引擎
+                    </span>
+                </div>
+                <div class="resource-settings-grid">
+                    <div class="form-group">
+                        <label for="ru-engine">下载引擎</label>
+                        <div class="select-wrapper">
+                            <select id="ru-engine">
+                                <option value="auto">自动（优先随包 aria2c）</option>
+                                <option value="aria2">强制 aria2c</option>
+                                <option value="builtin">Python 内置下载器</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <small id="ru-aria-status" class="form-hint"></small>
+                    </div>
+                    <div class="form-group">
+                        <label for="ru-jobs">并发任务数</label>
+                        <input id="ru-jobs" type="number" min="1" max="32" value="8">
+                        <small class="form-hint">网络不稳定时可适当降低，推荐 8。</small>
+                    </div>
+                </div>
+                <div class="resource-automation-row">
+                    <label class="checkbox-container">
+                        <input id="ru-enabled" type="checkbox">
+                        <span class="checkmark"></span>
+                        <span>
+                            <strong>Launcher 检测到游戏版本变化后自动预下载</strong>
+                            <small>通过 LimbusCompany.exe 的 SHA-256 判断，不需要联网检查版本。</small>
+                        </span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <aside class="setting-card resource-updater-task-card">
+            <div class="resource-task-header">
+                <div>
+                    <span class="resource-card-eyebrow">当前任务</span>
+                    <h3 class="setting-title">更新进度</h3>
+                </div>
+                <span id="ru-status-badge" class="resource-status-badge idle">
+                    <i class="fas fa-pause"></i>
+                    <span>等待操作</span>
+                </span>
+            </div>
+            <p id="ru-status-description" class="resource-task-description">配置更新范围后即可开始手动预下载。</p>
+
+            <div class="resource-progress-list">
+                <div class="resource-progress-item" data-channel="manifest">
+                    <div class="resource-progress-heading">
+                        <span><i class="fas fa-list-check"></i> 资源清单</span>
+                        <strong id="ru-manifest-text">0%</strong>
+                    </div>
+                    <div class="resource-progress-track">
+                        <div id="ru-manifest-bar" class="resource-progress-bar"></div>
+                    </div>
+                    <small id="ru-manifest-message">等待生成下载清单</small>
+                </div>
+                <div class="resource-progress-item" data-channel="localize">
+                    <div class="resource-progress-heading">
+                        <span><i class="fas fa-language"></i> Localize</span>
+                        <strong id="ru-localize-text">0%</strong>
+                    </div>
+                    <div class="resource-progress-track">
+                        <div id="ru-localize-bar" class="resource-progress-bar"></div>
+                    </div>
+                    <small id="ru-localize-message">等待下载本地化资源</small>
+                </div>
+                <div class="resource-progress-item" data-channel="bundle">
+                    <div class="resource-progress-heading">
+                        <span><i class="fas fa-boxes-stacked"></i> AssetBundle</span>
+                        <strong id="ru-bundle-text">0%</strong>
+                    </div>
+                    <div class="resource-progress-track">
+                        <div id="ru-bundle-bar" class="resource-progress-bar"></div>
+                    </div>
+                    <small id="ru-bundle-message">等待下载 Bundle 缓存</small>
+                </div>
+            </div>
+
+            <div class="resource-task-actions">
+                <button id="ru-cancel" type="button" class="action-btn danger" disabled>
+                    <i class="fas fa-stop"></i> 取消任务
+                </button>
+                <button id="ru-start" type="button" class="primary-btn">
+                    <i class="fas fa-cloud-arrow-down"></i> 开始更新
+                </button>
+            </div>
+        </aside>
+    </div>
+
+</div>

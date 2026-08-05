@@ -117,6 +117,16 @@
             "speed_factor": "str",
             "gui_mode": "bool"
         },
+        "resource_update": {
+            "enabled": "bool",
+            "localize": "bool",
+            "bundle": "bool",
+            "lang_jp": "bool",
+            "lang_en": "bool",
+            "lang_kr": "bool",
+            "jobs": "int",
+            "engine": ["auto", "aria2", "builtin"]
+        },
         "last_install": {
             "llc": "str",
             "ourplay": "str",

@@ -41,6 +41,7 @@ from webutils.function_speed import (
     InjectionError,
     SpeedRangeError,
 )
+from resource_updater.web_api import ResourceUpdaterAPI
 
 class CancelRunning(Exception):
     pass
@@ -55,6 +56,7 @@ class LCTA_API():
 
     def __init__(self):
         self._window: webview.Window = None
+        self.resource_updater_api = ResourceUpdaterAPI()
         # 初始化单例管理器
         self.log_manager = LogManager()
         ConfigManager()
@@ -177,6 +179,7 @@ class LCTA_API():
         
     def set_window(self, window):
         self._window = window
+        self.resource_updater_api.set_window(window)
 
     def get_startup_data(self):
         """一次性返回启动所需的所有数据，减少多次 pywebview.api 桥接往返"""
@@ -1583,6 +1586,24 @@ class LCTA_API():
                     pass
 
         window.events.closed += remove_window
+
+    def resource_updater_get_initial_state(self):
+        return self.resource_updater_api.get_initial_state()
+
+    def resource_updater_select_game_folder(self):
+        return self.resource_updater_api.select_game_folder()
+
+    def resource_updater_probe_game_dir(self, game_dir):
+        return self.resource_updater_api.probe_game_dir(game_dir)
+
+    def resource_updater_save_options(self, options):
+        return self.resource_updater_api.save_options(options)
+
+    def resource_updater_start_update(self, options):
+        return self.resource_updater_api.start_update(options)
+
+    def resource_updater_cancel_update(self):
+        return self.resource_updater_api.cancel_update()
 
     def sync_theme_to_quick_editor(self, theme):
         """推送主题变更到所有打开的简易编辑器窗口"""

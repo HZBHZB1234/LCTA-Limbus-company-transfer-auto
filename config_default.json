@@ -117,6 +117,16 @@
             "speed_factor": "2.0",
             "gui_mode": false
         },
+        "resource_update": {
+            "enabled": false,
+            "localize": true,
+            "bundle": true,
+            "lang_jp": true,
+            "lang_en": true,
+            "lang_kr": true,
+            "jobs": 8,
+            "engine": "auto"
+        },
         "last_install": {
             "llc": "0",
             "ourplay": "0",

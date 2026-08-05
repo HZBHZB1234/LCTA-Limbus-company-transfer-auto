@@ -12,6 +12,7 @@
 | `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
 | `globalManagers/` | Cross-cutting singletons | 2 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
+| `resource_updater/` | Official localize/Bundle updater and Launcher fingerprint gate | 4 |
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
 | `fancy/` | User rule sets (one JSON file per ruleset) | auto-created |
 | `tests/` | Pytest test suite | 23 Python files |
@@ -32,21 +33,22 @@
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core** pywebview bridge. Includes the main `LCTA_API` (exposes `save_ruleset` class method so the Fancy page's 保存当前/保存全部 persist to `fancy/`, plus `check_fancy_marker` for second-run beautification confirmation), plus `RuleEditorAPI`, `QuickEditorAPI`, and read-only `TranslationLogViewerAPI`; exposes bus-rule multi-file import, spawns secondary windows, and synchronizes light/dark/purple themes |
-| `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
+| `app.py` | **Core** pywebview bridge. Includes the main `LCTA_API`, owns the shared `ResourceUpdaterAPI` used by the in-app resource page, plus `RuleEditorAPI`, `QuickEditorAPI`, and read-only `TranslationLogViewerAPI`; exposes bus-rule multi-file import, spawns editor/viewer windows, and synchronizes light/dark/purple themes |
+| `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/`; the 游戏资源更新 sidebar item is an ordinary SPA route |
 | `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器. Sidebar search input filters filenames/categories while typing and runs full-content search on Enter or the search button. File-edit tab: VSCode-style CodeMirror 6 editor with find/replace (Ctrl+F/H), match highlighting, dirty state indicator, status bar, change tracking, and smart ruleset generation. Ruleset-edit tab: simple form + advanced JSON editors for ruleset CRUD. Theme syncs with main app window (light/dark/purple) |
 | `quick-editor.html` | Standalone pywebview page for the 简易翻译编辑器. Simpler than rule-editor: sidebar file browser (categorized, searchable) + CodeMirror 6 JSON editor + bottom change list panel. Changes recorded as `{file, path, old, new}`, saved with derived bus `set` rules to fixed `fancy/_quick_edits.json`, and shown read-only in the main Fancy list |
 | `translation-log-viewer.html` | Standalone read-only translation diagnostic viewer. Opens one user-selected current `schema_version: 2` JSONL dump and provides structured filters, pagination, lazy full-record details, copy, refresh, and filtered export |
 | `css/base.css` | Base styling with 3 theme definitions (light/dark/purple) and CSS custom properties |
 | `css/components.css` | Component-specific styles: cards, buttons, forms, progress bars, modals |
-| `css/layout-extras.css` | Layout utilities, modals, drawers, scrollbars, responsive breakpoints. Now also loaded by rule-editor.html |
+| `css/layout-extras.css` | Layout utilities, modals, drawers, scrollbars, responsive breakpoints, and the two-column responsive layout for the resource updater page. Also loaded by rule-editor.html |
 | `css/rule-editor.css` | Rule editor styles: sidebar+main+bottom panel layout, VSCode-style find bar, bounded pointer-drag search panel with touch handling, data cards, smart-gen dialog (V1/V2/V3 with merge connectors), tiered scope options, editor status bar, match highlights, toasts, per-theme colors |
 | `css/quick-editor.css` | Quick editor styles: 3-panel flex layout (sidebar+main+changes), category groups with collapsible headers, file item active/hover states, toolbar buttons, change list cards with old→new diff display, resize handles, batch replace dialog, per-theme color variables |
 | `css/translation-log-viewer.css` | Three-column diagnostic viewer layout, filters, record table, collapsible detail cards, responsive detail panel, and theme-aware status styling |
 | `js/core.js` | Core framework: API binding, event system, navigation |
+| `js/resource-updater.js` | In-app resource updater page controller: refreshes persisted state on navigation, synchronizes shared Launcher config, probes the game directory, starts/cancels work, and renders channel progress/log events from `ResourceUpdaterAPI` |
 | `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip, FancyManager (saveAll now persists to `fancy/` folder via `pywebview.api.save_ruleset()`), `openRuleEditor()` global function |
 | `js/init.js` | Initialization and bootstrap: uses single `get_startup_data()` call; welcome content deferred via `_pendingWelcomeContent` for lazy section loading compatibility |
-| `js/utils.js` | Navigation, encryption, sidebar search; `initNavigation` async handler with `await loadSection()`, `goAndShow` async for lazy section loading |
+| `js/utils.js` | Navigation, encryption, and sidebar search; all ordinary tools, including 游戏资源更新, use lazy SPA sections through `await loadSection()` |
 | `js/modals.js` | Modal dialog management, markdown content loader with `_loadedMarkdowns` cache, and toggle functions (all null-guarded for lazy section loading safety) |
 | `js/quick-start.js` | Three-step first-use flow: choose one of four goals, check only goal-specific settings, save ordinary config where needed, then jump directly to the target feature page; no wizard progress/config schema |
 | `js/api-config.js` | API configuration page logic; container-not-found logs suppressed for lazy loading compatibility |
@@ -56,9 +58,9 @@
 | `js/rule-editor.js` | Rule editor frontend logic: two main mode tabs (file-edit / ruleset-edit). Sidebar typing performs local filename/category filtering; explicit search performs asynchronous full-content search with request IDs so stale results cannot overwrite newer searches. CodeMirror find panels use pointer capture, animation-frame transforms, boundary clamping, and cross-tab position restoration. File editing, JSON diff tracking, batch replace, ruleset CRUD, templates, validation, and V1/V2/V3 smart generation remain in this module |
 | `js/quick-editor.js` | Quick editor frontend logic (~800 lines): file browser with category grouping, CodeMirror 6 JSON editing, `diff_json`-based change tracking (`recordChanges()`), edit list rendering with per-item delete, search across files by keyword with drill-down, batch replace dialog, resize handle drag, theme sync with main window, Ctrl+S to record changes |
 | `js/translation-log-viewer.js` | Translation dump viewer frontend: native file selection, manual reread, structured filters, pagination, lazy detail rendering, clipboard copy, and filtered JSONL export; no directory scan or content search |
-| `sections/preload.js` | Lazy section loader: preloads only dashboard at startup, fetches others on first navigation via `loadSection()`; `onSectionLoaded()` callback re-runs per-section init (toggle funcs, list manager refs, select box values, DOM ref rebuilds) |
-| `sections/*.html` | 18 individual section HTML fragments (dashboard, translate, install, etc.) |
-| `guide/*.md` | 18 in-app user guide pages (one per feature tab) |
+| `sections/preload.js` | Lazy section loader: preloads only dashboard at startup, fetches others on first navigation via `loadSection()`; `onSectionLoaded()` initializes the embedded resource updater and other per-section controllers |
+| `sections/*.html` | 19 individual section HTML fragments, including `resource-updater.html` with game path, update scope, download strategy, progress, actions, and logs |
+| `guide/*.md` | 19 in-app user guide pages (one per feature tab, including the embedded resource updater) |
 | `assets/update.md` | Release changelog (v5.0.0+) |
 | `assets/LCTA-AU.md` | Auto-update system documentation |
 | `assets/firstUse.md` | Short first-use welcome with direct entry to the three-step quick-start flow |
@@ -164,6 +166,15 @@ Standalone library with own `__init__.py` public API.
 | `gui_progress.py` | WinForms companion window for GUI launcher mode: phase indicator (init→update→cdn→mod→launch→running), status label, progress bar, collapsible log area, game-running info display (PID + uptime + hotkey hints). `register_to_pipeline()` wires GUI to `LaunchPipeline` phases; `FormClosing` handler shows confirmation dialog and sets `cancel_event` on confirm |
 | `pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline: `on(phase, callback)` for module registration, `emit(phase, **kwargs)` to trigger all callbacks. Defines 7 phases (`PHASE_INIT` through `PHASE_EXIT`). `cancel_event` (threading.Event) supports GUI-initiated abort. `context` dict shares state (steam_argv, game_process, game_pid) across phases |
 
+## resource_updater/ — Official Game Resource Updater
+
+| File | Purpose |
+|------|---------|
+| `core.py` | Core updater: validates game files, extracts S/L CDN tokens and the real remote catalog URL, uses the game-compatible Unity request headers, hashes `LimbusCompany.exe`, parses Bundle names/cache keys, downloads token-scoped localize ZIPs, safely deploys localize files, populates Unity cache entries, removes failed Bundle entry directories, logs through `LogManager`, and manages bundled aria2c JSON-RPC with urllib fallback |
+| `service.py` | Shared configuration/state service. Stores Launcher state under `%LOCALAPPDATA%/LCTA/resource-updater/launcher-state.json`, compares the local `LimbusCompany.exe` SHA-256 fingerprint, checks whether prior partial runs cover current configured scopes, and records successful manual/Launcher work |
+| `web_api.py` | Main-window resource updater controller. `LCTA_API` delegates prefixed bridge methods to it; it handles folder selection/probing, option persistence, worker lifecycle, cancellation, progress events, success-state recording, and lifecycle/error logging through `LogManager` |
+| `__init__.py` | Public resource updater exports used by Launcher and tests |
+
 ## Import Dependency Graph
 
 ```
@@ -195,6 +206,12 @@ launcher/main.py
   → launcher/updates.py (reuses shared webutils/webFunc install, download and beautification helpers)
   → launcher/game_launch.py
   → launcher/cdn.py
+  → resource_updater/service.py (fingerprint-gated official localize/Bundle pre-download)
+
+resource_updater/web_api.py
+  → resource_updater/core.py (manual update worker)
+  → resource_updater/service.py (config and successful-scope state)
+  → globalManagers/ConfigManager.py
 
 Note: `launcher/` is separately GPL-3.0-licensed, but the current Python implementation is not import-isolated: launcher modules directly reuse `webutils/`, `webFunc/`, and `globalManagers/`.
 ```

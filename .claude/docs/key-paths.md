@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-04 -->
+<!-- Last updated: 2026-08-05 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -132,7 +132,9 @@ Launcher mode: start_webui.py -launcher
       pipeline.emit(PHASE_INIT)         → GUI shows phase indicator
     Phase check_update / cdn:
       → launcher/main.py main_pre()     → launcher/updates.py (Factory pattern)
-                                        → launcher/cdn.py (CDN optimize with cache TTL)
+      → resource_updater/service.py     compare SHA-256 fingerprint and configured completed scopes
+        → resource_updater/core.py      download official localize ZIPs + populate Unity Bundle cache
+      → launcher/cdn.py (CDN optimize with cache TTL)
       pipeline.emit(PHASE_CDN)
     Phase prepare_mod (if enabled):
       pipeline.emit(PHASE_PREPARE_MOD)  → launcher/game_launch.py prepare_mod()
@@ -312,6 +314,12 @@ Key launcher config items:
   launcher.work.cdn_optimize (bool)     auto CDN optimize on launch
   launcher.work.cdn_auto_apply (bool)   auto write optimal IP to hosts
   launcher.work.cdn_cache_ttl (str)     cache validity in hours (0 = always retest)
+  launcher.resource_update.enabled      enable fingerprint-gated official resource pre-download
+  launcher.resource_update.localize     update official localize files
+  launcher.resource_update.bundle       pre-populate Unity AssetBundle cache
+  launcher.resource_update.lang_*       selected jp/en/kr localize scopes
+  launcher.resource_update.jobs         concurrent download count
+  launcher.resource_update.engine       auto / aria2 / builtin
 
 Validate: config_check.json         JSON schema mapping keys → types ("str", "bool", etc.)
           config_default.json       default values template
@@ -457,3 +465,40 @@ User opens 「快速上手」
 No Markdown page parser, version tracking, dependency graph, reset API, or wizard-only config is involved.
 
 Files: `webui/js/quick-start.js`, `webui/sections/elder.html`, `webui/js/utils.js`, `webui/sections/preload.js`, `webui/js/core.js`, `webui/assets/firstUse.md`, `webui/guide/elder.md`
+
+## 16. Official Resource Update — Manual and Launcher Paths
+
+```
+Manual path:
+  Sidebar 「游戏资源更新」 or Launcher config → 「前往资源更新页面」
+    → webui/js/utils.js goAndShow('resource-updater')
+      → webui/sections/resource-updater.html + js/resource-updater.js
+      → webui/app.py LCTA_API.resource_updater_start_update()
+      → resource_updater/web_api.py ResourceUpdaterAPI.start_update()
+        → background thread → resource_updater/core.py ResourceUpdater.run()
+          → GameInfo.extract_tokens()            settings.json → S token; resources.assets → L token
+          → GameInfo.catalog_url()               remote .hash location → matching catalog .bin URL
+          → localize selected:
+              token-scoped localize_<lang>.zip → safe extraction into
+              LimbusCompany_Data/Assets/Resources_moved/Localize/<lang>/
+          → Bundle selected:
+              remote catalog_S1.bin with game-compatible Unity headers (local catalog fallback)
+              → bundle name/cache-key parsing → Unity cache <outer>/<inner>/__data + __info
+              → failed/cancelled item removes its incomplete <outer>/<inner>/ directory
+          → aria2c JSON-RPC if bundled/available; urllib fallback otherwise
+        → success: service.record_successful_update() merges only completed scopes
+
+Launcher path:
+  launcher/main.py check_update phase
+    → resource_updater/service.py run_launcher_resource_update()
+      → local SHA-256(LimbusCompany.exe), without an online version check
+      → compare %LOCALAPPDATA%/LCTA/resource-updater/launcher-state.json
+      → also verify saved localize languages / Bundle scope cover current config
+      → unchanged + covered: skip
+      → changed or missing scope: ResourceUpdater.run()
+      → save new fingerprint only after all selected work succeeds
+```
+
+Build path: `build.ps1` and `.github/workflows/release.yml` pin aria2 1.37.0, retry/validate the official release download, and copy `aria2c.exe` plus `COPYING` when available to `tools/aria2/` in full, compatible, and update artifacts.
+
+Files: `resource_updater/core.py`, `resource_updater/service.py`, `resource_updater/web_api.py`, `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `webui/css/layout-extras.css`, `webui/app.py`, `webui/sections/launcher-config.html`, `launcher/main.py`, `config_default.json`, `config_check.json`, `build.ps1`, `.github/workflows/release.yml`

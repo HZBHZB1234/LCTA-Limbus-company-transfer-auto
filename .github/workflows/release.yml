@@ -10,6 +10,7 @@ on:
 
 env:
   PYTHON_VERSION: 3.9.6  # 使用嵌入式Python版本
+  ARIA2_VERSION: 1.37.0
   APP_NAME: "LCTA"
   TESTER_NAME: "无法打开？运行环境检测"
   PYINSTALLER_ARGU: "--add-data \"LCTA_backup/config_default.json;.\" --add-data \"LCTA_backup/config_check.json;.\" --add-data \"LCTA_backup/webui;webui\" -i \"LCTA_backup/favicon.ico\""
@@ -128,6 +129,37 @@ jobs:
             Write-Host "CFST/ copied to release artifacts"
         } else {
             Write-Host "WARNING: CFST/ directory not found, skipping"
+        }
+
+    - name: Bundle aria2c (official resource updater)
+      run: |
+        $archive = ".\aria2.zip"
+        $extract = ".\aria2-extract"
+        $url = "https://github.com/aria2/aria2/releases/download/release-${{ env.ARIA2_VERSION }}/aria2-${{ env.ARIA2_VERSION }}-win-64bit-build1.zip"
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $url -OutFile $archive
+                if ((Get-Item $archive).Length -lt 1000000) { throw "aria2 archive size is invalid" }
+                break
+            } catch {
+                Remove-Item $archive -Force -ErrorAction SilentlyContinue
+                if ($attempt -eq 3) { throw }
+                Start-Sleep -Seconds (2 * $attempt)
+            }
+        }
+        Expand-Archive -Path $archive -DestinationPath $extract -Force
+        $aria2Exe = Get-ChildItem $extract -Recurse -Filter "aria2c.exe" -File | Select-Object -First 1
+        if (-not $aria2Exe) { throw "aria2c.exe not found in downloaded archive" }
+        $aria2License = Get-ChildItem $extract -Recurse -Filter "COPYING" -File | Select-Object -First 1
+        $targets = @(
+            "release\${{ env.APP_NAME }}\code\tools\aria2",
+            "release\${{ env.APP_NAME }}-Compatible\code\tools\aria2",
+            ".\LCTA_update\tools\aria2"
+        )
+        foreach ($target in $targets) {
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+            Copy-Item $aria2Exe.FullName "$target\aria2c.exe" -Force
+            if ($aria2License) { Copy-Item $aria2License.FullName "$target\COPYING" -Force }
         }
 
     - name: Upload Compatible portable application folder

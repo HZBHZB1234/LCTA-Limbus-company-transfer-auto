@@ -93,6 +93,10 @@ function initNavigation() {
                         cdnManager.init();
                     }
 
+                    if (sectionId === 'resource-updater-section' && typeof resourceUpdaterPage !== 'undefined') {
+                        resourceUpdaterPage.init();
+                    }
+
                     // 进入加速页时重新 init（恢复轮询并刷新状态缓存），
                     // 离开时停止轮询 —— 轮询生命周期绑定到导航而非 section 首次加载
                     if (typeof speedPage !== 'undefined') {

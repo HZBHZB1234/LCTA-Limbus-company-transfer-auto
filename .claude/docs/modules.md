@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-08-04 -->
+<!-- Last updated: 2026-08-05 -->
 
 ## Directory Overview
 
@@ -32,7 +32,7 @@
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core** pywebview bridge. Includes the main `LCTA_API` (exposes `save_ruleset` class method so the Fancy page's 保存当前/保存全部 persist to `fancy/`), plus `RuleEditorAPI`, `QuickEditorAPI`, and read-only `TranslationLogViewerAPI`; exposes bus-rule multi-file import, spawns secondary windows, and synchronizes light/dark/purple themes |
+| `app.py` | **Core** pywebview bridge. Includes the main `LCTA_API` (exposes `save_ruleset` class method so the Fancy page's 保存当前/保存全部 persist to `fancy/`, plus `check_fancy_marker` for second-run beautification confirmation), plus `RuleEditorAPI`, `QuickEditorAPI`, and read-only `TranslationLogViewerAPI`; exposes bus-rule multi-file import, spawns secondary windows, and synchronizes light/dark/purple themes |
 | `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/` |
 | `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器. Sidebar search input filters filenames/categories while typing and runs full-content search on Enter or the search button. File-edit tab: VSCode-style CodeMirror 6 editor with find/replace (Ctrl+F/H), match highlighting, dirty state indicator, status bar, change tracking, and smart ruleset generation. Ruleset-edit tab: simple form + advanced JSON editors for ruleset CRUD. Theme syncs with main app window (light/dark/purple) |
 | `quick-editor.html` | Standalone pywebview page for the 简易翻译编辑器. Simpler than rule-editor: sidebar file browser (categorized, searchable) + CodeMirror 6 JSON editor + bottom change list panel. Changes recorded as `{file, path, old, new}`, saved with derived bus `set` rules to fixed `fancy/_quick_edits.json`, and shown read-only in the main Fancy list |
@@ -83,7 +83,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `packages/manage.py` | Package management | Installed packages, mod management, symlink operations |
 | `packages/clean.py` | Cache cleaner | Clean game cache files |
 | `function_fetch.py` | Proper noun scrape | Fetch proper nouns from remote sources |
-| `function_fancy.py` | Text effects orchestration | Selects enabled v2/bus rulesets, preserves ruleset order across both engines, prepares skill-color resources only when required, scans UTF-8-SIG language JSON, atomically rewrites final changes, and returns `FancyRunStats`. Also owns validated `fancy/` load/save/delete and shared bus/调爪/LCJE/FL import helpers |
+| `function_fancy.py` | Text effects orchestration | Selects enabled v2/bus rulesets, preserves ruleset order across both engines, prepares skill-color resources only when required, scans UTF-8-SIG language JSON, atomically rewrites final changes, writes a `.lcta_fancy_applied` marker into the beautified language-pack directory (with `has_fancy_marker` for second-run UI confirmation), and returns `FancyRunStats`. Also owns validated `fancy/` load/save/delete and shared bus/调爪/LCJE/FL import helpers |
 | `fancy/` | Rule engine family | `engine.py` (compiled v2 beautification engine: validates/compiles file globs, structured JSON paths, AND conditions and typed actions, filters rules per file, returns exact changed paths via `ApplyResult`; `faust`/`skillColorHandler` imports hoisted out of the per-value loop with lazy caching), `bus.py` (bus replacement engine + converters: `format: lcta-bus`/`version: 1`, compile-time exact/dynamic file indexes with deduplicated shared glob/regex matchers, precomputed case-insensitive dir exclusions, optional prematched-rules argument on `apply_bus` to avoid double file matching, cached selector indexes by list path/field with mutation invalidation, regex-accelerated safe replacements, wildcard/index/selector paths, ordered literal/regex/end/safe/set operations, 调爪/LCJE/FL补丁 & quick-edit conversion; LCJE accepts both path-map patches and the reference editor's `{mods:[{file,path,old,new}]}` format), `builtin_data.py` (built-in rule data: `fancy`, `TEXT_REPLACEMENTS`, `EGO_WARNING_ACTIONS`, `EGO_NORMAL_ACTIONS`, `SKILL_COLOR_ACTIONS`), `builtin_func.py` (`SkillColorHandler` lazily extracts skill attributes from Unity resources, fingerprints top-level account folder names, caches color mappings in `tmp/fancy/skill-colors.json`, records cache hits, suppresses retries after init failure), `faust.py` (Faust character-specific fancy text rules; gradient processing rewritten as a single pass with a module-level hex lookup table and inlined interpolation, output identical to the previous per-character implementation). Facade re-exports all public symbols |
 | `function_translate.py` | Translation orchestration | Connects webui to translateFunc pipeline |
 | `function_translation_logs.py` | Translation diagnostics viewer backend | Reads only the user-selected `.jsonl` within its selected parent directory; v2-only indexing, cached summaries/byte offsets, filtering, pagination, lazy record reads, and filtered JSONL export |

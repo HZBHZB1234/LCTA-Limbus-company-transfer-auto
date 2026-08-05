@@ -785,6 +785,18 @@ class LCTA_API():
             raise RuntimeError('获取当前安装汉化包失败')
         fancy_main(gamePath, config_lang, config_list, enableMap, modal_id=modal_id)
 
+    def check_fancy_marker(self) -> dict:
+        """检查当前语言包目录是否存在美化标记文件"""
+        try:
+            from webutils.function_fancy import has_fancy_marker
+            gamePath = ConfigManager().get('game_path')
+            lang_path = Path(gamePath) / 'LimbusCompany_Data' / 'lang'
+            config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
+            return {'success': True, 'beautified': has_fancy_marker(gamePath, config_lang)}
+        except Exception as e:
+            self.log_manager.log_error(e)
+            return {'success': False, 'beautified': False}
+
     def fetch_proper_nouns(self, modal_id= "false"):
         """获取专有词汇"""
         try:

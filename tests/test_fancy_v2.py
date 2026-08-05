@@ -4,7 +4,7 @@ from pathlib import Path
 from webutils.rule_editor import browser as rule_editor
 from webutils.rule_editor import generate as rule_editor_generate
 from webutils.fancy.builtin_func import SkillColorHandler
-from webutils.function_fancy import fancy_main, load_fancy_folder_rules
+from webutils.function_fancy import fancy_main, has_fancy_marker, load_fancy_folder_rules
 from webutils.rule_editor import (
     apply_ruleset_to_content,
     build_rule_from_form,
@@ -89,6 +89,48 @@ def test_fancy_main_writes_changed_files(tmp_path):
     assert saved["dataList"][0]["desc"] == ">目标"
     assert stats.files_changed == 1
     assert stats.values_changed == 1
+
+
+def test_fancy_main_writes_marker_file(tmp_path):
+    package_dir = tmp_path / "LimbusCompany_Data" / "lang" / "LLC_zh-CN"
+    package_dir.mkdir(parents=True)
+    target_file = package_dir / "Skills.json"
+    target_file.write_text(json.dumps({"dataList": [{"desc": "大于目标"}]}, ensure_ascii=False), encoding="utf-8-sig")
+    ruleset = make_ruleset({
+        "files": ["Skill*.json"],
+        "scope": "dataList[*]",
+        "targets": ["desc"],
+        "where": [],
+        "actions": [{"type": "replace", "mode": "literal", "from": "大于", "to": ">"}],
+    })
+
+    assert not has_fancy_marker(str(tmp_path), "LLC_zh-CN")
+    fancy_main(str(tmp_path), "LLC_zh-CN", [ruleset])
+
+    marker = package_dir / ".lcta_fancy_applied"
+    assert marker.is_file()
+    assert has_fancy_marker(str(tmp_path), "LLC_zh-CN")
+    content = json.loads(marker.read_text(encoding="utf-8"))
+    assert content["files_changed"] == 1
+
+
+def test_fancy_main_marker_not_scanned_as_language_file(tmp_path):
+    package_dir = tmp_path / "LimbusCompany_Data" / "lang" / "LLC_zh-CN"
+    package_dir.mkdir(parents=True)
+    target_file = package_dir / "Skills.json"
+    target_file.write_text(json.dumps({"dataList": [{"desc": "无命中"}]}, ensure_ascii=False), encoding="utf-8-sig")
+    ruleset = make_ruleset({
+        "files": ["Skill*.json"],
+        "scope": "dataList[*]",
+        "targets": ["desc"],
+        "where": [],
+        "actions": [{"type": "replace", "mode": "literal", "from": "大于", "to": ">"}],
+    })
+
+    stats = fancy_main(str(tmp_path), "LLC_zh-CN", [ruleset])
+    stats = fancy_main(str(tmp_path), "LLC_zh-CN", [ruleset])
+
+    assert stats.files_scanned == 1
 
 
 def test_fancy_main_only_prepares_skill_cache_for_enabled_rulesets(monkeypatch, tmp_path):

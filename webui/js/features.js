@@ -293,7 +293,7 @@ class FancyManager {
     }
 }
 
-function applyFancy() {
+function doApplyFancy() {
     const modal = new ProgressModal('应用美化文本');
     modal.addLog(`开始执行美化`);
     modal.addLog(`应用规则集${fancyManager.enabledMap}`);
@@ -311,6 +311,23 @@ function applyFancy() {
         }
     );
 
+};
+
+async function applyFancy() {
+    try {
+        const result = await pywebview.api.check_fancy_marker();
+        if (result && result.success && result.beautified) {
+            showConfirm('提示',
+                '该语言包已应用过文本美化，部分规则非幂等，重复应用可能产生非预期结果。是否继续？',
+                () => doApplyFancy(),
+                () => {}
+            );
+            return;
+        }
+    } catch (error) {
+        console.error('检查美化标记失败:', error);
+    }
+    doApplyFancy();
 };
 
 // === 专有词汇 ===

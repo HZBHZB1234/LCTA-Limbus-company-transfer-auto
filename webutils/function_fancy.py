@@ -31,6 +31,22 @@ _log_manager = LogManager()
 
 logger = logging.getLogger('fancy')
 
+FANCY_MARKER_NAME = '.lcta_fancy_applied'
+
+def fancy_marker_path(game_path: str, package_name: str) -> Path:
+    """返回语言包目录中的美化标记文件路径"""
+    return (
+        Path(game_path)
+        / 'LimbusCompany_Data'
+        / 'lang'
+        / package_name
+        / FANCY_MARKER_NAME
+    )
+
+def has_fancy_marker(game_path: str, package_name: str) -> bool:
+    """该语言包是否已应用过文本美化"""
+    return fancy_marker_path(game_path, package_name).is_file()
+
 def exec_json(data: dict, config: list) -> dict:
     """应用 v2 规则；保留该入口供规则编辑器内容预览使用。"""
     return apply_rules(data, compile_rulesets(config)).data
@@ -217,6 +233,18 @@ def fancy_main(
             _log_manager.log_modal_process(f"处理文件 {file.name} 时出错: {e}", modal_id)
 
     logger.debug('规则应用耗时 %.3f 秒，文件写回耗时 %.3f 秒', apply_elapsed, write_elapsed)
+
+    try:
+        (lang_path / FANCY_MARKER_NAME).write_text(
+            json.dumps({
+                'applied_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'files_changed': files_changed,
+                'values_changed': values_changed,
+            }, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+    except Exception as e:
+        logger.warning(f"写入美化标记文件失败: {e}")
 
     stats = FancyRunStats(
         files_scanned=len(files),

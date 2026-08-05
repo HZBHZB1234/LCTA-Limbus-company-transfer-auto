@@ -17,6 +17,7 @@ from launcher.pipeline import (
     LaunchPipeline,
     PHASE_INIT,
     PHASE_CHECK_UPDATE,
+    PHASE_RESOURCE_UPDATE,
     PHASE_CDN,
     PHASE_PREPARE_MOD,
     PHASE_LAUNCH,
@@ -27,6 +28,7 @@ from launcher.pipeline import (
 _PHASE_LABELS_LOOKUP = {
     PHASE_INIT: "初始化",
     PHASE_CHECK_UPDATE: "检查更新",
+    PHASE_RESOURCE_UPDATE: "游戏资源更新",
     PHASE_CDN: "CDN优选",
     PHASE_PREPARE_MOD: "模组准备",
     PHASE_LAUNCH: "启动游戏",
@@ -111,10 +113,10 @@ class TestLaunchPipeline:
 
     def test_all_phase_constants_are_unique_strings(self):
         phases = [
-            PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN,
+            PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN,
             PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
         ]
-        assert len(set(phases)) == 7
+        assert len(set(phases)) == 8
         assert all(isinstance(p, str) for p in phases)
 
 
@@ -595,6 +597,62 @@ class TestGetVisiblePhases:
         assert PHASE_PREPARE_MOD in result
         assert result.index(PHASE_PREPARE_MOD) > result.index(PHASE_CDN)
         assert result.index(PHASE_PREPARE_MOD) < result.index(PHASE_LAUNCH)
+
+    def test_resource_update_enabled_includes_phase(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            def _mock_get(key, default):
+                if key == "launcher.work.update":
+                    return "LM-G"
+                if key == "launcher.work.cdn_optimize":
+                    return True
+                if key == "launcher.resource_update.enabled":
+                    return True
+                return default
+            instance.get.side_effect = _mock_get
+            result = _get_visible_phases()
+
+        assert PHASE_RESOURCE_UPDATE in result
+        assert result.index(PHASE_RESOURCE_UPDATE) > result.index(PHASE_CHECK_UPDATE)
+        assert result.index(PHASE_RESOURCE_UPDATE) < result.index(PHASE_CDN)
+
+    def test_resource_update_disabled_excludes_phase(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            def _mock_get(key, default):
+                if key == "launcher.work.update":
+                    return "LM-G"
+                return default
+            instance.get.side_effect = _mock_get
+            result = _get_visible_phases()
+
+        assert PHASE_RESOURCE_UPDATE not in result
+
+    def test_all_enabled_shows_all_seven(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            def _mock_get(key, default):
+                if key == "launcher.work.update":
+                    return "LM-G"
+                if key in ("launcher.work.cdn_optimize", "launcher.work.mod"):
+                    return True
+                if key == "launcher.resource_update.enabled":
+                    return True
+                return default
+            instance.get.side_effect = _mock_get
+            result = _get_visible_phases()
+
+        assert len(result) == 7
+        assert result == [
+            PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN,
+            PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING,
+        ]
 
     def test_all_enabled_shows_all_six(self):
         from launcher.gui_progress import _get_visible_phases

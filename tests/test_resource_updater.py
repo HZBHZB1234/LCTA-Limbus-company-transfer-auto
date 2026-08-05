@@ -126,7 +126,7 @@ def test_localize_update_uses_token_scoped_zip_and_blocks_traversal(tmp_path):
         / "story"
         / "chapter.json"
     )
-    assert result == {"updated": 1, "failed": 0}
+    assert result == {"updated": 1, "failed": 0, "failed_items": []}
     assert destination.read_bytes() == b'{"ok": true}'
     assert not (destination.parent.parent / "escaped.txt").exists()
 
@@ -189,7 +189,16 @@ def test_failed_bundle_download_removes_cache_entry_folder(tmp_path, monkeypatch
         },
     })
 
-    assert result == {"updated": 0, "skipped": 0, "failed": 1}
+    assert result == {
+        "updated": 0,
+        "skipped": 0,
+        "failed": 1,
+        "failed_items": [{
+            "name": bundle_name,
+            "url": "https://download.limbuscompanycdn.org/s20260805_example/{}".format(bundle_name),
+            "reason": "HTTP 403",
+        }],
+    }
     assert not (cache_dir / outer / inner).exists()
 
 
@@ -237,7 +246,16 @@ def test_failed_aria2_bundle_removes_cache_entry_folder(tmp_path):
         )],
     )
 
-    assert result == {"completed": 0, "skipped": 0, "failed": 1}
+    assert result == {
+        "completed": 0,
+        "skipped": 0,
+        "failed": 1,
+        "failed_items": [{
+            "name": "example.bundle",
+            "url": "https://download.limbuscompanycdn.org/token/example.bundle",
+            "reason": "HTTP 403 (错误码 22)",
+        }],
+    }
     assert not destination.parent.exists()
 
 

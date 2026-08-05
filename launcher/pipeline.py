@@ -1,17 +1,19 @@
 import threading
 from typing import Any, Callable, Dict, List, Optional
 
-PHASE_INIT         = "init"
-PHASE_CHECK_UPDATE = "check_update"
-PHASE_CDN          = "cdn_optimize"
-PHASE_PREPARE_MOD  = "prepare_mod"
-PHASE_LAUNCH       = "launch_game"
-PHASE_RUNNING      = "game_running"
-PHASE_EXIT         = "game_exit"
+PHASE_INIT             = "init"
+PHASE_CHECK_UPDATE     = "check_update"
+PHASE_RESOURCE_UPDATE  = "resource_update"
+PHASE_CDN              = "cdn_optimize"
+PHASE_PREPARE_MOD      = "prepare_mod"
+PHASE_LAUNCH           = "launch_game"
+PHASE_RUNNING          = "game_running"
+PHASE_EXIT             = "game_exit"
 
 _PHASE_ORDER = [
     PHASE_INIT,
     PHASE_CHECK_UPDATE,
+    PHASE_RESOURCE_UPDATE,
     PHASE_CDN,
     PHASE_PREPARE_MOD,
     PHASE_LAUNCH,

@@ -43,6 +43,7 @@ class ResourceUpdaterPage {
         this.element('ru-probe').addEventListener('click', () => this.probe());
         this.element('ru-start').addEventListener('click', () => this.start());
         this.element('ru-cancel').addEventListener('click', () => this.cancel());
+        this.element('ru-go-launcher').addEventListener('click', () => goAndShow('launcher-config'));
 
         this.element('ru-localize').addEventListener('change', () => this.syncScopeState());
         this.element('ru-bundle').addEventListener('change', () => this.syncScopeState());
@@ -59,12 +60,13 @@ class ResourceUpdaterPage {
     applyInitialState(state) {
         const config = state.config || {};
         this.element('ru-game-path').value = state.game_path || '';
-        ['enabled', 'localize', 'bundle', 'lang_jp', 'lang_en', 'lang_kr'].forEach((key) => {
+        ['localize', 'bundle', 'lang_jp', 'lang_en', 'lang_kr'].forEach((key) => {
             const element = this.element(`ru-${key.replace('_', '-')}`);
             if (element) element.checked = !!config[key];
         });
         this.element('ru-jobs').value = config.jobs || 8;
         this.element('ru-engine').value = config.engine || 'auto';
+        this.setIntegrationChip(!!config.enabled);
 
         const ariaMessage = state.aria2_available
             ? '已找到 aria2c，自动模式将优先使用。'
@@ -85,12 +87,14 @@ class ResourceUpdaterPage {
 
     collectOptions() {
         let gamePath = '';
+        let enabled = false;
         if (typeof configManager !== 'undefined' && configManager) {
             gamePath = configManager.getCachedValue('game_path') || '';
+            enabled = !!configManager.getCachedValue('launcher.resource_update.enabled');
         }
         return {
             game_path: gamePath,
-            enabled: this.element('ru-enabled').checked,
+            enabled: enabled,
             localize: this.element('ru-localize').checked,
             bundle: this.element('ru-bundle').checked,
             lang_jp: this.element('ru-lang-jp').checked,
@@ -125,19 +129,6 @@ class ResourceUpdaterPage {
         if (typeof configManager !== 'undefined' && configManager) {
             Object.entries(values).forEach(([key, value]) => configManager.setCachedValue(key, value));
         }
-
-        const linkedControls = {
-            'launcher-resource-update-enabled': options.enabled,
-            'launcher-resource-update-localize': options.localize,
-            'launcher-resource-update-bundle': options.bundle,
-            'launcher-resource-update-engine': options.engine,
-        };
-        Object.entries(linkedControls).forEach(([id, value]) => {
-            const element = document.getElementById(id);
-            if (!element) return;
-            if (element.type === 'checkbox') element.checked = !!value;
-            else element.value = value;
-        });
     }
 
     async probe() {
@@ -200,11 +191,17 @@ class ResourceUpdaterPage {
         if (event.type === 'complete') {
             this.setRunning(false);
             const status = event.status || 'error';
-            const description = status === 'success'
-                ? this.formatResult(event.result)
-                : status === 'cancelled'
-                    ? '任务已停止，已完成的文件会保留并可在下次继续使用。'
-                    : '部分资源未能完成，请前往日志页面查看详情后重试。';
+            const failedItems = (event.result && event.result.failed_items) || [];
+            let description;
+            if (status === 'success') {
+                description = this.formatResult(event.result);
+            } else if (status === 'cancelled') {
+                description = '任务已停止，已完成的文件会保留并可在下次继续使用。';
+            } else if (failedItems.length) {
+                description = `以下 ${failedItems.length} 个文件下载失败：${failedItems.map((item) => item.name).join('、')}。详情见日志。`;
+            } else {
+                description = '部分资源未能完成，请前往日志页面查看详情后重试。';
+            }
             this.setStatus(event.message, status, description);
         }
     }
@@ -225,6 +222,15 @@ class ResourceUpdaterPage {
         chip.innerHTML = available
             ? '<i class="fas fa-bolt"></i> aria2c 已就绪'
             : '<i class="fas fa-download"></i> 使用内置下载器';
+    }
+
+    setIntegrationChip(enabled) {
+        const chip = this.element('ru-integration-chip');
+        if (!chip) return;
+        chip.className = `resource-state-chip ${enabled ? 'success' : 'neutral'}`;
+        chip.innerHTML = enabled
+            ? '<i class="fas fa-check"></i> 已开启'
+            : '<i class="fas fa-circle-info"></i> 未开启';
     }
 
     setProbeState(type, label, message) {

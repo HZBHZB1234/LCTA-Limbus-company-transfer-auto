@@ -431,6 +431,9 @@ const TOOLTIP_DATA = {
     'launcher-work-cdn-auto-apply': 'CDN优选完成后自动将选出的最优IP写入系统hosts文件。需要管理员权限，如权限不足会尝试UAC提权。',
     'launcher-work-cdn-cache-ttl': 'CDN优选结果的有效时间（小时）。缓存有效期内跳过测速直接使用已有hosts。设为0表示每次启动都重新测速。',
     'launcher-work-gui-mode': '在Launcher模式下显示图形化进度窗口，实时展示更新、CDN优选和游戏启动的状态与日志。关闭则使用传统的控制台模式。',
+    'launcher-resource-update-enabled': 'Launcher 在检测到游戏版本变化后自动预下载官方资源。通过 LimbusCompany.exe 的 SHA-256 判断，不需要联网检查版本。相关设置请在"游戏资源更新"页面配置。',
+    'launcher-work-speed': '通过 Launcher 启动游戏时自动启用游戏加速并注册全局热键。相关设置请在"游戏加速"页面配置。',
+    'launcher-speed-factor': 'Ctrl+S 热键切换时的目标倍率（默认 2.0x）。',
     'steam-command': '用于通过 Steam 启动游戏的命令行参数。复制后可粘贴到 Steam 游戏属性中的启动选项。',
 
     // ===== 抓取专有词汇 =====

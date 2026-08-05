@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-08-05 -->
+<!-- Last updated: 2026-08-06 -->
 
 ## How to Run
 
@@ -60,7 +60,7 @@ Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_w
 - **Launcher license scope**: `launcher/` is GPL-3.0-licensed, but its Python modules currently reuse shared `webutils/`, `webFunc/`, and `globalManagers/` code; do not assume import isolation
 - **Official resource state**: Launcher uses the local SHA-256 of `LimbusCompany.exe`; fingerprints and token-scoped download caches live under `%LOCALAPPDATA%/LCTA/resource-updater/`, not the packaged code directory
 - **Official resource logging**: Backend resource-update diagnostics must go through the `LogManager` singleton; the updater page shows task status/progress but does not maintain a separate UI log card
-- **Official resource UI**: Keep the manual updater inside the main SPA (`sections/resource-updater.html` + `js/resource-updater.js`); `LCTA_API` delegates prefixed bridge calls to the shared `ResourceUpdaterAPI`
+- **Official resource UI**: Keep the manual updater inside the main SPA (`sections/resource-updater.html` + `js/resource-updater.js`); `LCTA_API` delegates prefixed bridge calls to the shared `ResourceUpdaterAPI`. The auto-download switch is configured on the Launcher page only (see AGENTS.md Launcher 集成规范); the updater page reads `launcher.resource_update.enabled` from the config cache and only shows an integration intro + jump button
 - **Knowledge-base maintenance**: Significant features, files, entry points, dependencies, or structural changes must update the relevant `.claude/docs/*.md` file and its `Last updated` date
 - **Agent instruction source**: Edit `CLAUDE.md`, then synchronize the identical content to `AGENTS.md`
 

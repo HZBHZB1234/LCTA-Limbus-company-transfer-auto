@@ -92,33 +92,16 @@
             </div>
         </div>
 
-        <div id="speed-launcher-section" class="setting-card" style="display:none;">
+        <div class="setting-card">
             <h3 class="setting-title">
-                <i class="fas fa-rocket"></i> Launcher 设置
+                <i class="fas fa-rocket"></i> Launcher 集成
             </h3>
-            <div class="form-group">
-                <label class="checkbox-container">
-                    <input type="checkbox" id="launcher-work-speed">
-                    <span class="checkmark"></span>
-                    在 Launcher 模式下启用游戏加速
-                </label>
-                <small class="form-hint">开启后，通过 Launcher 启动游戏将自动注册全局热键</small>
-            </div>
-            <div class="form-group">
-                <label for="launcher-speed-factor">热键加速倍率</label>
-                <div class="speed-input-group">
-                    <input type="number" id="launcher-speed-factor" value="2.0" min="0.1" max="10.0" step="0.1">
-                    <span class="speed-label">x</span>
-                </div>
-                <small class="form-hint">Ctrl+S 热键切换时的目标倍率（默认 2.0x）</small>
-            </div>
-            <div class="speed-hotkey-info">
-                <p><strong>Launcher 热键:</strong></p>
-                <ul>
-                    <li><kbd>Ctrl+S</kbd> — 切换加速开关（1x ↔ 设定倍率）</li>
-                    <li><kbd>Ctrl+Shift+S</kbd> — 打开倍率选择窗口</li>
-                </ul>
-                <p class="form-hint">热键仅在 Launcher 模式下生效，WebUI 页面不注册热键。</p>
+            <p class="form-hint">开启后，通过 Launcher 启动游戏将自动注入加速并注册全局热键：<kbd>Ctrl+S</kbd> 切换加速开关（1x ↔ 设定倍率），<kbd>Ctrl+Shift+S</kbd> 打开倍率选择窗口。</p>
+            <p class="form-hint">开关与热键倍率请在 Launcher 配置页的「工作模式」中设置，热键仅在 Launcher 模式下生效。</p>
+            <div style="margin-top: 0.5rem;">
+                <button type="button" class="action-btn secondary" onclick="goAndShow('launcher-config')">
+                    <i class="fas fa-arrow-right"></i> 前往 Launcher 配置
+                </button>
             </div>
         </div>
     </div>

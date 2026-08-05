@@ -27,7 +27,7 @@ from System.Windows.Forms import (
 
 from globalManagers.ConfigManager import ConfigManager
 from launcher.pipeline import (
-    PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN,
+    PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN,
     PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
 )
 
@@ -36,17 +36,19 @@ _window: Optional["LauncherProgressWindow"] = None
 _PHASE_LABELS = {
     PHASE_INIT: "初始化",
     PHASE_CHECK_UPDATE: "检查更新",
+    PHASE_RESOURCE_UPDATE: "游戏资源更新",
     PHASE_CDN: "CDN优选",
     PHASE_PREPARE_MOD: "模组准备",
     PHASE_LAUNCH: "启动游戏",
     PHASE_RUNNING: "游戏运行中",
     PHASE_EXIT: "游戏已退出",
 }
-_PHASE_ORDER = [PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN, PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING]
+_PHASE_ORDER = [PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN, PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING]
 
 _PHASE_STATUS_TEXT = {
     PHASE_INIT: "正在初始化...",
     PHASE_CHECK_UPDATE: "正在检查更新...",
+    PHASE_RESOURCE_UPDATE: "正在检查游戏资源更新...",
     PHASE_CDN: "正在进行CDN优选...",
     PHASE_PREPARE_MOD: "正在准备模组...",
     PHASE_LAUNCH: "正在启动游戏...",
@@ -63,6 +65,9 @@ def _get_visible_phases() -> list:
             visible.append(ph)
         elif ph == PHASE_CHECK_UPDATE:
             if config.get("launcher.work.update", "no") != "no":
+                visible.append(ph)
+        elif ph == PHASE_RESOURCE_UPDATE:
+            if config.get("launcher.resource_update.enabled", False):
                 visible.append(ph)
         elif ph == PHASE_CDN:
             if config.get("launcher.work.cdn_optimize", False):
@@ -106,6 +111,7 @@ class LauncherProgressWindow:
 
         pipeline.on(PHASE_INIT, lambda **kw: self._show_phase(PHASE_INIT))
         pipeline.on(PHASE_CHECK_UPDATE, lambda **kw: self._show_phase(PHASE_CHECK_UPDATE))
+        pipeline.on(PHASE_RESOURCE_UPDATE, lambda **kw: self._show_phase(PHASE_RESOURCE_UPDATE))
         pipeline.on(PHASE_CDN, lambda **kw: self._show_phase(PHASE_CDN))
         pipeline.on(PHASE_PREPARE_MOD, lambda **kw: self._show_phase(PHASE_PREPARE_MOD))
         pipeline.on(PHASE_LAUNCH, lambda **kw: self._show_phase(PHASE_LAUNCH))
@@ -303,6 +309,15 @@ class LauncherProgressWindow:
             if status_text and self._status_label is not None and not self._status_label.IsDisposed:
                 self._status_label.Text = status_text
 
+        self._safe_invoke(_do)
+
+    def mark_phase_failed(self, phase: str) -> None:
+        def _do():
+            lbl = self._phase_labels.get(phase)
+            if lbl is None or lbl.IsDisposed:
+                return
+            lbl.ForeColor = Color.FromArgb(244, 67, 54)
+            lbl.Text = f"\u2717 {_PHASE_LABELS[phase]}"
         self._safe_invoke(_do)
 
     def _show_game_running(self, **kw) -> None:

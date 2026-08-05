@@ -115,14 +115,24 @@
                     </div>
                 </div>
                 <div class="resource-automation-row">
-                    <label class="checkbox-container">
-                        <input id="ru-enabled" type="checkbox">
-                        <span class="checkmark"></span>
-                        <span>
-                            <strong>Launcher 检测到游戏版本变化后自动预下载</strong>
-                            <small>通过 LimbusCompany.exe 的 SHA-256 判断，不需要联网检查版本。</small>
+                    <div class="resource-integration-heading">
+                        <div class="resource-integration-icon">
+                            <i class="fas fa-rocket"></i>
+                        </div>
+                        <div class="resource-integration-text">
+                            <strong>已集成至 Launcher</strong>
+                            <small>开启后，Launcher 在检测到游戏版本变化（LimbusCompany.exe 的 SHA-256 指纹）时会自动预下载官方资源，无需联网检查版本。开关位于 Launcher 配置页的「工作模式」中。</small>
+                        </div>
+                    </div>
+                    <div class="resource-integration-actions">
+                        <span id="ru-integration-chip" class="resource-state-chip neutral">
+                            <i class="fas fa-circle-info"></i>
+                            未开启
                         </span>
-                    </label>
+                        <button id="ru-go-launcher" type="button" class="action-btn secondary">
+                            <i class="fas fa-arrow-right"></i> 前往 Launcher 配置
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

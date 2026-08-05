@@ -31,9 +31,6 @@ class SpeedPage {
 
         // 预设按钮列表
         this.presetBtns = document.querySelectorAll('.speed-preset-btn');
-
-        this.launcherSection = document.getElementById('speed-launcher-section');
-        this.launcherSwitch = document.getElementById('launcher-work-speed');
     }
 
     async init() {
@@ -60,13 +57,11 @@ class SpeedPage {
     _showDisclaimer() {
         if (this.overlay) this.overlay.style.display = 'flex';
         if (this.mainContent) this.mainContent.style.display = 'none';
-        if (this.launcherSection) this.launcherSection.style.display = 'none';
     }
 
     _showMain() {
         if (this.overlay) this.overlay.style.display = 'none';
         if (this.mainContent) this.mainContent.style.display = '';
-        if (this.launcherSection) this.launcherSection.style.display = '';
         this._startPolling();
     }
 

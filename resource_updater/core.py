@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -459,14 +460,21 @@ class ResourceUpdater:
         if self.aria2:
             self.aria2.remove_all()
 
-    def report(self, channel: str, message: str, fraction: Optional[float] = None) -> None:
+    def report(
+        self,
+        channel: str,
+        message: str,
+        fraction: Optional[float] = None,
+        level: int = logging.INFO,
+    ) -> None:
         if fraction is None:
-            _log_manager.log("[游戏资源更新/{}] {}".format(channel, message))
+            _log_manager.log("[游戏资源更新/{}] {}".format(channel, message), level)
         else:
             _log_manager.log(
                 "[游戏资源更新/{}] {} ({}%)".format(
                     channel, message, int(max(0.0, min(1.0, fraction)) * 100)
-                )
+                ),
+                level,
             )
         if self.progress_callback:
             self.progress_callback(channel, message, fraction)
@@ -530,10 +538,25 @@ class ResourceUpdater:
                 bool,
             ]
         ],
-    ) -> Dict[str, int]:
+    ) -> Dict[str, Any]:
         client = self._aria_client()
         pending = []
         failed = skipped = completed = 0
+        failed_items = []
+
+        def record_failure(
+            url: str,
+            destination: Path,
+            reason: str,
+            cleanup_parent: bool,
+        ) -> None:
+            failed_items.append({
+                "name": url.rsplit("/", 1)[-1] or destination.name,
+                "url": url,
+                "reason": reason,
+            })
+            self._cleanup_failed_download(destination, cleanup_parent)
+
         for (
             url,
             destination,
@@ -546,6 +569,7 @@ class ResourceUpdater:
                 gid = client.add(url, destination, include_xrw)
                 pending.append({
                     "gid": gid,
+                    "url": url,
                     "destination": destination,
                     "skip_not_found": skip_not_found,
                     "post_action": post_action,
@@ -553,9 +577,12 @@ class ResourceUpdater:
                 })
             except Exception as exc:
                 failed += 1
-                self._cleanup_failed_download(destination, cleanup_parent)
-                self.report(channel, "提交下载失败: {}".format(exc))
+                record_failure(url, destination, "提交下载失败: {}".format(exc), cleanup_parent)
+                self.report(
+                    channel, "提交下载失败: {}".format(exc), level=logging.WARNING
+                )
         total = len(tasks)
+        last_finished = -1
         try:
             while pending:
                 self._check_cancel()
@@ -574,22 +601,41 @@ class ResourceUpdater:
                             completed += 1
                         except Exception as exc:
                             failed += 1
+                            record_failure(
+                                task["url"],
+                                task["destination"],
+                                "下载后处理失败: {}".format(exc),
+                                task["cleanup_parent"],
+                            )
+                            self.report(
+                                channel,
+                                "下载后处理失败: {}".format(exc),
+                                level=logging.WARNING,
+                            )
+                    elif state in ("error", "removed"):
+                        error_code = int(status.get("errorCode") or 0)
+                        if error_code == 3 and task["skip_not_found"]:
+                            skipped += 1
                             self._cleanup_failed_download(
                                 task["destination"], task["cleanup_parent"]
                             )
-                            self.report(channel, "下载后处理失败: {}".format(exc))
-                    elif state in ("error", "removed"):
-                        error_code = int(status.get("errorCode") or 0)
-                        self._cleanup_failed_download(
-                            task["destination"], task["cleanup_parent"]
-                        )
-                        if error_code == 3 and task["skip_not_found"]:
-                            skipped += 1
                         else:
+                            message = status.get("errorMessage") or "未知错误"
                             failed += 1
+                            record_failure(
+                                task["url"],
+                                task["destination"],
+                                "{} (错误码 {})".format(message, error_code),
+                                task["cleanup_parent"],
+                            )
                             self.report(
                                 channel,
-                                status.get("errorMessage") or "aria2 下载失败",
+                                "下载失败: {} (错误码 {}): {}".format(
+                                    task["url"].rsplit("/", 1)[-1],
+                                    error_code,
+                                    message,
+                                ),
+                                level=logging.WARNING,
                             )
                     else:
                         remaining.append(task)
@@ -598,13 +644,14 @@ class ResourceUpdater:
                 fraction = finished / total if total else 1.0
                 if known_total:
                     fraction = max(fraction, min(0.99, downloaded / known_total))
-                self.report(
-                    channel,
-                    "已完成 {}/{}，速度 {:.1f} MiB/s".format(
-                        finished, total, speed / 1024 / 1024
-                    ),
-                    fraction,
+                progress_text = "已完成 {}/{}，速度 {:.1f} MiB/s".format(
+                    finished, total, speed / 1024 / 1024
                 )
+                if finished != last_finished:
+                    self.report(channel, progress_text, fraction)
+                    last_finished = finished
+                elif self.progress_callback:
+                    self.progress_callback(channel, progress_text, fraction)
                 if pending:
                     time.sleep(0.5)
         except Exception:
@@ -614,7 +661,12 @@ class ResourceUpdater:
                     task["destination"], task["cleanup_parent"]
                 )
             raise
-        return {"completed": completed, "skipped": skipped, "failed": failed}
+        return {
+            "completed": completed,
+            "skipped": skipped,
+            "failed": failed,
+            "failed_items": failed_items,
+        }
 
     def _download_one_builtin(
         self,
@@ -691,10 +743,10 @@ class ResourceUpdater:
 
     def update_localize(
         self, manifest: Dict[str, Any], languages: Sequence[str]
-    ) -> Dict[str, int]:
+    ) -> Dict[str, Any]:
         selected = [language for language in languages if language in LOCALIZE_LANGUAGES]
         if not selected:
-            return {"updated": 0, "failed": 0}
+            return {"updated": 0, "failed": 0, "failed_items": []}
         zip_dir = self.work_dir / "downloads" / str(manifest["tokens"]["l"])
         zip_dir.mkdir(parents=True, exist_ok=True)
         tasks = []
@@ -760,6 +812,7 @@ class ResourceUpdater:
                 raise DownloadError("本地化压缩包损坏: {}".format(zip_path)) from exc
 
         failed = updated = 0
+        failed_items = []
         for index, (destination, content) in enumerate(updates):
             self._check_cancel()
             try:
@@ -770,14 +823,23 @@ class ResourceUpdater:
                 updated += 1
             except OSError as exc:
                 failed += 1
-                self.report("localize", "写入失败: {} ({})".format(destination, exc))
+                failed_items.append({
+                    "name": destination.name,
+                    "url": str(destination),
+                    "reason": str(exc),
+                })
+                self.report(
+                    "localize",
+                    "写入失败: {} ({})".format(destination, exc),
+                    level=logging.WARNING,
+                )
             self.report(
                 "localize",
                 "正在应用本地化文件 {}/{}".format(index + 1, len(updates)),
                 (index + 1) / len(updates) if updates else 1.0,
             )
         self.report("localize", "本地化更新完成：{} 个文件".format(updated), 1.0)
-        return {"updated": updated, "failed": failed}
+        return {"updated": updated, "failed": failed, "failed_items": failed_items}
 
     def _existing_bundle_mapping(self) -> Dict[str, str]:
         mapping = {}
@@ -804,7 +866,7 @@ class ResourceUpdater:
             "-1\n{}\n1\n__data\n".format(int(time.time())), encoding="utf-8"
         )
 
-    def update_bundles(self, manifest: Dict[str, Any]) -> Dict[str, int]:
+    def update_bundles(self, manifest: Dict[str, Any]) -> Dict[str, Any]:
         metadata = dict(manifest["bundle_meta"])
         existing = self._existing_bundle_mapping()
         for name in manifest["bundles"]:
@@ -830,7 +892,7 @@ class ResourceUpdater:
             )
         if not tasks:
             self.report("bundle", "Bundle 缓存已是最新", 1.0)
-            return {"updated": 0, "skipped": 0, "failed": 0}
+            return {"updated": 0, "skipped": 0, "failed": 0, "failed_items": []}
 
         if self._resolved_engine() == "aria2":
             result = self._download_many_aria2("bundle", tasks)
@@ -838,9 +900,11 @@ class ResourceUpdater:
                 "updated": result["completed"],
                 "skipped": result["skipped"],
                 "failed": result["failed"],
+                "failed_items": result["failed_items"],
             }
 
         updated = skipped = failed = 0
+        failed_items = []
 
         def worker(index: int, task) -> str:
             try:
@@ -862,7 +926,18 @@ class ResourceUpdater:
                 raise
             except Exception as exc:
                 self._cleanup_failed_download(task[1], True)
-                self.report("bundle", "Bundle 下载失败: {}".format(exc))
+                failed_items.append({
+                    "name": task[0].rsplit("/", 1)[-1] or task[1].name,
+                    "url": task[0],
+                    "reason": str(exc),
+                })
+                self.report(
+                    "bundle",
+                    "Bundle 下载失败: {} ({})".format(
+                        task[0].rsplit("/", 1)[-1], exc
+                    ),
+                    level=logging.WARNING,
+                )
                 return "failed"
 
         with ThreadPoolExecutor(max_workers=self.jobs) as executor:
@@ -885,7 +960,12 @@ class ResourceUpdater:
             ),
             1.0,
         )
-        return {"updated": updated, "skipped": skipped, "failed": failed}
+        return {
+            "updated": updated,
+            "skipped": skipped,
+            "failed": failed,
+            "failed_items": failed_items,
+        }
 
     def run(
         self,
@@ -918,12 +998,16 @@ class ResourceUpdater:
                 self.aria2.stop()
                 self.aria2 = None
         failed = sum(item.get("failed", 0) for item in results.values())
+        failed_items = []
+        for item in results.values():
+            failed_items.extend(item.get("failed_items") or [])
         result = {
             "success": failed == 0,
             "engine": resolved_engine,
             "tokens": manifest["tokens"],
             "results": results,
             "failed": failed,
+            "failed_items": failed_items,
         }
         _log_manager.log("[游戏资源更新] 任务结束: {}".format(result))
         return result

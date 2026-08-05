@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-05 -->
+<!-- Last updated: 2026-08-06 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -130,12 +130,14 @@ Launcher mode: start_webui.py -launcher
   Pipeline phases (emit order):
     Phase init:
       pipeline.emit(PHASE_INIT)         → GUI shows phase indicator
-    Phase check_update / cdn:
-      → launcher/main.py main_pre()     → launcher/updates.py (Factory pattern)
-      → resource_updater/service.py     compare SHA-256 fingerprint and configured completed scopes
-        → resource_updater/core.py      download official localize ZIPs + populate Unity Bundle cache
-      → launcher/cdn.py (CDN optimize with cache TTL)
-      pipeline.emit(PHASE_CDN)
+    Phase check_update:
+      pipeline.emit(PHASE_CHECK_UPDATE) → launcher/updates.py (Factory pattern)
+    Phase resource_update:
+      pipeline.emit(PHASE_RESOURCE_UPDATE) → resource_updater/service.py
+        → resource_updater/core.py      compare SHA-256 fingerprint and configured completed scopes
+                                        download official localize ZIPs + populate Unity Bundle cache
+    Phase cdn:
+      pipeline.emit(PHASE_CDN)          → launcher/cdn.py (CDN optimize with cache TTL)
     Phase prepare_mod (if enabled):
       pipeline.emit(PHASE_PREPARE_MOD)  → launcher/game_launch.py prepare_mod()
                                         → launcher/patch.py (Unity asset patching)
@@ -175,6 +177,10 @@ JS: user adjusts speed slider
   → webui/app.py                    LCTA_API.set_speed()
   → webutils/function_speed.py      openspeedy DLL injection
     → subprocess: openspeedy        inject DLL → hook game time APIs
+
+Launcher integration switch (launcher.work.speed / launcher.work.speed_factor):
+  checkbox lives ONLY on webui/sections/launcher-config.html 「工作模式配置」
+  → webui/js/speed.js 游戏加速页仅保留集成介绍 + goAndShow('launcher-config') 跳转按钮
 
 Launcher mode:
   → launcher/speed_hotkey.py        Ctrl+Shift+S → toggle speed
@@ -470,7 +476,7 @@ Files: `webui/js/quick-start.js`, `webui/sections/elder.html`, `webui/js/utils.j
 
 ```
 Manual path:
-  Sidebar 「游戏资源更新」 or Launcher config → 「前往资源更新页面」
+  Sidebar 「游戏资源更新」（页面内含 Launcher 集成介绍 + 跳转按钮；启用开关位于 Launcher 配置页「工作模式」）
     → webui/js/utils.js goAndShow('resource-updater')
       → webui/sections/resource-updater.html + js/resource-updater.js
       → webui/app.py LCTA_API.resource_updater_start_update()
@@ -486,10 +492,13 @@ Manual path:
               → bundle name/cache-key parsing → Unity cache <outer>/<inner>/__data + __info
               → failed/cancelled item removes its incomplete <outer>/<inner>/ directory
           → aria2c JSON-RPC if bundled/available; urllib fallback otherwise
+        → failures: per-file WARNING logs (name + error code), collected into result["failed_items"]
+          ({name, url, reason}); aria2 polling progress only logs when the finished count changes
         → success: service.record_successful_update() merges only completed scopes
 
 Launcher path:
-  launcher/main.py check_update phase
+  launcher/main.py resource_update phase
+    → launcher/gui_progress.py          (if gui_mode) shows 「游戏资源更新」phase label
     → resource_updater/service.py run_launcher_resource_update()
       → local SHA-256(LimbusCompany.exe), without an online version check
       → compare %LOCALAPPDATA%/LCTA/resource-updater/launcher-state.json
@@ -497,6 +506,8 @@ Launcher path:
       → unchanged + covered: skip
       → changed or missing scope: ResourceUpdater.run()
       → save new fingerprint only after all selected work succeeds
+    → main.py logs failures item-by-item at WARNING ("游戏资源更新失败文件: …")
+      and marks the resource-update phase red (✗) + status text in the GUI when failed > 0
 ```
 
 Build path: `build.ps1` and `.github/workflows/release.yml` pin aria2 1.37.0, retry/validate the official release download, and copy `aria2c.exe` plus `COPYING` when available to `tools/aria2/` in full, compatible, and update artifacts.

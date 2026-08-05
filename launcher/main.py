@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import os
+import logging
 
 print('开始')
 file_dir = Path(os.path.dirname(__file__)).parent
@@ -27,7 +28,7 @@ from launcher.cdn import run_cdn_optimization
 
 from launcher.pipeline import (
     LaunchPipeline,
-    PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN,
+    PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN,
     PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
 )
 
@@ -52,6 +53,47 @@ def _prepare_mod_handler(**kw):
     if ConfigManager().get("launcher.work.mod", False):
         from launcher.game_launch import prepare_mod
         prepare_mod(steam_argv)
+
+
+def _resource_update_handler(**kw):
+    cancel_event = kw.get('cancel_event')
+    try:
+        from resource_updater.service import run_launcher_resource_update
+        resource_result = run_launcher_resource_update(
+            cancel_event=cancel_event
+        )
+        if resource_result.get("skipped"):
+            _log_manager.log(
+                "游戏资源预下载已跳过: {}".format(
+                    resource_result.get("reason", "unknown")
+                )
+            )
+            return
+        failed_count = resource_result.get("failed", 0)
+        if failed_count:
+            _log_manager.log(
+                "游戏资源预下载结果: 存在 {} 个失败项".format(failed_count),
+                logging.WARNING,
+            )
+            for item in resource_result.get("failed_items", []):
+                _log_manager.log(
+                    "游戏资源更新失败文件: {} — {}".format(
+                        item.get("name"), item.get("reason")
+                    ),
+                    logging.WARNING,
+                )
+            progress = kw.get('progress')
+            if progress is not None and progress.is_alive():
+                progress.update_status(
+                    "游戏资源更新完成，但 {} 个文件失败".format(failed_count)
+                )
+                progress.mark_phase_failed(PHASE_RESOURCE_UPDATE)
+        else:
+            _log_manager.log(
+                "游戏资源预下载结果: {}".format(resource_result)
+            )
+    except Exception as e:
+        _log_manager.log_error(e)
 
 
 def _cleanup_mod_handler(**kw):
@@ -127,6 +169,7 @@ def main():
 
     if mod_enabled:
         pipeline.on(PHASE_PREPARE_MOD, _prepare_mod_handler)
+    pipeline.on(PHASE_RESOURCE_UPDATE, _resource_update_handler)
     pipeline.on(PHASE_EXIT, _cleanup_mod_handler)
     pipeline.on(PHASE_RUNNING, _register_speed_hotkey_handler)
     pipeline.on(PHASE_EXIT, _unregister_speed_hotkey_handler)
@@ -167,25 +210,8 @@ def main():
             except Exception as e:
                 _log_manager.log_error(e)
 
-            try:
-                if progress and progress.is_alive():
-                    progress.update_status("正在检查游戏资源更新...")
-                from resource_updater.service import run_launcher_resource_update
-                resource_result = run_launcher_resource_update(
-                    cancel_event=pipeline.cancel_event
-                )
-                if resource_result.get("skipped"):
-                    _log_manager.log(
-                        "游戏资源预下载已跳过: {}".format(
-                            resource_result.get("reason", "unknown")
-                        )
-                    )
-                else:
-                    _log_manager.log(
-                        "游戏资源预下载结果: {}".format(resource_result)
-                    )
-            except Exception as e:
-                _log_manager.log_error(e)
+        if not pipeline.cancel_event.is_set():
+            pipeline.emit(PHASE_RESOURCE_UPDATE, cancel_event=pipeline.cancel_event, progress=progress)
 
         if not pipeline.cancel_event.is_set():
             if progress and progress.is_alive():

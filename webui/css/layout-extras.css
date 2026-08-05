@@ -616,6 +616,47 @@
     border-top: 1px solid var(--color-border-light);
 }
 
+.resource-integration-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.resource-integration-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg-card));
+    color: var(--color-primary);
+    font-size: 15px;
+}
+
+.resource-integration-text strong {
+    display: block;
+    color: var(--color-text-primary);
+    font-size: 14px;
+}
+
+.resource-integration-text small {
+    display: block;
+    margin-top: 4px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+.resource-integration-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-sm);
+}
+
 .resource-automation-row .checkbox-container {
     align-items: flex-start;
 }

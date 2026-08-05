@@ -108,7 +108,7 @@ class Updater:
     
     def install_requirements(self, source_dir: str) -> bool:
         """根据新的requirements.txt安装依赖"""
-        requirements_path = source_dir / "requirements.txt"
+        requirements_path = Path(source_dir) / "requirements.txt"
         if not os.path.exists(requirements_path):
             _log_manager.log("未找到requirements.txt文件")
             _log_manager.log_modal_process("未找到requirements.txt文件", self.modal_id)

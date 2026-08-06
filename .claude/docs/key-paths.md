@@ -526,3 +526,57 @@ Launcher path:
 Build path: `build.ps1` and `.github/workflows/release.yml` pin aria2 1.37.0, retry/validate the official release download, and copy `aria2c.exe` plus `COPYING` when available to `tools/aria2/` in full, compatible, and update artifacts.
 
 Files: `resource_updater/core.py`, `resource_updater/service.py`, `resource_updater/web_api.py`, `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `webui/css/layout-extras.css`, `webui/app.py`, `webui/sections/launcher-config.html`, `launcher/main.py`, `config_default.json`, `config_check.json`, `build.ps1`, `.github/workflows/release.yml`
+
+## 17. Modern Main WebView Bootstrap
+
+```
+python start_webui.py
+  → webui/app.py main()
+    → webui/product/main.html (default; `--legacy-ui` selects webui/index.html)
+      → frontend/src/main/main.ts + Pinia
+        → pywebview.api.get_product_bootstrap()
+          → webui/app_api/product.py ProductMixin
+            → product/workspace.py WorkspaceService.get_snapshot()
+              → ConfigManager + installed language directories
+              → product/launcher_session.py LaunchSessionStore.load()
+            → product/tasks.py TaskRegistry.list()
+```
+
+The first response provides the complete first-screen state; the frontend then refreshes workspace/tasks without issuing legacy per-control bridge calls.
+
+## 18. Recommended Localization Action Plan
+
+```
+Main home/workbench “安装推荐汉化”
+  → pywebview.api.build_action_plan("install-recommended-localization")
+    → product/actions.py ActionPlanService.build()
+      → preflight game path and produce steps/changes/warnings
+  → user confirms plan
+  → pywebview.api.execute_action_plan(plan_id)
+    → TaskRegistry creates background task
+    → webutils/function_llc.py function_llc_main(output_dir=...)
+    → webutils/packages/install.py install_translation_package()
+    → CoreMixin modal callbacks mirror progress/logs into TaskRegistry
+    → main task drawer polls list_tasks()/get_task()
+```
+
+Cancellation reuses the existing modal cancellation path: `cancel_task()` → `set_modal_running(task_id, "cancel")` → `LogManager.check_running()` → `CancelRunning`.
+
+## 19. Launcher WebView Lifecycle and Main-Window Link
+
+```
+python start_webui.py -launcher
+  → launcher/main.py main()
+    → config launcher.work.ui_mode (default: webview)
+    → launcher/webview_window.py run_launcher_webview()
+      → pywebview owns the main UI event loop
+      → LauncherWindowAPI.start_launcher_session()
+        → product/launcher_session.py LaunchSessionService.start()
+          → controlled worker thread
+            → launcher/main.py run_launcher(progress=adapter)
+              → LaunchPipeline phase callbacks
+              → persisted tmp/launcher/last-session.json
+              → versioned lcta:launcher-session-changed events + polling fallback
+```
+
+Launcher “打开完整 LCTA” calls `LauncherWindowAPI.open_main_window(target, context)`, starts `start_webui.py --target <area>`, and the main bootstrap selects the requested area. The main home page reads the persisted latest session, so it can display Launcher state even when the windows run in separate Python processes.

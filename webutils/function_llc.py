@@ -83,6 +83,8 @@ def function_llc_main(modal_id, **kwargs):
     use_cache = kwargs.get('use_cache', True)
     cache_path = kwargs.get('cache_path', "")
     dump_default = kwargs.get("dump_default", False)
+    output_dir = Path(kwargs.get("output_dir") or os.getcwd())
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     if use_cache and not(cache_path and os.path.exists(cache_path)):
         raise Exception("缓存文件不存在")
@@ -95,8 +97,10 @@ def function_llc_main(modal_id, **kwargs):
         # 根据from_参数选择不同的下载源
         if from_ == 'api':
             _log_manager.log_modal_process("使用API模式下载", modal_id)
-            _download_from_api(temp_dir, modal_id, zip_type, from_proxy,
-                               dump_default, use_cache, cache_path)
+            return _download_from_api(
+                temp_dir, modal_id, zip_type, from_proxy,
+                dump_default, use_cache, cache_path, output_dir
+            )
         else:
             # 原有的GitHub下载逻辑
             GithubFunc.GithubRequester.update_config(use_proxy=from_proxy)
@@ -159,7 +163,7 @@ def function_llc_main(modal_id, **kwargs):
             result = _process_llc_package(
                 temp_dir, modal_id,
                 save_path_text, save_path_font,
-                last_zip.name, use_cache, cache_path, dump_default
+                str(output_dir / last_zip.name), use_cache, cache_path, dump_default
             )
             if result:
                 return result
@@ -168,7 +172,8 @@ def function_llc_main(modal_id, **kwargs):
 
 
 def _download_from_api(temp_dir, modal_id, zip_type,
-                       from_proxy, dump_default, use_cache, cache_path):
+                       from_proxy, dump_default, use_cache, cache_path,
+                       output_dir=Path.cwd()):
     """使用API下载文件"""
     # 初始化Note对象并获取API数据
     note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
@@ -239,7 +244,7 @@ def _download_from_api(temp_dir, modal_id, zip_type,
     result = _process_llc_package(
         temp_dir, modal_id,
         save_path_text, save_path_font,
-        file_name, use_cache, cache_path, dump_default
+        str(Path(output_dir) / file_name), use_cache, cache_path, dump_default
     )
     if result:
         return result

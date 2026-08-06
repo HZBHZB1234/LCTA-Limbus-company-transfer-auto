@@ -28,6 +28,7 @@ from webui.app_api.speed import SpeedMixin
 from webui.app_api.update import UpdateMixin
 from webui.app_api.drops import DropMixin
 from webui.app_api.resources import ResourceMixin
+from webui.app_api.product import ProductMixin
 from webui.rule_editor_api import RuleEditorAPI
 from webui.quick_editor_api import QuickEditorAPI
 from webui.llm_fancy_api import LLMFancyAPI
@@ -36,14 +37,20 @@ from webui.translation_log_api import TranslationLogViewerAPI
 
 class LCTA_API(CoreMixin, TranslatorMixin, PackagesMixin, DownloadMixin, FancyMixin,
                WindowMixin, CdnMixin, SpeedMixin, UpdateMixin, DropMixin,
-               ResourceMixin, ConfigMixin):
+               ResourceMixin, ConfigMixin, ProductMixin):
     """主窗口 JS-API 桥接类。方法按功能域拆分至 webui/app_api/ 各 mixin。"""
     pass
 
 
 def main():
+    import mimetypes
+    mimetypes.init()
+    mimetypes.add_type("application/javascript", ".js")
+    
     # 获取HTML文件的绝对路径
-    html_path = os.path.join(os.getenv('path_'), "webui\\index.html")
+    use_legacy_ui = os.getenv("LCTA_LEGACY_UI", "false").lower() == "true"
+    relative_entry = "webui\\index.html" if use_legacy_ui else "webui\\product\\main.html"
+    html_path = os.path.join(os.getenv('path_'), relative_entry)
 
     # 创建API实例
     api = LCTA_API()

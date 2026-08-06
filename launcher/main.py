@@ -156,30 +156,15 @@ def _close_progress_window(progress, game_process, exit_code, cancel_event):
         pass
 
 
-def main():
+def run_launcher(progress=None, log_handler=None):
     ConfigManager()
 
-    gui_mode = ConfigManager().get("launcher.work.gui_mode", False)
     mod_enabled = ConfigManager().get("launcher.work.mod", False)
-
-    if gui_mode:
-        _hide_launcher_console()
 
     pipeline = LaunchPipeline()
 
-    progress = None
-    log_handler = None
-
-    if gui_mode:
-        try:
-            from launcher.gui_progress import create_progress_window, ProgressLogHandler
-            _log_manager.log("正在启动GUI进度窗口...")
-            progress = create_progress_window()
-            progress.register_to_pipeline(pipeline)
-            log_handler = ProgressLogHandler(progress)
-            _log_manager._logger.addHandler(log_handler)
-        except Exception as e:
-            _log_manager.log(f"无法创建GUI进度窗口，回退到控制台模式: {e}")
+    if progress:
+        progress.register_to_pipeline(pipeline)
 
     if mod_enabled:
         pipeline.on(PHASE_PREPARE_MOD, _prepare_mod_handler)
@@ -269,6 +254,40 @@ def main():
             pass
 
     _close_progress_window(progress, game_process, exit_code, pipeline.cancel_event)
+
+
+def _run_winforms_launcher():
+    progress = None
+    log_handler = None
+    try:
+        from launcher.gui_progress import create_progress_window, ProgressLogHandler
+        _log_manager.log("正在启动兼容 GUI 进度窗口...")
+        progress = create_progress_window()
+        log_handler = ProgressLogHandler(progress)
+        _log_manager._logger.addHandler(log_handler)
+    except Exception as e:
+        _log_manager.log(f"无法创建兼容 GUI 进度窗口，回退到控制台模式: {e}")
+    return run_launcher(progress=progress, log_handler=log_handler)
+
+
+def main():
+    ConfigManager()
+    ui_mode = ConfigManager().get("launcher.work.ui_mode", "webview")
+
+    if ui_mode == "webview":
+        _hide_launcher_console()
+        try:
+            from launcher.webview_window import run_launcher_webview
+            return run_launcher_webview(run_launcher)
+        except Exception as e:
+            _log_manager.log(f"无法创建 Launcher WebView，回退到兼容 GUI: {e}")
+            return _run_winforms_launcher()
+
+    if ui_mode == "winforms":
+        _hide_launcher_console()
+        return _run_winforms_launcher()
+
+    return run_launcher()
 
 
 if __name__ == '__main__':

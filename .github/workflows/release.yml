@@ -31,6 +31,20 @@ jobs:
         python-version: '3.9'
         cache: 'pip'
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        cache: 'npm'
+        cache-dependency-path: LCTA/package-lock.json
+
+    - name: Build modern WebView frontend
+      run: |
+        npm ci --prefix .\LCTA
+        npm --prefix .\LCTA run typecheck:webui
+        npm --prefix .\LCTA run build:webui
+        Remove-Item .\LCTA\node_modules -Recurse -Force
+
     - name: Init code for release
       run: |
         python -m pip install requests rjsmin rcssmin

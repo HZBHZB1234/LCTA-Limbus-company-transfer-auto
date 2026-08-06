@@ -12,9 +12,10 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 |----------|-------|-------|
 | Python 3.9.6+ | Backend (primary) | Business logic, translation engine, webview bridge |
 | C (MinGW-w64) | Native launcher | `launcher.c` → compiled to .exe as PE entry point for packaged releases |
-| JavaScript | Frontend | SPA modules plus standalone editor and translation-log viewer scripts, bridged to Python via `pywebview.api` |
-| HTML/CSS | Frontend | SPA in `webui/index.html` with lazy section fragments plus standalone rule editor, quick editor, and translation diagnostic viewer windows with theme sync |
-| PowerShell | Build system | `build.ps1` (617 lines), 6-step build pipeline |
+| TypeScript / Vue 3 | Modern frontend | Vite multi-page build with Pinia stores for the main product shell and Launcher WebView |
+| JavaScript | Legacy frontend | Existing SPA modules plus standalone editor and translation-log viewer scripts, bridged to Python via `pywebview.api` |
+| HTML/CSS | Frontend | Modern build output in `webui/product/`; legacy SPA and standalone tools remain available during migration |
+| PowerShell | Build system | `build.ps1` runs the Vite build before the existing release pipeline |
 | YAML | CI/CD | GitHub Actions: `release.yml`, `check.yml`, `check-sync.yml` |
 
 ## Layered Architecture
@@ -26,9 +27,19 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │  webui/app.py            LCTA_API 组装壳 + main (pywebview)  │
 │  webui/app_api/*.py      LCTA_API 功能域 mixin（core/config/  │
 │                          packages/download/fancy/windows/    │
-│                          cdn/speed/update/drops/resources）  │
-│  webui/index.html + js/  frontend SPA                │
-│  launcher/main.py        CLI launcher entry point    │
+│                          cdn/speed/update/drops/resources/    │
+│                          product）                            │
+│  frontend/               Vue/Vite source, dual HTML entries  │
+│  webui/product/          generated dual WebView assets       │
+│  webui/index.html + js/  legacy frontend SPA fallback        │
+│  launcher/webview_window.py modern Launcher window/API       │
+│  launcher/main.py        Launcher dispatcher + worker flow   │
+├─────────────────────────────────────────────────────┤
+│                  PRODUCT SERVICES                    │
+│  product/workspace.py   WorkspaceSnapshot           │
+│  product/actions.py     versioned ActionPlan flow   │
+│  product/tasks.py       unified in-process tasks     │
+│  product/launcher_session.py persistent session      │
 ├─────────────────────────────────────────────────────┤
 │                  BUSINESS LOGIC                      │
 │  webutils/__init__.py    public API aggregation      │
@@ -61,11 +72,13 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 └─────────────────────────────────────────────────────┘
 ```
 
-## The 7 Source Directories
+## Source Directories
 
 | Directory | Role |
 |-----------|------|
-| `webui/` | Frontend: pywebview desktop window + HTML/CSS/JS SPA |
+| `frontend/` | Vue 3 + TypeScript + Vite source for main and Launcher WebViews |
+| `product/` | Product-facing snapshots, action plans, task state, and Launcher sessions |
+| `webui/` | pywebview host, generated modern assets, legacy SPA, and standalone tools |
 | `webutils/` | Business logic: one `function_*.py` per feature, all exported via `__init__.py` |
 | `webFunc/` | Infrastructure: GitHub downloads, file transfer, Lanzou parsing, web notes |
 | `translateFunc/` | Translation engine: multi-stage LLM pipeline with proper noun matching |

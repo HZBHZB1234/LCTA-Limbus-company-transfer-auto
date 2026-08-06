@@ -6,7 +6,9 @@
 
 | Directory | Role | Key Files |
 |-----------|------|-----------|
-| `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 5 standalone pages + sections |
+| `frontend/` | Vue 3 + TypeScript source for modern main and Launcher WebViews | 2 HTML entries + shared tokens/stores |
+| `product/` | Product-state layer: workspace, action plans, tasks, Launcher sessions | 5 Python files |
+| `webui/` | pywebview host, generated modern frontend, legacy HTML/CSS/JS app | modern output + 5 standalone pages + sections |
 | `webutils/` | Business logic layer (feature modules + beautification engines) | 69 Python files |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
@@ -29,11 +31,30 @@
 | `.github/InitCode.py` | Release preparation script. Localizes shared HTML resources across the main shell and standalone pages; recursively downloads esm.sh module graphs and rewrites their imports to local files so CodeMirror works offline |
 | `.github/workflows/check-sync.yml` | Pull-request/manual CI guard that fails when `CLAUDE.md` and `AGENTS.md` differ |
 
+## frontend/ — Modern WebView Source
+
+| File | Purpose |
+|------|---------|
+| `vite.config.ts` | Vite multi-page configuration. Builds `main.html` and `launcher.html` with relative asset URLs into `webui/product/` |
+| `src/shared/` | Shared pywebview bridge wrapper, TypeScript contracts, and semantic light/dark design tokens |
+| `src/main/` | Five-area product shell, state-driven home, global task drawer, recommended-install action plan, and Launcher session card |
+| `src/launcher/` | Compact Launcher GUI with launch-plan timeline, game-running state, logs drawer, close choices, and main-window deep links |
+
+## product/ — Product Services
+
+| File | Purpose |
+|------|---------|
+| `models.py` | Versioned product dataclasses for actions, action plans, issues, and operation results |
+| `workspace.py` | Builds `WorkspaceSnapshot` from config, game path, installed language packages, and the latest Launcher session |
+| `actions.py` | Builds and executes the first goal-based vertical slice: recommended LLC localization download and installation |
+| `tasks.py` | Thread-safe unified task snapshots, progress, logs, and cancellation requests |
+| `launcher_session.py` | Maps `LaunchPipeline` phases to a persisted Launcher session, including logs, progress, cancellation, and game state |
+
 ## webui/ — Frontend Application
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core** pywebview bridge — thin shell (~100 lines). Assembles `LCTA_API` from the feature-domain mixins in `webui/app_api/`, re-exports the 4 window bridge classes (`RuleEditorAPI`/`QuickEditorAPI`/`LLMFancyAPI`/`TranslationLogViewerAPI` from their own files) and `CancelRunning`, and defines `main()` (window creation + modal callback wiring). Owns the shared `ResourceUpdaterAPI` used by the in-app resource page |
+| `app.py` | Main pywebview host. Loads `webui/product/main.html` by default, keeps `webui/index.html` behind `--legacy-ui`, and assembles legacy domain APIs plus `ProductMixin` |
 | `app_api/` | `LCTA_API` 按功能域拆分的 mixin 模块包（详见下方小节）。`webui/app.py` 的 `LCTA_API` 依次继承这些 mixin；pywebview 通过 `dir()` 枚举 JS API，继承方法对前端透明，无需改动 JS |
 | `rule_editor_api.py` | `RuleEditorAPI` 窗口桥接：美化规则编辑器（文件浏览、规则 CRUD、校验、智能分析、模板） |
 | `quick_editor_api.py` | `QuickEditorAPI` 窗口桥接：简易翻译编辑器（diff/批量编辑） |
@@ -87,6 +108,7 @@
 | `update.py` | `UpdateMixin` | `auto_check_update`/`manual_check_update`/`perform_update_in_modal`/`perform_update_from_file` |
 | `drops.py` | `DropMixin` | `handle_dropped_files`/`on_drop`/`eval_dropped_files` |
 | `resources.py` | `ResourceMixin` | `resource_updater_*` 转发到 `self.resource_updater_api` |
+| `product.py` | `ProductMixin` | Modern bootstrap/workspace snapshots, action-plan execution, unified task queries/cancel, theme persistence, and Launcher window opening |
 | `exceptions.py` | — | `CancelRunning`（各 mixin 共用，`webui/app.py` re-export） |
 | `assets/LCTA-AU.md` | Auto-update system documentation |
 | `assets/firstUse.md` | Short first-use welcome with direct entry to the three-step quick-start flow |
@@ -180,7 +202,8 @@ Standalone library with own `__init__.py` public API.
 
 | File | Purpose |
 |------|---------|
-| `main.py` | Entry point: pipeline orchestration — creates `LaunchPipeline`, registers handlers for resource-update/mod/speed-hotkey, optionally creates GUI window, then emits pipeline phases in order. Uses `subprocess.Popen` (not `subprocess.call`) for game launch to support cancel-flow from GUI |
+| `main.py` | Launcher dispatcher and reusable `run_launcher(progress=...)` worker flow. Defaults to WebView mode, retains WinForms and console fallbacks, and uses `subprocess.Popen` for game lifecycle control |
+| `webview_window.py` | Modern Launcher pywebview window and `LauncherWindowAPI`; starts/cancels sessions, closes with explicit modes, and opens the main LCTA window with context |
 | `game_launch.py` | Game launch phases: `prepare_mod()` (mod patching pre-game), `cleanup_mod_assets()` (post-game restore), `start_speed_hotkey()` / `stop_speed_hotkey()` (lifecycle wrappers). Game process launch moved to `main.py` pipeline |
 | `updates.py` | Translation pack update system (Factory pattern for LLC/OurPlay/Machine). Optional post-update beautification passes all built-in/user rules plus the enable map to `fancy_main()`, allowing disabled skill-color rules to avoid resource preparation |
 | `cdn.py` | CDN optimization for launcher mode with cache TTL to avoid redundant speed tests |
@@ -190,7 +213,7 @@ Standalone library with own `__init__.py` public API.
 | `changes.py` | Text data patch application |
 | `compress.py` | Compression utilities |
 | `speed_hotkey.py` | Game speed hotkey (Ctrl+Shift+S) with comprehensive lifecycle logging, foreground process check, .NET STA threading for UI |
-| `gui_progress.py` | WinForms companion window for GUI launcher mode: phase indicator (init→update→resource_update→cdn→mod→launch→running), status label, progress bar, collapsible log area, game-running info display (PID + uptime + hotkey hints). `register_to_pipeline()` wires GUI to `LaunchPipeline` phases; `FormClosing` handler shows confirmation dialog and sets `cancel_event` on confirm |
+| `gui_progress.py` | Compatibility-only WinForms fallback retained during WebView parity migration |
 | `pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline: `on(phase, callback)` for module registration, `emit(phase, **kwargs)` to trigger all callbacks. Defines 8 phases (`PHASE_INIT` through `PHASE_EXIT`, including `PHASE_RESOURCE_UPDATE` between check_update and cdn). `cancel_event` (threading.Event) supports GUI-initiated abort. `context` dict shares state (steam_argv, game_process, game_pid) across phases |
 
 ## resource_updater/ — Official Game Resource Updater

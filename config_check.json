@@ -124,6 +124,7 @@
             "cdn_cache_ttl": "str",
             "speed": "bool",
             "speed_factor": "str",
+            "ui_mode": ["webview", "winforms", "console"],
             "gui_mode": "bool"
         },
         "resource_update": {

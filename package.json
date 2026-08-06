@@ -1,0 +1,24 @@
+{
+  "name": "lcta-product-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "npm@11.9.0",
+  "scripts": {
+    "dev": "vite --config frontend/vite.config.ts",
+    "typecheck:webui": "vue-tsc --noEmit -p frontend/tsconfig.json",
+    "build:webui": "vite build --config frontend/vite.config.ts",
+    "preview:webui": "vite preview --config frontend/vite.config.ts"
+  },
+  "dependencies": {
+    "pinia": "4.0.2",
+    "vue": "3.5.41"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@vitejs/plugin-vue": "6.0.8",
+    "typescript": "^6.0.3",
+    "vite": "8.2.0",
+    "vue-tsc": "^3.3.9"
+  }
+}

@@ -1,0 +1,101 @@
+:root {
+  color-scheme: dark;
+  --font-sans: "Segoe UI Variable", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  --bg: #0d100f;
+  --bg-soft: #121614;
+  --surface: #171c19;
+  --surface-raised: #202620;
+  --surface-strong: #292f29;
+  --surface-glass: rgba(23, 28, 25, 0.88);
+  --line: rgba(217, 203, 166, 0.16);
+  --line-strong: rgba(217, 203, 166, 0.34);
+  --text: #eee8d9;
+  --text-soft: #c2bcad;
+  --muted: #8e9188;
+  --gold: #c6a45d;
+  --gold-bright: #e1c276;
+  --gold-ink: #2a2112;
+  --crimson: #8f393b;
+  --crimson-bright: #bd5453;
+  --green: #6f9a80;
+  --cyan: #6f9ca0;
+  --danger: #d36d67;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --ease: 180ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #e8e5dc;
+  --bg-soft: #f0ede5;
+  --surface: #f8f5ec;
+  --surface-raised: #ffffff;
+  --surface-strong: #e3ded1;
+  --surface-glass: rgba(248, 245, 236, 0.9);
+  --line: rgba(70, 61, 43, 0.14);
+  --line-strong: rgba(70, 61, 43, 0.28);
+  --text: #262721;
+  --text-soft: #56584f;
+  --muted: #77796f;
+  --gold: #9b742f;
+  --gold-bright: #b78835;
+  --gold-ink: #fff8e6;
+  --crimson: #873c3c;
+  --crimson-bright: #a94847;
+  --green: #527c62;
+  --cyan: #4d7e82;
+  --danger: #a43f3b;
+  --shadow: 0 18px 45px rgba(62, 54, 38, 0.13);
+}
+
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; min-height: 100%; margin: 0; }
+body {
+  font-family: var(--font-sans);
+  color: var(--text);
+  background:
+    radial-gradient(circle at 84% 8%, rgba(143, 57, 59, 0.17), transparent 28rem),
+    radial-gradient(circle at 10% 90%, rgba(198, 164, 93, 0.09), transparent 24rem),
+    var(--bg);
+  overflow-x: hidden;
+}
+button, input, select, textarea { font: inherit; }
+button { color: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 3px;
+}
+
+.button {
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--surface-raised);
+  cursor: pointer;
+  transition: transform var(--ease), border-color var(--ease), background var(--ease);
+}
+.button:hover { transform: translateY(-1px); border-color: var(--gold); }
+.button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.button.primary { background: linear-gradient(135deg, var(--gold-bright), var(--gold)); color: var(--gold-ink); border-color: transparent; font-weight: 700; }
+.button.danger { background: color-mix(in srgb, var(--danger) 16%, var(--surface)); border-color: color-mix(in srgb, var(--danger) 55%, transparent); }
+.button.ghost { background: transparent; border-color: transparent; color: var(--text-soft); }
+.eyebrow { color: var(--gold-bright); text-transform: uppercase; letter-spacing: 0.18em; font-size: 11px; font-weight: 800; }
+.muted { color: var(--muted); }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 5px color-mix(in srgb, var(--muted) 12%, transparent); }
+.status-dot.healthy, .status-dot.succeeded, .status-dot.completed { background: var(--green); }
+.status-dot.attention, .status-dot.running, .status-dot.game_running { background: var(--gold-bright); }
+.status-dot.blocked, .status-dot.failed { background: var(--danger); }
+.status-dot.cancelled, .status-dot.skipped { background: var(--muted); }
+.progress-track { height: 6px; overflow: hidden; border-radius: 99px; background: var(--surface-strong); }
+.progress-value { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--crimson), var(--gold-bright)); transition: width var(--ease); }
+.spinner { width: 16px; height: 16px; border: 2px solid color-mix(in srgb, var(--gold) 26%, transparent); border-top-color: var(--gold-bright); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }

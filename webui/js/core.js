@@ -305,8 +305,8 @@ class ConfigManager {
             'launcher-work-speed': 'launcher.work.speed',
             'launcher-speed-factor': 'launcher.work.speed_factor',
 
-            // GUI进度窗口
-            'launcher-work-gui-mode': 'launcher.work.gui_mode',
+            // Launcher 界面模式
+            'launcher-work-ui-mode': 'launcher.work.ui_mode',
             // 游戏官方资源预下载（仅开关，详细配置在游戏资源更新页面）
             'launcher-resource-update-enabled': 'launcher.resource_update.enabled'
         };

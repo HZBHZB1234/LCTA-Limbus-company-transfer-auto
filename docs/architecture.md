@@ -3,7 +3,7 @@
 > 面向开发者的详细架构说明，包含技术决策理由和权衡分析。
 > AI 快速参考请见 `.claude/docs/architecture.md`
 
-<!-- Last updated: 2026-08-02 -->
+<!-- Last updated: 2026-08-06 -->
 
 ## 项目概述
 
@@ -223,7 +223,17 @@ C 代码（`launcher.c`）仅在发布包中使用，作为 PE 入口点：
 **理由**：launcher/ 继承自 LimbusModLoader（GPL-3.0），必须保持许可证隔离。
 **代价**：launcher/ 无法复用 webutils/ 中的工具函数（如配置访问），需要自己实现或通过 CLI 通信。
 
-### ADR-3: 前端使用原生 JS 而非框架
-**决策**：不引入 React/Vue 等前端框架。
-**理由**：减少依赖数量；减小打包体积；项目前端复杂度适中，原生 JS 可维护。
-**代价**：缺乏框架提供的状态管理和组件化能力，大型 UI 变更时需要更多手动管理 DOM。
+### ADR-3: 旧前端保持原生 JS 作为迁移回退
+**决策**：`webui/index.html` 与独立专业工具暂时保持原生 JS，不在首个纵切片中机械迁移。
+**理由**：保证大规模交互重构期间仍可访问全部旧功能，并降低一次性回归风险。
+**代价**：迁移期同时维护现代与旧版两套前端入口。
+
+### ADR-4: 主界面与 Launcher 采用 Vue/Vite 双 WebView
+**决策**：新增 `frontend/`，使用 Vue 3、TypeScript、Pinia 与 Vite 多页面构建，生成 `webui/product/main.html` 和 `webui/product/launcher.html`。
+**理由**：新的产品壳需要共享组件、设计令牌、版本化状态模型和更清晰的窗口边界；Launcher 也必须摆脱固定 WinForms 进度窗。
+**代价**：构建链增加 Node.js/npm；发布流程必须先执行 Vite 构建。
+
+### ADR-5: 产品状态由 Python 持有
+**决策**：`product/` 提供 `WorkspaceSnapshot`、`ActionPlan`、统一任务和持久化 Launcher 会话，前端只消费快照与命令。
+**理由**：主窗口和 Launcher 可能是不同进程，不能依赖窗口之间直接调用 JavaScript；后端单一真相也便于恢复和测试。
+**代价**：迁移期需要将旧 modal/回调逐步映射到统一任务结构。

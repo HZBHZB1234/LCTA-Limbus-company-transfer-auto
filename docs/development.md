@@ -3,13 +3,14 @@
 > 面向开发者的完整开发环境搭建、构建、调试和发布指南。
 > AI 快速参考请见 `.claude/docs/dev-guide.md`
 
-<!-- Last updated: 2026-08-04 -->
+<!-- Last updated: 2026-08-06 -->
 
 ## 前置条件
 
 | 工具 | 版本要求 | 用途 |
 |------|---------|------|
 | Python | 3.9.6+ | 运行和开发 |
+| Node.js | 24+ | Vue/Vite 双 WebView 前端构建 |
 | Git | 任意版本 | 版本控制 |
 | MinGW-w64 | 任意版本 | C launcher 编译（可选，构建时如不可用则跳过） |
 | PowerShell | 5.0+ | 运行构建脚本 |
@@ -44,6 +45,18 @@ source .venv/Scripts/activate
 
 ```bash
 pip install -r requirements.txt
+npm ci
+npm run build:webui
+```
+
+`python start_webui.py` 默认加载 `webui/product/main.html`。需要回退旧界面时运行 `python start_webui.py --legacy-ui`。
+
+现代前端常用命令：
+
+```bash
+npm run dev
+npm run typecheck:webui
+npm run build:webui
 ```
 
 ### 5. 配置环境变量

@@ -7,6 +7,10 @@
 ```bash
 # Install dependencies
 pip install -r requirements.txt
+npm ci
+
+# Build the modern main + Launcher WebViews
+npm run build:webui
 
 # WebUI mode (full desktop app)
 python start_webui.py
@@ -21,14 +25,29 @@ python start_webui.py -launcher
 .\build.ps1
 ```
 
-6-step pipeline: InitCode + pinned aria2c acquisition → C compilation (MinGW-w64) → embedded Python → dist assembly → update package clean → ZIP packaging.
+The build first runs `npm ci` + the Vite dual-WebView build, then executes the existing release pipeline: InitCode + pinned aria2c acquisition → C compilation (MinGW-w64) → embedded Python → dist assembly → update package clean → ZIP packaging.
 
 Outputs:
 - `LCTA-Portable-Full.zip` — normal release
 - `LCTA-Portable-Full-Compatible.zip` — compatible release
 - `LCTA-update.zip` — source update package
 
-Requirements: PowerShell 5.0+, MinGW-w64 (optional, skips if unavailable), Python 3.9.6, network.
+Requirements: PowerShell 5.0+, Node.js 24+, MinGW-w64 (optional, skips if unavailable), Python 3.9.6, network.
+
+Modern frontend development:
+
+```bash
+# Browser development server with pywebview bridge unavailable
+npm run dev
+
+# Vue template + TypeScript validation
+npm run typecheck:webui
+
+# Production output used by pywebview
+npm run build:webui
+```
+
+`frontend/vite.config.ts` has two HTML inputs and writes relative-URL assets to `webui/product/`. Do not hand-edit generated hashed files; change `frontend/src/` and rebuild.
 
 The build downloads aria2 1.37.0 from the official GitHub release, retries and rejects undersized responses, then places `aria2c.exe` (and `COPYING` when present) under `tools/aria2/` in all three artifacts. Runtime `engine=auto` falls back to urllib when aria2c is unavailable in a source checkout.
 

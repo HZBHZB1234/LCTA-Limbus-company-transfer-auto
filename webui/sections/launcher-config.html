@@ -233,12 +233,16 @@
         </div>
 
         <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="launcher-work-gui-mode">
-                <span class="checkmark"></span>
-                启用GUI进度窗口
-            </label>
-            <small class="form-hint">在Launcher模式下显示图形化进度窗口，展示启动过程中的状态和日志信息</small>
+            <label for="launcher-work-ui-mode">Launcher 界面模式</label>
+            <div class="select-wrapper">
+                <select id="launcher-work-ui-mode">
+                    <option value="webview">现代 Launcher GUI（推荐）</option>
+                    <option value="winforms">兼容 GUI</option>
+                    <option value="console">控制台模式</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+            <small class="form-hint">现代 GUI 会显示启动计划、阶段进度、游戏状态和问题处理入口；其余模式仅用于兼容与故障回退。</small>
         </div>
 
         <div class="form-group" id="steam-command">

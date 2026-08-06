@@ -36,6 +36,37 @@ Write-Host "  Cache:   $BuildCacheDir" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 # ============================================================
+# Frontend: Vue/Vite dual WebView build
+# ============================================================
+Write-Host "`n[web] 构建现代 WebView 前端..." -ForegroundColor Yellow
+$packageLockPath = "$ProjectRoot\package-lock.json"
+if (Test-Path $packageLockPath) {
+    Push-Location $ProjectRoot
+    npm ci
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        Write-Host "  ERROR: npm ci 失败" -ForegroundColor Red
+        exit 1
+    }
+    npm run typecheck:webui
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        Write-Host "  ERROR: WebView 前端类型检查失败" -ForegroundColor Red
+        exit 1
+    }
+    npm run build:webui
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        Write-Host "  ERROR: WebView 前端构建失败" -ForegroundColor Red
+        exit 1
+    }
+    Pop-Location
+    Write-Host "  现代 WebView 前端构建完成" -ForegroundColor Green
+} else {
+    Write-Host "  WARNING: package-lock.json 未找到，跳过现代前端构建" -ForegroundColor Yellow
+}
+
+# ============================================================
 # Step 1: InitCode（含缓存）
 # ============================================================
 Write-Host "`n[1/6] 初始化代码..." -ForegroundColor Yellow

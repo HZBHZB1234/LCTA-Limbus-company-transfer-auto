@@ -62,6 +62,12 @@ def start_webui():
                 import clr
                 print('clr导入成功，使用mono')
         
+        if "--legacy-ui" in sys.argv:
+            os.environ["LCTA_LEGACY_UI"] = "true"
+        if "--target" in sys.argv:
+            target_index = sys.argv.index("--target") + 1
+            if target_index < len(sys.argv):
+                os.environ["LCTA_START_TARGET"] = sys.argv[target_index]
         from webui.app import main
         print("正在启动LCTA WebUI...")
         print("请稍候，界面即将打开...")

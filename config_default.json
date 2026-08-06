@@ -115,7 +115,8 @@
             "cdn_cache_ttl": "24.0",
             "speed": false,
             "speed_factor": "2.0",
-            "gui_mode": false
+            "ui_mode": "webview",
+            "gui_mode": true
         },
         "resource_update": {
             "enabled": false,

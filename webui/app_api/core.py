@@ -319,6 +319,9 @@ class CoreMixin:
 
     def set_modal_status(self, status, modal_id):
         """设置模态窗口状态"""
+        product_update = getattr(self, "_update_product_task_from_modal", None)
+        if product_update:
+            product_update(modal_id, message=status)
         try:
             self.log(f"[{modal_id}] 状态变更{status}")
         except Exception:pass
@@ -339,6 +342,9 @@ class CoreMixin:
 
     def add_modal_log(self, message, modal_id):
         """向模态窗口添加日志"""
+        product_update = getattr(self, "_update_product_task_from_modal", None)
+        if product_update:
+            product_update(modal_id, log=message)
         try:
             self.log(f"[{modal_id}] {message}")
         except Exception:pass
@@ -360,6 +366,9 @@ class CoreMixin:
 
     def update_modal_progress(self, percent, text, modal_id,log=True):
         """更新模态窗口进度"""
+        product_update = getattr(self, "_update_product_task_from_modal", None)
+        if product_update:
+            product_update(modal_id, progress=percent, message=text)
         try:
             if log:
                 self.log(f"[{modal_id}] 进度变更至{percent}% 消息内容[{text}]")

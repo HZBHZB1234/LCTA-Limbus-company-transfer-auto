@@ -1,4 +1,4 @@
-# LCTA 产品体验与前后端交互重构计划
+# LCTA 主界面、Launcher GUI 与前后端交互重构计划
 
 <!-- Last updated: 2026-08-06 -->
 
@@ -8,12 +8,13 @@
 
 ## 1. 计划目标
 
-本次工作不是对现有页面进行换色、加阴影或替换控件，而是重新设计 LCTA 的产品模型、人机交互关系、信息架构和前后端契约，使软件从“功能与设置项集合”转变为“围绕用户目标提供判断、建议、预览和执行的一体化工作台”。
+本次工作不是对现有页面进行换色、加阴影或替换控件，而是重新设计 LCTA 的产品模型、人机交互关系、信息架构和前后端契约，使软件从“功能与设置项集合”转变为“围绕用户目标提供判断、建议、预览和执行的一体化工作台”。重构范围同时包含主 WebUI 与 Launcher GUI；两者使用共享的 WebView 前端基础、设计系统、状态模型和任务反馈，但针对“完整管理”和“快速启动”采用不同的信息密度与窗口形态。
 
 最终需要同时解决两类问题：
 
 1. **操作问题**：用户不需要先理解模块、配置文件和内部术语，便能完成安装汉化、更新资源、启动游戏、自动翻译、管理模组等主要任务。
 2. **视觉问题**：页面不再由大量同构卡片、表单和按钮平铺组成，而是通过清晰层级、场景化布局、状态表达、内容密度和适度动效建立辨识度。
+3. **Launcher 体验问题**：Launcher GUI 不再是附属的 WinForms 进度窗口，而是默认启用、可交互、可恢复、与主界面互通的现代 WebView 启动中心。
 
 ## 2. 与既有计划的关系
 
@@ -36,6 +37,7 @@
 - 15 个主前端 JavaScript 文件，约 12,680 行。
 - 148 处 `pywebview.api` 直接桥接调用。
 - 主 API 由多个 mixin 和独立窗口 API 暴露，公开方法数量较多，返回结构与任务反馈模式不统一。
+- Launcher GUI 当前由 `launcher/gui_progress.py` 使用 WinForms 构建固定尺寸进度窗，通过 `LaunchPipeline` 阶段回调和 `ProgressLogHandler` 更新；`launcher.work.gui_mode` 默认值为 `false`，GUI 仍是可选附加模式。
 
 ### 3.2 主要根因
 
@@ -47,6 +49,7 @@
 6. **配置与工作流混杂**：高级参数、一次性选择、长期偏好和危险操作常被放在同一视觉层级。
 7. **视觉组件语义不足**：大量页面复用相同卡片、表单组和按钮结构，虽然一致，但无法表达主次、进度、风险、推荐和状态差异。
 8. **桥接层过于细碎**：前端直接拼接多次 Python 调用，页面承担了本应由后端工作流编排器负责的决策和顺序控制。
+9. **Launcher 与主界面割裂**：Launcher GUI 只能显示阶段、进度和日志，无法复用主界面的状态解释、问题修复、自动化配置和任务结果；主界面也无法展示当前 Launcher 会话或直接接管失败流程。
 
 ## 4. 产品设计原则
 
@@ -121,6 +124,7 @@
 6. 配置翻译服务并开始自动翻译。
 7. 应用文本美化、调爪文本和模组。
 8. 诊断故障、查看日志、重试或恢复。
+9. 通过默认 Launcher GUI 查看启动计划、处理阻塞、启动游戏并在运行期间掌握当前状态。
 
 ## 6. 目标信息架构
 
@@ -204,6 +208,31 @@
 - 页面切换或窗口最小化后任务状态不丢失。
 - 所有长任务采用同一事件和结果模型。
 
+### 6.7 主界面与 Launcher GUI 的关系
+
+主 WebUI 与 Launcher GUI 是同一产品的两个界面形态，不是两个独立配置程序：
+
+- **主 WebUI**：负责首次配置、内容管理、翻译、美化、诊断、设置和自动化策略编辑。
+- **Launcher GUI**：负责展示本次启动计划、启动前检查、阶段进度、可处理阻塞、游戏运行状态和本次会话结果。
+- 两个界面共享 `ConfigManager`、`WorkspaceSnapshot`、任务系统、主题偏好和自动化计划，不维护独立副本。
+- 主界面首页显示正在运行或最近一次 Launcher 会话，并提供“查看启动窗口”“重新运行”“修复问题”等动作。
+- 主界面的自动化区域提供 Launcher GUI 的实时预览，让用户在保存前看到启动窗口会展示哪些步骤。
+- Launcher GUI 提供“打开完整 LCTA”“编辑启动计划”“查看任务详情”“打开相关设置”等深链接，并携带当前会话、失败步骤或设置项上下文。
+- 如果主 WebUI 已打开，Launcher GUI 的“打开完整 LCTA”应聚焦现有窗口并跳转；如果未打开，则创建主窗口并定位到目标上下文。
+- Launcher GUI 即使独立启动也能获得完整启动快照，不依赖主 WebUI 先运行。
+- 两个窗口同时存在时，通过后端事件和 revision 同步状态，禁止依赖窗口之间直接调用彼此的 JavaScript。
+
+### 6.8 Launcher GUI 的目标状态
+
+Launcher WebView 默认启用，并覆盖以下四种状态：
+
+1. **启动前**：显示本次将执行的步骤、预计影响、已跳过步骤、阻塞问题和“开始/继续启动”主操作。
+2. **启动中**：以阶段时间线展示更新、资源预下载、CDN、模组准备和游戏启动；提供当前步骤详情、进度、速度和可取消状态。
+3. **游戏运行中**：显示 PID、运行时长、已启用能力、加速状态与快捷键提示；将详细日志收纳到抽屉中。
+4. **结束或失败**：显示本次会话摘要、失败步骤、已完成变更、重试、跳过后继续、打开主界面修复和退出选项。
+
+关闭 Launcher GUI 时保留现有语义，但改为一致的 WebView 对话框：游戏运行中可选择“结束游戏并退出 Launcher”“仅关闭 Launcher，游戏继续运行”或“返回”；启动准备阶段关闭时明确说明取消会停止哪些任务。
+
 ## 7. 旧页面迁移映射
 
 | 当前入口 | 目标位置 | 迁移方式 |
@@ -215,7 +244,7 @@
 | `resource-updater` | 工作台“资源预下载” | 保留独立领域能力，接入统一预检与任务模型 |
 | `cdn` | 工作台“网络优化” | 将 Cloudflare / CloudFront 技术选择降级为方案详情 |
 | `speed` | 工作台“游戏工具” + 自动化 | 手动控制在工作台，Launcher 集成开关只在自动化区域 |
-| `launcher-config` | 自动化 | 重构为可视化运行顺序与策略配置 |
+| `launcher-config` | 自动化 + Launcher GUI | 主界面重构为可视化运行顺序与策略配置；Launcher GUI 只消费本次启动计划并提供上下文跳转 |
 | `settings` | 设置 | 按常用、账户、存储、网络、高级重组 |
 | `clean` | 内容库“存储管理”或修复流程 | 先展示可回收空间与影响，再执行清理 |
 | `log` / `test` | 任务详情 / 诊断模式 | 日志与测试不占据普通用户主导航 |
@@ -290,6 +319,7 @@
 - 保留 Limbus Company 工具箱的深色、工业感和游戏辅助工具气质，但避免直接复制游戏界面。
 - 使用“控制台 + 工作台 + 内容对象”的组合语言，不使用全页面同构白色卡片。
 - 建立强标题、关键状态、主操作、次要说明和技术详情五级层次。
+- 主 WebUI 与 Launcher GUI 使用同一品牌语言；Launcher GUI 更紧凑、更聚焦、更具阶段感，主 WebUI 则承担高密度管理和编辑。
 
 ### 9.2 布局层次
 
@@ -299,6 +329,7 @@
 - 内容库：列表/表格与详情抽屉，支持高信息密度。
 - 设置：分组导航 + 搜索 + 低密度表单。
 - 编辑器类窗口：继续使用高密度专业布局，不强行套用普通卡片页。
+- Launcher GUI：采用紧凑垂直时间线、当前步骤焦点区、游戏运行状态区和可收纳日志抽屉，不复刻主界面的侧边栏布局。
 
 ### 9.3 组件语义
 
@@ -333,6 +364,39 @@
 - 图标按钮必须有可读标签。
 - 表单错误与任务错误可被屏幕阅读器感知。
 
+### 9.6 暗色主题参考与配色提取
+
+主 WebUI 与 Launcher GUI 的暗色模式可参考 `https://limbuscompany.huijiwiki.com/wiki/首页` 的整体氛围和配色关系，但不得直接复制站点布局、素材或完整样式。
+
+设计阶段需要完成一次正式的视觉取样：
+
+- 记录参考页面的背景、表面、边框、主文字、弱文字、强调色、危险色和装饰性色关系。
+- 以深黑/炭灰背景、冷灰金属表面、温暖浅色文字、低饱和金色或橙色强调、深红边框作为候选方向，再通过实际取样确定最终色值。
+- 将参考色转换为语义令牌，不允许页面直接散落参考站点色值。
+- 确保参考风格经过 LCTA 品牌化处理，并在高对比度、长时间阅读和任务进度场景下保持可用性。
+- 主界面和 Launcher GUI 共用基础暗色令牌，但允许 Launcher GUI 使用更强的阶段强调和状态光效。
+- 将参考截图、取样色值、对比度结果和最终令牌映射记录到视觉设计规范中。
+
+### 9.7 组件库策略
+
+允许引入 Vue 组件库，但不能让组件库默认外观重新造成“所有页面都一样”的问题。实施前进行短期技术验证，优先评估以下路线：
+
+1. **无样式或 Headless 组件原语 + 自有设计系统**：优先用于 Dialog、Popover、Select、Tabs、Tooltip、Dropdown、Command Palette 等交互复杂且需要可访问性的组件。
+2. **支持无样式模式的完整组件库**：用于表格、树、虚拟列表、分页等高成本组件，但视觉必须接入 LCTA 令牌。
+3. **完整样式组件库**：只有在主题覆盖能力、包体积和视觉一致性验证通过后，才允许局部使用。
+
+候选可包含 Reka UI、PrimeVue、Naive UI 或实施时同等级的 Vue 3 组件方案。最终选择必须满足：
+
+- Vue 3 与 TypeScript 支持。
+- 键盘操作、焦点管理和 ARIA 能力。
+- 支持自定义主题或无样式模式。
+- 可 tree-shaking，且不会显著放大离线包体积。
+- 可完全本地打包，不依赖运行时 CDN、远程字体或远程图标。
+- 在 pywebview / WebView2 中行为稳定。
+- 同时适用于主 WebUI 和 Launcher GUI，避免维护两套基础组件。
+
+组件库选型必须以一个包含 Select、Dialog、Tooltip、Virtual List 和 Launcher 阶段时间线的原型为依据，不以文档观感直接决定。
+
 ## 10. 目标前端架构
 
 ### 10.1 技术方向
@@ -348,6 +412,9 @@
 ```text
 webui/
   src/
+    entries/
+      main.ts
+      launcher.ts
     app/
       router/
       shell/
@@ -363,6 +430,7 @@ webui/
       automation/
       settings/
       tasks/
+      launcher/
     components/
       primitives/
       feedback/
@@ -374,6 +442,11 @@ webui/
       LibraryView.vue
       AutomationView.vue
       SettingsView.vue
+      launcher/
+        LauncherView.vue
+        LauncherPreparingView.vue
+        LauncherRunningView.vue
+        LauncherResultView.vue
     styles/
       tokens.css
       themes.css
@@ -381,7 +454,7 @@ webui/
       utilities.css
 ```
 
-最终目录可在实施时微调，但必须保持“领域状态、桥接、组件、页面”分层，禁止再次形成单个超大 `features.js`。
+最终目录可在实施时微调，但必须保持“领域状态、桥接、组件、页面”分层，禁止再次形成单个超大 `features.js`。Vite 需要生成主 WebUI 与 Launcher GUI 两个本地 HTML 入口，并共享同一套组件、令牌和领域模块。
 
 ### 10.3 前端约束
 
@@ -391,6 +464,8 @@ webui/
 - 配置表单使用草稿、验证、保存结果和冲突处理，不直接散落修改全局缓存。
 - 路由支持深链接到具体工作流、对象和设置项。
 - 普通用户界面与专家模式复用状态，不维护两套配置。
+- 主 WebUI 和 Launcher GUI 使用不同入口与应用壳，但共享 bridge、stores、设计令牌和组件原语。
+- Launcher GUI 不允许通过远程页面运行；所有 HTML、CSS、JavaScript、图标和字体必须随应用离线打包。
 
 ## 11. 目标后端架构与桥接契约
 
@@ -404,6 +479,7 @@ webui/
 - `TaskService`：统一任务生命周期、进度、取消、重试和结果。
 - `LibraryService`：统一列出和管理本地内容对象。
 - `SettingsService`：提供分区设置、验证和事务式更新。
+- `LaunchSessionService`：将 `LaunchPipeline` 映射为可恢复、可查询、可取消的启动会话，并负责主界面与 Launcher GUI 的状态同步。
 
 领域逻辑继续复用 `webutils/`、`resource_updater/`、`translateFunc/`、`globalManagers/`，产品门面不复制底层实现。
 
@@ -463,6 +539,21 @@ OperationResult
   failed_items
   next_actions
   recovery
+
+LaunchSessionSnapshot
+  id
+  state
+  current_phase
+  phases
+  launch_plan
+  game_process
+  enabled_features
+  started_at
+  finished_at
+  can_cancel
+  can_close_without_stopping_game
+  issues
+  result
 ```
 
 ### 11.3 建议桥接 API
@@ -484,6 +575,11 @@ retry_task(task_id)
 get_settings(section)
 validate_settings_patch(section, patch)
 apply_settings_patch(section, patch, expected_revision)
+get_launcher_session(session_id)
+start_launcher_session(options)
+cancel_launcher_session(session_id)
+close_launcher_window(mode)
+open_main_window(target, context)
 ```
 
 接口名可在契约设计阶段调整，但不得继续为每个按钮增加一个无统一返回结构的桥接方法。
@@ -499,9 +595,13 @@ lcta:task-updated
 lcta:task-finished
 lcta:library-changed
 lcta:settings-changed
+lcta:launcher-session-changed
+lcta:launcher-window-command
 ```
 
 事件必须带版本和实体 ID；前端收到未知版本时应降级为重新拉取快照，而不是静默失效。
+
+Launcher 会话事件必须由后端持有真相；窗口重新创建后可通过 `session_id` 恢复当前阶段、日志摘要和游戏运行状态。
 
 ### 11.5 配置事务
 
@@ -517,16 +617,18 @@ lcta:settings-changed
 
 ### Task 0.1：建立任务清单与现状链路
 
-- [ ] 为八个核心任务记录当前入口、页面跳转、用户决策、桥接调用、失败点和结果反馈。
+- [ ] 为九个核心任务记录当前入口、页面跳转、用户决策、桥接调用、失败点和结果反馈。
 - [ ] 从 `key-paths.md` 与实际代码核对每条链路。
 - [ ] 标出可以合并的动作和必须保留的领域边界。
+- [ ] 单独记录 `start_webui.py -launcher` → `launcher/main.py` → `LaunchPipeline` → WinForms GUI 的启动、取消、游戏运行和关闭链路。
 - [ ] 输出 `docs/superpowers/specs/2026-08-xx-product-ux-design.md` 初稿。
 
 ### Task 0.2：建立可量化基线
 
 - [ ] 记录首次安装、更新汉化、配置 Launcher、开始翻译所需点击和页面数。
 - [ ] 记录首屏桥接次数、关键流程 API 次数和长任务反馈差异。
-- [ ] 保存主页面、空状态、错误状态和执行状态截图作为前后对比。
+- [ ] 保存主页面与现有 Launcher GUI 的空状态、执行状态、游戏运行状态、错误状态和关闭确认截图作为前后对比。
+- [ ] 对指定灰机 Wiki 参考页完成暗色配色取样、语义映射和对比度记录。
 - [ ] 定义可用性验收脚本，而不是只依赖视觉主观评价。
 
 ### Phase 0 Gate
@@ -557,7 +659,14 @@ lcta:settings-changed
 - [ ] 定义取消、重试和部分成功语义。
 - [ ] 保证任务异常不会只写日志而不给 UI 结构化结果。
 
-### Task 1.4：建立兼容层
+### Task 1.4：定义 Launcher 会话模型
+
+- [ ] 将 `LaunchPipeline` 阶段映射为 `LaunchSessionSnapshot`，保留阶段顺序、可见性和条件跳过规则。
+- [ ] 将 Launcher 日志、资源更新进度、游戏 PID、运行时长、加速状态和退出结果并入会话快照。
+- [ ] 定义关闭窗口、取消启动、结束游戏、仅关闭窗口和失败后继续的状态转换。
+- [ ] 让 Launcher 会话进入统一任务中心，同时保留适合 Launcher GUI 的阶段视图。
+
+### Task 1.5：建立兼容层
 
 - [ ] 新产品 API 调用现有领域实现。
 - [ ] 旧页面继续使用旧 API，直到对应流程完成迁移。
@@ -568,6 +677,7 @@ lcta:settings-changed
 - [ ] 可通过单次快照调用获得首页所需数据。
 - [ ] 可构建并执行“安装推荐汉化”动作计划。
 - [ ] 任务进度可在不依赖页面 modal DOM 的情况下消费。
+- [ ] Launcher 会话可在窗口重建后恢复当前阶段和游戏运行状态。
 - [ ] 契约具备 Python 单元测试和 TypeScript 类型定义。
 
 ## Phase 2：前端基础、应用壳与设计系统
@@ -577,30 +687,41 @@ lcta:settings-changed
 - [ ] 按需吸收 `2026-07-19-frontend-refactor.md` 的 Vite、Vue、TypeScript、Pinia、Router、ESLint 和 Vitest 配置。
 - [ ] 创建 pywebview bridge adapter 和 mock adapter。
 - [ ] 建立开发浏览器模式，允许无 Python 窗口调试状态场景。
+- [ ] 配置主 WebUI 与 Launcher GUI 两个 Vite HTML 入口和共享构建产物。
 - [ ] 设置新旧 UI 并行入口，避免大爆炸替换。
 
-### Task 2.2：实现设计令牌与基础组件
+### Task 2.2：完成组件库技术验证
+
+- [ ] 使用候选组件方案实现 Select、Dialog、Tooltip、Virtual List 和 Launcher 阶段时间线原型。
+- [ ] 比较可访问性、主题自由度、包体积、tree-shaking、离线构建和 WebView2 行为。
+- [ ] 确定“自有组件 + Headless 原语 + 局部复杂组件”的最终边界。
+- [ ] 将选型、弃选原因和升级策略写入设计规范。
+
+### Task 2.3：实现设计令牌与基础组件
 
 - [ ] 建立亮色、暗色及主题扩展令牌，减少页面内硬编码颜色。
 - [ ] 实现按钮、输入、选择器、开关、标签、提示、弹层、抽屉和分段控件。
 - [ ] 实现焦点、禁用、错误、加载和减少动态效果状态。
 - [ ] 使用视觉回归页面展示所有组件状态。
 
-### Task 2.3：实现应用壳
+### Task 2.4：实现双应用壳
 
 - [ ] 实现五个一级区域导航。
 - [ ] 实现全局任务中心。
 - [ ] 实现命令搜索与功能搜索。
 - [ ] 实现上下文返回、深链接和窗口尺寸适配。
+- [ ] 实现无侧边栏的 Launcher 紧凑应用壳、日志抽屉和窗口级确认对话框。
+- [ ] 验证两个入口共享主题、组件和 bridge，但不会加载彼此不需要的页面代码。
 
 ### Phase 2 Gate
 
 - [ ] 新应用壳可在 pywebview 和普通浏览器 mock 环境运行。
 - [ ] 基础组件通过键盘和主题测试。
+- [ ] 主 WebUI 与 Launcher GUI 可从同一构建产物独立启动。
 - [ ] 首屏不依赖大量分散桥接调用。
 - [ ] 旧 UI 仍可回退访问。
 
-## Phase 3：首页与首次使用主流程
+## Phase 3：首页、首次使用与 Launcher GUI 主流程
 
 ### Task 3.1：实现状态驱动首页
 
@@ -622,12 +743,32 @@ lcta:settings-changed
 - [ ] 支持自定义来源和字体，但默认折叠。
 - [ ] 支持失败项重试和返回动作计划修改选项。
 
+### Task 3.4：将 Launcher GUI 改为 WebView
+
+- [ ] 新建 Launcher WebView 入口、窗口启动器和最小 `LauncherWindowAPI`。
+- [ ] 将阻塞式启动管线移入受控工作线程，保证 pywebview 事件循环负责窗口与 JS bridge。
+- [ ] 将 `LaunchPipeline` 阶段、日志和资源进度转换为版本化 Launcher 会话事件。
+- [ ] 实现启动前、启动中、游戏运行中、结束和失败五类视图状态。
+- [ ] 实现取消、关闭、结束游戏、仅关闭窗口和打开主 WebUI 的完整行为。
+- [ ] 将 WebView GUI 设为 Launcher 默认与推荐模式；控制台模式降级为兼容/故障回退选项。
+- [ ] 在功能等价期间保留 WinForms 回退，达到 Gate 后删除 `launcher/gui_progress.py`。
+
+### Task 3.5：实现主界面与 Launcher GUI 联动
+
+- [ ] 首页显示活动或最近 Launcher 会话及对应主操作。
+- [ ] 自动化页面提供 Launcher 步骤预览，并与实际会话使用同一计划数据。
+- [ ] Launcher GUI 可带上下文打开主界面的自动化、设置、任务详情或故障修复区域。
+- [ ] 实现窗口发现、聚焦和单实例协调，避免重复创建主窗口。
+- [ ] 验证两个窗口同时修改安全偏好时的 revision 同步与冲突提示。
+
 ### Phase 3 Gate
 
 - [ ] 新用户无需理解下载页与安装页的差异即可完成安装。
 - [ ] 从首页开始到执行安装最多三次有意义决策。
 - [ ] 下载完成后不需要手动跳转并重新选包。
 - [ ] 成功、失败、取消、无网络和路径无效场景均有完整 UI。
+- [ ] Launcher 默认打开 WebView GUI，并能完整呈现现有管线阶段和关闭语义。
+- [ ] 主界面可查看 Launcher 会话，Launcher GUI 可准确跳转回主界面上下文。
 
 ## Phase 4：工作台与内容库
 
@@ -693,8 +834,10 @@ lcta:settings-changed
 
 - [ ] 将 Launcher 工作模式显示为有顺序的步骤链。
 - [ ] 显示每个步骤的依赖、状态、最近结果和配置入口。
+- [ ] 使用与 Launcher GUI 相同的数据和组件渲染“下次启动预览”，避免配置页与实际启动表现不一致。
 - [ ] 生成并验证 Steam 启动命令。
 - [ ] 保证所有集成复选框只存在于自动化区域。
+- [ ] 将 WebView GUI 作为默认与推荐显示模式；控制台模式仅放在兼容性/故障排查选项中。
 
 ### Task 6.2：重构设置
 
@@ -713,6 +856,7 @@ lcta:settings-changed
 ### Phase 6 Gate
 
 - [ ] 自动化顺序和依赖对用户可见。
+- [ ] 自动化预览与 Launcher GUI 实际步骤顺序、标题和启用状态一致。
 - [ ] 设置修改不会覆盖其他窗口或任务产生的新状态。
 - [ ] 常见错误均有面向用户的修复建议。
 - [ ] 专家仍能访问完整日志和高级配置。
@@ -721,21 +865,24 @@ lcta:settings-changed
 
 ### Task 7.1：视觉与动效完善
 
-- [ ] 对首页、工作流、内容库、自动化、设置和任务中心进行统一视觉评审。
+- [ ] 对首页、工作流、内容库、自动化、设置、任务中心和 Launcher GUI 进行统一视觉评审。
+- [ ] 完成灰机 Wiki 暗色参考的取样、语义令牌转换、品牌化调整和对比度验证。
 - [ ] 清除同构卡片滥用、无意义阴影、重复边框和无层级按钮。
 - [ ] 为加载、空、错误、成功、离线和部分成功补齐状态设计。
-- [ ] 验证常见窗口尺寸、缩放比例和长中文文案。
+- [ ] 验证主窗口、Launcher 紧凑窗口的常见尺寸、缩放比例和长中文文案。
 
 ### Task 7.2：可用性与回归测试
 
 - [ ] 使用 Phase 0 的脚本重新测量点击数、页面数和完成时间。
 - [ ] 为首页推荐规则、动作计划、任务状态机和设置事务增加自动化测试。
 - [ ] 为关键 Vue 组件和 store 增加 Vitest 测试。
-- [ ] 完成 pywebview Windows WebView2 实机验证。
+- [ ] 完成主 WebUI 与 Launcher GUI 的 pywebview Windows WebView2 实机验证。
+- [ ] 验证主窗口未打开、已打开、Launcher 独立运行和两个窗口同时存在的生命周期。
 
 ### Task 7.3：构建与打包迁移
 
 - [ ] 确认 Vite 产物在离线打包环境中不依赖外部 CDN。
+- [ ] 确认主 WebUI 与 Launcher GUI 的多入口产物均被源码运行、打包版和 CI 正确收集。
 - [ ] 若修改构建流程，同步更新 `build.ps1` 与 `.github/workflows/release.yml`。
 - [ ] 若仍有新增 `webui/` JS 进入旧 bundle，按脚本顺序同步更新 `.github/InitCode.py`；若切换为 Vite 产物，则明确移除旧 bundle 假设。
 - [ ] 验证开发、源码运行、打包版和 CI 产物。
@@ -743,6 +890,7 @@ lcta:settings-changed
 ### Task 7.4：删除兼容层和旧页面
 
 - [ ] 只有在对应功能达到行为等价并通过验收后删除旧 section、JS 和 API。
+- [ ] Launcher WebView 达到行为等价后删除 WinForms `launcher/gui_progress.py`、相关 `clr`/WinForms GUI 依赖和旧回退分支；若其他功能仍使用 pythonnet，则只删除 Launcher 专属依赖。
 - [ ] 删除无引用的内联事件、全局函数和 `evaluate_js()` 页面耦合。
 - [ ] 更新所有相关 guide、README 和 `.claude/docs/` 文档。
 - [ ] 更新被修改文档顶部的 `Last updated` 日期。
@@ -751,6 +899,7 @@ lcta:settings-changed
 
 - [ ] 核心功能与旧版行为等价或有明确批准的产品变更。
 - [ ] 新版通过构建、测试、离线运行和打包验证。
+- [ ] Launcher WebView 是默认模式，控制台回退可用但不干扰普通用户。
 - [ ] 新旧 UI 双轨和兼容 API 已安全移除。
 - [ ] 文档、帮助内容和截图与最终界面一致。
 
@@ -760,6 +909,8 @@ lcta:settings-changed
 
 - 首次安装推荐汉化：最多三次有意义决策。
 - 日常健康状态下：启动游戏只需一次主操作。
+- Launcher GUI 从启动前检查到游戏运行持续使用同一窗口，不要求用户返回主 WebUI 查看关键状态。
+- Launcher GUI 遇到可修复阻塞时，可在当前窗口处理或一次操作带上下文打开主 WebUI。
 - 任一核心流程缺少配置时：无需离开流程即可补全并继续。
 - 任一长任务：最多一次操作即可打开任务详情。
 - 任一失败任务：结果页明确提供重试、修改选项或查看诊断中的至少一个可行动入口。
@@ -770,12 +921,15 @@ lcta:settings-changed
 - 首页推荐动作不超过三个，且只有一个主操作。
 - 高级配置默认不占据核心流程首屏。
 - 相同配置项不在多个页面重复出现。
+- Launcher GUI 不复制完整自动化设置，只展示本次计划、最小修复项和上下文跳转。
 
 ### 13.3 技术质量
 
 - 业务组件中直接 `pywebview.api` 调用为零。
 - 新工作流 API 使用统一成功、错误和任务结构。
 - 新长任务全部进入统一任务中心。
+- Launcher 使用 WebView 入口，`launcher.work.gui_mode` 默认启用或被新的显示模式配置等价替代。
+- Launcher 会话由后端持有，可在窗口重建或主窗口后来打开时恢复。
 - TypeScript strict、ESLint、Vitest 和 Python 相关测试通过。
 - 首屏通过一个聚合快照完成主要状态初始化，特殊能力检测最多追加少量并行请求。
 
@@ -785,6 +939,7 @@ lcta:settings-changed
 - 所有核心流程支持键盘操作和清晰焦点状态。
 - 所有页面具备加载、空、错误和成功状态。
 - 不再以同一种卡片和表单布局覆盖所有内容类型。
+- 主 WebUI 与 Launcher GUI 暗色模式共享语义令牌，视觉一致但布局不互相照搬。
 - 动效不阻碍操作，并支持系统减少动态效果偏好。
 
 ## 14. 测试策略
@@ -795,12 +950,14 @@ lcta:settings-changed
 - 推荐动作规则测试。
 - 动作计划预检与执行测试。
 - 任务状态机、取消和重试测试。
+- Launcher 会话状态机、管线阶段映射、关闭模式和窗口恢复测试。
 - 设置 revision、验证和事务更新测试。
 
 ### 14.2 TypeScript / Vue
 
 - bridge adapter 与事件版本测试。
 - workspace、workflow、task、library store 测试。
+- launcher store、阶段时间线、运行状态、关闭确认和主界面深链接测试。
 - 首页主操作状态矩阵测试。
 - 工作流步骤、变更预览、错误恢复和危险确认组件测试。
 - 路由深链接和上下文恢复测试。
@@ -815,6 +972,10 @@ lcta:settings-changed
 - 无管理员权限写 hosts。
 - API 凭据无效。
 - Launcher 配置不完整。
+- Launcher WebView 默认启动、控制台回退和 WinForms 迁移期回退。
+- Launcher 启动准备阶段关闭、游戏运行中关闭、仅关窗口、结束游戏并退出和取消关闭。
+- 主 WebUI 已打开时聚焦并跳转；未打开时创建并跳转。
+- Launcher GUI 关闭后重新打开并恢复活动会话。
 - 任务运行中切换页面、关闭子窗口或重新打开任务中心。
 - 亮色、暗色、不同缩放比例和窄窗口。
 
@@ -836,6 +997,7 @@ lcta:settings-changed
 
 - 配置仍以 `ConfigManager` 为唯一持久化来源。
 - 任务以新 `TaskService` 为唯一运行状态来源。
+- Launcher 会话以 `LaunchSessionService` 为唯一状态来源，主 WebUI 与 Launcher GUI 都只消费该服务。
 - 旧页面通过兼容适配器读取同一来源。
 - 禁止新旧前端分别维护任务队列、配置缓存或安装状态。
 
@@ -848,16 +1010,19 @@ lcta:settings-changed
 | 前后端契约持续变化 | Phase 1 先冻结版本化数据结构，再开始大量页面实现 |
 | 视觉升级但交互仍复杂 | 所有页面必须对应用户任务指标，禁止仅按截图验收 |
 | 简化界面损失高级能力 | 基础模式与专家模式共享状态，专业编辑器保留高密度能力 |
+| 组件库限制视觉表达或增加包体积 | 先做真实控件原型和打包对比，优先 Headless 原语与局部引入 |
 | Launcher 配置重复 | 代码评审检查集成开关唯一位置，源页面只提供说明与跳转 |
+| WebView 事件循环与启动管线互相阻塞 | 管线进入受控工作线程，窗口生命周期和取消状态由 `LaunchSessionService` 统一管理 |
+| 主窗口与 Launcher 窗口状态冲突 | 后端单一真相、revision、窗口发现和版本化事件 |
 | 长任务状态丢失 | 后端持有任务状态，前端通过快照与事件恢复 |
 
 ## 16. 文档维护要求
 
 发生相应修改时必须同步更新：
 
-- `.claude/docs/architecture.md`：新前端架构、产品门面、任务事件和桥接边界。
+- `.claude/docs/architecture.md`：新前端架构、双 WebView 入口、产品门面、Launcher 会话、任务事件和桥接边界。
 - `.claude/docs/modules.md`：新增、迁移和删除的前后端文件。
-- `.claude/docs/key-paths.md`：首页推荐、汉化安装、Launcher 自动化、翻译和任务恢复链路。
+- `.claude/docs/key-paths.md`：首页推荐、汉化安装、Launcher WebView 生命周期、主窗口联动、Launcher 自动化、翻译和任务恢复链路。
 - `.claude/docs/dev-guide.md`：Vite 开发、测试、构建和 mock bridge 使用方式。
 - `docs/architecture.md` 与 `docs/development.md`：面向维护者的长期架构和发布说明。
 - `webui/guide/`：按新信息架构重写帮助内容，优先上下文帮助而不是长篇页面说明。
@@ -866,17 +1031,21 @@ lcta:settings-changed
 
 ## 17. 建议的首个实施里程碑
 
-计划获确认后，首个里程碑只实现“首页状态 + 推荐安装汉化”纵切片，不立即迁移全部页面。
+计划获确认后，首个里程碑实现“共享双 WebView 基础 + 首页状态 + Launcher GUI 基础会话 + 推荐安装汉化”纵切片，不立即迁移全部页面。
 
 该里程碑应交付：
 
 1. `WorkspaceSnapshot` 第一版。
-2. “安装推荐汉化”动作计划。
-3. 统一任务状态第一版。
-4. 新应用壳和设计令牌最小集。
-5. 新首页。
-6. 安装流程及结果页。
-7. 旧 UI 回退入口。
-8. 对应 Python、TypeScript 与集成测试。
+2. `LaunchSessionSnapshot` 第一版。
+3. “安装推荐汉化”动作计划。
+4. 统一任务状态第一版。
+5. 组件库原型结论、共享设计令牌最小集和暗色参考取样。
+6. 主 WebUI 与 Launcher GUI 两个 Vite / WebView 入口。
+7. 新首页。
+8. Launcher 启动前、启动中和游戏运行状态基础界面。
+9. 主界面 Launcher 会话卡片与 Launcher GUI“打开完整 LCTA”联动。
+10. 安装流程及结果页。
+11. 旧主 UI、WinForms Launcher GUI 和控制台模式回退入口。
+12. 对应 Python、TypeScript、窗口生命周期与集成测试。
 
-只有该纵切片证明新交互确实减少步骤、提高可理解性且打包可行后，才进入其他功能迁移。
+只有该纵切片证明新交互确实减少步骤、提高可理解性，两个 WebView 入口可稳定打包，Launcher 管线不会阻塞窗口，且主界面与 Launcher GUI 能可靠同步后，才进入其他功能迁移。

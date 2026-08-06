@@ -4,6 +4,11 @@ elevate_write_hosts / elevate_remove_hosts 通过 helper_script = __file__ +
 sys.executable <file> --cdn-write-hosts <json> 重启自身做 UAC 提权，
 __main__ 块负责处理 --cdn-write-hosts 子进程参数。
 
+提权策略：非管理员进程先真实尝试直接写入/移除；仅当权限类失败
+（WinError 5 / PermissionError）时才触发 UAC 提权重试——不做“新建文件”
+式权限探测，避免目录可新建但目标文件不可替换（ACL/只读/杀软拦截）
+导致的假阳性短路提权路径。
+
 提权子进程会以脚本方式直接运行本文件（无包上下文），此时相对导入不可用，
 故根据 __package__ 判断：脚本模式将 webutils/ 加入 sys.path 后按包导入，
 避免触发 webutils/__init__（其导入整包依赖）；两种模式导入内容一致。
@@ -16,7 +21,6 @@ import os
 import sys
 import tempfile
 import time
-import uuid
 from typing import Callable, Dict, List, Optional
 
 if __package__ is None:
@@ -28,7 +32,13 @@ if __package__ is None:
         CF_END_MARKER,
         CF_START_MARKER,
     )
-    from cdn.hosts import _get_hosts_path, remove_hosts_block, write_hosts
+    from cdn.hosts import (
+        _format_hosts_error,
+        _get_hosts_path,
+        _is_permission_error,
+        remove_hosts_block,
+        write_hosts,
+    )
 else:
     from .constants import (
         CFA_END_MARKER,
@@ -36,7 +46,13 @@ else:
         CF_END_MARKER,
         CF_START_MARKER,
     )
-    from .hosts import _get_hosts_path, remove_hosts_block, write_hosts
+    from .hosts import (
+        _format_hosts_error,
+        _get_hosts_path,
+        _is_permission_error,
+        remove_hosts_block,
+        write_hosts,
+    )
 
 
 def _is_admin() -> bool:
@@ -72,6 +88,10 @@ def elevate_write_hosts(
     在必要时提权写入 hosts。
     对应 LLC_BABEL HostsWriteElevator。
 
+    策略：非管理员进程先真实尝试直接写入；仅权限类失败（WinError 5）
+    才触发 UAC 提权重试，避免探测文件权限与实际替换权限不一致造成的
+    “探针通过却写入失败、且不弹 UAC”的假阳性。
+
     返回: (success: bool, error_message: Optional[str])
     """
     if hosts_path is None:
@@ -79,27 +99,24 @@ def elevate_write_hosts(
 
     os.makedirs(os.path.dirname(hosts_path), exist_ok=True)
 
-    # 检查是否已经以管理员身份运行
+    # 已经以管理员身份运行，直接写入
     if _is_admin():
-        # 已经是管理员，直接写入
-        success, err = write_hosts(cf_ip, cloudfront_mappings, log_cb, hosts_path)
+        success, err = write_hosts(
+            cf_ip, cloudfront_mappings, log_cb, hosts_path, elevated=True
+        )
         return success, err
 
-    # 检查是否可以写入（普通用户权限下尝试创建一个临时文件）
-    can_write = False
+    # 非管理员：先真实尝试直接写入；权限类失败才走 UAC 提权
     try:
-        test_path = hosts_path + f".{uuid.uuid4().hex[:8]}.test"
-        with open(test_path, "w") as f:
-            f.write("test")
-        os.remove(test_path)
-        can_write = True
-    except (PermissionError, OSError):
-        pass
-
-    if can_write:
-        # 不需要提权即可写入
-        success, err = write_hosts(cf_ip, cloudfront_mappings, log_cb, hosts_path)
+        success, err = write_hosts(
+            cf_ip, cloudfront_mappings, log_cb, hosts_path,
+            raise_on_permission_error=True,
+        )
         return success, err
+    except (PermissionError, OSError) as e:
+        if not _is_permission_error(e):
+            return False, _format_hosts_error(e)
+        # 权限类失败，继续走提权路径
 
     # 需要提权：将请求写入临时 JSON 文件，然后以管理员身份重新运行
     request_json = {
@@ -210,25 +227,24 @@ def elevate_remove_hosts(
 
     os.makedirs(os.path.dirname(hosts_path), exist_ok=True)
 
-    # 检查是否已经以管理员身份运行
+    # 已经以管理员身份运行，直接移除
     if _is_admin():
-        success, err = remove_hosts_block(marker_start, marker_end, hosts_path, log_cb)
+        success, err = remove_hosts_block(
+            marker_start, marker_end, hosts_path, log_cb, elevated=True
+        )
         return success, err
 
-    # 检查是否可以写入
-    can_write = False
+    # 非管理员：先真实尝试直接移除；权限类失败才走 UAC 提权
     try:
-        test_path = hosts_path + f".{uuid.uuid4().hex[:8]}.test"
-        with open(test_path, "w") as f:
-            f.write("test")
-        os.remove(test_path)
-        can_write = True
-    except (PermissionError, OSError):
-        pass
-
-    if can_write:
-        success, err = remove_hosts_block(marker_start, marker_end, hosts_path, log_cb)
+        success, err = remove_hosts_block(
+            marker_start, marker_end, hosts_path, log_cb,
+            raise_on_permission_error=True,
+        )
         return success, err
+    except (PermissionError, OSError) as e:
+        if not _is_permission_error(e):
+            return False, _format_hosts_error(e)
+        # 权限类失败，继续走提权路径
 
     # 需要提权
     request_json = {
@@ -315,6 +331,7 @@ def _handle_helper_invocation():
                         cf_ip=req.get("cf_ip"),
                         cloudfront_mappings=req.get("cloudfront_mappings"),
                         hosts_path=req.get("hosts_path"),
+                        elevated=True,
                     )
 
                     result = {
@@ -332,6 +349,7 @@ def _handle_helper_invocation():
                     success, err = remove_hosts_block(
                         marker_s, marker_e,
                         hosts_path=req.get("hosts_path", _get_hosts_path()),
+                        elevated=True,
                     )
                     result = {
                         "success": success,

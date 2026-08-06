@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import stat
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -16,20 +17,37 @@ from .constants import (
 )
 
 
-def _format_hosts_error(exc: Exception) -> str:
+def _is_permission_error(exc: Exception) -> bool:
+    """判断异常是否为权限类错误（[WinError 5] / PermissionError / 拒绝访问）。"""
+    err_str = str(exc)
+    return isinstance(exc, PermissionError) or "WinError 5" in err_str or "拒绝访问" in err_str
+
+
+def _format_hosts_error(exc: Exception, elevated: bool = False) -> str:
     """
     将 hosts 写入/移除时的异常转换为用户可读的错误描述。
     包含错误原因与解决建议；无法识别时退回原始错误信息。
+
+    elevated: 是否为已提权（管理员）进程中的失败；用于区分引导文案。
     """
     err_str = str(exc)
 
     # 权限不足（[WinError 5] / PermissionError）
-    if isinstance(exc, PermissionError) or "WinError 5" in err_str or "拒绝访问" in err_str:
+    if _is_permission_error(exc):
+        if elevated:
+            return (
+                f"已以管理员权限运行，仍无法修改 hosts 文件。\n\n"
+                f"原因：hosts 文件可能被设置为只读属性，"
+                f"或被杀毒软件/安全软件（如 Windows Defender、火绒等）的 hosts 保护功能拦截。\n\n"
+                f"解决方法：\n"
+                f"1. 右键 hosts 文件 → 属性 → 取消勾选“只读”；\n"
+                f"2. 将本程序添加到杀毒软件白名单/排除列表，或关闭其 hosts 保护功能。"
+            )
         return (
             f"权限不足，无法修改 hosts 文件。\n\n"
             f"原因：hosts 位于系统保护目录 C:\\Windows\\System32\\drivers\\etc\\，"
             f"修改需要管理员权限，当前程序未以管理员身份运行。\n\n"
-            f"解决方法：右键点击程序图标 → 以管理员身份运行，然后重试。"
+            f"解决方法：请重新操作并在 UAC 弹窗中选择“是”以授予权限。"
         )
 
     # 文件被占用（[WinError 32]）
@@ -119,11 +137,21 @@ def _build_block(marker_start: str, marker_end: str, mappings: List[Tuple[str, s
     return block
 
 
+def _clear_readonly(path: str) -> None:
+    """尝试清除目标文件的只读属性（失败忽略），供 os.replace 原子替换使用。"""
+    try:
+        os.chmod(path, stat.S_IWRITE)
+    except OSError:
+        pass
+
+
 def write_hosts(
     cf_ip: Optional[str] = None,
     cloudfront_mappings: Optional[Dict[str, str]] = None,
     log_cb: Optional[Callable[[str], None]] = None,
-    hosts_path: Optional[str] = None
+    hosts_path: Optional[str] = None,
+    raise_on_permission_error: bool = False,
+    elevated: bool = False
 ):
     """
     将优选 IP 写入系统 hosts 文件的受管标记块。
@@ -131,6 +159,10 @@ def write_hosts(
 
     cf_ip: Cloudflare 优选 IP（None 表示不清除旧映射）
     cloudfront_mappings: {domain: ip, ...}
+
+    raise_on_permission_error: 权限类错误（WinError 5/PermissionError）时抛出原始异常，
+        供提权流程判断是否升级权限重试（其余错误仍返回格式化描述）。
+    elevated: 当前进程是否已提权；影响权限失败时的提示文案。
 
     返回: (success: bool, error_message: Optional[str])
     """
@@ -176,7 +208,8 @@ def write_hosts(
                 f.write(content)
                 f.write(terminator)
 
-        # 原子替换
+        # 清除目标只读属性后原子替换（MoveFileEx 拒绝替换只读目标）
+        _clear_readonly(hosts_path)
         os.replace(temp_path, hosts_path)
 
         if log_cb:
@@ -188,7 +221,9 @@ def write_hosts(
         error_msg = f"写入 hosts 失败：{e}"
         if log_cb:
             log_cb(error_msg)
-        return False, _format_hosts_error(e)
+        if raise_on_permission_error and _is_permission_error(e):
+            raise
+        return False, _format_hosts_error(e, elevated=elevated)
     finally:
         if os.path.isfile(temp_path):
             try:
@@ -261,10 +296,16 @@ def remove_hosts_block(
     marker_start: str,
     marker_end: str,
     hosts_path: str,
-    log_cb: Optional[Callable[[str], None]] = None
+    log_cb: Optional[Callable[[str], None]] = None,
+    raise_on_permission_error: bool = False,
+    elevated: bool = False
 ):
     """
     移除 hosts 文件中的单个受管标记块（CF 或 CFA）。
+
+    raise_on_permission_error: 权限类错误（WinError 5/PermissionError）时抛出原始异常，
+        供提权流程判断是否升级权限重试（其余错误仍返回格式化描述）。
+    elevated: 当前进程是否已提权；影响权限失败时的提示文案。
 
     返回: (success: bool, error_message: Optional[str])
     """
@@ -290,7 +331,8 @@ def remove_hosts_block(
                 f.write(content)
                 f.write(terminator)
 
-        # 原子替换
+        # 清除目标只读属性后原子替换（MoveFileEx 拒绝替换只读目标）
+        _clear_readonly(hosts_path)
         os.replace(temp_path, hosts_path)
 
         if log_cb:
@@ -302,7 +344,9 @@ def remove_hosts_block(
         error_msg = f"移除 hosts 块失败：{e}"
         if log_cb:
             log_cb(error_msg)
-        return False, _format_hosts_error(e)
+        if raise_on_permission_error and _is_permission_error(e):
+            raise
+        return False, _format_hosts_error(e, elevated=elevated)
     finally:
         if os.path.isfile(temp_path):
             try:

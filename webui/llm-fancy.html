@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LCTA - LLM 文本美化</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/llm-fancy.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<div class="llmf-container">
+    <div class="llmf-header">
+        <h1><i class="fas fa-wand-magic-sparkles"></i> LLM 文本美化</h1>
+        <p>使用 bus 语法匹配文本组，交由 LLM 美化，输出 bus 引擎格式规则集（自动保存至 fancy/ 并启用）。</p>
+    </div>
+
+    <!-- 选择规则 -->
+    <div class="llmf-card">
+        <h3><i class="fas fa-bullseye"></i> 匹配规则（bus 语法）
+            <small>path 支持 key、[*] 通配、[索引]、[?字段=值] 选择器；path 为空表示匹配全部字符串叶子</small>
+        </h3>
+        <div class="llmf-field">
+            <textarea id="llmf-selection" class="llmf-code" rows="8" spellcheck="false"></textarea>
+            <div class="llmf-hint">文件匹配器支持 glob 字符串、{"exact": "..."} 或 {"regex": "..."}</div>
+        </div>
+        <div class="llmf-actions" style="margin-bottom:0;">
+            <button class="llmf-btn" id="llmf-selection-validate">
+                <i class="fas fa-check-circle"></i> 校验
+            </button>
+            <button class="llmf-btn" id="llmf-selection-example">
+                <i class="fas fa-file-code"></i> 加载示例
+            </button>
+        </div>
+    </div>
+
+    <!-- 排除规则集 -->
+    <div class="llmf-card">
+        <h3><i class="fas fa-ban"></i> 排除规则集（避免重复处理）
+            <small>勾选的 bus 规则集会先模拟执行，已被其命中的文本路径将不送 LLM</small>
+        </h3>
+        <div class="llmf-exclusion-list" id="llmf-exclusions">
+            <div class="llmf-empty"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>
+        </div>
+    </div>
+
+    <!-- LLM 设置 -->
+    <div class="llmf-card">
+        <h3><i class="fas fa-robot"></i> LLM 设置</h3>
+        <div class="llmf-field">
+            <span id="llmf-api-status" class="llmf-api-badge"><i class="fas fa-spinner fa-spin"></i> 检测中...</span>
+        </div>
+        <div class="llmf-field">
+            <label class="llmf-checkbox">
+                <input type="checkbox" id="llmf-dedup-enabled" checked>
+                启用去重（相同文本只送一次 LLM，结果应用到所有相同文本位置）
+            </label>
+        </div>
+        <div class="llmf-row">
+            <div class="llmf-field">
+                <label for="llmf-max-length">批大小（字符上限）</label>
+                <input type="number" id="llmf-max-length" min="1000" step="1000" value="20000">
+            </div>
+            <div class="llmf-field">
+                <label for="llmf-max-workers">并发数</label>
+                <input type="number" id="llmf-max-workers" min="1" max="16" value="4">
+            </div>
+        </div>
+    </div>
+
+    <!-- 自定义提示词 -->
+    <div class="llmf-card">
+        <h3><i class="fas fa-pen-nib"></i> 自定义提示词</h3>
+        <div class="llmf-field">
+            <label class="llmf-checkbox">
+                <input type="checkbox" id="llmf-prompt-enabled">
+                启用自定义美化指令（未启用时仅注入保证解析正确的默认提示）
+            </label>
+        </div>
+        <div class="llmf-field">
+            <textarea id="llmf-prompt" class="llmf-code" rows="5" spellcheck="false"
+                      placeholder="例如：请以更自然流畅的中文重写以下文本，避免机翻腔，保持原文语气与角色风格。"></textarea>
+        </div>
+    </div>
+
+    <!-- 操作 -->
+    <div class="llmf-actions">
+        <button class="llmf-btn" id="llmf-scan-btn">
+            <i class="fas fa-search"></i> 扫描预览
+        </button>
+        <button class="llmf-btn llmf-btn-success" id="llmf-run-btn">
+            <i class="fas fa-play"></i> 开始美化
+        </button>
+        <button class="llmf-btn llmf-btn-danger" id="llmf-cancel-btn" disabled>
+            <i class="fas fa-stop"></i> 取消
+        </button>
+        <span style="flex:1;"></span>
+        <button class="llmf-btn" id="llmf-save-config-btn">
+            <i class="fas fa-save"></i> 保存配置
+        </button>
+    </div>
+
+    <!-- 进度与日志 -->
+    <div class="llmf-card llmf-progress-card" id="llmf-progress-card">
+        <h3><i class="fas fa-tasks"></i> 执行进度</h3>
+        <div class="llmf-progress-bar"><div class="llmf-progress-fill" id="llmf-progress-fill"></div></div>
+        <div class="llmf-log" id="llmf-log"></div>
+    </div>
+
+    <!-- 结果 -->
+    <div class="llmf-result" id="llmf-result">
+        <h4><i class="fas fa-check-circle"></i> 美化完成</h4>
+        <div id="llmf-result-body"></div>
+    </div>
+</div>
+
+<script src="js/llm-fancy.js"></script>
+</body>
+</html>

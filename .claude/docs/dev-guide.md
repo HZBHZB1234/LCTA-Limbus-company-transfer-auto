@@ -44,11 +44,14 @@ pytest tests/test_config.py
 # Run text-beautification engine coverage
 pytest tests/test_fancy_conditions.py tests/test_fancy_v2.py tests/test_fancy_performance.py
 
+# Run LLM text-beautification coverage
+pytest tests/test_llm_fancy.py
+
 # Run official-resource updater coverage
 pytest tests/test_resource_updater.py
 ```
 
-Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`, `tests/test_resource_updater.py`
+Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`, `tests/test_llm_fancy.py`, `tests/test_resource_updater.py`
 
 ## Project Conventions
 

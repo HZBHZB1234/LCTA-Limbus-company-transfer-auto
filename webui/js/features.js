@@ -1456,6 +1456,11 @@ function openQuickEditor() {
     pywebview.api.open_quick_editor();
 }
 
+// 打开 LLM 文本美化独立窗口
+function openLLMFancy() {
+    pywebview.api.open_llm_fancy();
+}
+
 async function importBusRules() {
     try {
         const result = await pywebview.api.import_bus_rules();

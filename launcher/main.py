@@ -167,13 +167,6 @@ def main():
 
     pipeline = LaunchPipeline()
 
-    if mod_enabled:
-        pipeline.on(PHASE_PREPARE_MOD, _prepare_mod_handler)
-    pipeline.on(PHASE_RESOURCE_UPDATE, _resource_update_handler)
-    pipeline.on(PHASE_EXIT, _cleanup_mod_handler)
-    pipeline.on(PHASE_RUNNING, _register_speed_hotkey_handler)
-    pipeline.on(PHASE_EXIT, _unregister_speed_hotkey_handler)
-
     progress = None
     log_handler = None
 
@@ -187,6 +180,13 @@ def main():
             _log_manager._logger.addHandler(log_handler)
         except Exception as e:
             _log_manager.log(f"无法创建GUI进度窗口，回退到控制台模式: {e}")
+
+    if mod_enabled:
+        pipeline.on(PHASE_PREPARE_MOD, _prepare_mod_handler)
+    pipeline.on(PHASE_RESOURCE_UPDATE, _resource_update_handler)
+    pipeline.on(PHASE_EXIT, _cleanup_mod_handler)
+    pipeline.on(PHASE_RUNNING, _register_speed_hotkey_handler)
+    pipeline.on(PHASE_EXIT, _unregister_speed_hotkey_handler)
 
     def _launcher_check_running(modal_id=None, log=True):
         if pipeline.cancel_event.is_set():

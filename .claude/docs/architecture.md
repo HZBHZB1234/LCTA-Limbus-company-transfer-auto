@@ -43,6 +43,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │    matcher/               proper noun AC matching    │
 │  webutils/fancy/engine.py compiled v2 rule engine    │
 │  webutils/fancy/bus.py     bus/import rule engine     │
+│  webutils/llm_fancy/       LLM text-beautification    │
 │  webutils/function_fancy.py file orchestration/stats │
 │  resource_updater/         official resource updater  │
 ├─────────────────────────────────────────────────────┤
@@ -78,6 +79,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Pipeline** | `translateFunc/pipeline.py` | `TranslationPipeline` orchestrates: fetch proper nouns → build matcher → priority files → WorkerPool → aggregate |
 | **Compile/Apply** | `webutils/fancy/engine.py` | Text beautification validates and compiles v2 rules once, selects rules per file, then applies structured-path conditions/actions without repeatedly reparsing paths or regexes |
 | **Bus Compile/Apply** | `webutils/fancy/bus.py` | Validates `format: lcta-bus`, compiles glob/regex/exact file matchers into per-file indexes, caches selector lookups by list path/field, preserves ordered literal/regex/end/safe/set operations, and mechanically converts 调爪、LCJE、FL and quick-editor edits |
+| **Scan-Exclude-LLM** | `webutils/llm_fancy/` | Bus-syntax selection scan → user-chosen bus rulesets simulated on a data copy to exclude already-handled paths → size-batched LLM rewriting (default 20k chars) → validated `lcta-bus` ruleset built, saved to `fancy/`, and auto-enabled |
 | **Factory** | `launcher/updates.py` | Update objects for LLC, OurPlay, Machine translation — each implements a common interface |
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |
 | **Pipeline** | `launcher/pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline (init→check_update→resource_update→cdn→prepare_mod→launch→running→exit). Modules register callbacks per phase via `on(phase, callback)`; `cancel_event` supports GUI-initiated shutdown.
@@ -91,6 +93,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `LCTA_API` | `webui/app.py` | Central hub: bridges backend features to the SPA, owns the main-window `ResourceUpdaterAPI`, includes `get_startup_data()` for consolidated frontend init, opens editor windows with theme injection, and handles redesigned drag-drop file flows |
 | `RuleEditorAPI` | `webui/app.py` | Secondary pywebview bridge for the rule editor window: wraps `webutils/rule_editor/` methods (file browser, rules CRUD, rule building, validation, smart analysis), plus `get_config_value()` for cross-window config queries (e.g. theme). Instantiated as `js_api=RuleEditorAPI()` in a separate `webview.create_window()` call |
 | `QuickEditorAPI` | `webui/app.py` | Pywebview bridge for the quick editor window: wraps `webutils/rule_editor/quick.py` methods (diff_json, load/save/apply_quick_edits) plus shared methods from `webutils/rule_editor/browser.py` (file browser, search). Instantiated as `js_api=QuickEditorAPI()` in `open_quick_editor()` |
+| `LLMFancyAPI` | `webui/app.py` | Pywebview bridge for the LLM 文本美化 window: wraps `webutils/llm_fancy/` (selection scan preview, exclusion-ruleset simulation, batched LLM beautification with progress/log callbacks and cancel, ruleset build/save/auto-enable) plus config persistence (`ui_default.llm_fancy`). Instantiated as `js_api=LLMFancyAPI()` in `LCTA_API.open_llm_fancy()` |
 | `ResourceUpdaterAPI` | `resource_updater/web_api.py` | Resource-update controller owned by `LCTA_API`. Probes game files, persists updater options, runs/cancels the worker thread, and emits per-channel progress into the main SPA's `resource-updater.js` controller |
 | `ResourceUpdater` | `resource_updater/core.py` | Extracts S/L CDN tokens, downloads token-scoped localize ZIPs, parses remote/fallback catalog data, populates Unity cache entries, and selects bundled aria2c or the built-in downloader |
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |

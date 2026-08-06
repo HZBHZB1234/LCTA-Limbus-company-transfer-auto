@@ -68,6 +68,15 @@
             "max_length": "str",
             "min_length": "str",
             "output_type": "str"
+        },
+        "llm_fancy": {
+            "rules": "str",
+            "exclusions": "str",
+            "prompt": "str",
+            "prompt_enabled": "bool",
+            "max_length": "str",
+            "max_workers": "str",
+            "dedup_enabled": "bool"
         }
     },
     "api_config": "str",

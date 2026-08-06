@@ -63,7 +63,7 @@ class LogManager:
         self._logger.addHandler(ch)
 
         # -- 子日志器（fancy 引擎等）共享同一套 handler，避免调试日志丢失 --
-        for child_name in ("fancy", "rule_editor"):
+        for child_name in ("fancy", "rule_editor", "llm_fancy"):
             child = logging.getLogger(child_name)
             child.setLevel(log_level)
             child.propagate = False

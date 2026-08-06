@@ -233,9 +233,6 @@ def main():
                     progress.mark_phase_failed(PHASE_CHECK_UPDATE)
 
         if not pipeline.cancel_event.is_set():
-            pipeline.emit(PHASE_RESOURCE_UPDATE, cancel_event=pipeline.cancel_event, progress=progress)
-
-        if not pipeline.cancel_event.is_set():
             pipeline.emit(PHASE_CDN)
             if progress and progress.is_alive():
                 progress.set_progress(0)
@@ -254,6 +251,9 @@ def main():
                     progress.update_phase_progress(100, "CDN 优选阶段完成")
             except Exception as e:
                 _log_manager.log_error(e)
+
+        if not pipeline.cancel_event.is_set():
+            pipeline.emit(PHASE_RESOURCE_UPDATE, cancel_event=pipeline.cancel_event, progress=progress)
 
         if not pipeline.cancel_event.is_set():
             pipeline.context['steam_argv'] = steam_argv

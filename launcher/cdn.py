@@ -21,7 +21,7 @@ def run_cdn_optimization(
         return
 
     try:
-        cache_ttl = float(config.get('launcher.work.cdn_cache_ttl', '24.0'))
+        cache_ttl = float(config.get('launcher.work.cdn_cache_ttl', '12.0'))
     except (ValueError, TypeError):
         cache_ttl = 0
     if cache_ttl > 0:

@@ -640,7 +640,7 @@ class TestGetVisiblePhases:
 
         assert PHASE_RESOURCE_UPDATE in result
         assert result.index(PHASE_RESOURCE_UPDATE) > result.index(PHASE_CHECK_UPDATE)
-        assert result.index(PHASE_RESOURCE_UPDATE) < result.index(PHASE_CDN)
+        assert result.index(PHASE_RESOURCE_UPDATE) > result.index(PHASE_CDN)
 
     def test_resource_update_disabled_excludes_phase(self):
         from launcher.gui_progress import _get_visible_phases
@@ -674,7 +674,7 @@ class TestGetVisiblePhases:
 
         assert len(result) == 7
         assert result == [
-            PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN,
+            PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN, PHASE_RESOURCE_UPDATE,
             PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING,
         ]
 

@@ -137,14 +137,14 @@ Launcher mode: start_webui.py -launcher
     Phase check_update:
       pipeline.emit(PHASE_CHECK_UPDATE) → launcher/updates.py (Factory pattern)
                                          → main.py reports network/check/install milestones to stage progress
+    Phase cdn:
+      pipeline.emit(PHASE_CDN)          → launcher/cdn.py (CDN optimize with cache TTL)
+                                         forwards selector percentages/messages to GUI stage progress
     Phase resource_update:
       pipeline.emit(PHASE_RESOURCE_UPDATE) → resource_updater/service.py
         → resource_updater/core.py      compare SHA-256 fingerprint and configured completed scopes
                                         download official localize ZIPs + populate Unity Bundle cache
                                         → progress_callback(channel, message, fraction) updates GUI stage progress
-    Phase cdn:
-      pipeline.emit(PHASE_CDN)          → launcher/cdn.py (CDN optimize with cache TTL)
-                                         forwards selector percentages/messages to GUI stage progress
     Phase prepare_mod (if enabled):
       pipeline.emit(PHASE_PREPARE_MOD)  → launcher/game_launch.py prepare_mod()
                                          reports stepped progress for cleanup/detection/text/assets/audio

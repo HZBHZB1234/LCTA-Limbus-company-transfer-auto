@@ -33,7 +33,12 @@
 
 | File | Purpose |
 |------|---------|
-| `app.py` | **Core** pywebview bridge. Includes the main `LCTA_API`, owns the shared `ResourceUpdaterAPI` used by the in-app resource page, plus `RuleEditorAPI`, `QuickEditorAPI`, `LLMFancyAPI`, and read-only `TranslationLogViewerAPI`; exposes bus-rule multi-file import, spawns editor/viewer windows, and synchronizes light/dark/purple themes |
+| `app.py` | **Core** pywebview bridge — thin shell (~100 lines). Assembles `LCTA_API` from the feature-domain mixins in `webui/app_api/`, re-exports the 4 window bridge classes (`RuleEditorAPI`/`QuickEditorAPI`/`LLMFancyAPI`/`TranslationLogViewerAPI` from their own files) and `CancelRunning`, and defines `main()` (window creation + modal callback wiring). Owns the shared `ResourceUpdaterAPI` used by the in-app resource page |
+| `app_api/` | `LCTA_API` 按功能域拆分的 mixin 模块包（详见下方小节）。`webui/app.py` 的 `LCTA_API` 依次继承这些 mixin；pywebview 通过 `dir()` 枚举 JS API，继承方法对前端透明，无需改动 JS |
+| `rule_editor_api.py` | `RuleEditorAPI` 窗口桥接：美化规则编辑器（文件浏览、规则 CRUD、校验、智能分析、模板） |
+| `quick_editor_api.py` | `QuickEditorAPI` 窗口桥接：简易翻译编辑器（diff/批量编辑） |
+| `llm_fancy_api.py` | `LLMFancyAPI` 窗口桥接：LLM 文本美化（扫描预览/批处理/取消/配置持久化，后台线程 + 事件推送） |
+| `translation_log_api.py` | `TranslationLogViewerAPI` 只读桥接：翻译诊断日志查看器（选择 dump、分页查询、过滤导出） |
 | `index.html` | Single-page HTML shell (~200 lines), section placeholders loaded dynamically from `sections/`; the 游戏资源更新 sidebar item is an ordinary SPA route |
 | `rule-editor.html` | Standalone pywebview page for the 美化规则编辑器. Sidebar search input filters filenames/categories while typing and runs full-content search on Enter or the search button. File-edit tab: VSCode-style CodeMirror 6 editor with find/replace (Ctrl+F/H), match highlighting, dirty state indicator, status bar, change tracking, and smart ruleset generation. Ruleset-edit tab: simple form + advanced JSON editors for ruleset CRUD. Theme syncs with main app window (light/dark/purple) |
 | `llm-fancy.html` | Standalone pywebview page for the LLM 文本美化 window (opened from the fancy page). Bus-syntax selection rules JSON editor, fancy/ bus-ruleset exclusion checkboxes, custom prompt toggle + textarea, batch size / concurrency inputs, scan preview and run buttons with streamed progress/log and result summary. Theme syncs with main app window |
@@ -65,6 +70,24 @@
 | `sections/*.html` | 19 individual section HTML fragments, including `resource-updater.html` with read-only shared game path (set in 设置 page), update scope, download strategy, progress, actions, logs, and a Launcher integration intro card (switch + detailed settings on launcher-config page) |
 | `guide/*.md` | 19 in-app user guide pages (one per feature tab, including the embedded resource updater) |
 | `assets/update.md` | Release changelog (v5.0.0+) |
+
+### webui/app_api/ — LCTA_API 功能域 mixin
+
+| File | Mixin | Methods |
+|------|-------|---------|
+| `core.py` | `CoreMixin` | 核心管道：`__init__`/`config` 属性/`set_function`/`init_*`/`set_window`/`run_func`/`get_attr`/`set_attr`、日志（`log`/`log_error`/`log_ui`）、进度、模态窗口管理全套（`add_modal_id`/`check_modal_running`/`set_modal_running`/`del_modal_list`/`set_modal_status`/`add_modal_log`/`update_modal_progress`/`_make_cdn_callbacks`）、`browse_file`/`browse_folder`、`check_show`、`get_startup_data`、`save_setting_from`。注意 `check_show` 用 `Path(__file__).resolve().parent.parent` 定位 `webui/assets/update.md` |
+| `config.py` | `ConfigMixin` | 配置读写：`update_config_value`/`update_config_batch`/`get_config_value`/`get_config_batch`/`save_settings`/`use_default_config`/`reset_config`/`save_config_to_file` |
+| `translation.py` | `TranslatorMixin` | `start_translation`/`format_api_settings`/`test_api`/`fetch_proper_nouns` |
+| `packages.py` | `PackagesMixin` | 汉化包安装/删除/切换/字体、Mod 管理、软链接、`move_folders`、`clean_cache`、`get_system_fonts` |
+| `download.py` | `DownloadMixin` | OurPlay / 零协 / LCTA 自动 / 调爪 下载 |
+| `fancy.py` | `FancyMixin` | `get_fancy_rulesets`/`save_ruleset`/`import_bus_rules`/`fancy_main`/`check_fancy_marker`、规则编辑器窗口 `open_rule_editor`/`sync_theme_to_rule_editor` |
+| `windows.py` | `WindowMixin` | 辅助窗口：`open_quick_editor`/`open_llm_fancy`/`open_translation_log_viewer` + 其余 `sync_theme_to_*`、Nexus 测试窗口 `startTest`/`eval_skip`/`sign_eval_js` |
+| `cdn.py` | `CdnMixin` | `cdn_*` 全部（Cloudflare/CloudFront 优选、hosts 写入/移除） |
+| `speed.py` | `SpeedMixin` | `speed_*` 全部（DLL 注入/弹出/倍率） |
+| `update.py` | `UpdateMixin` | `auto_check_update`/`manual_check_update`/`perform_update_in_modal`/`perform_update_from_file` |
+| `drops.py` | `DropMixin` | `handle_dropped_files`/`on_drop`/`eval_dropped_files` |
+| `resources.py` | `ResourceMixin` | `resource_updater_*` 转发到 `self.resource_updater_api` |
+| `exceptions.py` | — | `CancelRunning`（各 mixin 共用，`webui/app.py` re-export） |
 | `assets/LCTA-AU.md` | Auto-update system documentation |
 | `assets/firstUse.md` | Short first-use welcome with direct entry to the three-step quick-start flow |
 
@@ -182,12 +205,20 @@ Standalone library with own `__init__.py` public API.
 ## Import Dependency Graph
 
 ```
-webui/app.py
+webui/app.py                       (thin shell: 组装 LCTA_API + main + re-export)
+  → webui/app_api/core.py          CoreMixin: ConfigManager/LogManager/ResourceUpdaterAPI,
+                                   webview, webutils.load, GithubDownload, translator_constants
+  → webui/app_api/{config,translation,packages,download,fancy,windows,cdn,speed,update,
+                    drops,resources}.py  各功能域 mixin → webutils/ (feature functions)
+  → webui/rule_editor_api.py       RuleEditorAPI → webutils/rule_editor/, function_fancy
+  → webui/quick_editor_api.py      QuickEditorAPI → webutils/rule_editor/
+  → webui/llm_fancy_api.py         LLMFancyAPI → webutils/llm_fancy/
+  → webui/translation_log_api.py   TranslationLogViewerAPI → webutils/function_translation_logs
   → webutils/ (all feature functions via __init__.py)
     → translateFunc/ (translation pipeline)
     → webFunc/ (GitHub downloads, file transfer)
   → globalManagers/ (ConfigManager, LogManager)
-  → webutils/rule_editor/ (RuleEditorAPI: file browser, rules CRUD; QuickEditorAPI)
+  → webutils/rule_editor/ (file browser, rules CRUD)
   → webutils/function_fancy.py (load_fancy_folder_rules, fancy_main)
   → webutils/llm_fancy/ (LLMFancyAPI: scan/exclude/split/LLM/ruleset build; imports translatekit only, no translateFunc/)
 

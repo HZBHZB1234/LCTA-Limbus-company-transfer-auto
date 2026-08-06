@@ -23,7 +23,10 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 ┌─────────────────────────────────────────────────────┐
 │                   PRESENTATION                       │
 │  start_webui.py          dispatcher (WebUI/Launcher) │
-│  webui/app.py            LCTA_API class (pywebview)  │
+│  webui/app.py            LCTA_API 组装壳 + main (pywebview)  │
+│  webui/app_api/*.py      LCTA_API 功能域 mixin（core/config/  │
+│                          packages/download/fancy/windows/    │
+│                          cdn/speed/update/drops/resources）  │
 │  webui/index.html + js/  frontend SPA                │
 │  launcher/main.py        CLI launcher entry point    │
 ├─────────────────────────────────────────────────────┤
@@ -75,7 +78,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | Pattern | Where | Concrete Example |
 |---------|-------|-----------------|
 | **Singleton** | `globalManagers/` | `ConfigManager` — thread-safe, lazy-init, dotted-path access. `LogManager` — async UI callbacks via thread pool |
-| **Bridge** | `webui/app.py` ↔ JS | `LCTA_API` class exposes Python methods to JS via `pywebview.api`; JS calls like `pywebview.api.install_llc()` |
+| **Bridge** | `webui/app.py` + `webui/app_api/` ↔ JS | `LCTA_API` class exposes Python methods to JS via `pywebview.api` (pywebview enumerates `dir()` so inherited mixin methods are exposed transparently); JS calls like `pywebview.api.install_llc()` |
 | **Pipeline** | `translateFunc/pipeline.py` | `TranslationPipeline` orchestrates: fetch proper nouns → build matcher → priority files → WorkerPool → aggregate |
 | **Compile/Apply** | `webutils/fancy/engine.py` | Text beautification validates and compiles v2 rules once, selects rules per file, then applies structured-path conditions/actions without repeatedly reparsing paths or regexes |
 | **Bus Compile/Apply** | `webutils/fancy/bus.py` | Validates `format: lcta-bus`, compiles glob/regex/exact file matchers into per-file indexes, caches selector lookups by list path/field, preserves ordered literal/regex/end/safe/set operations, and mechanically converts 调爪、LCJE、FL and quick-editor edits |
@@ -90,10 +93,10 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 
 | Interface | File | Role |
 |-----------|------|------|
-| `LCTA_API` | `webui/app.py` | Central hub: bridges backend features to the SPA, owns the main-window `ResourceUpdaterAPI`, includes `get_startup_data()` for consolidated frontend init, opens editor windows with theme injection, and handles redesigned drag-drop file flows |
-| `RuleEditorAPI` | `webui/app.py` | Secondary pywebview bridge for the rule editor window: wraps `webutils/rule_editor/` methods (file browser, rules CRUD, rule building, validation, smart analysis), plus `get_config_value()` for cross-window config queries (e.g. theme). Instantiated as `js_api=RuleEditorAPI()` in a separate `webview.create_window()` call |
-| `QuickEditorAPI` | `webui/app.py` | Pywebview bridge for the quick editor window: wraps `webutils/rule_editor/quick.py` methods (diff_json, load/save/apply_quick_edits) plus shared methods from `webutils/rule_editor/browser.py` (file browser, search). Instantiated as `js_api=QuickEditorAPI()` in `open_quick_editor()` |
-| `LLMFancyAPI` | `webui/app.py` | Pywebview bridge for the LLM 文本美化 window: wraps `webutils/llm_fancy/` (selection scan preview, exclusion-ruleset simulation, batched LLM beautification with progress/log callbacks and cancel, ruleset build/save/auto-enable) plus config persistence (`ui_default.llm_fancy`). Instantiated as `js_api=LLMFancyAPI()` in `LCTA_API.open_llm_fancy()` |
+| `LCTA_API` | `webui/app.py`（组装壳）+ `webui/app_api/*.py`（mixin） | Central hub: assembles the feature-domain mixins (`CoreMixin`/`ConfigMixin`/`TranslatorMixin`/`PackagesMixin`/`DownloadMixin`/`FancyMixin`/`WindowMixin`/`CdnMixin`/`SpeedMixin`/`UpdateMixin`/`DropMixin`/`ResourceMixin`), bridges backend features to the SPA, owns the main-window `ResourceUpdaterAPI`, includes `get_startup_data()` for consolidated frontend init, opens editor windows with theme injection, and handles redesigned drag-drop file flows |
+| `RuleEditorAPI` | `webui/rule_editor_api.py` | Secondary pywebview bridge for the rule editor window: wraps `webutils/rule_editor/` methods (file browser, rules CRUD, rule building, validation, smart analysis), plus `get_config_value()` for cross-window config queries (e.g. theme). Instantiated as `js_api=RuleEditorAPI()` in a separate `webview.create_window()` call |
+| `QuickEditorAPI` | `webui/quick_editor_api.py` | Pywebview bridge for the quick editor window: wraps `webutils/rule_editor/quick.py` methods (diff_json, load/save/apply_quick_edits) plus shared methods from `webutils/rule_editor/browser.py` (file browser, search). Instantiated as `js_api=QuickEditorAPI()` in `open_quick_editor()` |
+| `LLMFancyAPI` | `webui/llm_fancy_api.py` | Pywebview bridge for the LLM 文本美化 window: wraps `webutils/llm_fancy/` (selection scan preview, exclusion-ruleset simulation, batched LLM beautification with progress/log callbacks and cancel, ruleset build/save/auto-enable) plus config persistence (`ui_default.llm_fancy`). Instantiated as `js_api=LLMFancyAPI()` in `LCTA_API.open_llm_fancy()` |
 | `ResourceUpdaterAPI` | `resource_updater/web_api.py` | Resource-update controller owned by `LCTA_API`. Probes game files, persists updater options (incl. retry settings), runs/cancels the worker thread, records results, exposes the last update result (failure list for the manual retry button), and emits per-channel progress into the main SPA's `resource-updater.js` controller |
 | `ResourceUpdater` | `resource_updater/core.py` | Extracts S/L CDN tokens, downloads token-scoped localize ZIPs, parses remote/fallback catalog data, populates Unity cache entries, and selects bundled aria2c or the built-in downloader. Transient download failures auto-retry with `retry_max`/`retry_delay` backoff; exhausted retries emit a Range probe with diagnostic headers; aria2 uses a per-file connection limit |
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |

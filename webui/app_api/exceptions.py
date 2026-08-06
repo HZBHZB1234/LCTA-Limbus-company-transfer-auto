@@ -1,0 +1,2 @@
+class CancelRunning(Exception):
+    pass

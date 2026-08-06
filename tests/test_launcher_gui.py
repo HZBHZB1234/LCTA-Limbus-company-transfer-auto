@@ -833,7 +833,7 @@ class TestBrowseDialogs:
 class TestCleanCache:
     """clean_cache 可变默认参数修复：custom_files 不得跨调用累积。"""
 
-    @patch("webui.app.clean_config_main")
+    @patch("webui.app_api.packages.clean_config_main")
     def test_custom_files_not_shared_across_calls(self, mock_clean):
         api = _make_api()
         api.add_modal_log = MagicMock()
@@ -846,7 +846,7 @@ class TestCleanCache:
         assert len(second) == 1
         assert first is not second
 
-    @patch("webui.app.clean_config_main")
+    @patch("webui.app_api.packages.clean_config_main")
     def test_clean_cache_no_mods_passes_empty_list(self, mock_clean):
         api = _make_api()
         api.add_modal_log = MagicMock()
@@ -857,8 +857,8 @@ class TestCleanCache:
 class TestMoveFolders:
     """move_folders 盘符提取：UNC 不截断、无字母目录名不崩溃。"""
 
-    @patch("webui.app.ctypes.windll.user32", create=True)
-    @patch("webui.app._move_folders")
+    @patch("webui.app_api.packages.ctypes.windll.user32", create=True)
+    @patch("webui.app_api.packages._move_folders")
     def test_drive_paths_preserved_and_no_letter_dir_safe(self, mock_move, fake_user32):
         import tempfile
 
@@ -873,10 +873,10 @@ class TestMoveFolders:
         assert all(os.path.isabs(s) for s in sources)
         assert mock_move.call_args.args[1] == r"C:\dst"
 
-    @patch("webui.app.ctypes.windll.user32", create=True)
-    @patch("webui.app._move_folders")
+    @patch("webui.app_api.packages.ctypes.windll.user32", create=True)
+    @patch("webui.app_api.packages._move_folders")
     def test_unc_paths_not_truncated(self, mock_move, fake_user32):
-        import webui.app as app_mod
+        import webui.app_api.packages as app_mod
 
         fake_user32.FindWindowW.return_value = 0
         real_path = Path
@@ -897,7 +897,7 @@ class TestMoveFolders:
 class TestUpdateConfigBatch:
     """update_config_batch 应一次批量写入，避免逐项全量写盘。"""
 
-    @patch("webui.app.ConfigManager")
+    @patch("webui.app_api.config.ConfigManager")
     def test_uses_set_batch_once(self, mock_cm):
         api = _make_api()
         instance = mock_cm.return_value
@@ -908,7 +908,7 @@ class TestUpdateConfigBatch:
         instance.set.assert_not_called()
         assert result == {"success": True, "updated": 3, "total": 3}
 
-    @patch("webui.app.ConfigManager")
+    @patch("webui.app_api.config.ConfigManager")
     def test_empty_updates_skip_write(self, mock_cm):
         api = _make_api()
         result = api.update_config_batch({})
@@ -919,7 +919,7 @@ class TestUpdateConfigBatch:
 class TestCheckShow:
     """check_show 版本号归一化：'v5.0.0' 与 '5.0.0' 视为相同，避免首启误弹。"""
 
-    @patch("webui.app.ConfigManager")
+    @patch("webui.app_api.core.ConfigManager")
     @patch.dict(os.environ, {"__version__": "5.0.0"}, clear=False)
     def test_v_prefixed_last_version_does_not_show_update(self, mock_cm):
         api = _make_api()
@@ -929,7 +929,7 @@ class TestCheckShow:
         assert result == {"show": False}
         instance.set.assert_not_called()
 
-    @patch("webui.app.ConfigManager")
+    @patch("webui.app_api.core.ConfigManager")
     @patch.dict(os.environ, {"__version__": "5.0.0"}, clear=False)
     def test_older_version_shows_update(self, mock_cm):
         api = _make_api()
@@ -944,7 +944,7 @@ class TestEditorWindowsCleanup:
     """编辑器窗口 closed 后应从句柄列表移除。"""
 
     def _open_rule_editor(self, api, window):
-        import webui.app as app_mod
+        import webui.app_api.fancy as app_mod
 
         with patch.object(app_mod.webview, "create_window", return_value=window), \
              patch.object(app_mod.ConfigManager, "get", return_value="light"), \
@@ -971,7 +971,7 @@ class TestEditorWindowsCleanup:
         api = _make_api()
         window = MagicMock()
         window.events.closed = _EventHolder()
-        import webui.app as app_mod
+        import webui.app_api.windows as app_mod
 
         with patch.object(app_mod.webview, "create_window", return_value=window), \
              patch.object(app_mod.ConfigManager, "get", return_value="light"), \

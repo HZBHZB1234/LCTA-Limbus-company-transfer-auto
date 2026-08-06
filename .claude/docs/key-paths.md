@@ -5,6 +5,8 @@
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
 
+> 注：`webui/app.py` 为组装薄壳，`LCTA_API` 各方法实际定义在 `webui/app_api/` 对应功能域 mixin 中；`webui/app.py LCTA_API.xxx()` 的调用链描述仍然成立（方法经继承暴露，前端 JS 无感知）。
+
 ---
 
 ## 1. Translation Installation — LLC (零协会)

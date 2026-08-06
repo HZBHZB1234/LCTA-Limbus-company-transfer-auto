@@ -58,7 +58,7 @@ Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_w
 - **Module naming**: Feature modules in `webutils/` use `function_<feature>.py` pattern
 - **Config access**: Always use `ConfigManager.get("dotted.path")`, never read `config.json` directly
 - **Logging**: Use `LogManager` singleton, not `print()` or root `logging`
-- **Bridge pattern**: New JS-accessible methods go in `webui/app.py` `LCTA_API` class; JS calls via `pywebview.api.<method>()`
+- **Bridge pattern**: New JS-accessible methods go in the `LCTA_API` feature-domain mixin under `webui/app_api/`（按方法归属选 `core.py`/`config.py`/`translation.py`/`packages.py`/`download.py`/`fancy.py`/`windows.py`/`cdn.py`/`speed.py`/`update.py`/`drops.py`/`resources.py`）; `webui/app.py` 只组装 `LCTA_API(CoreMixin, ...)` 与 `main()`。pywebview 通过 `dir()` 暴露继承方法，JS 调用方式不变（`pywebview.api.<method>()`）。注意：mixin 模块各自持有可能被测试 `@patch` 的模块级名字（如 `clean_config_main`、`ConfigManager`），patch 目标需写 `webui.app_api.<模块>`
 - **Public API**: New webutils functions must be exported in `webutils/__init__.py`
 - **Launcher license scope**: `launcher/` is GPL-3.0-licensed, but its Python modules currently reuse shared `webutils/`, `webFunc/`, and `globalManagers/` code; do not assume import isolation
 - **Official resource state**: Launcher uses the local SHA-256 of `LimbusCompany.exe`; fingerprints and token-scoped download caches live under `%LOCALAPPDATA%/LCTA/resource-updater/`, not the packaged code directory
@@ -81,7 +81,7 @@ The repository-local pre-commit hook copies `CLAUDE.md` to `AGENTS.md` and stage
 
 1. Create `webutils/function_<newfeature>.py` with the feature logic
 2. Export public functions in `webutils/__init__.py`
-3. Add API methods in `webui/app.py` `LCTA_API` class
+3. Add API methods in the matching `LCTA_API` mixin under `webui/app_api/`（核心管道/配置/翻译/汉化包下载等按域选择；窗口类桥接见 `webui/*_api.py`）
 4. Create section HTML fragment `webui/sections/<newfeature>.html`
 5. Add the section name to `preloadAllSections()` array in `webui/sections/preload.js`
 6. Add a placeholder `<div>` in `webui/index.html` with id `<newfeature>-section`
@@ -98,7 +98,7 @@ The repository-local pre-commit hook copies `CLAUDE.md` to `AGENTS.md` and stage
 
 ### Adding a New Modal Operation
 
-Follow existing modal pattern in `webui/app.py`: Python method starts operation → creates modal → callback chain updates progress → modal closes on completion.
+Follow existing modal pattern in `webui/app_api/`（`CoreMixin` 提供 `add_modal_log`/`update_modal_progress`/`check_modal_running` 等全套）：Python method starts operation → creates modal → callback chain updates progress → modal closes on completion.
 
 ## Debugging
 

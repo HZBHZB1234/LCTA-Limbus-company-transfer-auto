@@ -739,8 +739,9 @@
 }
 
 .resource-task-actions {
-    display: grid;
-    grid-template-columns: auto minmax(150px, 1fr);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: var(--spacing-sm);
     margin-top: var(--spacing-lg);
 }
@@ -750,11 +751,72 @@
     justify-content: center;
 }
 
+.resource-task-actions .action-btn {
+    flex: 0 0 auto;
+}
+
+.resource-task-actions .primary-btn {
+    flex: 1 0 auto;
+}
+
 .resource-task-actions button:disabled,
 .resource-path-row button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+}
+
+.resource-failed-list {
+    margin-top: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 8px);
+    background: color-mix(in srgb, var(--color-error, #dc3545) 6%, transparent);
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.resource-failed-list .resource-failed-title {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-error, #dc3545);
+}
+
+.resource-failed-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.resource-failed-items li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--color-surface, #fff) 70%, transparent);
+}
+
+.resource-failed-items li strong {
+    font-size: 12px;
+    font-family: monospace;
+    word-break: break-all;
+}
+
+.resource-failed-items li span {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.resource-failed-items li small {
+    font-size: 10px;
+    color: var(--color-text-muted, #888);
+    word-break: break-all;
 }
 
 @media (max-width: 1120px) {
@@ -769,9 +831,16 @@
 
 @media (max-width: 720px) {
     .resource-path-row,
-    .resource-settings-grid,
-    .resource-task-actions {
+    .resource-settings-grid {
         grid-template-columns: 1fr;
+    }
+
+    .resource-task-actions {
+        flex-direction: column;
+    }
+
+    .resource-task-actions .primary-btn {
+        flex: 0 0 auto;
     }
 
     .resource-path-row button,

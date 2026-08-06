@@ -12,6 +12,13 @@ from .core import ResourceUpdater, build_game_fingerprint, default_work_dir
 _log_manager = LogManager()
 
 
+def _as_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _state_path() -> Path:
     return default_work_dir() / "launcher-state.json"
 
@@ -47,8 +54,13 @@ def get_resource_update_config() -> Dict[str, Any]:
         "lang_jp": manager.get("launcher.resource_update.lang_jp", True),
         "lang_en": manager.get("launcher.resource_update.lang_en", True),
         "lang_kr": manager.get("launcher.resource_update.lang_kr", True),
-        "jobs": manager.get("launcher.resource_update.jobs", 8),
+        "jobs": max(1, _as_int(manager.get("launcher.resource_update.jobs", 8), 8)),
         "engine": manager.get("launcher.resource_update.engine", "auto"),
+        "retry_max": max(0, _as_int(manager.get("launcher.resource_update.retry_max", 2), 2)),
+        "retry_delay": max(5, _as_int(manager.get("launcher.resource_update.retry_delay", 30), 30)),
+        "connection_limit": max(
+            1, min(16, _as_int(manager.get("launcher.resource_update.connection_limit", 8), 8))
+        ),
     }
 
 
@@ -60,6 +72,57 @@ def selected_languages(config: Dict[str, Any]):
     ]
 
 
+def record_update_result(
+    game_path: Path,
+    result: Dict[str, Any],
+    update_localize: bool,
+    update_bundle: bool,
+    languages,
+) -> None:
+    """无论成败都记录更新结果；已完整完成的 scope 会标记，失败 scope 保持未完成（下次启动重试）。"""
+    state_path = _state_path()
+    fingerprint = build_game_fingerprint(game_path)
+    previous = _load_state(state_path)
+    resources = (
+        previous.get("resources", {})
+        if previous.get("fingerprint") == fingerprint
+        else {}
+    )
+    completed_languages = set(resources.get("languages", []))
+    if update_localize:
+        localize_result = (result.get("results") or {}).get("localize") or {}
+        if not localize_result.get("failed"):
+            resources["localize"] = True
+            completed_languages.update(languages)
+    if update_bundle:
+        bundle_result = (result.get("results") or {}).get("bundle") or {}
+        if not bundle_result.get("failed"):
+            resources["bundle"] = True
+    resources["languages"] = sorted(completed_languages)
+    failed_items = []
+    for item in (result.get("results") or {}).values():
+        failed_items.extend(item.get("failed_items") or [])
+    last_result = {
+        "success": bool(result.get("success")),
+        "failed": result.get("failed", 0),
+        "retried": result.get("retried", 0),
+        "failed_items": [
+            {"name": item.get("name"), "reason": item.get("reason")}
+            for item in failed_items
+        ],
+    }
+    _save_state(state_path, {
+        "game_dir": str(game_path),
+        "fingerprint": fingerprint,
+        "tokens": result.get("tokens", {}),
+        "resources": resources,
+        "last_result": last_result,
+    })
+    _log_manager.log(
+        "[游戏资源更新/Launcher] 已记录更新结果: {}".format(last_result)
+    )
+
+
 def record_successful_update(
     game_path: Path,
     result: Dict[str, Any],
@@ -67,27 +130,12 @@ def record_successful_update(
     update_bundle: bool,
     languages,
 ) -> None:
-    state_path = _state_path()
-    fingerprint = build_game_fingerprint(game_path)
-    previous = _load_state(state_path)
-    resources = previous.get("resources", {}) if previous.get("fingerprint") == fingerprint else {}
-    completed_languages = set(resources.get("languages", []))
-    if update_localize:
-        completed_languages.update(languages)
-    resources.update({
-        "localize": bool(resources.get("localize")) or update_localize,
-        "bundle": bool(resources.get("bundle")) or update_bundle,
-        "languages": sorted(completed_languages),
-    })
-    _save_state(state_path, {
-        "game_dir": str(game_path),
-        "fingerprint": fingerprint,
-        "tokens": result.get("tokens", {}),
-        "resources": resources,
-    })
-    _log_manager.log(
-        "[游戏资源更新/Launcher] 已记录 EXE 指纹与完成范围: {}".format(resources)
-    )
+    record_update_result(game_path, result, update_localize, update_bundle, languages)
+
+
+def get_last_update_result() -> Optional[Dict[str, Any]]:
+    state = _load_state(_state_path())
+    return state.get("last_result")
 
 
 def _state_covers_config(
@@ -133,20 +181,28 @@ def run_launcher_resource_update(
         jobs=config["jobs"],
         engine=config["engine"],
         cancel_event=cancel_event,
+        retry_max=config["retry_max"],
+        retry_delay=config["retry_delay"],
+        connection_limit=config["connection_limit"],
     )
     result = updater.run(
         update_localize=config["localize"],
         update_bundle=config["bundle"],
         languages=selected_languages(config),
     )
+    record_update_result(
+        game_path,
+        result,
+        config["localize"],
+        config["bundle"],
+        selected_languages(config),
+    )
     if result["success"]:
-        record_successful_update(
-            game_path,
-            result,
-            config["localize"],
-            config["bundle"],
-            selected_languages(config),
-        )
+        _log_manager.log("[游戏资源更新/Launcher] 预下载完成: {}".format(result))
     else:
-        _log_manager.log("[游戏资源更新/Launcher] 预下载存在失败项: {}".format(result))
+        _log_manager.log(
+            "[游戏资源更新/Launcher] 预下载存在失败项（已完成范围已记录，下次启动将自动重试失败范围）: {}".format(
+                result
+            )
+        )
     return result

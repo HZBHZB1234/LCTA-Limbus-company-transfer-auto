@@ -125,7 +125,10 @@
             "lang_en": true,
             "lang_kr": true,
             "jobs": 8,
-            "engine": "auto"
+            "engine": "auto",
+            "retry_max": 2,
+            "retry_delay": 30,
+            "connection_limit": 16
         },
         "last_install": {
             "llc": "0",

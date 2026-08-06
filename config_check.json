@@ -134,7 +134,10 @@
             "lang_en": "bool",
             "lang_kr": "bool",
             "jobs": "int",
-            "engine": ["auto", "aria2", "builtin"]
+            "engine": ["auto", "aria2", "builtin"],
+            "retry_max": "int",
+            "retry_delay": "int",
+            "connection_limit": "int"
         },
         "last_install": {
             "llc": "str",

@@ -174,9 +174,9 @@ Standalone library with own `__init__.py` public API.
 
 | File | Purpose |
 |------|---------|
-| `core.py` | Core updater: validates game files, extracts S/L CDN tokens and the real remote catalog URL, uses the game-compatible Unity request headers, hashes `LimbusCompany.exe`, parses Bundle names/cache keys, downloads token-scoped localize ZIPs, safely deploys localize files, populates Unity cache entries, removes failed Bundle entry directories, logs through `LogManager`, and manages bundled aria2c JSON-RPC with urllib fallback. Download failures are reported at WARNING level with file name + error code and collected into `failed_items` in the run result; aria2 polling progress logs are throttled to count changes (progress callbacks still fire each poll) |
-| `service.py` | Shared configuration/state service. Stores Launcher state under `%LOCALAPPDATA%/LCTA/resource-updater/launcher-state.json`, compares the local `LimbusCompany.exe` SHA-256 fingerprint, checks whether prior partial runs cover current configured scopes, and records successful manual/Launcher work |
-| `web_api.py` | Main-window resource updater controller. `LCTA_API` delegates prefixed bridge methods to it; it probes the shared game directory (read from main config `game_path`), persists updater options, runs/cancels the worker, records success state, and logs lifecycle/errors through `LogManager` |
+| `core.py` | Core updater: validates game files, extracts S/L CDN tokens and the real remote catalog URL, uses the game-compatible Unity request headers, hashes `LimbusCompany.exe`, parses Bundle names/cache keys, downloads token-scoped localize ZIPs, safely deploys localize files, populates Unity cache entries, removes failed Bundle entry directories, logs through `LogManager`, and manages bundled aria2c JSON-RPC with urllib fallback. Download failures are reported at WARNING level with file name + error code and collected into `failed_items` in the run result; aria2 polling progress logs are throttled to count changes (progress callbacks still fire each poll). Transient failures (aria2 error state, builtin downloader exceptions, remote catalog fetch) are automatically retried with a configurable `retry_max`/`retry_delay` backoff (0 = disabled, keeps legacy behavior); exhausted retries run a Range probe (`_probe_failure`) that captures status code + diagnostic response headers into `failed_items[].diagnostics`, and the run result aggregates a `retried` counter |
+| `service.py` | Shared configuration/state service. Stores Launcher state under `%LOCALAPPDATA%/LCTA/resource-updater/launcher-state.json`, compares the local `LimbusCompany.exe` SHA-256 fingerprint, checks whether prior partial runs cover current configured scopes, and records update results (success or failure) via `record_update_result` — only fully completed scopes are marked so failed scopes are retried on the next launch. Also persists the last result (success/failed/retried counts + failed item names/reasons) under `last_result` and exposes retry defaults (`retry_max=2`, `retry_delay=30`, `connection_limit=8`) from config |
+| `web_api.py` | Main-window resource updater controller. `LCTA_API` delegates prefixed bridge methods to it; it probes the shared game directory (read from main config `game_path`), persists updater options (including retry settings), runs/cancels the worker, records results, exposes the last update result to the page, and logs lifecycle/errors through `LogManager` |
 | `__init__.py` | Public resource updater exports used by Launcher and tests |
 
 ## Import Dependency Graph
@@ -214,8 +214,8 @@ launcher/main.py
   → resource_updater/service.py (fingerprint-gated official localize/Bundle pre-download)
 
 resource_updater/web_api.py
-  → resource_updater/core.py (manual update worker)
-  → resource_updater/service.py (config and successful-scope state)
+  → resource_updater/core.py (manual update worker with retry)
+  → resource_updater/service.py (config, retry defaults, and last-result state)
   → globalManagers/ConfigManager.py
 
 Note: `launcher/` is separately GPL-3.0-licensed, but the current Python implementation is not import-isolated: launcher modules directly reuse `webutils/`, `webFunc/`, and `globalManagers/`.

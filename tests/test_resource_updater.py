@@ -2,8 +2,12 @@ import json
 import zipfile
 from pathlib import Path
 
+import pytest
+
 import resource_updater.core as updater_core
+import resource_updater.service as updater_service
 from resource_updater.core import (
+    DownloadCancelled,
     DownloadError,
     GameInfo,
     ResourceUpdater,
@@ -126,7 +130,7 @@ def test_localize_update_uses_token_scoped_zip_and_blocks_traversal(tmp_path):
         / "story"
         / "chapter.json"
     )
-    assert result == {"updated": 1, "failed": 0, "failed_items": []}
+    assert result == {"updated": 1, "failed": 0, "failed_items": [], "retried": 0}
     assert destination.read_bytes() == b'{"ok": true}'
     assert not (destination.parent.parent / "escaped.txt").exists()
 
@@ -174,6 +178,9 @@ def test_failed_bundle_download_removes_cache_entry_folder(tmp_path, monkeypatch
         raise DownloadError("HTTP 403")
 
     monkeypatch.setattr(updater_core, "http_download", fail_download)
+    monkeypatch.setattr(
+        ResourceUpdater, "_probe_failure", staticmethod(lambda url: "")
+    )
     updater = ResourceUpdater(
         game_dir,
         work_dir=tmp_path / "work",
@@ -193,6 +200,7 @@ def test_failed_bundle_download_removes_cache_entry_folder(tmp_path, monkeypatch
         "updated": 0,
         "skipped": 0,
         "failed": 1,
+        "retried": 0,
         "failed_items": [{
             "name": bundle_name,
             "url": "https://download.limbuscompanycdn.org/s20260805_example/{}".format(bundle_name),
@@ -202,7 +210,7 @@ def test_failed_bundle_download_removes_cache_entry_folder(tmp_path, monkeypatch
     assert not (cache_dir / outer / inner).exists()
 
 
-def test_failed_aria2_bundle_removes_cache_entry_folder(tmp_path):
+def test_failed_aria2_bundle_removes_cache_entry_folder(tmp_path, monkeypatch):
     game_dir = make_game(tmp_path)
     cache_dir = tmp_path / "unity-cache"
     destination = cache_dir / ("b" * 32) / ("a" * 32) / "__data"
@@ -233,6 +241,9 @@ def test_failed_aria2_bundle_removes_cache_entry_folder(tmp_path):
         engine="aria2",
     )
     updater.aria2 = FakeAria2()
+    monkeypatch.setattr(
+        ResourceUpdater, "_probe_failure", staticmethod(lambda url: "")
+    )
 
     result = updater._download_many_aria2(
         "bundle",
@@ -250,6 +261,7 @@ def test_failed_aria2_bundle_removes_cache_entry_folder(tmp_path):
         "completed": 0,
         "skipped": 0,
         "failed": 1,
+        "retried": 0,
         "failed_items": [{
             "name": "example.bundle",
             "url": "https://download.limbuscompanycdn.org/token/example.bundle",
@@ -288,3 +300,321 @@ def test_launcher_state_requires_all_configured_scopes():
     assert _state_covers_config(state, fingerprint, config)
     config["lang_jp"] = True
     assert not _state_covers_config(state, fingerprint, config)
+
+
+class RetryAria2:
+    def __init__(self, error_statuses=1):
+        self.error_statuses = error_statuses
+        self.add_count = 0
+        self.status_calls = []
+
+    def add(self, url, target, include_xrw):
+        self.add_count += 1
+        target.parent.mkdir(parents=True, exist_ok=True)
+        return "gid-{}".format(self.add_count)
+
+    def status(self, gid):
+        self.status_calls.append(gid)
+        if len(self.status_calls) <= self.error_statuses:
+            return {
+                "status": "error",
+                "completedLength": "0",
+                "totalLength": "1",
+                "downloadSpeed": "0",
+                "errorCode": "22",
+                "errorMessage": "HTTP 403",
+            }
+        return {
+            "status": "complete",
+            "completedLength": "1",
+            "totalLength": "1",
+            "downloadSpeed": "0",
+            "errorCode": "0",
+            "errorMessage": "",
+        }
+
+    def remove_all(self):
+        pass
+
+
+def make_bundle_task(tmp_path):
+    destination = tmp_path / ("b" * 32) / ("a" * 32) / "__data"
+    return (
+        "https://download.limbuscompanycdn.org/token/example.bundle",
+        destination,
+        True,
+        True,
+        ResourceUpdater._write_bundle_info,
+        True,
+    )
+
+
+def test_aria2_retries_transient_failure_and_recovers(tmp_path):
+    updater = ResourceUpdater(
+        make_game(tmp_path),
+        work_dir=tmp_path / "work",
+        cache_dir=tmp_path / "unity-cache",
+        engine="aria2",
+        retry_max=2,
+        retry_delay=0.05,
+    )
+    updater.aria2 = RetryAria2(error_statuses=1)
+
+    result = updater._download_many_aria2("bundle", [make_bundle_task(tmp_path)])
+
+    assert result == {
+        "completed": 1,
+        "skipped": 0,
+        "failed": 0,
+        "retried": 1,
+        "failed_items": [],
+    }
+    assert updater.aria2.add_count == 2
+    destination = make_bundle_task(tmp_path)[1]
+    assert (destination.parent / "__info").is_file()
+
+
+def test_aria2_retry_exhausted_records_failure_with_diagnostics(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        ResourceUpdater,
+        "_probe_failure",
+        staticmethod(lambda url: "probe: HTTP 403 (fake)"),
+    )
+    updater = ResourceUpdater(
+        make_game(tmp_path),
+        work_dir=tmp_path / "work",
+        cache_dir=tmp_path / "unity-cache",
+        engine="aria2",
+        retry_max=2,
+        retry_delay=0.05,
+    )
+    updater.aria2 = RetryAria2(error_statuses=99)
+
+    result = updater._download_many_aria2("bundle", [make_bundle_task(tmp_path)])
+
+    assert result["completed"] == 0
+    assert result["failed"] == 1
+    assert result["retried"] == 2
+    assert updater.aria2.add_count == 3
+    assert result["failed_items"] == [{
+        "name": "example.bundle",
+        "url": "https://download.limbuscompanycdn.org/token/example.bundle",
+        "reason": "HTTP 403 (错误码 22)",
+        "diagnostics": "probe: HTTP 403 (fake)",
+    }]
+    assert not make_bundle_task(tmp_path)[1].parent.exists()
+
+
+def test_aria2_retry_backoff_accepts_cancel(tmp_path):
+    updater = ResourceUpdater(
+        make_game(tmp_path),
+        work_dir=tmp_path / "work",
+        cache_dir=tmp_path / "unity-cache",
+        engine="aria2",
+        retry_max=2,
+        retry_delay=3600,
+    )
+    client = RetryAria2(error_statuses=1)
+    updater.aria2 = client
+    original_status = client.status
+
+    def cancel_on_first_status(gid):
+        result = original_status(gid)
+        if len(client.status_calls) == 1:
+            updater.cancel_event.set()
+        return result
+
+    client.status = cancel_on_first_status
+
+    with pytest.raises(DownloadCancelled):
+        updater._download_many_aria2("bundle", [make_bundle_task(tmp_path)])
+
+    assert client.add_count == 1
+    assert client.status_calls == ["gid-1"]
+
+
+def test_aria2_retry_max_zero_disables_retry(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        ResourceUpdater, "_probe_failure", staticmethod(lambda url: "")
+    )
+    updater = ResourceUpdater(
+        make_game(tmp_path),
+        work_dir=tmp_path / "work",
+        cache_dir=tmp_path / "unity-cache",
+        engine="aria2",
+        retry_max=0,
+    )
+    client = RetryAria2(error_statuses=99)
+    updater.aria2 = client
+
+    result = updater._download_many_aria2("bundle", [make_bundle_task(tmp_path)])
+
+    assert result == {
+        "completed": 0,
+        "skipped": 0,
+        "failed": 1,
+        "retried": 0,
+        "failed_items": [{
+            "name": "example.bundle",
+            "url": "https://download.limbuscompanycdn.org/token/example.bundle",
+            "reason": "HTTP 403 (错误码 22)",
+        }],
+    }
+    assert client.add_count == 1
+
+
+def test_builtin_retries_transient_failure_and_recovers(tmp_path, monkeypatch):
+    game_dir = make_game(tmp_path)
+    cache_dir = tmp_path / "unity-cache"
+    inner = "a" * 32
+    outer = "b" * 32
+    bundle_name = "characters_{}.bundle".format(inner)
+    attempts = {"n": 0}
+
+    def flaky_download(url, destination, include_xrw, cancel_event, progress=None):
+        attempts["n"] += 1
+        if attempts["n"] <= 2:
+            raise DownloadError("HTTP 403")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"data")
+
+    monkeypatch.setattr(updater_core, "http_download", flaky_download)
+    updater = ResourceUpdater(
+        game_dir,
+        work_dir=tmp_path / "work",
+        cache_dir=cache_dir,
+        engine="builtin",
+        retry_max=2,
+        retry_delay=0.05,
+    )
+
+    result = updater.update_bundles({
+        "tokens": {"s": "s20260805_example"},
+        "bundles": [bundle_name],
+        "bundle_meta": {bundle_name: {"inner": inner, "outer": outer}},
+    })
+
+    assert result == {
+        "updated": 1,
+        "skipped": 0,
+        "failed": 0,
+        "retried": 2,
+        "failed_items": [],
+    }
+    assert attempts["n"] == 3
+    assert (cache_dir / outer / inner / "__data").read_bytes() == b"data"
+
+
+def test_builtin_retry_exhausted_records_failure(tmp_path, monkeypatch):
+    game_dir = make_game(tmp_path)
+    cache_dir = tmp_path / "unity-cache"
+    inner = "a" * 32
+    outer = "b" * 32
+    bundle_name = "characters_{}.bundle".format(inner)
+    attempts = {"n": 0}
+
+    def always_fail(url, destination, include_xrw, cancel_event, progress=None):
+        attempts["n"] += 1
+        raise DownloadError("HTTP 403")
+
+    monkeypatch.setattr(updater_core, "http_download", always_fail)
+    monkeypatch.setattr(
+        ResourceUpdater,
+        "_probe_failure",
+        staticmethod(lambda url: "probe: HTTP 403 (fake)"),
+    )
+    updater = ResourceUpdater(
+        game_dir,
+        work_dir=tmp_path / "work",
+        cache_dir=cache_dir,
+        engine="builtin",
+        retry_max=1,
+        retry_delay=0.05,
+    )
+
+    result = updater.update_bundles({
+        "tokens": {"s": "s20260805_example"},
+        "bundles": [bundle_name],
+        "bundle_meta": {bundle_name: {"inner": inner, "outer": outer}},
+    })
+
+    assert result["updated"] == 0
+    assert result["failed"] == 1
+    assert result["retried"] == 0
+    assert attempts["n"] == 2
+    assert result["failed_items"] == [{
+        "name": bundle_name,
+        "url": "https://download.limbuscompanycdn.org/s20260805_example/{}".format(bundle_name),
+        "reason": "HTTP 403",
+        "diagnostics": "probe: HTTP 403 (fake)",
+    }]
+    assert not (cache_dir / outer / inner).exists()
+
+
+def test_record_update_result_tracks_scopes_and_last_result(tmp_path, monkeypatch):
+    state_file = tmp_path / "launcher-state.json"
+    monkeypatch.setattr(updater_service, "_state_path", lambda: state_file)
+    fingerprint = {"LimbusCompany.exe": {"sha256": "abc", "size": 1}}
+    monkeypatch.setattr(
+        updater_service, "build_game_fingerprint", lambda game_path: fingerprint
+    )
+
+    partial_failure = {
+        "success": False,
+        "tokens": {"s": "s1", "l": "l1"},
+        "retried": 3,
+        "failed": 2,
+        "results": {
+            "localize": {"updated": 5, "failed": 0, "failed_items": [], "retried": 0},
+            "bundle": {
+                "updated": 1,
+                "failed": 2,
+                "retried": 3,
+                "failed_items": [
+                    {"name": "a.bundle", "reason": "HTTP 403", "diagnostics": "probe: HTTP 403"},
+                    {"name": "b.bundle", "reason": "timeout"},
+                ],
+            },
+        },
+    }
+    updater_service.record_update_result(Path("C:/game"), partial_failure, True, True, ["en"])
+
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    assert state["resources"]["localize"] is True
+    assert "bundle" not in state["resources"]
+    assert state["resources"]["languages"] == ["en"]
+    assert state["last_result"] == {
+        "success": False,
+        "failed": 2,
+        "retried": 3,
+        "failed_items": [
+            {"name": "a.bundle", "reason": "HTTP 403"},
+            {"name": "b.bundle", "reason": "timeout"},
+        ],
+    }
+    assert updater_service.get_last_update_result() == state["last_result"]
+
+    full_success = {
+        "success": True,
+        "tokens": {},
+        "retried": 0,
+        "failed": 0,
+        "results": {
+            "localize": {"updated": 0, "failed": 0, "failed_items": [], "retried": 0},
+            "bundle": {"updated": 0, "failed": 0, "failed_items": [], "retried": 0},
+        },
+    }
+    updater_service.record_update_result(Path("C:/game"), full_success, True, True, ["en", "jp"])
+
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    assert state["resources"]["bundle"] is True
+    assert state["resources"]["languages"] == ["en", "jp"]
+    assert state["last_result"]["success"] is True
+
+    fingerprint["LimbusCompany.exe"]["sha256"] = "new"
+    updater_service.record_update_result(Path("C:/game"), partial_failure, True, True, ["en"])
+
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    assert state["resources"]["localize"] is True
+    assert "bundle" not in state["resources"]
+    assert state["resources"]["languages"] == ["en"]

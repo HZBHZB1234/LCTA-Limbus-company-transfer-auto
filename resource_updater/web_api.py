@@ -8,8 +8,9 @@ from globalManagers.LogManager import LogManager
 
 from .core import DownloadCancelled, GameInfo, ResourceUpdater, resolve_aria2_binary
 from .service import (
+    get_last_update_result,
     get_resource_update_config,
-    record_successful_update,
+    record_update_result,
     selected_languages,
 )
 
@@ -54,6 +55,7 @@ class ResourceUpdaterAPI:
             "aria2_available": bool(resolve_aria2_binary()),
             "status": self.status,
             "status_text": self.status_text,
+            "last_result": get_last_update_result(),
         }
 
     def probe_game_dir(self, game_dir: str) -> Dict[str, Any]:
@@ -72,6 +74,12 @@ class ResourceUpdaterAPI:
             return {"success": False, "message": str(exc)}
 
     def save_options(self, options: Dict[str, Any]) -> Dict[str, Any]:
+        def as_int(value, default):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
         updates = {
             "launcher.resource_update.enabled": bool(options.get("enabled", False)),
             "launcher.resource_update.localize": bool(options.get("localize", True)),
@@ -79,8 +87,13 @@ class ResourceUpdaterAPI:
             "launcher.resource_update.lang_jp": bool(options.get("lang_jp", True)),
             "launcher.resource_update.lang_en": bool(options.get("lang_en", True)),
             "launcher.resource_update.lang_kr": bool(options.get("lang_kr", True)),
-            "launcher.resource_update.jobs": max(1, min(int(options.get("jobs", 8)), 32)),
+            "launcher.resource_update.jobs": max(1, min(as_int(options.get("jobs", 8), 8), 32)),
             "launcher.resource_update.engine": options.get("engine", "auto"),
+            "launcher.resource_update.retry_max": max(0, as_int(options.get("retry_max", 2), 2)),
+            "launcher.resource_update.retry_delay": max(5, as_int(options.get("retry_delay", 30), 30)),
+            "launcher.resource_update.connection_limit": max(
+                1, min(as_int(options.get("connection_limit", 8), 8), 16)
+            ),
         }
         count = ConfigManager().set_batch(updates)
         _log_manager.debug(
@@ -135,20 +148,23 @@ class ResourceUpdaterAPI:
                     engine=options.get("engine", "auto"),
                     progress_callback=progress,
                     cancel_event=self.cancel_event,
+                    retry_max=options.get("retry_max", 2),
+                    retry_delay=options.get("retry_delay", 30),
+                    connection_limit=options.get("connection_limit", 8),
                 )
                 result = self.updater.run(
                     update_localize=update_localize,
                     update_bundle=update_bundle,
                     languages=languages,
                 )
+                record_update_result(
+                    game_path,
+                    result,
+                    update_localize,
+                    update_bundle,
+                    languages,
+                )
                 if result["success"]:
-                    record_successful_update(
-                        game_path,
-                        result,
-                        update_localize,
-                        update_bundle,
-                        languages,
-                    )
                     self.status = "success"
                     self.status_text = "资源更新完成"
                 else:

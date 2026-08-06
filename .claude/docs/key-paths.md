@@ -326,6 +326,9 @@ Key launcher config items:
   launcher.resource_update.lang_*       selected jp/en/kr localize scopes
   launcher.resource_update.jobs         concurrent download count
   launcher.resource_update.engine       auto / aria2 / builtin
+  launcher.resource_update.retry_max    auto-retry rounds on transient download failure (0 = off)
+  launcher.resource_update.retry_delay  seconds between retry rounds (min 5)
+  launcher.resource_update.connection_limit  aria2 connections per file (1–16, default 8)
 
 Validate: config_check.json         JSON schema mapping keys → types ("str", "bool", etc.)
           config_default.json       default values template
@@ -494,7 +497,14 @@ Manual path:
           → aria2c JSON-RPC if bundled/available; urllib fallback otherwise
         → failures: per-file WARNING logs (name + error code), collected into result["failed_items"]
           ({name, url, reason}); aria2 polling progress only logs when the finished count changes
-        → success: service.record_successful_update() merges only completed scopes
+        → transient failures auto-retry up to retry_max times with retry_delay backoff
+          (aria2 error state is re-queued without cleanup; builtin downloader re-attempts the file)
+        → exhausted retries run a Range probe (status + cf/x-amz headers) into failed_items[].diagnostics
+        → result: service.record_update_result() merges only fully completed scopes into state,
+          persists last_result {success, failed, retried, failed_items}, and re-marks nothing
+          on failure — the Launcher re-runs failed scopes on the next launch
+        → page shows last_result: failure list + 「重试失败项」 button (re-runs the full update;
+          already-downloaded files are skipped by cache/existence checks)
 
 Launcher path:
   launcher/main.py resource_update phase
@@ -505,7 +515,8 @@ Launcher path:
       → also verify saved localize languages / Bundle scope cover current config
       → unchanged + covered: skip
       → changed or missing scope: ResourceUpdater.run()
-      → save new fingerprint only after all selected work succeeds
+      → record_update_result() saves the new fingerprint only for fully completed scopes;
+        failed scopes stay unmarked and re-run on the next launch
     → main.py logs failures item-by-item at WARNING ("游戏资源更新失败文件: …")
       and marks the resource-update phase red (✗) + status text in the GUI when failed > 0
 ```

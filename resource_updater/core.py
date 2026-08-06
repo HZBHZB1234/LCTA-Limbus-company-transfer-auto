@@ -163,9 +163,10 @@ def http_download(
 
 
 class Aria2Client:
-    def __init__(self, binary: Path, jobs: int):
+    def __init__(self, binary: Path, jobs: int, connection_limit: int = 8):
         self.binary = binary
         self.jobs = max(1, jobs)
+        self.connection_limit = max(1, min(16, connection_limit))
         self.secret = hashlib.sha256(
             "{}:{}".format(os.getpid(), time.time()).encode("utf-8")
         ).hexdigest()[:24]
@@ -184,7 +185,8 @@ class Aria2Client:
             "--rpc-listen-all=false", "--rpc-listen-port={}".format(port),
             "--rpc-secret={}".format(self.secret),
             "--max-concurrent-downloads={}".format(self.jobs),
-            "--max-connection-per-server=16", "--split=16", "--min-split-size=4M",
+            "--max-connection-per-server={}".format(self.connection_limit),
+            "--split=16", "--min-split-size=4M",
             "--continue=true", "--auto-file-renaming=false", "--allow-overwrite=true",
             "--file-allocation=none", "--max-tries=5", "--retry-wait=3",
             "--console-log-level=error", "--quiet=true",
@@ -445,6 +447,9 @@ class ResourceUpdater:
         engine: str = "auto",
         progress_callback: Optional[ProgressCallback] = None,
         cancel_event: Optional[threading.Event] = None,
+        retry_max: int = 0,
+        retry_delay: float = 30.0,
+        connection_limit: int = 8,
     ):
         self.game = GameInfo(Path(game_dir))
         self.work_dir = Path(work_dir) if work_dir else default_work_dir()
@@ -454,6 +459,9 @@ class ResourceUpdater:
         self.progress_callback = progress_callback
         self.cancel_event = cancel_event or threading.Event()
         self.aria2 = None
+        self.retry_max = max(0, int(retry_max))
+        self.retry_delay = max(0.0, float(retry_delay))
+        self.connection_limit = max(1, min(16, int(connection_limit)))
 
     def cancel(self) -> None:
         self.cancel_event.set()
@@ -506,6 +514,55 @@ class ResourceUpdater:
         if self.cancel_event.is_set():
             raise DownloadCancelled("更新已取消")
 
+    def _sleep_cancel(self, seconds: float) -> None:
+        """分片休眠，期间响应取消事件。"""
+        deadline = time.monotonic() + max(0.0, seconds)
+        while True:
+            self._check_cancel()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(0.5, remaining))
+
+    def _probe_failure(self, url: str) -> str:
+        """最终失败时对 URL 发一次 Range 探针，抓取状态码与诊断响应头，用于下次定性根因。"""
+        try:
+            request = urllib.request.Request(url, headers=_headers(True))
+            request.add_header("Range", "bytes=0-0")
+            try:
+                response = urllib.request.urlopen(request, timeout=8)
+            except urllib.error.HTTPError as exc:
+                response = exc
+            code = getattr(response, "code", getattr(response, "status", "?"))
+            headers = getattr(response, "headers", {}) or {}
+            parts = ["probe: HTTP {}".format(code)]
+            for key in (
+                "server",
+                "x-cache",
+                "x-amz-cf-id",
+                "x-amz-cf-pop",
+                "cf-ray",
+                "x-amz-error-type",
+                "retry-after",
+            ):
+                value = headers.get(key)
+                if value:
+                    parts.append("{}={}".format(key, value))
+            try:
+                snippet = (
+                    response.read(100)
+                    .decode("utf-8", "replace")
+                    .strip()
+                    .replace("\n", " ")[:80]
+                )
+                if snippet:
+                    parts.append(snippet)
+            except Exception:
+                pass
+            return " | ".join(parts)
+        except Exception as exc:
+            return "probe: 探针失败 ({})".format(exc)
+
     def _resolved_engine(self) -> str:
         if self.engine not in ("auto", "aria2", "builtin"):
             raise ValueError("未知下载引擎: {}".format(self.engine))
@@ -521,7 +578,7 @@ class ResourceUpdater:
             binary = resolve_aria2_binary()
             if not binary:
                 raise Aria2Error("找不到 aria2c")
-            self.aria2 = Aria2Client(binary, self.jobs)
+            self.aria2 = Aria2Client(binary, self.jobs, connection_limit=self.connection_limit)
             self.aria2.start()
         return self.aria2
 
@@ -541,7 +598,7 @@ class ResourceUpdater:
     ) -> Dict[str, Any]:
         client = self._aria_client()
         pending = []
-        failed = skipped = completed = 0
+        failed = skipped = completed = retried = 0
         failed_items = []
 
         def record_failure(
@@ -549,12 +606,16 @@ class ResourceUpdater:
             destination: Path,
             reason: str,
             cleanup_parent: bool,
+            diagnostics: Optional[str] = None,
         ) -> None:
-            failed_items.append({
+            item = {
                 "name": url.rsplit("/", 1)[-1] or destination.name,
                 "url": url,
                 "reason": reason,
-            })
+            }
+            if diagnostics:
+                item["diagnostics"] = diagnostics
+            failed_items.append(item)
             self._cleanup_failed_download(destination, cleanup_parent)
 
         for (
@@ -571,9 +632,12 @@ class ResourceUpdater:
                     "gid": gid,
                     "url": url,
                     "destination": destination,
+                    "include_xrw": include_xrw,
                     "skip_not_found": skip_not_found,
                     "post_action": post_action,
                     "cleanup_parent": cleanup_parent,
+                    "retries_left": self.retry_max,
+                    "retry_at": None,
                 })
             except Exception as exc:
                 failed += 1
@@ -586,9 +650,34 @@ class ResourceUpdater:
         try:
             while pending:
                 self._check_cancel()
+                now = time.monotonic()
                 remaining = []
                 speed = downloaded = known_total = 0
                 for task in pending:
+                    if task["retry_at"] is not None:
+                        if now < task["retry_at"]:
+                            remaining.append(task)
+                            continue
+                        try:
+                            task["gid"] = client.add(
+                                task["url"], task["destination"], task["include_xrw"]
+                            )
+                            task["retry_at"] = None
+                            retried += 1
+                        except Exception as exc:
+                            failed += 1
+                            record_failure(
+                                task["url"],
+                                task["destination"],
+                                "重试提交失败: {}".format(exc),
+                                task["cleanup_parent"],
+                            )
+                            self.report(
+                                channel,
+                                "重试提交失败: {}".format(exc),
+                                level=logging.WARNING,
+                            )
+                            continue
                     status = client.status(task["gid"])
                     state = status.get("status")
                     downloaded += int(status.get("completedLength") or 0)
@@ -619,23 +708,45 @@ class ResourceUpdater:
                             self._cleanup_failed_download(
                                 task["destination"], task["cleanup_parent"]
                             )
+                        elif task["retries_left"] > 0:
+                            task["retries_left"] -= 1
+                            task["retry_at"] = time.monotonic() + self.retry_delay
+                            remaining.append(task)
+                            self.report(
+                                channel,
+                                "下载失败 {name}，{delay:.0f} 秒后自动重试（剩余 {left} 轮）".format(
+                                    name=task["url"].rsplit("/", 1)[-1],
+                                    delay=self.retry_delay,
+                                    left=task["retries_left"],
+                                ),
+                                level=logging.WARNING,
+                            )
                         else:
                             message = status.get("errorMessage") or "未知错误"
+                            reason = "{} (错误码 {})".format(message, error_code)
+                            diagnostics = self._probe_failure(task["url"])
                             failed += 1
                             record_failure(
                                 task["url"],
                                 task["destination"],
-                                "{} (错误码 {})".format(message, error_code),
+                                reason,
                                 task["cleanup_parent"],
+                                diagnostics,
                             )
                             self.report(
                                 channel,
-                                "下载失败: {} (错误码 {}): {}".format(
+                                "下载失败: {}（错误码 {}），重试 {} 轮仍失败: {}".format(
                                     task["url"].rsplit("/", 1)[-1],
                                     error_code,
+                                    self.retry_max,
                                     message,
                                 ),
                                 level=logging.WARNING,
+                            )
+                            _log_manager.debug(
+                                "[游戏资源更新/{}] 失败诊断: {} | {}".format(
+                                    channel, task["url"], diagnostics
+                                )
                             )
                     else:
                         remaining.append(task)
@@ -665,6 +776,7 @@ class ResourceUpdater:
             "completed": completed,
             "skipped": skipped,
             "failed": failed,
+            "retried": retried,
             "failed_items": failed_items,
         }
 
@@ -690,6 +802,43 @@ class ResourceUpdater:
             self._cleanup_failed_download(destination, cleanup_parent)
             raise
 
+    def _download_with_retry_builtin(
+        self,
+        channel: str,
+        url: str,
+        destination: Path,
+        include_xrw: bool,
+        index: int,
+        total: int,
+        cleanup_parent: bool = False,
+    ) -> int:
+        """内置下载器带退避重试，返回实际尝试次数（1 = 一次成功）。"""
+        attempts = 1 + self.retry_max
+        for attempt in range(attempts):
+            try:
+                self._download_one_builtin(
+                    channel, url, destination, include_xrw, index, total, cleanup_parent
+                )
+                return attempt + 1
+            except (DownloadCancelled, FileNotFoundError):
+                raise
+            except Exception:
+                if attempt < self.retry_max:
+                    self.report(
+                        channel,
+                        "下载失败 {name}，{delay:.0f} 秒后自动重试（第 {round}/{max} 轮）".format(
+                            name=destination.name,
+                            delay=self.retry_delay,
+                            round=attempt + 1,
+                            max=self.retry_max,
+                        ),
+                        level=logging.WARNING,
+                    )
+                    self._sleep_cancel(self.retry_delay)
+                    continue
+                raise
+        raise DownloadError("下载失败: {}".format(destination.name))
+
     def _build_manifest(self, include_bundle: bool) -> Dict[str, Any]:
         self.report("manifest", "正在读取游戏 CDN 信息", 0.05)
         tokens = self.game.extract_tokens()
@@ -705,7 +854,21 @@ class ResourceUpdater:
             catalog_path = token_dir / "catalog_S1.bin"
             try:
                 self.report("manifest", "正在获取远程 catalog", 0.35)
-                catalog_data = http_get(catalog_url, True, timeout=120)
+                try:
+                    catalog_data = http_get(catalog_url, True, timeout=120)
+                except Exception:
+                    if self.retry_max > 0:
+                        self.report(
+                            "manifest",
+                            "远程 catalog 获取失败，{:.0f} 秒后自动重试".format(
+                                self.retry_delay
+                            ),
+                            level=logging.WARNING,
+                        )
+                        self._sleep_cancel(self.retry_delay)
+                        catalog_data = http_get(catalog_url, True, timeout=120)
+                    else:
+                        raise
                 temp_path = catalog_path.with_name(catalog_path.name + ".part")
                 temp_path.write_bytes(catalog_data)
                 temp_path.replace(catalog_path)
@@ -761,18 +924,21 @@ class ResourceUpdater:
                     "localize_{}.zip"
                 ).format(manifest["tokens"]["l"], language)
                 tasks.append((url, zip_path, False, False, None, False))
+        localize_retried = 0
         if tasks:
             if self._resolved_engine() == "aria2":
                 result = self._download_many_aria2("localize", tasks)
+                localize_retried = result.get("retried", 0)
                 if result["failed"]:
                     raise DownloadError(
                         "{} 个本地化压缩包下载失败".format(result["failed"])
                     )
             else:
                 for index, task in enumerate(tasks):
-                    self._download_one_builtin(
+                    attempts = self._download_with_retry_builtin(
                         "localize", task[0], task[1], task[2], index, len(tasks)
                     )
+                    localize_retried += max(0, attempts - 1)
 
         updates = []
         for language, zip_path in zip_paths.items():
@@ -839,7 +1005,12 @@ class ResourceUpdater:
                 (index + 1) / len(updates) if updates else 1.0,
             )
         self.report("localize", "本地化更新完成：{} 个文件".format(updated), 1.0)
-        return {"updated": updated, "failed": failed, "failed_items": failed_items}
+        return {
+            "updated": updated,
+            "failed": failed,
+            "failed_items": failed_items,
+            "retried": localize_retried,
+        }
 
     def _existing_bundle_mapping(self) -> Dict[str, str]:
         mapping = {}
@@ -892,7 +1063,13 @@ class ResourceUpdater:
             )
         if not tasks:
             self.report("bundle", "Bundle 缓存已是最新", 1.0)
-            return {"updated": 0, "skipped": 0, "failed": 0, "failed_items": []}
+            return {
+                "updated": 0,
+                "skipped": 0,
+                "failed": 0,
+                "retried": 0,
+                "failed_items": [],
+            }
 
         if self._resolved_engine() == "aria2":
             result = self._download_many_aria2("bundle", tasks)
@@ -900,15 +1077,18 @@ class ResourceUpdater:
                 "updated": result["completed"],
                 "skipped": result["skipped"],
                 "failed": result["failed"],
+                "retried": result.get("retried", 0),
                 "failed_items": result["failed_items"],
             }
 
-        updated = skipped = failed = 0
+        updated = skipped = failed = retried = 0
         failed_items = []
+        retry_lock = threading.Lock()
 
         def worker(index: int, task) -> str:
+            nonlocal retried
             try:
-                self._download_one_builtin(
+                attempts = self._download_with_retry_builtin(
                     "bundle",
                     task[0],
                     task[1],
@@ -918,6 +1098,8 @@ class ResourceUpdater:
                     cleanup_parent=True,
                 )
                 task[4](task[1])
+                with retry_lock:
+                    retried += max(0, attempts - 1)
                 return "updated"
             except FileNotFoundError:
                 self._cleanup_failed_download(task[1], True)
@@ -926,11 +1108,15 @@ class ResourceUpdater:
                 raise
             except Exception as exc:
                 self._cleanup_failed_download(task[1], True)
-                failed_items.append({
+                item = {
                     "name": task[0].rsplit("/", 1)[-1] or task[1].name,
                     "url": task[0],
                     "reason": str(exc),
-                })
+                }
+                diagnostics = self._probe_failure(task[0])
+                if diagnostics:
+                    item["diagnostics"] = diagnostics
+                failed_items.append(item)
                 self.report(
                     "bundle",
                     "Bundle 下载失败: {} ({})".format(
@@ -964,6 +1150,7 @@ class ResourceUpdater:
             "updated": updated,
             "skipped": skipped,
             "failed": failed,
+            "retried": retried,
             "failed_items": failed_items,
         }
 
@@ -976,13 +1163,16 @@ class ResourceUpdater:
         self.game.validate()
         self.work_dir.mkdir(parents=True, exist_ok=True)
         _log_manager.log(
-            "[游戏资源更新] 开始任务: game_dir={}, localize={}, bundle={}, languages={}, engine={}, jobs={}".format(
+            "[游戏资源更新] 开始任务: game_dir={}, localize={}, bundle={}, languages={}, engine={}, jobs={}, retry_max={}, retry_delay={}, connection_limit={}".format(
                 self.game.game_dir,
                 update_localize,
                 update_bundle,
                 list(languages),
                 self.engine,
                 self.jobs,
+                self.retry_max,
+                self.retry_delay,
+                self.connection_limit,
             )
         )
         manifest = self._build_manifest(update_bundle)
@@ -998,6 +1188,7 @@ class ResourceUpdater:
                 self.aria2.stop()
                 self.aria2 = None
         failed = sum(item.get("failed", 0) for item in results.values())
+        retried = sum(item.get("retried", 0) for item in results.values())
         failed_items = []
         for item in results.values():
             failed_items.extend(item.get("failed_items") or [])
@@ -1006,6 +1197,7 @@ class ResourceUpdater:
             "engine": resolved_engine,
             "tokens": manifest["tokens"],
             "results": results,
+            "retried": retried,
             "failed": failed,
             "failed_items": failed_items,
         }

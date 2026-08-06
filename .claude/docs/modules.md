@@ -180,7 +180,7 @@ Standalone library with own `__init__.py` public API.
 
 | File | Purpose |
 |------|---------|
-| `main.py` | Entry point: pipeline orchestration — creates `LaunchPipeline`, registers handlers for resource-update/mod/speed-hotkey, optionally creates GUI window, then emits pipeline phases in order. Uses `subprocess.Popen` (not `subprocess.call`) for game launch to support cancel-flow from GUI |
+| `main.py` | Entry point: pipeline orchestration — creates `LaunchPipeline`, registers handlers for resource-update/mod/speed-hotkey, optionally creates the WinForms launch center, then emits pipeline phases in order. Connects LogManager modal status/progress, resource download progress, CDN percentages, stepped mod preparation, and launch-process milestones to the GUI. Uses `subprocess.Popen` (not `subprocess.call`) for game launch to support cancel-flow from GUI |
 | `game_launch.py` | Game launch phases: `prepare_mod()` (mod patching pre-game), `cleanup_mod_assets()` (post-game restore), `start_speed_hotkey()` / `stop_speed_hotkey()` (lifecycle wrappers). Game process launch moved to `main.py` pipeline |
 | `updates.py` | Translation pack update system (Factory pattern for LLC/OurPlay/Machine). Optional post-update beautification passes all built-in/user rules plus the enable map to `fancy_main()`, allowing disabled skill-color rules to avoid resource preparation |
 | `cdn.py` | CDN optimization for launcher mode with cache TTL to avoid redundant speed tests |
@@ -190,7 +190,7 @@ Standalone library with own `__init__.py` public API.
 | `changes.py` | Text data patch application |
 | `compress.py` | Compression utilities |
 | `speed_hotkey.py` | Game speed hotkey (Ctrl+Shift+S) with comprehensive lifecycle logging, foreground process check, .NET STA threading for UI |
-| `gui_progress.py` | WinForms companion window for GUI launcher mode: phase indicator (init→update→resource_update→cdn→mod→launch→running), status label, progress bar, collapsible log area, game-running info display (PID + uptime + hotkey hints). `register_to_pipeline()` wires GUI to `LaunchPipeline` phases; `FormClosing` handler shows confirmation dialog and sets `cancel_event` on confirm |
+| `gui_progress.py` | WinForms launch center for GUI mode: dark card layout with header/status badge, configuration summary (game path/update mode/enabled integrations/launch source), vertical dynamic phase rail, separate overall and stage progress bars, detailed task text, expandable real-time log panel, explicit cancel/exit action, and running/exited views with PID, uptime, hotkey hints, runtime, and exit code. `register_to_pipeline()` wires GUI to `LaunchPipeline`; dedicated modal/resource/CDN progress adapters accept real backend progress; `FormClosing` retains the cancel/launcher-only/game-termination confirmation flow |
 | `pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline: `on(phase, callback)` for module registration, `emit(phase, **kwargs)` to trigger all callbacks. Defines 8 phases (`PHASE_INIT` through `PHASE_EXIT`, including `PHASE_RESOURCE_UPDATE` between check_update and cdn). `cancel_event` (threading.Event) supports GUI-initiated abort. `context` dict shares state (steam_argv, game_process, game_pid) across phases |
 
 ## resource_updater/ — Official Game Resource Updater

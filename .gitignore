@@ -28,6 +28,9 @@ dist
 dev_assets
 .env
 .venv
+node_modules
+.pytest_cache
+webui/product/
 translatekit
 LLc-CN_LCTA
 webui/assets/README.md

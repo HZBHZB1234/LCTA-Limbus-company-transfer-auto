@@ -202,8 +202,16 @@ def mock_safe_window():
     w._form.IsHandleCreated = True
     w._status_label = MagicMock()
     w._status_label.IsDisposed = False
+    w._activity_label = MagicMock()
+    w._activity_label.IsDisposed = False
     w._progress_bar = MagicMock()
     w._progress_bar.IsDisposed = False
+    w._phase_percent_label = MagicMock()
+    w._phase_percent_label.IsDisposed = False
+    w._overall_progress_bar = MagicMock()
+    w._overall_progress_bar.IsDisposed = False
+    w._overall_progress_label = MagicMock()
+    w._overall_progress_label.IsDisposed = False
     w._log_box = MagicMock()
     w._log_box.IsDisposed = False
     w._log_toggle_btn = MagicMock()
@@ -267,6 +275,11 @@ class TestWindowPhaseDisplay:
     def test_form_title_updates(self, mock_safe_window):
         mock_safe_window._show_phase(PHASE_CDN)
         assert "CDN" in mock_safe_window._form.Text
+
+    def test_show_phase_updates_overall_progress(self, mock_safe_window):
+        mock_safe_window._show_phase(PHASE_CDN)
+        assert mock_safe_window._overall_progress_bar.Value == 40
+        assert mock_safe_window._overall_progress_label.Text == "40%"
 
     def test_unknown_phase_does_not_raise(self, mock_safe_window):
         mock_safe_window._show_phase("nonexistent")
@@ -461,6 +474,17 @@ class TestWindowMethods:
     def test_set_progress_marquee_mode(self, mock_safe_window):
         mock_safe_window.set_progress_marquee()
         assert mock_safe_window._progress_bar.Style is not None
+
+    def test_resource_progress_updates_detail_and_percent(self, mock_safe_window):
+        mock_safe_window.update_resource_progress("Bundle", "已完成 2/4", 0.5)
+        assert mock_safe_window._progress_bar.Value == 50
+        assert mock_safe_window._phase_percent_label.Text == "50%"
+        assert "Bundle" in mock_safe_window._activity_label.Text
+
+    def test_resource_progress_without_fraction_uses_marquee(self, mock_safe_window):
+        mock_safe_window.update_resource_progress("Localize", "正在解析目录", None)
+        assert mock_safe_window._progress_bar.Style is not None
+        assert "Localize" in mock_safe_window._activity_label.Text
 
     def test_append_log_calls_log_box(self, mock_safe_window):
         mock_safe_window.append_log("line 1")

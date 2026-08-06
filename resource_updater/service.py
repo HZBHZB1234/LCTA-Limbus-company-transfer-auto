@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 from globalManagers.ConfigManager import ConfigManager
 from globalManagers.LogManager import LogManager
 
-from .core import ResourceUpdater, build_game_fingerprint, default_work_dir
+from .core import ProgressCallback, ResourceUpdater, build_game_fingerprint, default_work_dir
 
 
 _log_manager = LogManager()
@@ -156,6 +156,7 @@ def _state_covers_config(
 def run_launcher_resource_update(
     game_dir: Optional[Path] = None,
     cancel_event: Optional[threading.Event] = None,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> Dict[str, Any]:
     config = get_resource_update_config()
     if not config["enabled"]:
@@ -180,6 +181,7 @@ def run_launcher_resource_update(
         game_path,
         jobs=config["jobs"],
         engine=config["engine"],
+        progress_callback=progress_callback,
         cancel_event=cancel_event,
         retry_max=config["retry_max"],
         retry_delay=config["retry_delay"],

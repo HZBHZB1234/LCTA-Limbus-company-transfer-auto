@@ -128,29 +128,35 @@ Launcher mode: start_webui.py -launcher
   → launcher/main.py                  ConfigManager() → LaunchPipeline()
     → launcher/pipeline.py            LaunchPipeline created; cancel_event for GUI abort
     → launcher/gui_progress.py        (if gui_mode) create_progress_window() + register_to_pipeline()
+                                       renders config summary, vertical phases, overall/stage progress,
+                                       expandable logs, status badge, and cancel/exit action
 
   Pipeline phases (emit order):
     Phase init:
       pipeline.emit(PHASE_INIT)         → GUI shows phase indicator
     Phase check_update:
       pipeline.emit(PHASE_CHECK_UPDATE) → launcher/updates.py (Factory pattern)
+                                         → main.py reports network/check/install milestones to stage progress
     Phase resource_update:
       pipeline.emit(PHASE_RESOURCE_UPDATE) → resource_updater/service.py
         → resource_updater/core.py      compare SHA-256 fingerprint and configured completed scopes
                                         download official localize ZIPs + populate Unity Bundle cache
+                                        → progress_callback(channel, message, fraction) updates GUI stage progress
     Phase cdn:
       pipeline.emit(PHASE_CDN)          → launcher/cdn.py (CDN optimize with cache TTL)
+                                         forwards selector percentages/messages to GUI stage progress
     Phase prepare_mod (if enabled):
       pipeline.emit(PHASE_PREPARE_MOD)  → launcher/game_launch.py prepare_mod()
+                                         reports stepped progress for cleanup/detection/text/assets/audio
                                         → launcher/patch.py (Unity asset patching)
                                         → launcher/sound.py (sound replacement)
                                         → launcher/changes.py (text data patches)
     Phase launch:
       → subprocess.Popen(steam_argv)   ← Non-blocking, stored in pipeline.context
-      pipeline.emit(PHASE_LAUNCH)       → GUI shows "游戏运行中"
+      pipeline.emit(PHASE_LAUNCH)       → GUI shows process-creation progress
     Phase running:
       pipeline.emit(PHASE_RUNNING)      → game_launch.py start_speed_hotkey()
-                                        → GUI shows PID + uptime + hotkey hints
+                                        → GUI marks overall progress complete and shows PID + uptime + hotkey hints
       → _wait_for_game(poll + cancel_event check)
     Phase exit:
       pipeline.emit(PHASE_EXIT)         → game_launch.py cleanup_mod_assets()

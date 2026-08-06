@@ -52,15 +52,21 @@ def _prepare_mod_handler(**kw):
         return
     if ConfigManager().get("launcher.work.mod", False):
         from launcher.game_launch import prepare_mod
-        prepare_mod(steam_argv)
+        prepare_mod(steam_argv, progress_callback=kw.get('progress_callback'))
 
 
 def _resource_update_handler(**kw):
     cancel_event = kw.get('cancel_event')
+    progress = kw.get('progress')
     try:
         from resource_updater.service import run_launcher_resource_update
         resource_result = run_launcher_resource_update(
-            cancel_event=cancel_event
+            cancel_event=cancel_event,
+            progress_callback=(
+                progress.update_resource_progress
+                if progress is not None and progress.is_alive()
+                else None
+            ),
         )
         if resource_result.get("skipped"):
             _log_manager.log(
@@ -82,7 +88,6 @@ def _resource_update_handler(**kw):
                     ),
                     logging.WARNING,
                 )
-            progress = kw.get('progress')
             if progress is not None and progress.is_alive():
                 progress.update_status(
                     "游戏资源更新完成，但 {} 个文件失败".format(failed_count)
@@ -191,42 +196,79 @@ def main():
     def _launcher_check_running(modal_id=None, log=True):
         if pipeline.cancel_event.is_set():
             raise RuntimeError("cancelled")
-    _log_manager.set_modal_callbacks(check_running=_launcher_check_running)
+    modal_callbacks = {"check_running": _launcher_check_running}
+    if progress and progress.is_alive():
+        modal_callbacks.update(
+            status_callback=progress.update_status,
+            progress_callback=progress.update_modal_progress,
+        )
+    _log_manager.set_modal_callbacks(**modal_callbacks)
 
     pipeline.emit(PHASE_INIT)
+    if progress and progress.is_alive():
+        progress.update_phase_progress(100, "Launcher 配置与启动环境已就绪")
 
     steam_argv = ''
     try:
         if not pipeline.cancel_event.is_set():
-            if progress and progress.is_alive():
-                progress.set_progress_marquee()
-                progress.update_status("正在检查更新...")
             pipeline.emit(PHASE_CHECK_UPDATE)
+            if progress and progress.is_alive():
+                progress.set_progress(10)
+                progress.update_status("正在初始化更新网络...")
             steam_argv = resolve_steam_argv()
             try:
+                if progress and progress.is_alive():
+                    progress.set_progress(25)
+                    progress.update_status("正在连接更新服务...")
                 GithubDownload.init_request(quiet=True)
+                if progress and progress.is_alive():
+                    progress.set_progress_marquee("正在检查并安装可用的汉化更新...")
                 update_obj = create_update()
                 update_obj.run()
+                if progress and progress.is_alive():
+                    progress.update_phase_progress(100, "汉化更新检查完成")
             except Exception as e:
                 _log_manager.log_error(e)
+                if progress and progress.is_alive():
+                    progress.mark_phase_failed(PHASE_CHECK_UPDATE)
 
         if not pipeline.cancel_event.is_set():
             pipeline.emit(PHASE_RESOURCE_UPDATE, cancel_event=pipeline.cancel_event, progress=progress)
 
         if not pipeline.cancel_event.is_set():
-            if progress and progress.is_alive():
-                progress.update_status("正在进行CDN优选...")
             pipeline.emit(PHASE_CDN)
+            if progress and progress.is_alive():
+                progress.set_progress(0)
+                progress.update_status("正在进行CDN优选...")
             try:
-                run_cdn_optimization(file_dir, cancel_event=pipeline.cancel_event)
+                run_cdn_optimization(
+                    file_dir,
+                    cancel_event=pipeline.cancel_event,
+                    progress_callback=(
+                        progress.update_cdn_progress
+                        if progress and progress.is_alive()
+                        else None
+                    ),
+                )
+                if progress and progress.is_alive():
+                    progress.update_phase_progress(100, "CDN 优选阶段完成")
             except Exception as e:
                 _log_manager.log_error(e)
 
         if not pipeline.cancel_event.is_set():
             pipeline.context['steam_argv'] = steam_argv
             if progress and progress.is_alive():
+                progress.set_progress(0)
                 progress.update_status("正在准备模组...")
-            pipeline.emit(PHASE_PREPARE_MOD, steam_argv=steam_argv)
+            pipeline.emit(
+                PHASE_PREPARE_MOD,
+                steam_argv=steam_argv,
+                progress_callback=(
+                    progress.update_phase_progress
+                    if progress and progress.is_alive()
+                    else None
+                ),
+            )
     except Exception as e:
         _log_manager.log_error(e)
 
@@ -235,14 +277,17 @@ def main():
 
     if not pipeline.cancel_event.is_set():
         try:
-            if progress and progress.is_alive():
-                progress.update_status("正在启动游戏...")
             pipeline.emit(PHASE_LAUNCH)
+            if progress and progress.is_alive():
+                progress.set_progress(15)
+                progress.update_status("正在创建游戏进程...")
 
             game_process = subprocess.Popen(steam_argv)
             pipeline.context['game_process'] = game_process
             pipeline.context['game_pid'] = game_process.pid
             _log_manager.log(f"游戏已启动 (PID: {game_process.pid})")
+            if progress and progress.is_alive():
+                progress.update_phase_progress(100, "游戏进程已创建，正在移交运行状态...")
 
             pipeline.emit(PHASE_RUNNING)
 
@@ -251,6 +296,9 @@ def main():
             exit_code = game_process.returncode if game_process.poll() is not None else -1
         except Exception as e:
             _log_manager.log_error(e)
+            if progress and progress.is_alive():
+                progress.mark_phase_failed(PHASE_LAUNCH)
+                progress.update_status(f"游戏启动失败：{e}")
             exit_code = -1
 
     try:

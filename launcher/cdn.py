@@ -3,13 +3,18 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
+from typing import Callable, Optional
 
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 
 _log_manager = LogManager()
 
-def run_cdn_optimization(project_root: Path, cancel_event: threading.Event = None) -> None:
+def run_cdn_optimization(
+    project_root: Path,
+    cancel_event: threading.Event = None,
+    progress_callback: Optional[Callable[[float, str], None]] = None,
+) -> None:
     """CDN优选（在启动游戏前优化CDN连接）"""
     config = ConfigManager()
     if not config.get('launcher.work.cdn_optimize', False):
@@ -44,6 +49,11 @@ def run_cdn_optimization(project_root: Path, cancel_event: threading.Event = Non
 
         def launcher_progress(pct, msg):
             _log_manager.log(f"[CDN] {pct:.0f}%: {msg}")
+            if progress_callback is not None:
+                try:
+                    progress_callback(pct, msg)
+                except Exception:
+                    pass
 
         def cancel_check():
             if cancel_event and cancel_event.is_set():

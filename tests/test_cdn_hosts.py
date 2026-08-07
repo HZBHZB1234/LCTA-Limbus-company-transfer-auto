@@ -107,6 +107,7 @@ def test_write_hosts_clears_readonly_before_replace(tmp_path):
 def test_write_hosts_permission_error_returns_formatted_by_default(tmp_path, monkeypatch):
     hosts = tmp_path / "hosts"
     hosts.write_text("x\n", encoding="utf-8")
+    monkeypatch.setattr(hosts_mod, "REPLACE_RETRY_DELAY", 0)
 
     def fake_replace(src, dst):
         raise PermissionError(13, "拒绝访问", dst)
@@ -123,6 +124,7 @@ def test_write_hosts_permission_error_returns_formatted_by_default(tmp_path, mon
 def test_write_hosts_permission_error_raises_when_requested(tmp_path, monkeypatch):
     hosts = tmp_path / "hosts"
     hosts.write_text("x\n", encoding="utf-8")
+    monkeypatch.setattr(hosts_mod, "REPLACE_RETRY_DELAY", 0)
 
     def fake_replace(src, dst):
         raise PermissionError(13, "拒绝访问", dst)
@@ -140,6 +142,7 @@ def test_write_hosts_permission_error_raises_when_requested(tmp_path, monkeypatc
 def test_write_hosts_lock_error_still_formatted_when_requested(tmp_path, monkeypatch):
     hosts = tmp_path / "hosts"
     hosts.write_text("x\n", encoding="utf-8")
+    monkeypatch.setattr(hosts_mod, "REPLACE_RETRY_DELAY", 0)
 
     def fake_replace(src, dst):
         raise OSError(32, "另一个程序正在使用此文件", dst)
@@ -161,6 +164,88 @@ def test_format_hosts_error_elevated_wording():
     msg = hosts_mod._format_hosts_error(exc, elevated=True)
     assert "已以管理员权限运行" in msg
     assert "只读" in msg
+    assert "占用" in msg  # 文案覆盖"被其他程序占用"场景
+
+
+def test_write_hosts_retries_then_succeeds(tmp_path, monkeypatch):
+    """权限类失败一次后重试成功，且最终结果正确。"""
+    hosts = tmp_path / "hosts"
+    hosts.write_text("127.0.0.1 localhost\n", encoding="utf-8")
+    monkeypatch.setattr(hosts_mod, "REPLACE_RETRY_DELAY", 0)
+
+    real_replace = os.replace
+    calls = {"n": 0}
+
+    def flaky_replace(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise PermissionError(5, "拒绝访问", dst)
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", flaky_replace)
+
+    success, err = hosts_mod.write_hosts(cf_ip="1.2.3.4", hosts_path=str(hosts))
+
+    assert success is True
+    assert err is None
+    assert calls["n"] == 2
+    assert "1.2.3.4" in hosts.read_text(encoding="utf-8")
+
+
+def test_write_hosts_retries_exhausted_appends_occupancy_detail(tmp_path, monkeypatch):
+    """三次均失败后，附加占用进程的 PID 与路径到错误文案。"""
+    hosts = tmp_path / "hosts"
+    hosts.write_text("x\n", encoding="utf-8")
+    monkeypatch.setattr(hosts_mod, "REPLACE_RETRY_DELAY", 0)
+    monkeypatch.setattr(
+        hosts_mod,
+        "_find_locking_processes",
+        lambda path: [{"pid": 1234, "name": r"C:\fake\guard.exe"}],
+    )
+
+    def fake_replace(src, dst):
+        raise OSError(32, "另一个程序正在使用此文件", dst)
+
+    monkeypatch.setattr(os, "replace", fake_replace)
+
+    success, err = hosts_mod.write_hosts(cf_ip="1.2.3.4", hosts_path=str(hosts))
+
+    assert success is False
+    assert "被其他程序锁定" in err
+    assert "1234" in err
+    assert "C:\\fake\\guard.exe" in err
+
+
+def test_write_hosts_retries_exhausted_no_occupancy_message(tmp_path, monkeypatch):
+    """三次均失败且查不到占用进程时，给出兜底提示。"""
+    hosts = tmp_path / "hosts"
+    hosts.write_text("x\n", encoding="utf-8")
+    monkeypatch.setattr(hosts_mod, "REPLACE_RETRY_DELAY", 0)
+    monkeypatch.setattr(hosts_mod, "_find_locking_processes", lambda path: [])
+
+    def fake_replace(src, dst):
+        raise PermissionError(5, "拒绝访问", dst)
+
+    monkeypatch.setattr(os, "replace", fake_replace)
+
+    success, err = hosts_mod.write_hosts(cf_ip="1.2.3.4", hosts_path=str(hosts))
+
+    assert success is False
+    assert "未能检测到占用 hosts 文件的进程" in err
+
+
+@pytest.mark.skipif(os.name != "nt", reason="仅 Windows 支持 Restart Manager")
+def test_find_locking_processes_detects_self(tmp_path):
+    """Restart Manager 能检测到持有文件句柄的进程（自身），并返回 PID 与路径。"""
+    held = tmp_path / "held.txt"
+    with held.open("w", encoding="utf-8") as f:
+        f.write("hold")
+        with held.open("r", encoding="utf-8") as f2:
+            procs = hosts_mod._find_locking_processes(str(held))
+
+    assert procs, "应检测到持有句柄的进程"
+    assert os.getpid() in {p["pid"] for p in procs}
+    assert any("python" in p["name"].lower() for p in procs)
 
 
 def test_read_current_hosts_mappings(tmp_path):

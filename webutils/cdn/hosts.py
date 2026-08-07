@@ -4,8 +4,14 @@ from __future__ import annotations
 import ipaddress
 import os
 import stat
+import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+# 原子替换 hosts 时的重试策略：权限类（WinError 5）或占用类（WinError 32/33）
+# 失败会短暂重试，吸收杀软扫描/其他工具瞬时占用；全部失败后再分析占用进程。
+REPLACE_MAX_ATTEMPTS = 3
+REPLACE_RETRY_DELAY = 0.5
 
 from .constants import (
     CFA_END_MARKER,
@@ -23,6 +29,24 @@ def _is_permission_error(exc: Exception) -> bool:
     return isinstance(exc, PermissionError) or "WinError 5" in err_str or "拒绝访问" in err_str
 
 
+def _is_lock_error(exc: Exception) -> bool:
+    """判断异常是否为文件占用类错误（[WinError 32] / [WinError 33] / 文件正在使用）。"""
+    err_str = str(exc)
+    return (
+        isinstance(exc, OSError)
+        and (
+            "WinError 32" in err_str
+            or "WinError 33" in err_str
+            or "另一个程序正在使用此文件" in err_str
+        )
+    )
+
+
+def _is_retryable_replace_error(exc: Exception) -> bool:
+    """替换 hosts 时可重试的错误：权限类（WinError 5）或占用类（WinError 32/33）。"""
+    return _is_permission_error(exc) or _is_lock_error(exc)
+
+
 def _format_hosts_error(exc: Exception, elevated: bool = False) -> str:
     """
     将 hosts 写入/移除时的异常转换为用户可读的错误描述。
@@ -37,11 +61,13 @@ def _format_hosts_error(exc: Exception, elevated: bool = False) -> str:
         if elevated:
             return (
                 f"已以管理员权限运行，仍无法修改 hosts 文件。\n\n"
-                f"原因：hosts 文件可能被设置为只读属性，"
-                f"或被杀毒软件/安全软件（如 Windows Defender、火绒等）的 hosts 保护功能拦截。\n\n"
+                f"原因：hosts 文件可能被其他程序占用（如杀毒软件的 hosts 保护、"
+                f"hosts 管理/加速工具正在监听该文件），或被设置为只读属性，"
+                f"或被安全软件（如 Windows Defender、火绒等）的 hosts 保护功能拦截。\n\n"
                 f"解决方法：\n"
-                f"1. 右键 hosts 文件 → 属性 → 取消勾选“只读”；\n"
-                f"2. 将本程序添加到杀毒软件白名单/排除列表，或关闭其 hosts 保护功能。"
+                f"1. 退出占用 hosts 文件的程序（见下方占用进程提示），或暂时关闭杀毒软件的 hosts 保护后重试；\n"
+                f"2. 右键 hosts 文件 → 属性 → 取消勾选“只读”；\n"
+                f"3. 将本程序添加到杀毒软件白名单/排除列表，或关闭其 hosts 保护功能。"
             )
         return (
             f"权限不足，无法修改 hosts 文件。\n\n"
@@ -137,12 +163,187 @@ def _build_block(marker_start: str, marker_end: str, mappings: List[Tuple[str, s
     return block
 
 
-def _clear_readonly(path: str) -> None:
-    """尝试清除目标文件的只读属性（失败忽略），供 os.replace 原子替换使用。"""
+def _clear_readonly(
+    path: str,
+    log_cb: Optional[Callable[[str], None]] = None
+) -> None:
+    """尝试清除目标文件的只读属性，供 os.replace 原子替换使用；失败记录日志。"""
     try:
         os.chmod(path, stat.S_IWRITE)
-    except OSError:
-        pass
+    except OSError as e:
+        if log_cb:
+            log_cb(f"清除 hosts 只读属性失败（{e}），后续替换可能被拒绝")
+
+
+def _get_process_path(pid: int) -> Optional[str]:
+    """通过 OpenProcess + QueryFullProcessImageNameW 获取进程可执行文件路径。"""
+    try:
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        h = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
+        if not h:
+            return None
+        try:
+            buf = ctypes.create_unicode_buffer(32768)
+            size = ctypes.c_ulong(ctypes.sizeof(buf))
+            if ctypes.windll.kernel32.QueryFullProcessImageNameW(
+                h, 0, buf, ctypes.byref(size)
+            ):
+                return buf.value
+        finally:
+            ctypes.windll.kernel32.CloseHandle(h)
+    except Exception:
+        return None
+    return None
+
+
+def _find_locking_processes(file_path: str) -> List[Dict[str, Any]]:
+    """
+    通过 Restart Manager API 查找占用指定文件的进程。
+    返回: [{"pid": int, "name": str(可执行文件路径或进程名)}]
+    无占用/查询失败/非 Windows 时返回空列表。
+    """
+    if os.name != "nt" or not os.path.isfile(file_path):
+        return []
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return []
+
+    class RM_UNIQUE_PROCESS(ctypes.Structure):
+        _fields_ = [
+            ("dwProcessId", wintypes.DWORD),
+            ("ProcessStartTime", wintypes.FILETIME),
+        ]
+
+    class RM_PROCESS_INFO(ctypes.Structure):
+        _fields_ = [
+            ("Process", RM_UNIQUE_PROCESS),
+            ("strAppName", ctypes.c_wchar * 256),
+            ("strServiceShortName", ctypes.c_wchar * 64),
+            ("ApplicationType", wintypes.DWORD),
+            ("AppStatus", wintypes.DWORD),
+            ("TSSessionId", wintypes.DWORD),
+            ("bRestartable", wintypes.BOOL),
+        ]
+
+    try:
+        rm = ctypes.WinDLL("rstrtmgr")
+        rm.RmStartSession.argtypes = [
+            ctypes.POINTER(wintypes.DWORD),
+            wintypes.DWORD,
+            ctypes.c_wchar_p,  # WCHAR strSessionKey[32]
+        ]
+        rm.RmStartSession.restype = wintypes.DWORD
+        rm.RmRegisterResources.argtypes = [
+            wintypes.DWORD,
+            wintypes.UINT,
+            ctypes.POINTER(ctypes.c_wchar_p),  # LPCWSTR rgsFilenames[]
+            wintypes.UINT,
+            ctypes.c_void_p,  # RM_UNIQUE_PROCESS rgsApplications[]
+            wintypes.UINT,
+            ctypes.c_void_p,  # LPCWSTR rgsServiceNames[]
+        ]
+        rm.RmRegisterResources.restype = wintypes.DWORD
+        rm.RmGetList.argtypes = [
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.UINT),
+            ctypes.POINTER(wintypes.UINT),
+            ctypes.POINTER(RM_PROCESS_INFO),
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        rm.RmGetList.restype = wintypes.DWORD
+        rm.RmEndSession.argtypes = [wintypes.DWORD]
+        rm.RmEndSession.restype = wintypes.DWORD
+
+        session = wintypes.DWORD()
+        # RmStartSession 会写入 32 字符的会话密钥并带终止符，需额外 1 个 WCHAR
+        session_key = ctypes.create_unicode_buffer(33)
+
+        err = rm.RmStartSession(ctypes.byref(session), 0, session_key)
+        if err != 0:
+            return []
+        try:
+            file_w = ctypes.c_wchar_p(file_path)
+            err = rm.RmRegisterResources(
+                session, 1, ctypes.byref(file_w), 0, None, 0, None
+            )
+            if err != 0:
+                return []
+
+            n_needed = wintypes.UINT()
+            n_affected = wintypes.UINT()
+            reboot_reasons = wintypes.DWORD()
+            # 第一次调用仅获取进程数（返回 ERROR_MORE_DATA 属正常）
+            rm.RmGetList(
+                session,
+                ctypes.byref(n_needed),
+                ctypes.byref(n_affected),
+                None,
+                ctypes.byref(reboot_reasons),
+            )
+            if n_needed.value == 0:
+                return []
+
+            count = n_needed.value
+            info_array = (RM_PROCESS_INFO * count)()
+            n_affected = wintypes.UINT(count)
+            err = rm.RmGetList(
+                session,
+                ctypes.byref(n_needed),
+                ctypes.byref(n_affected),
+                info_array,
+                ctypes.byref(reboot_reasons),
+            )
+            if err != 0:
+                return []
+
+            result = []
+            for i in range(n_affected.value):
+                info = info_array[i]
+                pid = int(info.Process.dwProcessId)
+                name = (
+                    _get_process_path(pid)
+                    or info.strAppName
+                    or info.strServiceShortName
+                    or f"PID {pid}"
+                )
+                result.append({"pid": pid, "name": name})
+            return result
+        finally:
+            rm.RmEndSession(session)
+    except Exception:
+        return []
+
+
+def _build_occupancy_detail(
+    file_path: str,
+    log_cb: Optional[Callable[[str], None]] = None
+) -> str:
+    """重试全部失败后，尝试定位占用文件的进程，返回可追加到错误文案的提示。"""
+    try:
+        procs = _find_locking_processes(file_path)
+    except Exception:
+        procs = []
+
+    if procs:
+        proc_lines = "\n".join(f"  PID {p['pid']}: {p['name']}" for p in procs)
+        detail = (
+            f"\n\n检测到以下进程占用 hosts 文件：\n{proc_lines}\n"
+            f"可尝试退出相关程序后重试。"
+        )
+    else:
+        detail = (
+            "\n\n未能检测到占用 hosts 文件的进程"
+            "（可能是杀毒软件在后台保护该文件）。"
+        )
+    if log_cb:
+        log_cb("[hosts]" + detail.replace("\n", " "))
+    return detail
 
 
 def write_hosts(
@@ -163,6 +364,9 @@ def write_hosts(
     raise_on_permission_error: 权限类错误（WinError 5/PermissionError）时抛出原始异常，
         供提权流程判断是否升级权限重试（其余错误仍返回格式化描述）。
     elevated: 当前进程是否已提权；影响权限失败时的提示文案。
+
+    权限/占用类替换失败会按 REPLACE_MAX_ATTEMPTS 次短间隔重试（吸收瞬时占用）；
+    全部失败后尝试分析占用 hosts 文件的进程（PID 与路径）并附加到错误文案。
 
     返回: (success: bool, error_message: Optional[str])
     """
@@ -195,35 +399,54 @@ def write_hosts(
     # 重写 CloudFront 标记块
     _rewrite_block(lines, CFA_START_MARKER, CFA_END_MARKER, cfa_mappings, log_cb)
 
-    # 写入临时文件
+    # 写入临时文件并原子替换；权限/占用类失败按 REPLACE_MAX_ATTEMPTS 次重试
     temp_path = hosts_path + f".{uuid.uuid4().hex[:8]}.tmp"
+    last_error: Optional[Exception] = None
     try:
         newline = _detect_newline(lines)
 
-        with open(temp_path, "w", encoding=encoding_name, newline="", errors="replace") as f:
-            if bom and encoding_name not in ("utf-8-sig",):
-                f.buffer.write(bom)
+        for attempt in range(1, REPLACE_MAX_ATTEMPTS + 1):
+            try:
+                with open(temp_path, "w", encoding=encoding_name, newline="", errors="replace") as f:
+                    if bom and encoding_name not in ("utf-8-sig",):
+                        f.buffer.write(bom)
 
-            for content, terminator in lines:
-                f.write(content)
-                f.write(terminator)
+                    for content, terminator in lines:
+                        f.write(content)
+                        f.write(terminator)
 
-        # 清除目标只读属性后原子替换（MoveFileEx 拒绝替换只读目标）
-        _clear_readonly(hosts_path)
-        os.replace(temp_path, hosts_path)
+                # 清除目标只读属性后原子替换（MoveFileEx 拒绝替换只读目标）
+                _clear_readonly(hosts_path, log_cb)
+                os.replace(temp_path, hosts_path)
 
-        if log_cb:
-            log_cb(f"hosts 已更新：{hosts_path}")
+                if log_cb:
+                    log_cb(f"hosts 已更新：{hosts_path}")
 
-        return True, None
+                return True, None
 
-    except Exception as e:
+            except Exception as e:
+                last_error = e
+                if attempt >= REPLACE_MAX_ATTEMPTS or not _is_retryable_replace_error(e):
+                    break
+                if log_cb:
+                    log_cb(
+                        f"替换 hosts 失败（第 {attempt}/{REPLACE_MAX_ATTEMPTS} 次尝试），"
+                        f"稍后重试：{e}"
+                    )
+                time.sleep(REPLACE_RETRY_DELAY)
+
+        e = last_error
         error_msg = f"写入 hosts 失败：{e}"
         if log_cb:
             log_cb(error_msg)
         if raise_on_permission_error and _is_permission_error(e):
-            raise
-        return False, _format_hosts_error(e, elevated=elevated)
+            raise e
+        detail = (
+            _build_occupancy_detail(hosts_path, log_cb)
+            if _is_retryable_replace_error(e)
+            else ""
+        )
+        return False, _format_hosts_error(e, elevated=elevated) + detail
     finally:
         if os.path.isfile(temp_path):
             try:
@@ -307,6 +530,9 @@ def remove_hosts_block(
         供提权流程判断是否升级权限重试（其余错误仍返回格式化描述）。
     elevated: 当前进程是否已提权；影响权限失败时的提示文案。
 
+    权限/占用类替换失败会按 REPLACE_MAX_ATTEMPTS 次短间隔重试（吸收瞬时占用）；
+    全部失败后尝试分析占用 hosts 文件的进程（PID 与路径）并附加到错误文案。
+
     返回: (success: bool, error_message: Optional[str])
     """
     # 读取现有 hosts
@@ -318,35 +544,54 @@ def remove_hosts_block(
     # 用空映射重写目标块（即移除）
     _rewrite_block(lines, marker_start, marker_end, [], log_cb)
 
-    # 写入临时文件
+    # 写入临时文件并原子替换；权限/占用类失败按 REPLACE_MAX_ATTEMPTS 次重试
     temp_path = hosts_path + f".{uuid.uuid4().hex[:8]}.tmp"
+    last_error: Optional[Exception] = None
     try:
         newline = _detect_newline(lines)
 
-        with open(temp_path, "w", encoding=encoding_name, newline="", errors="replace") as f:
-            if bom and encoding_name not in ("utf-8-sig",):
-                f.buffer.write(bom)
+        for attempt in range(1, REPLACE_MAX_ATTEMPTS + 1):
+            try:
+                with open(temp_path, "w", encoding=encoding_name, newline="", errors="replace") as f:
+                    if bom and encoding_name not in ("utf-8-sig",):
+                        f.buffer.write(bom)
 
-            for content, terminator in lines:
-                f.write(content)
-                f.write(terminator)
+                    for content, terminator in lines:
+                        f.write(content)
+                        f.write(terminator)
 
-        # 清除目标只读属性后原子替换（MoveFileEx 拒绝替换只读目标）
-        _clear_readonly(hosts_path)
-        os.replace(temp_path, hosts_path)
+                # 清除目标只读属性后原子替换（MoveFileEx 拒绝替换只读目标）
+                _clear_readonly(hosts_path, log_cb)
+                os.replace(temp_path, hosts_path)
 
-        if log_cb:
-            log_cb(f"已移除 hosts 受管标记块 {marker_start}")
+                if log_cb:
+                    log_cb(f"已移除 hosts 受管标记块 {marker_start}")
 
-        return True, None
+                return True, None
 
-    except Exception as e:
+            except Exception as e:
+                last_error = e
+                if attempt >= REPLACE_MAX_ATTEMPTS or not _is_retryable_replace_error(e):
+                    break
+                if log_cb:
+                    log_cb(
+                        f"替换 hosts 失败（第 {attempt}/{REPLACE_MAX_ATTEMPTS} 次尝试），"
+                        f"稍后重试：{e}"
+                    )
+                time.sleep(REPLACE_RETRY_DELAY)
+
+        e = last_error
         error_msg = f"移除 hosts 块失败：{e}"
         if log_cb:
             log_cb(error_msg)
         if raise_on_permission_error and _is_permission_error(e):
-            raise
-        return False, _format_hosts_error(e, elevated=elevated)
+            raise e
+        detail = (
+            _build_occupancy_detail(hosts_path, log_cb)
+            if _is_retryable_replace_error(e)
+            else ""
+        )
+        return False, _format_hosts_error(e, elevated=elevated) + detail
     finally:
         if os.path.isfile(temp_path):
             try:

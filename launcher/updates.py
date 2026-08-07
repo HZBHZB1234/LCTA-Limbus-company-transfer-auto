@@ -56,6 +56,7 @@ class UpdateBase(ABC):
 
     def __init__(self):
         self.launcher_config: dict = ConfigManager().get('launcher', {})
+        self.ui_default_config: dict = ConfigManager().get('ui_default', {})
         self.cache_path = func_utils.get_cache_font()
 
     def check_network_available(self) -> bool:
@@ -161,7 +162,7 @@ class MachineUpdate(UpdateBase):
 
     def __init__(self):
         super().__init__()
-        self.config: dict = self.launcher_config.get("machine", {})
+        self.config: dict = self.ui_default_config.get("machine", {})
 
     def get_latest_version(self) -> str:
         """获取LCTA-AU最新版本号"""
@@ -194,7 +195,7 @@ class LLCUpdate(UpdateBase):
 
     def __init__(self):
         super().__init__()
-        self.config: dict = self.launcher_config.get("zero", {})
+        self.config: dict = self.ui_default_config.get("zero", {})
 
     def get_latest_version(self) -> str:
         """获取LLC最新版本号"""
@@ -218,7 +219,7 @@ class LLCUpdate(UpdateBase):
             download_source=self.config.get("download_source", "github"),
             from_proxy=self.config.get("use_proxy", True),
             zip_type=self.config.get("zip_type", "zip"),
-            use_cache=True,
+            use_cache=self.config.get("use_cache", True),
             cache_path=self.cache_path
         )
 
@@ -230,7 +231,7 @@ class OurPlayUpdate(UpdateBase):
 
     def __init__(self):
         super().__init__()
-        self.config: dict = self.launcher_config.get("ourplay", {})
+        self.config: dict = self.ui_default_config.get("ourplay", {})
 
     def get_latest_version(self) -> str:
         """获取OurPlay最新版本号"""
@@ -386,7 +387,7 @@ class LMGUpdate(UpdateBase):
 
     def get_latest_type(self) -> str:
         """获取最新源"""
-        use_proxy = self.launcher_config.get('zero', {}).get('use_proxy', True)
+        use_proxy = self.ui_default_config.get('zero', {}).get('use_proxy', True)
 
         try:
             GithubDownload.GithubRequester.update_config(use_proxy)

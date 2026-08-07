@@ -441,17 +441,6 @@ const TOOLTIP_DATA = {
     'enable-storage': '启用数据持久化存储，保存用户配置和运行状态。关闭后部分设置可能在重启后丢失。',
 
     // ===== Launcher配置 =====
-    'launcher-zero-zip-type': '零协会汉化包的压缩格式。ZIP 兼容性更好；7Z 压缩率更高但需 7-Zip 支持。',
-    'launcher-zero-download-source': '零协会汉化包的下载来源。GitHub 更新最及时；公益镜像通过 API 代理，适合网络不稳时使用。',
-    'launcher-zero-use-proxy': '通过代理服务器加速零协会汉化包的 GitHub 下载。建议开启。',
-    'launcher-zero-use-cache': '使用本地已有的字体文件，跳过字体下载步骤，加快更新速度。',
-    'launcher-ourplay-font-option': 'OurPlay 汉化包的字体处理方式。"保留原字体"不做处理；"精简字体"去除冗余；"使用本地缓存"复用已下载的字体。',
-    'launcher-ourplay-use-api': '通过 Webnote API 获取 OurPlay 版本信息。具有延迟，适合直连获取版本信息失败时使用。',
-    'launcher-ourplay-source': '启动器自动更新时使用的 OurPlay API 来源。PC API 为原版接口；Android API 为新版接口，需基板包辅助。',
-    'launcher-ourplay-official': '下载 OurPlay 官方权威汉化版本。关闭后下载社区修改版。仅 Android API 源有效。',
-    'launcher-ourplay-refer-package': '基板包的路径，用于 Android API 源的文件结构转换。留空则自动检测。仅 Android API 源有效。',
-    'launcher-machine-download-source': 'LCTA-AU 汉化包的下载来源。建议优先使用 LCTA-AU 源，翻译质量更高。',
-    'launcher-machine-use-proxy': '通过代理服务器加速 LCTA-AU 汉化包的 GitHub 下载。建议开启。',
     'launcher-work-update': '启动器自动更新模式。可选择不更新、仅更新指定汉化源，或组合更新多个汉化源。',
     'launcher-work-mod': '启动游戏时自动加载 MOD 支持。启用后可使用各类游戏模组。',
     'launcher-work-fancy': '更新汉化包后自动进行文本美化处理。相关美化选项请在"文本美化"页面配置。',
@@ -475,7 +464,7 @@ const TOOLTIP_DATA = {
     'input-bypass-volatility': '手动模式下计数的波动百分比（0-50，0 为关闭）。hook 会周期性在 ±该百分比内随机抖动计数再据此计算比例，防止恒定数值被检测。',
     'launcher-work-damage-hook': '通过 Launcher 启动游戏时自动注入伤害倍率 hook，敌方单位受到的伤害乘以设定倍率。首次使用需先在"伤害倍率"页面阅读并同意风险须知（未同意前本选项在 Launcher 配置页隐藏）。相关设置请在"伤害倍率"页面配置。',
     'damage-hook-multiplier': '敌方单位受到的伤害倍率（默认 3.0，范围 0.1-1000）。"无修正"伤害（按 1.0 处理）直接置为该倍率值；我方单位不受影响。',
-    'damage-hook-log': '开启后 hook 在战斗中对实际生效的伤害事件记录日志（目标/攻击方/暴击/倍率前后值），可在页面"最近日志"查看。默认关闭以降低运行开销。',
+    'damage-hook-log': '开启后 hook 在战斗中对实际生效的伤害事件记录日志（目标/攻击方/暴击/倍率前后值），逐条写入本地日志 logs/app.log（可在「日志」页查看），页面"最近日志"仅显示最新一条。默认关闭以降低运行开销。',
     'damage-hook-api-url': '伤害倍率函数偏移的 JSON API 地址。默认使用 web.lcta.top 提供的文件；游戏更新后程序自动检测 GameAssembly.dll 哈希变化并重新拉取，本地缓存同步失效。',
     'steam-command': '用于通过 Steam 启动游戏的命令行参数。复制后可粘贴到 Steam 游戏属性中的启动选项。',
 

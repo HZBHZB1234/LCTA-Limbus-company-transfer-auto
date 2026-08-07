@@ -386,16 +386,6 @@ function onOurplaySourceChange() {
     if (androidOptions) androidOptions.style.display = isAndroid ? '' : 'none';
 }
 
-function onLauncherOurplaySourceChange() {
-    const sourceEl = document.getElementById('launcher-ourplay-source');
-    const useApiGroup = document.getElementById('launcher-ourplay-use-api-group');
-    const androidOptions = document.getElementById('launcher-ourplay-android-options');
-    if (!sourceEl) return;
-    const isAndroid = sourceEl.value === 'android';
-    if (useApiGroup) useApiGroup.style.display = isAndroid ? 'none' : '';
-    if (androidOptions) androidOptions.style.display = isAndroid ? '' : 'none';
-}
-
 function downloadOurplay() {
     const fontOption = document.getElementById('ourplay-font-option').value;
     const checkHash = document.getElementById('ourplay-check-hash').checked;

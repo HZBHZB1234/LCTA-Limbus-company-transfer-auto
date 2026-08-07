@@ -94,7 +94,6 @@ window.addEventListener('pywebviewready', function() {
                     toggleAutoProper();
                     toggleSteamCommand();
                     if (typeof onOurplaySourceChange === 'function') onOurplaySourceChange();
-                    if (typeof onLauncherOurplaySourceChange === 'function') onLauncherOurplaySourceChange();
                 });
 
                 pywebview.api.check_show().then(

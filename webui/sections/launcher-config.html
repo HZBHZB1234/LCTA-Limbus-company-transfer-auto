@@ -8,127 +8,15 @@
 
 <div class="settings-grid">
     <div class="setting-card">
-        <h3 class="setting-title">零协汉化配置</h3>
-        <div class="form-group">
-            <label for="launcher-zero-zip-type">压缩格式:</label>
-            <div class="select-wrapper">
-                <select id="launcher-zero-zip-type">
-                    <option value="zip">ZIP格式</option>
-                    <option value="seven">7Z格式</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
-            </div>
-        </div>
-        
-        <div class="form-group">
-            <label for="launcher-zero-download-source">文本下载来源:</label>
-            <div class="select-wrapper">
-                <select id="launcher-zero-download-source">
-                    <option value="github">从github下载</option>
-                    <option value="api">从公益镜像下载 beta</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="launcher-zero-use-proxy" checked>
-                <span class="checkmark"></span>
-                使用代理加速下载
-            </label>
-        </div>
-        
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="launcher-zero-use-cache" checked>
-                <span class="checkmark"></span>
-                使用本地字体缓存
-            </label>
-            <small class="form-hint">使用本地已有的字体文件，加快下载速度</small>
-        </div>
-    </div>
-    
-    <div class="setting-card">
-        <h3 class="setting-title">OurPlay配置</h3>
-        <div class="form-group">
-            <label for="launcher-ourplay-source">API源:</label>
-            <div class="select-wrapper">
-                <select id="launcher-ourplay-source" onchange="onLauncherOurplaySourceChange()">
-                    <option value="pc">PC API</option>
-                    <option value="android">Android API (支持神人汉化)</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
-            </div>
-        </div>
-        <div class="form-group">
-            <label for="launcher-ourplay-font-option">字体处理选项:</label>
-            <div class="select-wrapper">
-                <select id="launcher-ourplay-font-option">
-                    <option value="keep">保留原字体</option>
-                    <option value="simplify">精简字体</option>
-                    <option value="llc">使用本地字体缓存</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
-            </div>
-        </div>
-
-        <div class="form-group" id="launcher-ourplay-use-api-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="launcher-ourplay-use-api" checked>
-                <span class="checkmark"></span>
-                使用API获取版本信息
-            </label>
-        </div>
-
-        <div id="launcher-ourplay-android-options" style="display:none;">
-            <div class="form-group">
-                <label class="checkbox-container">
-                    <input type="checkbox" id="launcher-ourplay-official" checked>
-                    <span class="checkmark"></span>
-                    下载正经版本汉化（关闭则下载神人汉化）
-                </label>
-            </div>
-            <div class="form-group">
-                <label for="launcher-ourplay-refer-package">基板包路径（可选）:</label>
-                <div class="file-input-group">
-                    <input type="text" id="launcher-ourplay-refer-package" placeholder="留空则自动检测（需已安装足够新版的零协会汉化包）">
-                    <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_folder('launcher-ourplay-refer-package')">
-                        <i class="fas fa-folder-open"></i> 浏览文件夹
-                    </button>
-                    <button type="button" class="action-btn secondary" onclick="pywebview.api.browse_file('launcher-ourplay-refer-package')">
-                        <i class="fas fa-file"></i> 浏览zip
-                    </button>
-                </div>
-                <small class="form-hint">基板包用于将手机版汉化包格式转化为通用格式。留空则自动从游戏安装目录检测。</small>
-            </div>
+        <h3 class="setting-title">汉化包下载配置</h3>
+        <p class="form-hint">汉化包的下载来源、压缩格式、字体处理等详细选项已与「汉化包下载」页面共用同一套配置，请在该页面统一设置。</p>
+        <div style="margin-top: 0.5rem;">
+            <button type="button" class="action-btn secondary" onclick="goAndShow('download')">
+                <i class="fas fa-arrow-right"></i> 前往汉化包下载页面
+            </button>
         </div>
     </div>
 
-    <div class="setting-card">
-        <h3 class="setting-title">LCTA-AU汉化配置</h3>
-
-        <div class="form-group">
-            <label for="launcher-machine-download-source">文本下载来源:</label>
-            <div class="select-wrapper">
-                <select id="launcher-machine-download-source">
-                    <option value="github">从github下载</option>
-                    <option value="api">从公益镜像下载 beta</option>
-                </select>
-                <i class="fas fa-chevron-down"></i>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="launcher-machine-use-proxy" checked>
-                <span class="checkmark"></span>
-                使用代理加速下载
-            </label>
-        </div>
-        
-    </div>
-    
     <div class="setting-card">
         <h3 class="setting-title">工作模式配置</h3>
         <div class="form-group">
@@ -155,6 +43,30 @@
             </label>
             <small class="form-hint">启用后将加载MOD并启动游戏</small>
         </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-gui-mode">
+                <span class="checkmark"></span>
+                启用GUI进度窗口
+            </label>
+            <small class="form-hint">在Launcher模式下显示图形化进度窗口，展示启动过程中的状态和日志信息</small>
+        </div>
+
+        <div class="form-group" id="steam-command">
+            <label for="steam-command">steam命令</label>
+            <div class="steam-command-group" style="display: flex; align-items: center; gap: 8px;">
+                <input type="text" id="steam-cmd" placeholder="复制steam命令" readonly 
+                    style="flex: 1; min-width: 0;">
+                <button class="action-btn secondary" onclick="copySteamPath()">
+                    <i class="fas fa-folder-open"></i> 复制
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">更新集成</h3>
 
         <div class="form-group">
             <label class="checkbox-container">
@@ -185,6 +97,10 @@
             <small class="form-hint">Launcher 会比较 LimbusCompany.exe 的 SHA-256，仅在游戏版本变化后执行，不需要联网检查版本。</small>
             <small class="form-hint">相关设置请在游戏资源更新页面配置</small>
         </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">游戏加速</h3>
 
         <div class="form-group" data-risk-service="speed">
             <label class="checkbox-container">
@@ -204,6 +120,10 @@
             </div>
             <small class="form-hint">Ctrl+S 热键切换时的目标倍率（默认 2.0x）</small>
         </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">CDN优选</h3>
 
         <div class="form-group">
             <label class="checkbox-container">
@@ -231,15 +151,10 @@
             </div>
             <small class="form-hint">CDN优选结果的有效时间。设为0则每次启动都重新测试，推荐12-72小时</small>
         </div>
+    </div>
 
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="launcher-work-gui-mode">
-                <span class="checkmark"></span>
-                启用GUI进度窗口
-            </label>
-            <small class="form-hint">在Launcher模式下显示图形化进度窗口，展示启动过程中的状态和日志信息</small>
-        </div>
+    <div class="setting-card">
+        <h3 class="setting-title">启动增强</h3>
 
         <div class="form-group" data-risk-service="input_bypass">
             <label class="checkbox-container">
@@ -260,19 +175,6 @@
             <small class="form-hint">启动游戏后自动注入伤害倍率 hook，敌方单位受到的伤害乘以设定倍率（默认 3.0）。偏移数据从远程 API 获取并按游戏版本缓存。</small>
             <small class="form-hint">相关设置请在伤害倍率页面配置</small>
         </div>
-
-        <div class="form-group" id="steam-command">
-            <label for="steam-command">steam命令</label>
-            <div class="steam-command-group" style="display: flex; align-items: center; gap: 8px;">
-                <input type="text" id="steam-cmd" placeholder="复制steam命令" readonly 
-                    style="flex: 1; min-width: 0;">
-                <button class="action-btn secondary" onclick="copySteamPath()">
-                    <i class="fas fa-folder-open"></i> 复制
-                </button>
-            </div>
-        </div>
-    </div>
-
     </div>
 </div>
 

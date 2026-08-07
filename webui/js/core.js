@@ -282,17 +282,6 @@ class ConfigManager {
             'proper-output': 'ui_default.proper.output_type',
             
             // Launcher设置
-            'launcher-zero-zip-type': 'launcher.zero.zip_type',
-            'launcher-zero-download-source': 'launcher.zero.download_source',
-            'launcher-zero-use-proxy': 'launcher.zero.use_proxy',
-            'launcher-zero-use-cache': 'launcher.zero.use_cache',
-            'machine-zero-download-source': 'launcher.machine.download_source',
-            'machine-zero-use-proxy': 'launcher.machine.use_proxy',
-            'launcher-ourplay-font-option': 'launcher.ourplay.font_option',
-            'launcher-ourplay-use-api': 'launcher.ourplay.use_api',
-            'launcher-ourplay-source': 'launcher.ourplay.source',
-            'launcher-ourplay-official': 'launcher.ourplay.official',
-            'launcher-ourplay-refer-package': 'launcher.ourplay.refer_package',
             'launcher-work-update': 'launcher.work.update',
             'launcher-work-mod': 'launcher.work.mod',
             'launcher-work-tiaozhua': 'launcher.work.tiaozhua',

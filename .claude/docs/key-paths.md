@@ -177,6 +177,14 @@ C launcher fallback (launcher.c):
   - If Python exits with non-zero code: AllocConsole → display captured output
   - Normal exit (code 0): C exits silently, console managed by Python layer
 
+Launcher auto-update config (与「汉化包下载」页共用一套配置):
+  → webui/sections/launcher-config.html     仅保留更新模式 (launcher.work.update) 与各集成开关
+                                             汉化包下载细节（压缩格式/下载来源/代理/字体/基板包等）
+                                             已在 Launcher 页移除，只由「汉化包下载」页配置
+  → launcher/updates.py                     LLCUpdate/MachineUpdate/OurPlayUpdate/LMGUpdate
+                                             改读 ConfigManager().get('ui_default')
+                                             .{zero,machine,ourplay}（不再读 launcher.{zero,machine,ourplay}）
+
 ## 6. Game Speed Modification
 
 ```
@@ -279,7 +287,7 @@ Launcher startup:
         - hash 变化（游戏更新）→ 拉 API (web.lcta.top/damage_hook.json)
           · API 已发布新版 → 更新 %LOCALAPPDATA%/LCTA/damage-hook/offsets-cache.json
           · API 未发布 / 网络失败 → 旧缓存降级 + stale 标记
-      apply()                                       writes 196-byte DHConfig to shared map
+      apply()                                       writes 16584-byte DHConfig to shared map
                                                       (Local\LCTA_DamageHook_Config)
       inject(pid)                                   remote-thread LoadLibraryW damage_hook.dll
     → hooks/damage_hook.dll + vendor/minhook        waits GameAssembly.dll → VerifyPrologue
@@ -287,6 +295,18 @@ Launcher startup:
                                                       MH_CreateHook on
                                                       GetTakeAttackDmgMultiplier
                                                       (enemy-only ×multiplier; 0→multiplier)
+      Damage log (damage_hook_log on):
+      → DLL hk_GetTakeAttackDmgMultiplier           per effective event writes
+                                                      "target=.. attacker=.. crit=.. mul X -> X"
+                                                      to shared ring buffer log_ring[128][128]
+                                                      (slot = head%128, head monotonic)
+      → _start_drain_thread()                        background 0.5s loop started by
+                                                      _open_map(); _drain_and_log() reads
+                                                      delta via drain_new_log_entries() →
+                                                      LogManager.log() → logs/app.log;
+                                                      overflow → dropped warning; close()
+                                                      stops thread + final flush (atexit
+                                                      registered in webui/app.py)
 Runtime update recovery (game hot-updates):
   → DLL prologue check fails → verified=0, last_error=3
   → refresh_offsets() (force) → apply() with retry_requested=1
@@ -295,7 +315,7 @@ Status query (WebUI):
   → get_status()                                    running / pid / injected / gameassembly_found /
                                                     verified / installed / last_error_text /
                                                     log_count / last_log / offsets_source /
-                                                    offsets_stale / game_version
+                                                     offsets_stale / game_version
 ```
 
 Files: `webutils/function_damage_hook.py`, `hooks/damage_hook.c`, `vendor/minhook/`, `webui/app_api/damage_hook.py`, `webui/sections/damage-hook.html`, `webui/js/damage-hook.js`, `docs/DAMAGE_HOOK.md`, `damage_hook.json`（API 样例）, `tests/test_damage_hook.py`

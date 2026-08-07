@@ -130,6 +130,12 @@ function onSectionLoaded(name) {
                 speedPage.init();
             }
             break;
+        case 'input-bypass':
+            console.log('[LCTA] Init section: input-bypass');
+            if (typeof inputBypassPage !== 'undefined' && inputBypassPage) {
+                inputBypassPage.init();
+            }
+            break;
     }
 
     if (configManager) configManager.applyConfigToUI();

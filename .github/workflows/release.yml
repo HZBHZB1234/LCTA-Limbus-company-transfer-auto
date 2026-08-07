@@ -112,6 +112,21 @@ jobs:
         Copy-Item venv release\${{ env.APP_NAME }}-Compatible\code\venv -Recurse
         release\${{ env.APP_NAME }}-Compatible\code\venv\Bins\python.exe -m pip install PyQt5 qtpy PyQtWebEngine
 
+    - name: Bundle rawinput hook DLL (input bypass)
+      run: |
+        $targets = @(
+            "release\${{ env.APP_NAME }}\code\hooks",
+            "release\${{ env.APP_NAME }}-Compatible\code\hooks",
+            ".\LCTA_update\hooks"
+        )
+        foreach ($target in $targets) {
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+        }
+        gcc -shared -O2 -s -static-libgcc -o rawinput_hook.dll hooks/rawinput_hook.c -lpsapi
+        Copy-Item rawinput_hook.dll "release\${{ env.APP_NAME }}\code\hooks\rawinput_hook.dll" -Force
+        Copy-Item rawinput_hook.dll "release\${{ env.APP_NAME }}-Compatible\code\hooks\rawinput_hook.dll" -Force
+        Copy-Item rawinput_hook.dll ".\LCTA_update\hooks\rawinput_hook.dll" -Force
+
     - name: Copy CFST directory (CDN optimization)
       run: |
         if (Test-Path .\LCTA\CFST) {

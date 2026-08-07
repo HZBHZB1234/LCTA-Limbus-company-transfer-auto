@@ -278,6 +278,33 @@ if (-not $gcc -or -not $windres) {
 
     Set-Location $ProjectRoot
     Write-Host "  C 编译完成" -ForegroundColor Green
+
+    # ---- 编译 rawinput hook DLL ----
+    $hookSrc = "$ProjectRoot\hooks\rawinput_hook.c"
+    if (Test-Path $hookSrc) {
+        $hookCacheDll = "$CCompileCache\rawinput_hook.dll"
+        $hookHashFile = "$CCompileCache\rawinput_hook.dll.hash"
+        $hookHash = (Get-FileHash -Path $hookSrc -Algorithm MD5).Hash
+        $cacheHit = $false
+        if ((Test-Path $hookCacheDll) -and (Test-Path $hookHashFile)) {
+            $cachedHash = (Get-Content $hookHashFile -Raw).Trim()
+            if ($cachedHash -eq $hookHash) { $cacheHit = $true }
+        }
+        if ($cacheHit) {
+            Write-Host "  使用缓存: rawinput_hook.dll" -ForegroundColor Green
+        } else {
+            Write-Host "  编译 hooks/rawinput_hook.c -> rawinput_hook.dll..."
+            gcc -shared -O2 -s -static-libgcc -o $hookCacheDll $hookSrc -lpsapi
+            if ($LASTEXITCODE -eq 0) {
+                $hookHash | Out-File -FilePath $hookHashFile -Encoding ASCII
+                Write-Host "    rawinput_hook.dll 完成" -ForegroundColor Green
+            } else {
+                Write-Host "    rawinput_hook.dll 编译失败" -ForegroundColor Red
+            }
+        }
+    } else {
+        Write-Host "  WARNING: hooks/rawinput_hook.c 未找到，跳过 hook DLL 编译" -ForegroundColor Yellow
+    }
 }
 
 # ============================================================
@@ -559,6 +586,20 @@ foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
     }
 }
 Write-Host "  aria2c 复制完成" -ForegroundColor Green
+
+# ---- 复制 rawinput hook DLL（输入反检测） ----
+Write-Host "  复制 rawinput hook DLL..."
+$hookCacheDll = "$CCompileCache\rawinput_hook.dll"
+if (Test-Path $hookCacheDll) {
+    foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+        $destHook = "$dest\hooks"
+        New-Item -ItemType Directory -Path $destHook -Force | Out-Null
+        Copy-Item $hookCacheDll "$destHook\rawinput_hook.dll" -Force
+    }
+    Write-Host "  rawinput_hook.dll 复制完成" -ForegroundColor Green
+} else {
+    Write-Host "  WARNING: rawinput_hook.dll 未编译，跳过复制" -ForegroundColor Yellow
+}
 
 # ---- 复制 venv（嵌入式 Python + site-packages + Scripts） ----
 Write-Host "  复制嵌入式 Python venv..."

@@ -245,6 +245,7 @@ js_files = [
     'js/resource-updater.js',
     'js/cdn.js',
     'js/speed.js',
+    'js/input-bypass.js',
 ]
 js_content = ''
 for f in js_files:

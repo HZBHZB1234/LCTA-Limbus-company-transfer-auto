@@ -125,6 +125,22 @@ def _unregister_speed_hotkey_handler(**kw):
         _log_manager.log_error(e)
 
 
+def _start_input_bypass_handler(**kw):
+    try:
+        from launcher.game_launch import start_input_bypass
+        start_input_bypass()
+    except Exception as e:
+        _log_manager.log_error(e)
+
+
+def _stop_input_bypass_handler(**kw):
+    try:
+        from launcher.game_launch import stop_input_bypass
+        stop_input_bypass()
+    except Exception as e:
+        _log_manager.log_error(e)
+
+
 def _wait_for_game(process, cancel_event):
     while process.poll() is None:
         if cancel_event.is_set():
@@ -192,6 +208,8 @@ def main():
     pipeline.on(PHASE_EXIT, _cleanup_mod_handler)
     pipeline.on(PHASE_RUNNING, _register_speed_hotkey_handler)
     pipeline.on(PHASE_EXIT, _unregister_speed_hotkey_handler)
+    pipeline.on(PHASE_RUNNING, _start_input_bypass_handler)
+    pipeline.on(PHASE_EXIT, _stop_input_bypass_handler)
 
     def _launcher_check_running(modal_id=None, log=True):
         if pipeline.cancel_event.is_set():

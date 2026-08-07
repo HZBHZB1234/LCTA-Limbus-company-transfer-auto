@@ -12,6 +12,7 @@ fancy/
 *.pyo
 *.pyd
 *.so
+hooks/*.dll
 *.zip
 *.7z
 *config.json

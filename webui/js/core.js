@@ -305,6 +305,15 @@ class ConfigManager {
             'launcher-work-speed': 'launcher.work.speed',
             'launcher-speed-factor': 'launcher.work.speed_factor',
 
+            // 输入反检测
+            'launcher-work-input-bypass': 'launcher.work.input_bypass',
+            'input-bypass-mode': 'launcher.work.input_bypass_mode',
+            'input-bypass-mouse-real': 'launcher.work.input_bypass_mouse_real',
+            'input-bypass-key-real': 'launcher.work.input_bypass_key_real',
+            'input-bypass-mouse-synth': 'launcher.work.input_bypass_mouse_synth',
+            'input-bypass-key-synth': 'launcher.work.input_bypass_key_synth',
+            'input-bypass-volatility': 'launcher.work.input_bypass_volatility',
+
             // GUI进度窗口
             'launcher-work-gui-mode': 'launcher.work.gui_mode',
             // 游戏官方资源预下载（仅开关，详细配置在游戏资源更新页面）

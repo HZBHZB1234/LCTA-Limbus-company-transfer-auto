@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-06 -->
+<!-- Last updated: 2026-08-07 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -200,6 +200,35 @@ Launcher mode:
 ```
 
 Files: `webui/js/speed.js`, `webui/app.py`, `webutils/function_speed.py`, `launcher/speed_hotkey.py`
+
+## 6.5 Input Bypass (CommonLib 输入反检测)
+
+```
+User toggles input bypass on Launcher config page
+  → webui/sections/launcher-config.html              checkbox (launcher.work.input_bypass) +
+                                                     goAndShow('launcher-config')
+  → webui/js/input-bypass.js                         模式/计数/波动值配置（auto|manual）→ update_config_batch
+  → webui/sections/input-bypass.html                 手动字段：4 个计数 + 波动值(%)；比例自动计算
+
+Launcher startup:
+  → launcher/main.py                                pipeline init → InputBypassManager.apply()
+  → webutils/function_input_bypass.py apply()        reads launcher.work.input_bypass_* config
+    → build_config(mode, armed, values)              clamp counts (≥0); volatility [0,50];
+                                                      ratio auto = synth/(real+synth) (<0.9)
+    → _write_config()                                writes 80-byte RHConfig to shared map
+  → inject(pid)                                     remote-thread LoadLibraryW rawinput_hook.dll
+    → hooks/rawinput_hook.dll                        detours CommonLib RawInput exports;
+                                                      auto: zero synth counts/ratios,
+                                                      manual: real/synth counts from config,
+                                                        ratio auto-calculated; volatility(±%)
+                                                        jitters counts each RH_JITTER_MS window
+                                                        so values aren't constant
+Status query (WebUI / status bar):
+  → get_status()                                    running / pid / dll_exists / injected /
+                                                    armed / mode / commonlib_found / installed
+```
+
+Files: `webutils/function_input_bypass.py`, `hooks/rawinput_hook.c`, `hooks/build.ps1`, `build.ps1`, `.github/workflows/release.yml`, `tests/test_input_bypass.py`
 
 ## 7. Rule Editor — File Edit → Smart Ruleset Generation
 

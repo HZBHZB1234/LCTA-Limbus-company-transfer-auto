@@ -115,7 +115,14 @@
             "cdn_cache_ttl": "12.0",
             "speed": false,
             "speed_factor": "2.0",
-            "gui_mode": false
+            "gui_mode": false,
+            "input_bypass": false,
+            "input_bypass_mode": "manual",
+            "input_bypass_mouse_real": "200",
+            "input_bypass_key_real": "200",
+            "input_bypass_mouse_synth": "0",
+            "input_bypass_key_synth": "0",
+            "input_bypass_volatility": "20"
         },
         "resource_update": {
             "enabled": false,

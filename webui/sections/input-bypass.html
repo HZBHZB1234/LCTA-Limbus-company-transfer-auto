@@ -1,0 +1,115 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-ghost"></i>
+        输入反检测
+    </h2>
+    <p class="section-subtitle">Hook CommonLib 的 RawInput 计数导出，控制游戏上报的合成/真实输入数据</p>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <i class="fas fa-info-circle"></i> 游戏状态
+        </h3>
+        <div class="speed-status-grid">
+            <div class="speed-status-item">
+                <span class="speed-status-label">运行状态:</span>
+                <span id="input-bypass-status" class="speed-status-value inactive">○ 未运行</span>
+            </div>
+            <div class="speed-status-item">
+                <span class="speed-status-label">PID:</span>
+                <span id="input-bypass-pid" class="speed-status-value">—</span>
+            </div>
+            <div class="speed-status-item">
+                <span class="speed-status-label">注入状态:</span>
+                <span id="input-bypass-injected" class="speed-status-value inactive">○ 未注入</span>
+            </div>
+            <div class="speed-status-item">
+                <span class="speed-status-label">CommonLib:</span>
+                <span id="input-bypass-commonlib" class="speed-status-value inactive">—</span>
+            </div>
+            <div class="speed-status-item">
+                <span class="speed-status-label">核心 detour:</span>
+                <span id="input-bypass-installed" class="speed-status-value inactive">× 未安装</span>
+            </div>
+            <div class="speed-status-item">
+                <span class="speed-status-label">真实计数 detour:</span>
+                <span id="input-bypass-installed-real" class="speed-status-value inactive">× 未安装</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <i class="fas fa-sliders-h"></i> 上报模式
+        </h3>
+        <div class="form-group">
+            <label for="input-bypass-mode">上报模式</label>
+            <div class="select-wrapper">
+                <select id="input-bypass-mode">
+                    <option value="auto">auto — 清零合成计数（推荐，不影响真实输入统计）</option>
+                    <option value="manual">manual — 自定义计数，比例自动计算</option>
+                </select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+            <small class="form-hint">auto 仅处理"虚拟点击"：宏产生的合成计数/比例上报为 0，真实输入保持自然。</small>
+            <small class="form-hint">manual 覆盖真实/合成计数：某些宏使用 PostMessage 模拟点击，既不记虚拟也不记真实，导致"双零"数据，需手动填报计数；合成比例自动计算。</small>
+        </div>
+
+        <div id="input-bypass-manual-fields">
+            <div class="form-group">
+                <label for="input-bypass-mouse-real">鼠标真实计数（手动模式）</label>
+                <input type="number" id="input-bypass-mouse-real" value="0" min="0" step="1">
+            </div>
+            <div class="form-group">
+                <label for="input-bypass-key-real">键盘真实计数（手动模式）</label>
+                <input type="number" id="input-bypass-key-real" value="0" min="0" step="1">
+            </div>
+            <div class="form-group">
+                <label for="input-bypass-mouse-synth">鼠标合成计数（手动模式）</label>
+                <input type="number" id="input-bypass-mouse-synth" value="0" min="0" step="1">
+            </div>
+            <div class="form-group">
+                <label for="input-bypass-key-synth">键盘合成计数（手动模式）</label>
+                <input type="number" id="input-bypass-key-synth" value="0" min="0" step="1">
+            </div>
+            <div class="form-group">
+                <label for="input-bypass-volatility">波动值（%，0=关闭）</label>
+                <input type="number" id="input-bypass-volatility" value="0" min="0" max="50" step="1">
+            </div>
+            <small class="form-hint">合成比例由计数自动计算（合成/总输入），无需手动指定；波动值让 hook 周期性地在 ±该百分比内抖动计数，防止恒定数值被检测。</small>
+        </div>
+
+        <div style="margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="input-bypass-btn-apply" class="primary-btn">
+                <i class="fas fa-check"></i> 保存并应用
+            </button>
+            <button id="input-bypass-btn-inject" class="action-btn primary">
+                <i class="fas fa-syringe"></i> 注入
+            </button>
+            <button id="input-bypass-btn-eject" class="action-btn danger">
+                <i class="fas fa-eject"></i> 弹出
+            </button>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <i class="fas fa-rocket"></i> Launcher 集成
+        </h3>
+        <p class="form-hint">开启后，通过 Launcher 启动游戏将自动等待游戏进程并注入，无需进入本页操作。</p>
+        <p class="form-hint">开关请在 Launcher 配置页的「工作模式」中勾选「启用输入反检测」。</p>
+        <div style="margin-top: 0.5rem;">
+            <button type="button" class="action-btn secondary" onclick="goAndShow('launcher-config')">
+                <i class="fas fa-arrow-right"></i> 前往 Launcher 配置
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="action-area">
+    <button class="primary-btn" onclick="saveSettings()">
+        <i class="fas fa-save"></i>
+        保存配置
+    </button>
+</div>

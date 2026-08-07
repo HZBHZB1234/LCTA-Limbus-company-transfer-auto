@@ -7,15 +7,16 @@
 | Directory | Role | Key Files |
 |-----------|------|-----------|
 | `webui/` | Frontend application (pywebview + HTML/CSS/JS) | 5 standalone pages + sections |
-| `webutils/` | Business logic layer (feature modules + beautification engines) | 69 Python files |
+| `webutils/` | Business logic layer (feature modules + beautification engines) | 70 Python files |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
 | `globalManagers/` | Cross-cutting singletons | 2 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `resource_updater/` | Official localize/Bundle updater and Launcher fingerprint gate | 4 |
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
+| `hooks/` | C source for native DLLs | `rawinput_hook.c` (input bypass, compiled to `rawinput_hook.dll` by build.ps1 / CI) + `build.ps1` |
 | `fancy/` | User rule sets (one JSON file per ruleset) | auto-created |
-| `tests/` | Pytest test suite | 26 Python files |
+| `tests/` | Pytest test suite | 27 Python files |
 | `.githooks/` | Repository-local Git hooks | `pre-commit` |
 | `.github/workflows/` | CI/CD and repository consistency checks | `release.yml`, `check.yml`, `check-sync.yml` |
 
@@ -87,6 +88,7 @@
 | `cdn.py` | `CdnMixin` | `cdn_*` 全部（Cloudflare/CloudFront 优选、hosts 写入/移除） |
 | `speed.py` | `SpeedMixin` | `speed_*` 全部（DLL 注入/弹出/倍率） |
 | `update.py` | `UpdateMixin` | `auto_check_update`/`manual_check_update`/`perform_update_in_modal`/`perform_update_from_file` |
+| `input_bypass.py` | `InputBypassMixin` | `input_bypass_*` 全部（get_status/apply/inject/eject，转发到 `webutils.function_input_bypass.InputBypassManager`） |
 | `drops.py` | `DropMixin` | `handle_dropped_files`/`on_drop`/`eval_dropped_files` |
 | `resources.py` | `ResourceMixin` | `resource_updater_*` 转发到 `self.resource_updater_api` |
 | `exceptions.py` | — | `CancelRunning`（各 mixin 共用，`webui/app.py` re-export） |
@@ -121,6 +123,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `drop/` | Drag-and-drop | Former `function_drop.py` split into a package: `handler.py` (`DropFileHandler` 接口 ABC + `DropFileHandlerRegistry` 注册表 + `remove_existing`/进度辅助), `context.py` (`FileExecutionContext`), `inspect.py` (zip/folder/json 只读快照，供各处理器复用), `handlers/` (每个 NAMEREFER 类别一个处理器类：`translation.py` full/nofont 汉化包、`archive_mod.py` FLmod/jsononly 压缩模组包、`copy_mod.py` carra/bank/textFile/LCTAchange/FLchange 单文件复制、`bus_import.py`、`update.py`、`invalid.py`；`__init__.py` 按容器类型分组的有序检测注册表), `detect.py` (`evalZip`/`evalFolder`/`eval7zip`/`evalJson`/`evalFile` 门面), `message.py` (`makeMessage`，显示名来自注册表), `eval_files.py` (`evalFiles` 主流程，按类型查注册表执行); zip/7z extraction, mod installation, update package handling via Updater, plus bus/调爪/LCJE/FL JSON recognition and shared import into `fancy/` |
 | `cdn/` | CDN optimization | Former `function_cdn.py` split into a package: `constants.py` (常量定义，对应 LLC_BABEL CdnTarget.cs), `classify.py` (CloudFront 探测失败分类), `cfst.py` (CloudflareSpeedTest 子进程 + CSV 解析), `cloudfront.py` (CloudFront DNS 候选发现与 HTTPS 端点探测), `selector.py` (CloudFront 两阶段 IP 选择), `hosts.py` (hosts 文件管理：编码/BOM 保留、受管标记块写入、原子替换前清除只读属性、`raise_on_permission_error` 权限错误重抛供提权判断、`elevated` 失败文案区分；权限/占用类替换失败按 `REPLACE_MAX_ATTEMPTS` 次短间隔重试，全部失败后经 Restart Manager API 分析占用进程 PID 与路径并附加到错误文案), `elevate.py` (管理员提权写入/移除 hosts 与提权子进程入口；策略：非管理员先真实尝试直写，仅权限类失败才触发 UAC 提权重试——无"新建文件"探针，避免假阳性短路提权路径), `optimize.py` (完整优选流程编排，含缓存 TTL 避免重复测速); facade re-exports all public API |
 | `function_speed.py` | Game speed | Game speed acceleration via openspeedy DLL injection; `is_injected()` checks self-tracked injection state |
+| `function_input_bypass.py` | 输入反检测 (CommonLib import anti-detection) | Injects `hooks/rawinput_hook.dll` into `LimbusCompany.exe` and controls synthesized/real input counts via a named shared-memory map (`Local\LCTA_RawInputHook_Config`, 80-byte `RHConfig` matching the C struct). `auto` mode zeroes synthesized counts/ratios; `manual` mode overrides the 4 counts (real/synth × mouse/key) from `launcher.work.input_bypass_*` config, auto-calculates the synth ratio as `synth/(real+synth)` (clamped `< 0.9`), and supports a `volatility` percentage (0-50) that makes the C hook jitter counts within a time window so reported values aren't constant. Manager API: `apply()` (write config), `inject(pid)`/`eject()`, `get_status()`, `close()`; pure helpers `parse_count`/`parse_percent`/`parse_ratio`/`auto_ratio`/`build_config` clamp values (ratios to `[0, 0.9)` to avoid the game's reset-window logic). Explicit `restype`/`argtypes` declarations for kernel32 calls so 64-bit handles/pointers are not truncated |
 | `function_resource.py` | Unity resource reader | Locates Limbus resource files and extracts text assets in batches through UnityPy; sets fallback Unity version `6000.3.12f1` for resources without usable version metadata; skips objects whose container is missing/None (UnityPy returns `None` for objects outside the container map) instead of crashing |
 | `rule_editor/` | Rule editor backend | `browser.py` (file browser: `_get_lang_dir`, `get_lang_files`, `get_category`, `get_file_content`, `search_files` — raw text occurrence counts with `utf-8-sig`, so BOM and temporarily invalid JSON files remain searchable — and JSON-validated `save_file_content` with backup), `rules.py` (ruleset CRUD: `get_ruleset_list`, `get_ruleset`, `save_ruleset`, `create_ruleset`, `delete_ruleset`, `apply_ruleset_to_content` + form helpers `build_rule_from_form`, `validate_rule`), `generate.py` (V1/V2/V3 smart analysis, change clustering, 5-dimension scoring, merge-candidate detection), `quick.py` (quick editor backend: deep JSON diffs `{file, path, old, new}`, persistence of edits plus derived bus `set` rules to `fancy/_quick_edits.json`, legacy migration, per-edit path failures and atomic writes), `constants.py` (single-source-of-truth `FILE_PREFIX_RULES`, `CATEGORY_FILE_PATTERNS`, `COMMON_REPLACEMENTS`, `TEMPLATES`; JS fetches via `get_editor_constants()` API with hardcoded fallback). Facade re-exports all public API |
 | `scripts/test_environment.py` | Debug utilities | Internal testing/debug helpers (moved out of webutils) |

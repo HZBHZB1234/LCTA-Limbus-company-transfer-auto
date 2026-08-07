@@ -40,6 +40,7 @@ from .cdn import (
     elevate_remove_hosts,
 )
 from .function_speed import SpeedManager
+from .function_input_bypass import InputBypassManager
 
 __all__ = [
     'function_llc_main',
@@ -93,4 +94,5 @@ __all__ = [
     'cdn_full_optimization_simple',
     'elevate_remove_hosts',
     'SpeedManager',
+    'InputBypassManager',
 ]

@@ -107,6 +107,15 @@ function initNavigation() {
                         }
                     }
 
+                    // 输入反检测页同样按导航生命周期管理轮询
+                    if (typeof inputBypassPage !== 'undefined') {
+                        if (sectionId === 'input-bypass-section') {
+                            inputBypassPage.init();
+                        } else {
+                            inputBypassPage.stop();
+                        }
+                    }
+
                     if (sectionId !== 'test-section') {
                         goTestSection(false);
                     }
@@ -437,6 +446,13 @@ const TOOLTIP_DATA = {
     'ru-connection-limit': 'aria2 每个文件的并发下载连接数。数值过高会瞬间打出大量连接，可能触发源站拒绝；网络不稳定时可适当调低。',
     'launcher-work-speed': '通过 Launcher 启动游戏时自动启用游戏加速并注册全局热键。相关设置请在"游戏加速"页面配置。',
     'launcher-speed-factor': 'Ctrl+S 热键切换时的目标倍率（默认 2.0x）。',
+    'launcher-work-input-bypass': '通过 Launcher 启动游戏时自动注入输入反检测 hook，改写游戏上报的合成输入计数。相关设置请在"输入反检测"页面配置。',
+    'input-bypass-mode': 'auto：仅清零合成计数/比例，真实输入保持自然统计（推荐，规避宏产生的虚拟点击）；manual：真实/合成计数使用手动填报值（用于 PostMessage 类宏导致的"双零"数据），合成比例由计数自动计算。',
+    'input-bypass-mouse-real': '手动模式下上报的鼠标真实计数。用于 PostMessage 类宏既不记虚拟也不记真实时手工补足真实输入量。',
+    'input-bypass-key-real': '手动模式下上报的键盘真实计数。',
+    'input-bypass-mouse-synth': '手动模式下上报的鼠标合成计数（宏/自动点击量）。',
+    'input-bypass-key-synth': '手动模式下上报的键盘合成计数。',
+    'input-bypass-volatility': '手动模式下计数的波动百分比（0-50，0 为关闭）。hook 会周期性在 ±该百分比内随机抖动计数再据此计算比例，防止恒定数值被检测。',
     'steam-command': '用于通过 Steam 启动游戏的命令行参数。复制后可粘贴到 Steam 游戏属性中的启动选项。',
 
     // ===== 抓取专有词汇 =====

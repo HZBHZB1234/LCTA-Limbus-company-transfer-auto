@@ -3,12 +3,14 @@ import os
 import signal
 import sys
 import tempfile
+import threading
 from typing import Callable, Optional
 
 import UnityPy.config
 UnityPy.config.FALLBACK_UNITY_VERSION = "6000.3.12f1"
 
 from globalManagers.LogManager import LogManager
+from globalManagers.ConfigManager import ConfigManager
 
 _log_manager = LogManager()
 
@@ -109,3 +111,76 @@ def stop_speed_hotkey() -> None:
     if _speed_exit_event is not None:
         _speed_exit_event.set()
         _speed_exit_event = None
+
+
+_input_bypass_exit_event = None
+_input_bypass_timeout = 180  # 等待游戏进程的最长时间（秒）
+
+
+def _inject_input_bypass_when_game_ready(exit_event: threading.Event) -> None:
+    """后台等待 LimbusCompany.exe 出现后注入输入反检测 hook。
+
+    Steam 启动模式中，PHASE_RUNNING 触发时 Steam 可能还在拉起游戏，
+    因此轮询等待游戏 PID 出现（最多 _input_bypass_timeout 秒）。
+    """
+    import time
+    from webutils.function_input_bypass import InputBypassManager
+
+    deadline = time.time() + _input_bypass_timeout
+    pid = None
+    while not exit_event.is_set() and time.time() < deadline:
+        pid = InputBypassManager.find_game_pid()
+        if pid is not None:
+            break
+        time.sleep(2)
+
+    if exit_event.is_set():
+        return
+    if pid is None:
+        _log_manager.log("输入反检测: 等待游戏进程超时，本次启动不注入")
+        return
+
+    try:
+        InputBypassManager.apply()
+        InputBypassManager.inject(pid)
+        _log_manager.log(f"输入反检测 hook 已注入 (PID: {pid})")
+    except Exception as e:
+        _log_manager.log_error(e)
+
+
+def start_input_bypass() -> None:
+    """PHASE_RUNNING 回调：若开启输入反检测，后台等待游戏进程并注入。"""
+    global _input_bypass_exit_event
+    if not ConfigManager().get("launcher.work.input_bypass", False):
+        return
+    if _input_bypass_exit_event is not None:
+        return
+    try:
+        from webutils.function_input_bypass import InputBypassManager
+        InputBypassManager.apply()
+        _log_manager.log("输入反检测已启用，等待游戏进程...")
+    except Exception as e:
+        _log_manager.log_error(e)
+
+    event = threading.Event()
+    t = threading.Thread(
+        target=_inject_input_bypass_when_game_ready,
+        args=(event,),
+        daemon=True,
+    )
+    t.start()
+    _input_bypass_exit_event = event
+
+
+def stop_input_bypass() -> None:
+    """PHASE_EXIT 回调：停止注入线程并弹出 DLL。"""
+    global _input_bypass_exit_event
+    if _input_bypass_exit_event is not None:
+        _input_bypass_exit_event.set()
+        _input_bypass_exit_event = None
+    from webutils.function_input_bypass import InputBypassManager
+    try:
+        InputBypassManager.close()
+        _log_manager.log("输入反检测 hook 已清理")
+    except Exception as e:
+        _log_manager.log_error(e)

@@ -124,7 +124,14 @@
             "cdn_cache_ttl": "str",
             "speed": "bool",
             "speed_factor": "str",
-            "gui_mode": "bool"
+            "gui_mode": "bool",
+            "input_bypass": "bool",
+            "input_bypass_mode": "str",
+            "input_bypass_mouse_real": "str",
+            "input_bypass_key_real": "str",
+            "input_bypass_mouse_synth": "str",
+            "input_bypass_key_synth": "str",
+            "input_bypass_volatility": "str"
         },
         "resource_update": {
             "enabled": "bool",

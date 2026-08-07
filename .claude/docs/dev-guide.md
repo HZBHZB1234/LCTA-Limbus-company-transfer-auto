@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-08-07 -->
+<!-- Last updated: 2026-08-08 -->
 
 ## How to Run
 
@@ -49,9 +49,12 @@ pytest tests/test_llm_fancy.py
 
 # Run official-resource updater coverage
 pytest tests/test_resource_updater.py
+
+# Run damage hook module tests
+pytest tests/test_damage_hook.py
 ```
 
-Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`, `tests/test_llm_fancy.py`, `tests/test_resource_updater.py`
+Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`, `tests/test_llm_fancy.py`, `tests/test_resource_updater.py`, `tests/test_input_bypass.py`, `tests/test_damage_hook.py`
 
 ## Project Conventions
 

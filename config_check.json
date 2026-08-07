@@ -131,7 +131,11 @@
             "input_bypass_key_real": "str",
             "input_bypass_mouse_synth": "str",
             "input_bypass_key_synth": "str",
-            "input_bypass_volatility": "str"
+            "input_bypass_volatility": "str",
+            "damage_hook": "bool",
+            "damage_hook_multiplier": "str",
+            "damage_hook_log": "bool",
+            "damage_hook_api": "str"
         },
         "resource_update": {
             "enabled": "bool",
@@ -156,6 +160,9 @@
         "disclaimer_accepted": "bool"
     },
     "input_bypass": {
+        "disclaimer_accepted": "bool"
+    },
+    "damage_hook": {
         "disclaimer_accepted": "bool"
     }
 }

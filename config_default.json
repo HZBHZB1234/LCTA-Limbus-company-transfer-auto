@@ -122,7 +122,11 @@
             "input_bypass_key_real": "200",
             "input_bypass_mouse_synth": "0",
             "input_bypass_key_synth": "0",
-            "input_bypass_volatility": "20"
+            "input_bypass_volatility": "20",
+            "damage_hook": false,
+            "damage_hook_multiplier": "3.0",
+            "damage_hook_log": false,
+            "damage_hook_api": "https://web.lcta.top/damage_hook.json"
         },
         "resource_update": {
             "enabled": false,
@@ -147,6 +151,9 @@
         "disclaimer_accepted": false
     },
     "input_bypass": {
+        "disclaimer_accepted": false
+    },
+    "damage_hook": {
         "disclaimer_accepted": false
     }
 }

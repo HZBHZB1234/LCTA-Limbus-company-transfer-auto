@@ -25,6 +25,14 @@ const RISK_SERVICES = {
         specific: '输入反检测通过注入 hook 对游戏上报的输入数据进行调整，使其更接近真实输入特征。',
         launcherCheckboxId: 'launcher-work-input-bypass',
     },
+    damage_hook: {
+        id: 'damage_hook',
+        name: '伤害倍率',
+        consentKey: 'damage_hook.disclaimer_accepted',
+        specific: '伤害倍率通过 MinHook 对游戏战斗伤害计算函数进行原生 detour，修改敌方单位受到的伤害数值。',
+        launcherCheckboxId: 'launcher-work-damage-hook',
+        hideUntilConsent: true, // 未同意前在 Launcher 配置页隐藏该选项，须先在源页面同意
+    },
 };
 
 const RiskGate = {
@@ -97,6 +105,7 @@ const RiskGate = {
                 configManager.setCachedValue(svc.consentKey, true);
             }
             addLogMessage(`已同意「${svc.name}」风险须知`, 'info');
+            this.refreshLauncherVisibility();
             return true;
         } catch (e) {
             console.error(`RiskGate.acceptConsent(${id}) error:`, e);
@@ -243,6 +252,19 @@ const RiskGate = {
         document.getElementById(`risk-gate-modal-close-${modal.id}`).addEventListener('click', () => modal.close());
     },
 
+    // 按同意态刷新 Launcher 配置页选项可见性（hideUntilConsent 服务未同意时隐藏）
+    async refreshLauncherVisibility() {
+        const tasks = Object.values(RISK_SERVICES)
+            .filter(svc => svc.hideUntilConsent)
+            .map(async svc => {
+                const group = document.querySelector(`[data-risk-service="${svc.id}"]`);
+                if (!group) return;
+                const accepted = await this.getConsent(svc.id);
+                group.style.display = accepted ? '' : 'none';
+            });
+        await Promise.all(tasks);
+    },
+
     // Launcher 配置页门控：勾选未同意服务时回滚并就地弹出同意弹窗
     gateLauncherSection() {
         if (this._launcherBound) return;
@@ -260,5 +282,6 @@ const RiskGate = {
                 });
             });
         });
+        this.refreshLauncherVisibility();
     },
 };

@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-07 -->
+<!-- Last updated: 2026-08-08 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -240,6 +240,65 @@ Status query (WebUI / status bar):
 ```
 
 Files: `webutils/function_input_bypass.py`, `hooks/rawinput_hook.c`, `hooks/build.ps1`, `build.ps1`, `.github/workflows/release.yml`, `tests/test_input_bypass.py`
+
+## 6.6 Damage Hook (伤害倍率, MinHook detour)
+
+```
+Hidden entry (page nav button hidden by default, `data-hidden-default="1"`,
+search-filtered; shown only from the debug page):
+  → webui/sections/test.html              按钮「显示伤害倍率页面」→ goDamageHookSection(true)
+  → webui/js/modals.js                    goDamageHookSection(true/false) — show+click / hide
+  → webui/js/utils.js                     section switch hides the button when leaving
+                                          (goDamageHookSection(false)); sidebar search
+                                          never reveals data-hidden-default buttons
+
+First-time gate (risk notice):
+  → webui/js/risk-gate.js          RiskGate.gatePage('damage_hook') — 未同意
+      damage_hook.disclaimer_accepted 时渲染覆盖层，同意后解锁页面。
+      该服务标记 hideUntilConsent：同意前 Launcher 配置页的「启用伤害倍率」
+      选项整组隐藏（refreshLauncherVisibility），需先在源页面同意；
+      同意写入后 acceptConsent() 与每次进入 launcher-config 页时刷新可见性
+
+User toggles damage hook on Launcher config page
+  → webui/sections/launcher-config.html              checkbox (launcher.work.damage_hook) +
+                                                      goAndShow('launcher-config');
+                                                      未同意前该选项隐藏（data-risk-service=damage_hook）
+  → webui/js/damage-hook.js                          倍率/日志/API 地址 → update_config_batch
+  → webui/sections/damage-hook.html                  倍率(0.1-1000)、日志开关（记录伤害日志）、
+                                                      偏移 API 地址、注入/弹出/立即刷新偏移 按钮
+
+Launcher startup:
+  → launcher/main.py                                PHASE_RUNNING → start_damage_hook()
+  → launcher/game_launch.py start_damage_hook()     先查 launcher.work.damage_hook 与
+                                                      damage_hook.disclaimer_accepted（未同意则跳过
+                                                      并记日志），通过后后台线程等
+                                                      LimbusCompany.exe（180s）
+  → webutils/function_damage_hook.py
+      resolve_offsets()                             GameAssembly.dll SHA-256 版本锚定：
+        - 缓存命中（hash 一致）→ 直接用缓存
+        - hash 变化（游戏更新）→ 拉 API (web.lcta.top/damage_hook.json)
+          · API 已发布新版 → 更新 %LOCALAPPDATA%/LCTA/damage-hook/offsets-cache.json
+          · API 未发布 / 网络失败 → 旧缓存降级 + stale 标记
+      apply()                                       writes 196-byte DHConfig to shared map
+                                                      (Local\LCTA_DamageHook_Config)
+      inject(pid)                                   remote-thread LoadLibraryW damage_hook.dll
+    → hooks/damage_hook.dll + vendor/minhook        waits GameAssembly.dll → VerifyPrologue
+                                                      (16B, from shared config) →
+                                                      MH_CreateHook on
+                                                      GetTakeAttackDmgMultiplier
+                                                      (enemy-only ×multiplier; 0→multiplier)
+Runtime update recovery (game hot-updates):
+  → DLL prologue check fails → verified=0, last_error=3
+  → refresh_offsets() (force) → apply() with retry_requested=1
+  → DLL MH_DisableHook → re-verify → re-install with new offsets (no restart)
+Status query (WebUI):
+  → get_status()                                    running / pid / injected / gameassembly_found /
+                                                    verified / installed / last_error_text /
+                                                    log_count / last_log / offsets_source /
+                                                    offsets_stale / game_version
+```
+
+Files: `webutils/function_damage_hook.py`, `hooks/damage_hook.c`, `vendor/minhook/`, `webui/app_api/damage_hook.py`, `webui/sections/damage-hook.html`, `webui/js/damage-hook.js`, `docs/DAMAGE_HOOK.md`, `damage_hook.json`（API 样例）, `tests/test_damage_hook.py`
 
 ## 7. Rule Editor — File Edit → Smart Ruleset Generation
 

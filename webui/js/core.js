@@ -314,6 +314,12 @@ class ConfigManager {
             'input-bypass-key-synth': 'launcher.work.input_bypass_key_synth',
             'input-bypass-volatility': 'launcher.work.input_bypass_volatility',
 
+            // 伤害倍率
+            'launcher-work-damage-hook': 'launcher.work.damage_hook',
+            'damage-hook-multiplier': 'launcher.work.damage_hook_multiplier',
+            'damage-hook-log': 'launcher.work.damage_hook_log',
+            'damage-hook-api-url': 'launcher.work.damage_hook_api',
+
             // GUI进度窗口
             'launcher-work-gui-mode': 'launcher.work.gui_mode',
             // 游戏官方资源预下载（仅开关，详细配置在游戏资源更新页面）

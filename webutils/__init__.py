@@ -41,6 +41,7 @@ from .cdn import (
 )
 from .function_speed import SpeedManager
 from .function_input_bypass import InputBypassManager
+from .function_damage_hook import DamageHookManager
 
 __all__ = [
     'function_llc_main',
@@ -95,4 +96,5 @@ __all__ = [
     'elevate_remove_hosts',
     'SpeedManager',
     'InputBypassManager',
+    'DamageHookManager',
 ]

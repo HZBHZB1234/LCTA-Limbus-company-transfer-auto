@@ -213,6 +213,17 @@ function goCleanSection(DIEPLAY){
     }
 };
 
+function goDamageHookSection(DIEPLAY){
+    const damageHookButton = document.getElementById('damage-hook-btn');
+    if (DIEPLAY) {
+        damageHookButton.style.display = 'block';
+        damageHookButton.click();
+    } 
+    else {
+        damageHookButton.style.display = 'none';
+    }
+};
+
 function copySteamPath() {
     const cmdElement = document.getElementById('steam-cmd');
 

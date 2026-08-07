@@ -1,10 +1,10 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-08-07 -->
+<!-- Last updated: 2026-08-08 -->
 
 ## Project Purpose
 
-LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive desktop toolkit for the game *Limbus Company*. Core feature: **Chinese localization/translation management** with automatic LLM-based translation updates. Also provides CDN optimization (with cache TTL to avoid redundant speed tests), an integrated game launcher with mod support, official localize/AssetBundle pre-download, 调爪 text modification package download/import, manual update from local zip, input bypass (CommonLib input count anti-detection via RawInput hook DLL + shared memory), and various game optimization tools. Version 5.0.1, MIT-licensed (launcher/ is GPL-3.0).
+LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive desktop toolkit for the game *Limbus Company*. Core feature: **Chinese localization/translation management** with automatic LLM-based translation updates. Also provides CDN optimization (with cache TTL to avoid redundant speed tests), an integrated game launcher with mod support, official localize/AssetBundle pre-download, 调爪 text modification package download/import, manual update from local zip, input bypass (CommonLib input count anti-detection via RawInput hook DLL + shared memory), damage multiplier (MinHook detour on GameAssembly.dll with API-fetched offsets + hash-anchored caching and auto-invalidation), and various game optimization tools. Version 5.0.1, MIT-licensed (launcher/ is GPL-3.0).
 
 ## Tech Stack
 
@@ -85,6 +85,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Scan-Exclude-LLM** | `webutils/llm_fancy/` | Bus-syntax selection scan → user-chosen bus rulesets simulated on a data copy to exclude already-handled paths → size-batched LLM rewriting (default 20k chars) → validated `lcta-bus` ruleset built, saved to `fancy/`, and auto-enabled |
 | **Factory** | `launcher/updates.py` | Update objects for LLC, OurPlay, Machine translation — each implements a common interface |
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |
+| **Cache + Auto-Invalidation** | `webutils/function_damage_hook.py` | Damage-hook offsets fetched from a JSON API are cached locally keyed by the local `GameAssembly.dll` SHA-256; a game update (hash change) invalidates the cache and auto-refetches. The C DLL's runtime 16-byte prologue check is the backstop: `verified=0` triggers a force refresh + `retry_requested` hot reinstall without restarting the game |
 | **Pipeline** | `launcher/pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline (init→check_update→resource_update→cdn→prepare_mod→launch→running→exit). Modules register callbacks per phase via `on(phase, callback)`; `cancel_event` supports GUI-initiated shutdown.
 | **Fingerprint Gate** | `resource_updater/service.py` | Local SHA-256 of `LimbusCompany.exe` gates Launcher pre-download without an online version check; successful resource scopes are persisted and merged so partial manual runs do not suppress missing work. `record_update_result()` marks only fully completed scopes — failed scopes stay unmarked and re-run on the next launch — and persists the last result (counts + failed item names/reasons) for the manual page |
 | **Registry + Interface** | `webutils/drop/` | `DropFileHandler` 接口（检测 + 执行 + 显示名收敛于单类）; `DropFileHandlerRegistry` 按容器类型（zip/folder/json/path）有序检测、按类型分派执行，兜底 `invalid` |
@@ -105,7 +106,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `CompiledBus` / `BusApplyResult` | `webutils/fancy/bus.py` | Immutable bus rules with precomputed exact/dynamic file indexes, deduplicated shared matchers, per-ruleset directory exclusions, selector indexes, ordered path execution, exact quick-edit success/failure counts, and changed-path reporting |
 | `FancyRunStats` | `webutils/function_fancy.py` | Reports scanned, matched and changed files/values, elapsed time, and skill-color resource cache hits; files are rewritten atomically only when content changes |
 | `DropFileHandler` / `DropFileHandlerRegistry` | `webutils/drop/handler.py` | 接口：每个分支类实现 `detect()`（快照/路径 → 类型字符串）与 `execute()`（上下文 → 结果键），声明 `file_type`/`label`; 注册表维护各容器类型的检测顺序（如 zip: full → nofont → FLmod → update → jsononly），并按类型查处理器执行，无需改动 `evalFile()` / `evalFiles()` 即可扩展新分支 |
-| `RiskGate` / `RISK_SERVICES` | `webui/js/risk-gate.js` | 前端风险服务统一门控（游戏加速/输入反检测等）：注册表驱动，规范化免责声明文本单一来源；源页面首入覆盖层门控（`gatePage`）、Launcher 配置页勾选就地同意弹窗（`gateLauncherSection`）、同意态持久化 `{service}.disclaimer_accepted`、重读入口（`showNoticeModal`）。新增风险服务只需注册一条记录 + 两个标记属性 |
+| `RiskGate` / `RISK_SERVICES` | `webui/js/risk-gate.js` | 前端风险服务统一门控（游戏加速/输入反检测/伤害倍率）：注册表驱动，规范化免责声明文本单一来源；源页面首入覆盖层门控（`gatePage`）、Launcher 配置页勾选就地同意弹窗（`gateLauncherSection`）、同意态持久化 `{service}.disclaimer_accepted`、重读入口（`showNoticeModal`）。`hideUntilConsent` 标记的服务（伤害倍率）未同意前在 Launcher 配置页整组隐藏（`refreshLauncherVisibility`，进入页面与 `acceptConsent` 时刷新），须先在源页面同意；Launcher 后端 `start_damage_hook` 同款检查 `damage_hook.disclaimer_accepted` 兜底。新增风险服务只需注册一条记录 + 两个标记属性 |
 | `LogManager` | `globalManagers/LogManager.py` | Singleton logger: file rotation, console, webview modal callbacks |
 
 ## Polyglot Boundaries

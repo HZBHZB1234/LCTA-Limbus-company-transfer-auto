@@ -139,6 +139,12 @@ function onSectionLoaded(name) {
                 inputBypassPage.init();
             }
             break;
+        case 'damage-hook':
+            console.log('[LCTA] Init section: damage-hook');
+            if (typeof damageHookPage !== 'undefined' && damageHookPage) {
+                damageHookPage.init();
+            }
+            break;
     }
 
     if (configManager) configManager.applyConfigToUI();

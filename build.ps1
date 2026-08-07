@@ -305,6 +305,49 @@ if (-not $gcc -or -not $windres) {
     } else {
         Write-Host "  WARNING: hooks/rawinput_hook.c 未找到，跳过 hook DLL 编译" -ForegroundColor Yellow
     }
+
+    # ---- 编译 damage hook DLL（伤害倍率，MinHook） ----
+    $damageSrc = "$ProjectRoot\hooks\damage_hook.c"
+    $minhookInclude = "$ProjectRoot\vendor\minhook\include"
+    $minhookHde = "$ProjectRoot\vendor\minhook\src\hde"
+    if (Test-Path $damageSrc -and (Test-Path "$minhookInclude\MinHook.h")) {
+        $damageCacheDll = "$CCompileCache\damage_hook.dll"
+        $damageHashFile = "$CCompileCache\damage_hook.dll.hash"
+        # 缓存键含 minhook 源码（改源码必须重编）
+        $damageInputs = @($damageSrc,
+                          "$ProjectRoot\vendor\minhook\src\hook.c",
+                          "$ProjectRoot\vendor\minhook\src\buffer.c",
+                          "$ProjectRoot\vendor\minhook\src\trampoline.c",
+                          "$MinHookHde\hde64.c")
+        $damageHashParts = foreach ($f in $damageInputs) {
+            if (Test-Path $f) { (Get-FileHash -Path $f -Algorithm MD5).Hash } else { "MISSING" }
+        }
+        $damageHash = $damageHashParts -join "|"
+        $cacheHit = $false
+        if ((Test-Path $damageCacheDll) -and (Test-Path $damageHashFile)) {
+            $cachedHash = (Get-Content $damageHashFile -Raw).Trim()
+            if ($cachedHash -eq $damageHash) { $cacheHit = $true }
+        }
+        if ($cacheHit) {
+            Write-Host "  使用缓存: damage_hook.dll" -ForegroundColor Green
+        } else {
+            Write-Host "  编译 hooks/damage_hook.c -> damage_hook.dll..."
+            gcc -shared -O2 -s -static-libgcc -o $damageCacheDll $damageSrc `
+                "$ProjectRoot\vendor\minhook\src\hook.c" `
+                "$ProjectRoot\vendor\minhook\src\buffer.c" `
+                "$ProjectRoot\vendor\minhook\src\trampoline.c" `
+                "$MinHookHde\hde64.c" `
+                -I $minhookInclude -I $minhookHde
+            if ($LASTEXITCODE -eq 0) {
+                $damageHash | Out-File -FilePath $damageHashFile -Encoding ASCII
+                Write-Host "    damage_hook.dll 完成" -ForegroundColor Green
+            } else {
+                Write-Host "    damage_hook.dll 编译失败" -ForegroundColor Red
+            }
+        }
+    } else {
+        Write-Host "  WARNING: hooks/damage_hook.c 或 vendor/minhook 缺失，跳过 damage hook 编译" -ForegroundColor Yellow
+    }
 }
 
 # ============================================================
@@ -599,6 +642,20 @@ if (Test-Path $hookCacheDll) {
     Write-Host "  rawinput_hook.dll 复制完成" -ForegroundColor Green
 } else {
     Write-Host "  WARNING: rawinput_hook.dll 未编译，跳过复制" -ForegroundColor Yellow
+}
+
+# ---- 复制 damage hook DLL（伤害倍率） ----
+Write-Host "  复制 damage hook DLL..."
+$damageCacheDll = "$CCompileCache\damage_hook.dll"
+if (Test-Path $damageCacheDll) {
+    foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+        $destHook = "$dest\hooks"
+        New-Item -ItemType Directory -Path $destHook -Force | Out-Null
+        Copy-Item $damageCacheDll "$destHook\damage_hook.dll" -Force
+    }
+    Write-Host "  damage_hook.dll 复制完成" -ForegroundColor Green
+} else {
+    Write-Host "  WARNING: damage_hook.dll 未编译，跳过复制" -ForegroundColor Yellow
 }
 
 # ---- 复制 venv（嵌入式 Python + site-packages + Scripts） ----

@@ -368,7 +368,7 @@ class InputBypassManager:
             if not _kernel32.WriteProcessMemory(proc, remote, path_w, n, ctypes.byref(written)):
                 raise RuntimeError("WriteProcessMemory 失败")
             kernel32 = _kernel32.GetModuleHandleW("kernel32.dll")
-            load_lib = _kernel32.GetProcAddress(kernel32, "LoadLibraryW")
+            load_lib = _kernel32.GetProcAddress(kernel32, b"LoadLibraryW")
             if not load_lib:
                 raise RuntimeError("无法定位 LoadLibraryW")
             thread = _kernel32.CreateRemoteThread(proc, None, 0, load_lib, remote, 0, None)
@@ -399,7 +399,7 @@ class InputBypassManager:
         try:
             if proc:
                 kernel32 = _kernel32.GetModuleHandleW("kernel32.dll")
-                free_lib = _kernel32.GetProcAddress(kernel32, "FreeLibrary")
+                free_lib = _kernel32.GetProcAddress(kernel32, b"FreeLibrary")
                 if free_lib:
                     param = ctypes.c_void_p(cls._remote_module)
                     thread = _kernel32.CreateRemoteThread(proc, None, 0, free_lib, param, 0, None)

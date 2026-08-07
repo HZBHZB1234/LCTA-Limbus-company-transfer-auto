@@ -116,12 +116,32 @@ function initNavigation() {
                         }
                     }
 
+                    // 伤害倍率页同样按导航生命周期管理轮询
+                    if (typeof damageHookPage !== 'undefined') {
+                        if (sectionId === 'damage-hook-section') {
+                            damageHookPage.init();
+                        } else {
+                            damageHookPage.stop();
+                        }
+                    }
+
+                    // Launcher 配置页每次进入时按同意态刷新风险选项可见性
+                    // （section 只加载一次，同意态变化必须按导航生命周期重查）
+                    if (sectionId === 'launcher-config-section' && typeof RiskGate !== 'undefined') {
+                        RiskGate.refreshLauncherVisibility();
+                    }
+
                     if (sectionId !== 'test-section') {
                         goTestSection(false);
                     }
 
                     if (sectionId !== 'clean-section') {
                         goCleanSection(false);
+                    }
+
+                    // 伤害倍率页（隐藏入口，仅从调试界面进入）离开时隐藏导航按钮
+                    if (sectionId !== 'damage-hook-section') {
+                        goDamageHookSection(false);
                     }                    
                 }, 150);
             }
@@ -453,6 +473,10 @@ const TOOLTIP_DATA = {
     'input-bypass-mouse-synth': '手动模式下上报的鼠标合成计数（宏/自动点击量）。',
     'input-bypass-key-synth': '手动模式下上报的键盘合成计数。',
     'input-bypass-volatility': '手动模式下计数的波动百分比（0-50，0 为关闭）。hook 会周期性在 ±该百分比内随机抖动计数再据此计算比例，防止恒定数值被检测。',
+    'launcher-work-damage-hook': '通过 Launcher 启动游戏时自动注入伤害倍率 hook，敌方单位受到的伤害乘以设定倍率。首次使用需先在"伤害倍率"页面阅读并同意风险须知（未同意前本选项在 Launcher 配置页隐藏）。相关设置请在"伤害倍率"页面配置。',
+    'damage-hook-multiplier': '敌方单位受到的伤害倍率（默认 3.0，范围 0.1-1000）。"无修正"伤害（按 1.0 处理）直接置为该倍率值；我方单位不受影响。',
+    'damage-hook-log': '开启后 hook 在战斗中对实际生效的伤害事件记录日志（目标/攻击方/暴击/倍率前后值），可在页面"最近日志"查看。默认关闭以降低运行开销。',
+    'damage-hook-api-url': '伤害倍率函数偏移的 JSON API 地址。默认使用 web.lcta.top 提供的文件；游戏更新后程序自动检测 GameAssembly.dll 哈希变化并重新拉取，本地缓存同步失效。',
     'steam-command': '用于通过 Steam 启动游戏的命令行参数。复制后可粘贴到 Steam 游戏属性中的启动选项。',
 
     // ===== 抓取专有词汇 =====
@@ -645,8 +669,8 @@ function onSidebarSearch(query) {
     const lower = query.toLowerCase().trim();
 
     if (!lower) {
-        // 显示全部
-        navBtns.forEach(b => b.style.display = '');
+        // 显示全部（默认隐藏的调试入口按钮保持隐藏）
+        navBtns.forEach(b => b.style.display = b.dataset.hiddenDefault === '1' ? 'none' : '');
         groups.forEach(g => g.style.display = '');
         return;
     }
@@ -656,8 +680,11 @@ function onSidebarSearch(query) {
         g.querySelectorAll('.nav-btn').forEach(btn => {
             const text = btn.textContent.toLowerCase();
             if (text.includes(lower)) {
-                btn.style.display = '';
-                hasVisible = true;
+                // 默认隐藏的导航按钮（调试入口）不因搜索而显示
+                if (btn.dataset.hiddenDefault !== '1') {
+                    btn.style.display = '';
+                    hasVisible = true;
+                }
             } else {
                 btn.style.display = 'none';
             }

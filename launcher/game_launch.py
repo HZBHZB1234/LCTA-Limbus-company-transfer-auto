@@ -184,3 +184,79 @@ def stop_input_bypass() -> None:
         _log_manager.log("输入反检测 hook 已清理")
     except Exception as e:
         _log_manager.log_error(e)
+
+
+_damage_hook_exit_event = None
+_damage_hook_timeout = 180  # 等待游戏进程的最长时间（秒）
+
+
+def _inject_damage_hook_when_game_ready(exit_event: threading.Event) -> None:
+    """后台等待 LimbusCompany.exe 出现后注入伤害倍率 hook。
+
+    注入前先解析偏移（带缓存与游戏更新自动失效，见
+    webutils/function_damage_hook.py）并写入共享内存；偏移不可用（无缓存
+    且 API 拉取失败）时跳过注入。
+    """
+    import time
+    from webutils.function_damage_hook import DamageHookManager
+
+    deadline = time.time() + _damage_hook_timeout
+    pid = None
+    while not exit_event.is_set() and time.time() < deadline:
+        pid = DamageHookManager.find_game_pid()
+        if pid is not None:
+            break
+        time.sleep(2)
+
+    if exit_event.is_set():
+        return
+    if pid is None:
+        _log_manager.log("伤害倍率: 等待游戏进程超时，本次启动不注入")
+        return
+
+    try:
+        result = DamageHookManager.apply()
+        if not result["success"]:
+            _log_manager.log(f"伤害倍率: {result.get('message', '未启用')}")
+            return
+        DamageHookManager.inject(pid)
+        status = DamageHookManager.get_status()
+        stale = "（偏移已过期，降级注入，可能不生效）" if status.get("offsets_stale") else ""
+        _log_manager.log(f"伤害倍率 hook 已注入 (PID: {pid}){stale}")
+    except Exception as e:
+        _log_manager.log_error(e)
+
+
+def start_damage_hook() -> None:
+    """PHASE_RUNNING 回调：若开启伤害倍率，后台等待游戏进程并注入。"""
+    global _damage_hook_exit_event
+    if not ConfigManager().get("launcher.work.damage_hook", False):
+        return
+    if not ConfigManager().get("damage_hook.disclaimer_accepted", False):
+        _log_manager.log("伤害倍率已配置但未同意免责声明，跳过注入")
+        return
+    if _damage_hook_exit_event is not None:
+        return
+    _log_manager.log("伤害倍率已启用，等待游戏进程...")
+    event = threading.Event()
+    t = threading.Thread(
+        target=_inject_damage_hook_when_game_ready,
+        args=(event,),
+        daemon=True,
+    )
+    t.start()
+    _damage_hook_exit_event = event
+
+
+def stop_damage_hook() -> None:
+    """PHASE_EXIT 回调：停止注入线程并弹出 DLL。"""
+    global _damage_hook_exit_event
+    if _damage_hook_exit_event is not None:
+        _damage_hook_exit_event.set()
+        _damage_hook_exit_event = None
+    from webutils.function_damage_hook import DamageHookManager
+    try:
+        DamageHookManager.close()
+        _log_manager.log("伤害倍率 hook 已清理")
+    except Exception as e:
+        _log_manager.log_error(e)

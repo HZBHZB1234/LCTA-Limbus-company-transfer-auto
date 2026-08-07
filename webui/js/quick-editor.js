@@ -39,6 +39,15 @@
         _apiReady: false,
     };
 
+    // 编辑器内搜索面板状态桥接（供 EditorSearchPanel 共用模块使用）
+    var qeSearchBridge = {
+        isOpen: false,
+        panelLeft: null,
+        panelTop: null,
+        panelRight: null,
+        onPanelClose: function () {},
+    };
+
     // ──── 工具函数 ────
     function $i(id) { return document.getElementById(id); }
 
@@ -131,6 +140,11 @@
                 syncThemeFromMain(),
             ]);
             initFileEditor();
+            if (window.EditorSearchPanel) {
+                EditorSearchPanel.attach($i('qe-editor-area'), qeSearchBridge);
+            } else {
+                console.warn('[quick-editor] EditorSearchPanel 未加载，编辑器内搜索面板不可用');
+            }
             renderFileList();
         } catch (e) {
             console.error('初始化失败:', e);
@@ -859,11 +873,29 @@
             });
         }
 
-        // Ctrl+S 记录修改
+        // Ctrl+S 记录修改；Ctrl+F 打开编辑器内搜索面板（与规则编辑器共用一套）
         document.addEventListener('keydown', function (e) {
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            var ctrl = e.ctrlKey || e.metaKey;
+            if (ctrl && e.key === 's') {
                 e.preventDefault();
                 recordChanges();
+                return;
+            }
+            if (ctrl && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+                e.preventDefault();
+                var sidebarSearch = $i('qe-file-search');
+                if (sidebarSearch) { sidebarSearch.focus(); sidebarSearch.select(); }
+                return;
+            }
+            if (ctrl && (e.key === 'f' || e.key === 'F')) {
+                if (state.fileEditor) {
+                    e.preventDefault();
+                    var CM = window.CodeMirror;
+                    if (CM && CM.openSearchPanel) {
+                        CM.openSearchPanel(state.fileEditor);
+                        qeSearchBridge.isOpen = true;
+                    }
+                }
             }
         });
 

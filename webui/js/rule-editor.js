@@ -77,7 +77,14 @@
         isOpen: false,
         panelLeft: null,   // 拖拽后的 left 值（相对 #re-file-edit-panel）
         panelTop: null,    // 拖拽后的 top 值（相对 #re-file-edit-panel）
-        panelRight: null   // 拖拽后的 right 值
+        panelRight: null,  // 拖拽后的 right 值
+        // 面板关闭时清理（供 EditorSearchPanel 回调）
+        onPanelClose: function () {
+            if (_searchBridge._restoreTimeout) {
+                clearTimeout(_searchBridge._restoreTimeout);
+                _searchBridge._restoreTimeout = null;
+            }
+        }
     };
 
     var CATEGORY_FILE_PATTERNS = {
@@ -320,7 +327,6 @@
         if (ts && ts.container) {
             ts.container.classList.add('active');
         }
-
         state.activeFileTab = path;
         state._lastViewedFile = path;
 
@@ -334,7 +340,7 @@
         if (empty) empty.style.display = 'none';
 
         // 恢复搜索状态到新编辑器
-        if (ts && ts.editor && _searchBridge.isOpen) {
+if (ts && ts.editor && _searchBridge.isOpen) {
             setTimeout(function () {
                 _restoreSearchState(ts.editor, ts.container);
             }, 50);
@@ -485,7 +491,11 @@
         populateSimpleFileSelect();
         switchTab('file-list');
         switchMainTab('file-edit');
-        initSearchPanelDrag();
+        if (window.EditorSearchPanel) {
+            EditorSearchPanel.attach($i('re-file-editor-container'), _searchBridge);
+        } else {
+            console.warn('[rule-editor] EditorSearchPanel 未加载，编辑器内搜索面板不可用');
+        }
         initResizeHandles();
         // 检查 pywebview API 是否已可用（防竞态）
         if (getApi()) {
@@ -4523,212 +4533,6 @@
     }
 
     // ═══════════════════════════════════════════════════════
-    //  Search Panel Drag — make CM6 search panel draggable
-    // ═══════════════════════════════════════════════════════
-
-    function initSearchPanelDrag() {
-        const container = $i('re-file-editor-container');
-        if (!container) return;
-
-        if (container._searchObserver) {
-            container._searchObserver.disconnect();
-        }
-
-        const observer = new MutationObserver(function (mutations) {
-            for (let i = 0; i < mutations.length; i++) {
-                const m = mutations[i];
-                for (let j = 0; j < m.addedNodes.length; j++) {
-                    const node = m.addedNodes[j];
-                    if (node.nodeType !== 1) continue;
-                    const search = node.classList && node.classList.contains('cm-search')
-                        ? node : (node.querySelector && node.querySelector('.cm-search'));
-                    if (search) {
-                        localizeSearchPanel(search);
-                        attachDrag(search);
-                    }
-                }
-            }
-        });
-        observer.observe(container, { childList: true, subtree: true });
-        container._searchObserver = observer;
-    }
-
-    function localizeSearchPanel(searchEl) {
-        if (searchEl._localized) return;
-        searchEl._localized = true;
-
-        // 监听关闭按钮，同步 _searchBridge 状态（必须在 CM6 移除面板前更新）
-        var closeBtn = searchEl.querySelector('button[name="close"]');
-        if (closeBtn && !closeBtn._closePatched) {
-            closeBtn._closePatched = true;
-            closeBtn.addEventListener('mousedown', function () {
-                _searchBridge.isOpen = false;
-                // 清除拖拽位置 — 下次 Ctrl+F 恢复默认位置
-                _searchBridge.panelLeft = null;
-                _searchBridge.panelTop = null;
-                _searchBridge.panelRight = null;
-                if (_searchBridge._restoreTimeout) {
-                    clearTimeout(_searchBridge._restoreTimeout);
-                    _searchBridge._restoreTimeout = null;
-                }
-            });
-        }
-
-        // 翻译字典：英文 → 中文
-        const T = {
-            "Find": "查找", "Replace": "替换",
-            "next": "下一个", "previous": "上一个", "all": "全部",
-            "match case": "区分大小写", "regexp": "正则", "by word": "全词匹配",
-            "replace": "替换", "replace all": "全部替换", "close": "关闭"
-        };
-
-        // 翻译 placeholder
-        const inputs = searchEl.querySelectorAll('input[type="text"]');
-        for (let i = 0; i < inputs.length; i++) {
-            const ph = inputs[i].placeholder;
-            if (ph && T[ph]) inputs[i].placeholder = T[ph];
-        }
-
-        // 翻译 button title / textContent（大小写不敏感）
-        const buttons = searchEl.querySelectorAll('button');
-        for (let i = 0; i < buttons.length; i++) {
-            const btn = buttons[i];
-            const title = btn.getAttribute('title');
-            if (title) {
-                const lower = title.toLowerCase();
-                if (T[title]) { btn.setAttribute('title', T[title]); }
-                else if (T[lower]) { btn.setAttribute('title', T[lower]); }
-            }
-            const name = btn.getAttribute('name');
-            if (name && T[name]) btn.setAttribute('title', T[name]);
-            // 替换按钮文字（如 "replace all" → "全部替换"）
-            const trimmed = btn.textContent && btn.textContent.trim();
-            if (trimmed && T[trimmed]) {
-                btn.textContent = T[trimmed];
-            }
-        }
-
-        // 翻译 checkbox label 文字
-        const labels = searchEl.querySelectorAll('label');
-        for (let i = 0; i < labels.length; i++) {
-            const lbl = labels[i];
-            const title = lbl.getAttribute('title');
-            if (title && T[title]) lbl.setAttribute('title', T[title]);
-            // 替换 label 内的文本节点（如 "match case" → "区分大小写"）
-            for (let k = 0; k < lbl.childNodes.length; k++) {
-                const cn = lbl.childNodes[k];
-                if (cn.nodeType === 3 && T[cn.textContent.trim()]) { // TEXT_NODE
-                    cn.textContent = T[cn.textContent.trim()];
-                }
-            }
-        }
-    }
-
-    function setSearchPanelPosition(panels, left, top) {
-        if (!panels) return;
-        var bounds = panels.offsetParent;
-        if (!bounds) return;
-        var boundsRect = bounds.getBoundingClientRect();
-        var panelRect = panels.getBoundingClientRect();
-        var margin = 8;
-        var maxLeft = Math.max(margin, boundsRect.width - panelRect.width - margin);
-        var maxTop = Math.max(margin, boundsRect.height - panelRect.height - margin);
-        var clampedLeft = Math.max(margin, Math.min(left, maxLeft));
-        var clampedTop = Math.max(margin, Math.min(top, maxTop));
-        panels.style.left = clampedLeft + 'px';
-        panels.style.top = clampedTop + 'px';
-        panels.style.right = 'auto';
-        panels.style.bottom = 'auto';
-    }
-
-    function attachDrag(searchEl) {
-        if (searchEl._dragBound) return;
-        searchEl._dragBound = true;
-
-        searchEl.addEventListener('pointerdown', function (e) {
-            // 仅在点击背景区域时启动拖动（排除交互控件）
-            const target = e.target;
-            if (e.button !== 0) return;
-            if (target.tagName === 'INPUT' || target.tagName === 'BUTTON' ||
-                target.tagName === 'LABEL' || target.closest('button') ||
-                target.closest('label')) return;
-
-            const panels = searchEl.parentElement; // .cm-panels
-            const bounds = panels ? panels.offsetParent : null;
-            if (!panels || !bounds) return;
-
-            const rect = panels.getBoundingClientRect();
-            const boundsRect = bounds.getBoundingClientRect();
-            const startX = e.clientX;
-            const startY = e.clientY;
-            const startLeft = rect.left - boundsRect.left;
-            const startTop = rect.top - boundsRect.top;
-            var moved = false;
-            var frameId = null;
-            var pendingX = startX;
-            var pendingY = startY;
-            const DEAD_ZONE = 3;   // 3px 死区，区分点击与拖拽
-
-            searchEl.setPointerCapture(e.pointerId);
-
-            function onMove(ev) {
-                if (ev.pointerId !== e.pointerId) return;
-                var dx = ev.clientX - startX;
-                var dy = ev.clientY - startY;
-                // 死区：移动 < 3px 不启动拖拽
-                if (!moved && Math.abs(dx) < DEAD_ZONE && Math.abs(dy) < DEAD_ZONE) return;
-                if (!moved) {
-                    moved = true;
-                    panels.style.willChange = 'transform';
-                    searchEl.classList.add('dragging');
-                    searchEl.style.userSelect = 'none';
-                }
-                pendingX = ev.clientX;
-                pendingY = ev.clientY;
-                if (frameId) return;
-                frameId = requestAnimationFrame(function () {
-                    frameId = null;
-                    panels.style.transform = 'translate3d(' +
-                        (pendingX - startX) + 'px,' + (pendingY - startY) + 'px,0)';
-                });
-            }
-
-            function onUp(ev) {
-                if (ev.pointerId !== e.pointerId) return;
-                if (frameId) {
-                    cancelAnimationFrame(frameId);
-                    frameId = null;
-                }
-                panels.style.transform = '';
-                panels.style.willChange = '';
-                searchEl.classList.remove('dragging');
-                searchEl.style.userSelect = '';
-                if (searchEl.hasPointerCapture(e.pointerId)) {
-                    searchEl.releasePointerCapture(e.pointerId);
-                }
-                searchEl.removeEventListener('pointermove', onMove);
-                searchEl.removeEventListener('pointerup', onUp);
-                searchEl.removeEventListener('pointercancel', onUp);
-
-                if (moved) {
-                    setSearchPanelPosition(
-                        panels,
-                        startLeft + (pendingX - startX),
-                        startTop + (pendingY - startY)
-                    );
-                    _searchBridge.panelLeft = panels.style.left;
-                    _searchBridge.panelTop = panels.style.top || '';
-                    _searchBridge.panelRight = panels.style.right || 'auto';
-                }
-            }
-
-            searchEl.addEventListener('pointermove', onMove);
-            searchEl.addEventListener('pointerup', onUp);
-            searchEl.addEventListener('pointercancel', onUp);
-        });
-    }
-
-    // ═══════════════════════════════════════════════════════
     //  跨标签搜索状态桥接 — 标签切换时保存/恢复搜索面板
     // ═══════════════════════════════════════════════════════
     function _captureSearchState(editorView) {
@@ -4758,7 +4562,9 @@
             }
             // 关闭旧编辑器的搜索面板，防止切换标签后 DOM 残留
             if (CM.closeSearchPanel) {
-                try { CM.closeSearchPanel(editorView); } catch(e) {}
+                try {
+                    CM.closeSearchPanel(editorView);
+                } catch(e) {}
             }
         } catch(e) { /* CM6 getSearchQuery may fail across versions */ }
     }
@@ -4779,11 +4585,13 @@
             if (!c) return;
             var panels = c.querySelector('.cm-panels');
             if (!panels) return;
-            setSearchPanelPosition(
-                panels,
-                parseFloat(_searchBridge.panelLeft) || 8,
-                parseFloat(_searchBridge.panelTop) || 8
-            );
+            if (window.EditorSearchPanel) {
+                EditorSearchPanel.setSearchPanelPosition(
+                    panels,
+                    parseFloat(_searchBridge.panelLeft) || 8,
+                    parseFloat(_searchBridge.panelTop) || 8
+                );
+            }
         }
 
         // 目标编辑器已有可见搜索面板：仅更新查询 + 位置

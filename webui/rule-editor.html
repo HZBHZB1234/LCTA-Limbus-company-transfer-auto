@@ -8,12 +8,13 @@
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/layout-extras.css">
     <link rel="stylesheet" href="css/rule-editor.css">
+    <link rel="stylesheet" href="css/editor-search-panel.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module">
         import {EditorView, basicSetup} from "https://esm.sh/codemirror@6.0.1";
         import {keymap} from "https://esm.sh/@codemirror/view@6.0.1";
         import {json} from "https://esm.sh/@codemirror/lang-json@6.0.1";
-        import {openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery, SearchQuery} from "https://esm.sh/@codemirror/search@6.0.1";
+        import {openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery, SearchQuery} from "https://esm.sh/@codemirror/search@^6.0.0?target=es2022";
         window.CodeMirror = {EditorView, basicSetup, keymap, json, openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery, SearchQuery};
     </script>
 </head>
@@ -176,6 +177,7 @@
     <div id="re-content-simple" class="re-content-panel"></div>
     <div id="re-content-advanced" class="re-content-panel" style="display:none;"></div>
 </div>
+<script src="js/editor-search-panel.js"></script>
 <script src="js/rule-editor.js"></script>
 </body>
 </html>

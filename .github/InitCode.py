@@ -69,7 +69,7 @@ CODEMIRROR_MODULES = {
     "https://esm.sh/codemirror@6.0.1": './vendor/codemirror/codemirror.js',
     "https://esm.sh/@codemirror/view@6.0.1": './vendor/codemirror/view.js',
     "https://esm.sh/@codemirror/lang-json@6.0.1": './vendor/codemirror/lang-json.js',
-    "https://esm.sh/@codemirror/search@6.0.1": './vendor/codemirror/search.js',
+    "https://esm.sh/@codemirror/search@^6.0.0?target=es2022": './vendor/codemirror/search.js',
 }
 HTML_RESOURCE_TRANSFERS = {
     'index.html': [

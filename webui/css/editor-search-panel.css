@@ -1,0 +1,130 @@
+/* CM6 搜索面板共享样式 — rule-editor 与 quick-editor 共用（VSCode 浮动样式）
+ * 依赖 base.css 中的 CSS 自定义属性，支持 light/dark/purple 三种主题
+ */
+
+/* 用 (0,3,0) 特异性、非 !important 覆盖 CM 后注入的 .ͼN .cm-panels(left:0 / sticky)，
+ * 既压过 CM，又不会盖掉 JS 拖拽写入的内联 left/top（内联 > 普通样式表） */
+.cm-editor .cm-panels.cm-panels-top,
+.cm-editor .cm-panels.cm-panels-bottom {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    left: auto;
+    z-index: 100;
+    border: none;
+    transition: none;
+}
+
+.cm-panels {
+    background: transparent !important;  /* 覆盖 .cm-editor .cm-panels 背景，避免全宽蒙版 */
+}
+
+.cm-search {
+    background: var(--color-bg-card, #ffffff);
+    border: 1px solid var(--color-border, #d4d4d4);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    padding: 6px 8px;
+    gap: 4px;
+    min-width: 310px;
+    max-width: 460px;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+}
+
+.cm-search input,
+.cm-search button,
+.cm-search label {
+    cursor: auto;
+    user-select: auto;
+    touch-action: auto;
+}
+
+.cm-search.dragging {
+    cursor: grabbing !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.cm-search .cm-textfield {
+    padding: 3px 8px;
+    font-size: 13px;
+    border: 1px solid var(--color-border, #cecece);
+    border-radius: 3px;
+    background: var(--color-bg-input, #fff);
+    color: var(--color-text-primary, #333);
+    outline: none;
+}
+
+.cm-search .cm-textfield:focus {
+    border-color: var(--color-primary, #0078d4);
+}
+
+.cm-search .cm-button {
+    height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--color-text-secondary, #666);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cm-search .cm-button:hover {
+    background: var(--color-border, #e0e0e0);
+}
+
+.cm-search .cm-button:active {
+    background: var(--color-border-dark, #ccc);
+}
+
+.cm-search .cm-button[name="close"] {
+    width: 24px;
+    padding: 0;
+}
+
+.cm-search label {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 6px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--color-text-secondary, #666);
+    user-select: none;
+    border-radius: 3px;
+}
+
+.cm-search label:hover {
+    background: var(--color-border, #e0e0e0);
+}
+
+.cm-search input[type="checkbox"] {
+    margin: 0;
+    width: auto;
+}
+
+/* Dark theme */
+.theme-dark .cm-search {
+    background: var(--color-bg-secondary, #2d2d2d);
+    border-color: var(--color-border, #444);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.theme-dark .cm-search .cm-textfield {
+    background: var(--color-bg-input, #3c3c3c);
+    border-color: var(--color-border, #555);
+    color: var(--color-text-primary, #ccc);
+}
+
+.theme-dark .cm-search .cm-button {
+    color: var(--color-text-secondary, #999);
+}
+
+.theme-dark .cm-search .cm-button:hover {
+    background: var(--color-border, #444);
+}

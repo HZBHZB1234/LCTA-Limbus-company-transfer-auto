@@ -244,6 +244,7 @@ js_files = [
     'js/init.js',
     'js/resource-updater.js',
     'js/cdn.js',
+    'js/risk-gate.js',
     'js/speed.js',
     'js/input-bypass.js',
 ]

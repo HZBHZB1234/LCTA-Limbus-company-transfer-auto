@@ -11,6 +11,7 @@ class InputBypassPage {
     }
 
     _initDomRefs() {
+        this.mainContent = document.getElementById('input-bypass-main-content');
         this.statusEl = document.getElementById('input-bypass-status');
         this.pidEl = document.getElementById('input-bypass-pid');
         this.injectedEl = document.getElementById('input-bypass-injected');
@@ -28,7 +29,20 @@ class InputBypassPage {
         this._initDomRefs();
         this._bindEvents();
         this._syncManualVisibility();
-        this.refreshStatus();
+        // 风险服务门控：未同意风险须知时显示覆盖层，同意后解锁并启动轮询
+        RiskGate.gatePage('input_bypass', {
+            onAccepted: () => this._showMain(),
+            onRejected: () => this._hideMain()
+        });
+    }
+
+    _hideMain() {
+        if (this.mainContent) this.mainContent.style.display = 'none';
+    }
+
+    _showMain() {
+        if (this.mainContent) this.mainContent.style.display = '';
+        this._startPolling();
     }
 
     _bindEvents() {

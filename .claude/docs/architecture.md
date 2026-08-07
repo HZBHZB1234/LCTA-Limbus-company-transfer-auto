@@ -105,6 +105,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `CompiledBus` / `BusApplyResult` | `webutils/fancy/bus.py` | Immutable bus rules with precomputed exact/dynamic file indexes, deduplicated shared matchers, per-ruleset directory exclusions, selector indexes, ordered path execution, exact quick-edit success/failure counts, and changed-path reporting |
 | `FancyRunStats` | `webutils/function_fancy.py` | Reports scanned, matched and changed files/values, elapsed time, and skill-color resource cache hits; files are rewritten atomically only when content changes |
 | `DropFileHandler` / `DropFileHandlerRegistry` | `webutils/drop/handler.py` | 接口：每个分支类实现 `detect()`（快照/路径 → 类型字符串）与 `execute()`（上下文 → 结果键），声明 `file_type`/`label`; 注册表维护各容器类型的检测顺序（如 zip: full → nofont → FLmod → update → jsononly），并按类型查处理器执行，无需改动 `evalFile()` / `evalFiles()` 即可扩展新分支 |
+| `RiskGate` / `RISK_SERVICES` | `webui/js/risk-gate.js` | 前端风险服务统一门控（游戏加速/输入反检测等）：注册表驱动，规范化免责声明文本单一来源；源页面首入覆盖层门控（`gatePage`）、Launcher 配置页勾选就地同意弹窗（`gateLauncherSection`）、同意态持久化 `{service}.disclaimer_accepted`、重读入口（`showNoticeModal`）。新增风险服务只需注册一条记录 + 两个标记属性 |
 | `LogManager` | `globalManagers/LogManager.py` | Singleton logger: file rotation, console, webview modal callbacks |
 
 ## Polyglot Boundaries

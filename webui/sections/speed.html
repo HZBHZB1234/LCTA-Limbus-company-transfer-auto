@@ -1,27 +1,4 @@
-<div id="speed-disclaimer-overlay" class="disclaimer-overlay" style="display:none;">
-    <div class="disclaimer-card">
-        <div class="disclaimer-icon">⚠️</div>
-        <h2>风险警告</h2>
-        <div class="disclaimer-body">
-            <p>游戏加速功能通过 <strong>DLL 注入技术</strong>实现。</p>
-            <ul>
-                <li>就该功能而言，如果月计想要检查，那么完全可以检测出用户是否进行了加速。</li>
-                <li>本功能仅供学习 Windows API Hooking 技术学习使用</li>
-                <li>使用本功能具有不小的风险。使用者自行承担全部风险，开发者不承担任何责任</li>
-            </ul>
-        </div>
-        <div class="disclaimer-agree">
-            <label class="checkbox-container">
-                <input type="checkbox" id="speed-disclaimer-checkbox">
-                <span class="checkmark"></span>
-                我已了解上述风险
-            </label>
-        </div>
-        <button id="speed-disclaimer-confirm" class="primary-btn" onclick="speedPage.acceptDisclaimer()">
-            <i class="fas fa-check"></i> 确认
-        </button>
-    </div>
-</div>
+<div class="disclaimer-overlay" data-risk-overlay="speed" style="display:none;"></div>
 
 <div id="speed-main-content" style="display:none;">
     <div class="section-header">
@@ -30,6 +7,9 @@
             游戏加速
         </h2>
         <p class="section-subtitle">基于 OpenSpeedy 的游戏速度控制 — 通过 DLL 注入实现变速</p>
+        <a href="javascript:void(0)" class="risk-reread-link" onclick="RiskGate.showNoticeModal('speed')">
+            <i class="fas fa-exclamation-triangle"></i> 查看风险须知
+        </a>
     </div>
 
     <div class="settings-grid">

@@ -1,9 +1,15 @@
+<div class="disclaimer-overlay" data-risk-overlay="input_bypass" style="display:none;"></div>
+
+<div id="input-bypass-main-content" style="display:none;">
 <div class="section-header">
     <h2 class="section-title">
         <i class="fas fa-ghost"></i>
         输入反检测
     </h2>
     <p class="section-subtitle">Hook CommonLib 的 RawInput 计数导出，控制游戏上报的合成/真实输入数据</p>
+    <a href="javascript:void(0)" class="risk-reread-link" onclick="RiskGate.showNoticeModal('input_bypass')">
+        <i class="fas fa-exclamation-triangle"></i> 查看风险须知
+    </a>
 </div>
 
 <div class="settings-grid">
@@ -112,4 +118,5 @@
         <i class="fas fa-save"></i>
         保存配置
     </button>
+</div>
 </div>

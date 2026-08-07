@@ -186,8 +186,15 @@ JS: user adjusts speed slider
   → webutils/function_speed.py      openspeedy DLL injection
     → subprocess: openspeedy        inject DLL → hook game time APIs
 
+First-time gate (risk notice):
+  → webui/js/risk-gate.js          RiskGate.gatePage('speed') — 未同意
+      speed.disclaimer_accepted 时渲染 data-risk-overlay 覆盖层，
+      勾选"我已了解并自愿承担上述风险"→ acceptConsent() 写配置后解锁页面
+
 Launcher integration switch (launcher.work.speed / launcher.work.speed_factor):
   checkbox lives ONLY on webui/sections/launcher-config.html 「工作模式配置」
+  → webui/js/risk-gate.js          gateLauncherSection() — 未同意时勾选回滚并
+                                    就地弹出同意弹窗（showConsentModal）
   → webui/js/speed.js 游戏加速页仅保留集成介绍 + goAndShow('launcher-config') 跳转按钮
 
 Launcher mode:
@@ -199,11 +206,15 @@ Launcher mode:
     → openspeedy                    inject DLL
 ```
 
-Files: `webui/js/speed.js`, `webui/app.py`, `webutils/function_speed.py`, `launcher/speed_hotkey.py`
+Files: `webui/js/speed.js`, `webui/js/risk-gate.js`, `webui/app.py`, `webutils/function_speed.py`, `launcher/speed_hotkey.py`
 
 ## 6.5 Input Bypass (CommonLib 输入反检测)
 
 ```
+First-time gate (risk notice):
+  → webui/js/risk-gate.js          RiskGate.gatePage('input_bypass') — 未同意
+      input_bypass.disclaimer_accepted 时渲染覆盖层，同意后解锁页面
+
 User toggles input bypass on Launcher config page
   → webui/sections/launcher-config.html              checkbox (launcher.work.input_bypass) +
                                                      goAndShow('launcher-config')

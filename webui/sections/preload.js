@@ -52,6 +52,9 @@ function onSectionLoaded(name) {
             toggleSteamCommand();
             if (typeof onLauncherOurplaySourceChange === 'function')
                 onLauncherOurplaySourceChange();
+            if (typeof RiskGate !== 'undefined' && RiskGate.gateLauncherSection) {
+                RiskGate.gateLauncherSection();
+            }
             break;
         case 'resource-updater':
             console.log('[LCTA] Init section: resource-updater');

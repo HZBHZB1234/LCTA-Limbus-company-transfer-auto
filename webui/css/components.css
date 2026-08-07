@@ -2065,10 +2065,11 @@ select.elder-select:focus {
 }
 
 /* ============================
-   游戏加速 - 免责声明覆盖层
+   风险服务 - 免责声明覆盖层
+   （由 js/risk-gate.js 统一渲染与管理）
    ============================ */
 
-/* 免责声明容器位于 #speed-section 内部。
+/* 免责声明容器位于各风险 section 内部。
    不可使用 position:fixed —— .content-section 的入场动画带 transform，
    会使 fixed 的包含块变为该 section 而非视口，导致卡片定位异常偏高。
    显示时主内容已隐藏，故直接在文档流内居中即可。 */
@@ -2111,16 +2112,56 @@ select.elder-select:focus {
 }
 
 .disclaimer-body ul {
-    margin: 0.5rem 0 0 1.2rem;
+    margin: 0.25rem 0 0.75rem 1.2rem;
     padding: 0;
+}
+
+.disclaimer-body ul:last-child {
+    margin-bottom: 0;
 }
 
 .disclaimer-body ul li {
     margin-bottom: 0.25rem;
 }
 
+/* 免责声明小节标题（功能说明/风险提示/使用须知） */
+.disclaimer-body .risk-section-title {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0.75rem 0 0.25rem;
+}
+
+.disclaimer-body .risk-section-title:first-child {
+    margin-top: 0;
+}
+
 .disclaimer-agree {
     margin-bottom: 1rem;
+}
+
+/* 风险页头部的"查看风险须知"重读入口链接 */
+.risk-reread-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.4rem;
+    font-size: 0.85rem;
+    color: #dc2626;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.risk-reread-link:hover {
+    opacity: 0.85;
+}
+
+/* 风险须知弹窗内容滚动区。
+   .modal-body 被 layout-extras.css 全局覆盖为 overflow:hidden（markdown 弹窗适配），
+   故让 .modal-status 自身在 flex 列中撑满剩余空间并滚动，footer 保持可见。 */
+.modal-status.risk-modal-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 /* ============================

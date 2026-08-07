@@ -14,10 +14,7 @@ class SpeedPage {
 
     _initDomRefs() {
         // 缓存常用 DOM 引用
-        this.overlay = document.getElementById('speed-disclaimer-overlay');
         this.mainContent = document.getElementById('speed-main-content');
-        this.disclaimerCheckbox = document.getElementById('speed-disclaimer-checkbox');
-        this.disclaimerConfirmBtn = document.getElementById('speed-disclaimer-confirm');
 
         this.statusRunning = document.getElementById('speed-status-running');
         this.statusPid = document.getElementById('speed-status-pid');
@@ -37,47 +34,23 @@ class SpeedPage {
         // 每次进入页面都刷新 DOM 引用（section 懒加载后构造函数中的引用可能为 null）
         this._initDomRefs();
 
-        // 检查免责声明
-        try {
-            const accepted = await pywebview.api.get_config_value('speed.disclaimer_accepted', false);
-            if (accepted) {
-                this._showMain();
-            } else {
-                this._showDisclaimer();
-            }
-        } catch (e) {
-            console.error('SpeedPage init error:', e);
-            this._showDisclaimer();
-        }
-
         // 初始化事件
         this._bindEvents();
+
+        // 风险服务门控：未同意风险须知时显示覆盖层，同意后解锁并启动轮询
+        RiskGate.gatePage('speed', {
+            onAccepted: () => this._showMain(),
+            onRejected: () => this._hideMain()
+        });
     }
 
-    _showDisclaimer() {
-        if (this.overlay) this.overlay.style.display = 'flex';
+    _hideMain() {
         if (this.mainContent) this.mainContent.style.display = 'none';
     }
 
     _showMain() {
-        if (this.overlay) this.overlay.style.display = 'none';
         if (this.mainContent) this.mainContent.style.display = '';
         this._startPolling();
-    }
-
-    async acceptDisclaimer() {
-        if (!this.disclaimerCheckbox || !this.disclaimerCheckbox.checked) {
-            showMessage('提示', '请先勾选"我已了解上述风险"');
-            return;
-        }
-        try {
-            await pywebview.api.update_config_value('speed.disclaimer_accepted', true);
-            addLogMessage('已同意游戏加速免责声明', 'info');
-            this._showMain();
-        } catch (e) {
-            console.error('acceptDisclaimer error:', e);
-            showMessage('错误', '保存设置失败: ' + e);
-        }
     }
 
     _bindEvents() {

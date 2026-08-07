@@ -154,5 +154,8 @@
     },
     "speed": {
         "disclaimer_accepted": "bool"
+    },
+    "input_bypass": {
+        "disclaimer_accepted": "bool"
     }
 }

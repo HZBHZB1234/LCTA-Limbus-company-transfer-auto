@@ -108,7 +108,7 @@ int main(int argc, char* argv[]) {
     // 设置其他有用的环境变量
     SetEnvironmentVariable("PYTHONUNBUFFERED", "1");
     SetEnvironmentVariable("PYTHONIOENCODING", "utf-8");
-    SetEnvironmentVariable("__version__", "5.0.0");
+    SetEnvironmentVariable("__version__", "5.0.1");
     if (is_debug) {
         SetEnvironmentVariable("__debug_exe__", "true");
     } else {

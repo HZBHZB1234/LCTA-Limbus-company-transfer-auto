@@ -941,27 +941,27 @@ class TestUpdateConfigBatch:
 
 
 class TestCheckShow:
-    """check_show 版本号归一化：'v5.0.0' 与 '5.0.0' 视为相同，避免首启误弹。"""
+    """check_show 版本号归一化：'v5.0.1' 与 '5.0.1' 视为相同，避免首启误弹。"""
 
     @patch("webui.app_api.core.ConfigManager")
-    @patch.dict(os.environ, {"__version__": "5.0.0"}, clear=False)
+    @patch.dict(os.environ, {"__version__": "5.0.1"}, clear=False)
     def test_v_prefixed_last_version_does_not_show_update(self, mock_cm):
         api = _make_api()
         instance = mock_cm.return_value
-        instance.get.return_value = "v5.0.0"
+        instance.get.return_value = "v5.0.1"
         result = api.check_show()
         assert result == {"show": False}
         instance.set.assert_not_called()
 
     @patch("webui.app_api.core.ConfigManager")
-    @patch.dict(os.environ, {"__version__": "5.0.0"}, clear=False)
+    @patch.dict(os.environ, {"__version__": "5.0.1"}, clear=False)
     def test_older_version_shows_update(self, mock_cm):
         api = _make_api()
         instance = mock_cm.return_value
         instance.get.return_value = "v4.9.0"
         result = api.check_show()
         assert result["show"] is True
-        instance.set.assert_called_once_with("last_version", "5.0.0")
+        instance.set.assert_called_once_with("last_version", "5.0.1")
 
 
 class TestEditorWindowsCleanup:

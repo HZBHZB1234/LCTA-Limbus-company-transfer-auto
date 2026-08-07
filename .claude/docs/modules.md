@@ -69,7 +69,7 @@
 | `sections/preload.js` | Lazy section loader: preloads only dashboard at startup, fetches others on first navigation via `loadSection()`; `onSectionLoaded()` initializes the embedded resource updater and other per-section controllers |
 | `sections/*.html` | 19 individual section HTML fragments, including `resource-updater.html` with read-only shared game path (set in 设置 page), update scope, download strategy, progress, actions, logs, and a Launcher integration intro card (switch + detailed settings on launcher-config page) |
 | `guide/*.md` | 19 in-app user guide pages (one per feature tab, including the embedded resource updater) |
-| `assets/update.md` | Release changelog (v5.0.0+) |
+| `assets/update.md` | Release changelog (v5.0.1+) |
 
 ### webui/app_api/ — LCTA_API 功能域 mixin
 

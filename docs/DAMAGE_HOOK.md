@@ -30,8 +30,9 @@
 │    - 缓存命中（哈希一致）→ 直接用，不发网络请求         │
 │    - 失效（哈希变化）→ 拉 API → 校验 → 写缓存           │
 │      · API 无新版 → 保留旧缓存 + stale 降级注入          │
-│  apply(): 写共享内存 LCTA_DamageHook_Config (196B)     │
+│  apply(): 写共享内存 LCTA_DamageHook_Config (16584B)   │
 │  inject()/eject()/get_status()/refresh_offsets()       │
+│  日志抽取线程：共享内存环形缓冲 → LogManager 落盘       │
 └───────────────┬───────────────────────────────────────┘
                 │ LoadLibraryW（远程线程）
 ┌───────────────▼───────────────────────────────────────┐
@@ -41,10 +42,13 @@
 │  retry_requested=1 → 摘除旧钩 → 按新偏移重装            │
 │  状态回写：gameassembly_found/verified/installed/      │
 │           last_error/log_count/last_log                │
+│  日志开关：伤害事件写入环形缓冲 log_ring（128×128B）    │
 └───────────────────────────────────────────────────────┘
 ```
 
-共享内存 `DH_CONFIG` 结构（C/Python ctypes 一一对应，196 字节）：`magic("DHGD") | enabled | log | retry_requested | multiplier(float) | rva_take_attack | rva_opponent_faction | prologue[16] | gameassembly_found | verified | installed | last_error | log_count | last_log[128] | pad`
+共享内存 `DH_CONFIG` 结构（C/Python ctypes 一一对应，16584 字节）：`magic("DHGD") | enabled | log | retry_requested | multiplier(float) | rva_take_attack | rva_opponent_faction | prologue[16] | gameassembly_found | verified | installed | last_error | log_count | last_log[128] | log_head | log_ring[128][128] | pad`
+
+**伤害日志流程**：开启 `damage_hook_log` 后，DLL 在每次伤害倍率实际生效（`result != before`）时把 `target=... attacker=... crit=... mul X -> X` 写入共享内存环形缓冲（先写条目再 `InterlockedIncrement` log_head，槽位 = head % 128，head 单调递增）；Python 端后台抽取线程（0.5s 间隔，共享内存创建时启动、`close()` 停止）按 `log_count` 增量读取新条目并经 `LogManager.log()` 逐条写入本地日志 `logs/app.log`（与「日志」页同源）。增量超过容量时中间条目被覆盖，记一条丢弃警告；`apply()` 重写共享内存使计数回 0，抽取端自动按重置处理。
 
 ---
 
@@ -92,7 +96,7 @@
 
 ## 5. 配置项
 
-`launcher.work.damage_hook`（bool，Launcher 启动时自动注入）/ `damage_hook_multiplier`（str，默认 "3.0"，钳制 [0.1, 1000]）/ `damage_hook_log`（bool，伤害日志）/ `damage_hook_api`（str，偏移 API 地址）；`damage_hook.disclaimer_accepted`（风险须知同意持久化，RiskGate 统一管理）。
+`launcher.work.damage_hook`（bool，Launcher 启动时自动注入）/ `damage_hook_multiplier`（str，默认 "3.0"，钳制 [0.1, 1000]）/ `damage_hook_log`（bool，伤害日志：DLL 写共享内存环形缓冲 → Python 抽取线程经 LogManager 落盘 `logs/app.log`，页面"最近日志"仅显示最新一条）/ `damage_hook_api`（str，偏移 API 地址）；`damage_hook.disclaimer_accepted`（风险须知同意持久化，RiskGate 统一管理）。
 
 ---
 
@@ -123,7 +127,7 @@ powershell -ExecutionPolicy Bypass -File hooks\build.ps1   :: 独立编译 hooks
 | 1 | Launcher 勾选「启用伤害倍率」启动游戏 | 日志出现 `伤害倍率 hook 已注入 (PID: ...)` |
 | 2 | WebUI 伤害倍率页状态 | detour 状态 `● 已安装`；偏移来源 缓存/API |
 | 3 | 进入战斗 | 敌人受到伤害 ≈ 原值 × 倍率；我方不受影响 |
-| 4 | 勾选日志并战斗 | 页面"最近日志"出现 `target=... crit=... mul X -> X` |
+| 4 | 勾选日志并战斗 | 页面"最近日志"出现 `target=... crit=... mul X -> X`；`logs/app.log` 逐条记录，`grep 伤害倍率 logs/app.log` 可查 |
 | 5 | 游戏更新后 | 状态显示偏移过期 → 自动重拉；或手动点「立即刷新偏移」 |
 
 ## 8. 反作弊注意事项

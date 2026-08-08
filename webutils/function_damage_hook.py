@@ -25,7 +25,8 @@ https://web.lcta.top/damage_hook.json，可用 launcher.work.damage_hook_api
 配置项（launcher.work.*）：
     damage_hook               bool   是否在 Launcher 启动时注入
     damage_hook_multiplier    str    伤害倍率（默认 3.0，钳制 [0.1, 1000]）
-    damage_hook_log           bool   伤害事件日志开关（回写共享内存环形缓冲）
+    damage_hook_log           bool   伤害事件日志开关（DLL 写入共享内存环形缓冲，
+                                     后台线程增量抽取后经 LogManager 落盘 logs/app.log）
     damage_hook_api           str    偏移 JSON API 地址
 """
 
@@ -49,7 +50,8 @@ logger = logging.getLogger(__name__)
 TARGET_PROCESS = "LimbusCompany.exe"
 MAP_NAME = "Local\\LCTA_DamageHook_Config"
 DH_MAGIC = 0x44484744
-CONFIG_SIZE = 196  # 与 C 端 DH_CONFIG 结构大小一致
+LOG_RING_CAP = 128  # 与 C 端 DH_LOG_RING_CAP 一致（2 的幂）
+LOG_RING_INTERVAL = 0.5  # 伤害日志抽取线程轮询间隔（秒）
 
 DEFAULT_API_URL = "https://web.lcta.top/damage_hook.json"
 MULTIPLIER_MIN = 0.1
@@ -91,7 +93,7 @@ class PROCESSENTRY32W(ctypes.Structure):
 
 
 class DHConfig(ctypes.Structure):
-    """与 hooks/damage_hook.c 的 DH_CONFIG 一一对应（自然对齐，196 字节）。"""
+    """与 hooks/damage_hook.c 的 DH_CONFIG 一一对应（自然对齐，16584 字节）。"""
 
     _fields_ = [
         ("magic", ctypes.c_int32),
@@ -108,8 +110,13 @@ class DHConfig(ctypes.Structure):
         ("last_error", ctypes.c_int32),
         ("log_count", ctypes.c_int32),
         ("last_log", ctypes.c_char * 128),
+        ("log_head", ctypes.c_int32),
+        ("log_ring", (ctypes.c_char * 128) * LOG_RING_CAP),
         ("_pad", ctypes.c_int32),
     ]
+
+
+CONFIG_SIZE = ctypes.sizeof(DHConfig)  # 16584，与 C 端 DH_CONFIG 结构大小一致
 
 
 _kernel32 = ctypes.windll.kernel32
@@ -235,6 +242,44 @@ def build_config(offsets: Dict, multiplier: float, enabled: bool, log: bool) -> 
     return cfg
 
 
+def _decode_log_entry(raw: bytes) -> str:
+    """把环形缓冲里的一条日志清洗为可读字符串（NUL 截断 + 非法字节丢弃）。"""
+    return raw.split(b"\x00", 1)[0].decode("utf-8", "ignore").strip()
+
+
+def drain_new_log_entries(cfg: DHConfig, last_count: int) -> Dict:
+    """从共享内存环形缓冲中抽取自 last_count 以来的新伤害日志条目。
+
+    返回 {"entries": [str, ...], "count": 新总计数, "dropped": 因缓冲溢出被
+    覆盖丢弃的条数}：
+    - count < last_count（共享内存被重写/重建）→ 视作重置，只抽取当前剩余。
+    - 增量超过容量 → 中间条目已被覆盖，返回容量内的最新条目并计 dropped。
+    - 槽位 = log_head % CAP，head 单调递增，条目先写后增 head，无半条。
+    """
+    count = int(cfg.log_count)
+    head = int(cfg.log_head)
+    if count < 0 or head < 0:
+        return {"entries": [], "count": count if count >= 0 else 0,
+                "dropped": 0}
+    if count < last_count or last_count < 0:
+        last_count = 0
+    new = count - last_count
+    dropped = 0
+    if new <= 0:
+        return {"entries": [], "count": count, "dropped": 0}
+    if new > LOG_RING_CAP:
+        dropped = new - LOG_RING_CAP
+        new = LOG_RING_CAP
+    start = head - new
+    entries = []
+    for i in range(new):
+        raw = bytes(cfg.log_ring[(start + i) % LOG_RING_CAP])
+        text = _decode_log_entry(raw)
+        if text:
+            entries.append(text)
+    return {"entries": entries, "count": count, "dropped": dropped}
+
+
 # ---------------------------------------------------------------------------
 # 缓存路径 / 本地指纹
 # ---------------------------------------------------------------------------
@@ -330,6 +375,11 @@ class DamageHookManager:
     _cached_pid: Optional[int] = None
     _offsets: Optional[Dict] = None      # 最近一次 resolve 结果（含 source/stale）
     _offsets_lock = threading.Lock()
+
+    # 伤害日志抽取线程：DLL 写共享内存环形缓冲 → 后台线程增量抽取 → LogManager 落盘
+    _drain_thread: Optional[threading.Thread] = None
+    _drain_stop: Optional[threading.Event] = None
+    _drained_count: int = 0
 
     # ---- 路径 / 进程检测 ----
 
@@ -519,6 +569,7 @@ class DamageHookManager:
                 return False
             cls._map_handle = handle
             cls._map_view = view
+            cls._start_drain_thread()
             return True
 
     @classmethod
@@ -577,6 +628,55 @@ class DamageHookManager:
             "multiplier": multiplier,
             "retry_requested": bool(retry),
         }
+
+    # ---- 伤害日志抽取（共享内存环形缓冲 → LogManager 落盘 logs/app.log） ----
+
+    @classmethod
+    def _start_drain_thread(cls) -> None:
+        """启动后台抽取线程（幂等）。DLL 写环形缓冲后逐条写入本地日志。"""
+        if cls._drain_thread is not None and cls._drain_thread.is_alive():
+            return
+        cls._drain_stop = threading.Event()  # 每代线程新建事件，避免复用已置位事件
+        cls._drained_count = 0
+        thread = threading.Thread(
+            target=cls._drain_loop, name="damage-hook-log-drain", daemon=True
+        )
+        thread.start()
+        cls._drain_thread = thread
+
+    @classmethod
+    def _drain_loop(cls) -> None:
+        """轮询共享内存并抽取新日志条目；共享内存关闭或 stop 事件置位时退出。"""
+        stop = cls._drain_stop
+        while stop is None or not stop.is_set():
+            try:
+                cls._drain_and_log()
+            except Exception as e:
+                _log_manager.log_error(e)
+            stop.wait(LOG_RING_INTERVAL)
+
+    @classmethod
+    def _drain_and_log(cls) -> None:
+        """抽取自上次以来的新日志条目并经 LogManager 写入本地日志。
+
+        与 close() 的共享内存释放互斥：读取在 _map_lock 内完成（拷贝出 cfg
+        副本后再处理日志），避免 UnmapViewOfFile 与 memmove 竞争。
+        """
+        with cls._map_lock:
+            if cls._map_view is None:
+                return
+            cfg = DHConfig()
+            ctypes.memmove(ctypes.byref(cfg), cls._map_view, CONFIG_SIZE)
+        if cfg.magic != DH_MAGIC:
+            return
+        result = drain_new_log_entries(cfg, cls._drained_count)
+        cls._drained_count = result["count"]
+        for entry in result["entries"]:
+            _log_manager.log(f"伤害倍率: {entry}")
+        if result["dropped"]:
+            _log_manager.log(
+                f"伤害倍率: 有 {result['dropped']} 条伤害日志因缓冲溢出被覆盖丢弃"
+            )
 
     # ---- 注入 / 弹出 ----
 
@@ -715,11 +815,22 @@ class DamageHookManager:
 
     @classmethod
     def close(cls):
-        """弹出 DLL 并释放共享内存映射。"""
+        """弹出 DLL 并释放共享内存映射（同时停止日志抽取线程并冲刷剩余条目）。"""
         try:
             cls.eject()
         except Exception as e:
             _log_manager.log_error(e)
+        # 冲刷剩余日志条目后再释放共享内存
+        try:
+            cls._drain_and_log()
+        except Exception as e:
+            _log_manager.log_error(e)
+        stop = cls._drain_stop
+        if stop is not None:
+            stop.set()
+        if cls._drain_thread is not None:
+            cls._drain_thread.join(timeout=LOG_RING_INTERVAL + 1)
+            cls._drain_thread = None
         with cls._map_lock:
             if cls._map_view:
                 _kernel32.UnmapViewOfFile(cls._map_view)

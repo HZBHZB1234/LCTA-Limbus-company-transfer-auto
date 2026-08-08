@@ -33,6 +33,8 @@
 #define DH_MAP_NAME     L"Local\\LCTA_DamageHook_Config"
 #define DH_POLL_MS      300
 #define DH_GA_TIMEOUT_MS 60000               /* 等待 GameAssembly.dll 上限 */
+#define DH_LOG_RING_CAP 128                  /* 伤害日志环形缓冲容量（2 的幂） */
+#define DH_LOG_LINE_MAX 127                  /* 单条日志最大字节（含 NUL） */
 
 /* UNIT_FACTION.PLAYER == 0（dump.cs TypeDefIndex 16970） */
 #define UNIT_FACTION_PLAYER 0
@@ -47,7 +49,7 @@
 #define DH_ERR_MH_ENABLE        6
 
 /* 与 webutils/function_damage_hook.py 中 DHConfig（ctypes）保持字段一一对应，
- * 自然对齐，共 196 字节。 */
+ * 自然对齐，共 16584 字节。 */
 typedef struct _DH_CONFIG {
     volatile LONG        magic;
     volatile LONG        enabled;            /* 0/1 */
@@ -61,8 +63,10 @@ typedef struct _DH_CONFIG {
     volatile LONG        verified;           /* prologue 自检是否通过 */
     volatile LONG        installed;          /* detour 是否已安装 */
     volatile LONG        last_error;         /* DH_ERR_* */
-    volatile LONG        log_count;          /* 已记录伤害事件数 */
-    char                 last_log[128];      /* 最近一条伤害日志 */
+    volatile LONG        log_count;          /* 已记录伤害事件总数（单调递增） */
+    char                 last_log[128];      /* 最近一条伤害日志（UI 展示用） */
+    volatile LONG        log_head;           /* 环形缓冲写指针（单调递增，槽位=head%CAP） */
+    char                 log_ring[DH_LOG_RING_CAP][DH_LOG_LINE_MAX + 1]; /* 伤害日志环形缓冲 */
     LONG                 _pad;
 } DH_CONFIG;
 
@@ -101,6 +105,7 @@ static float __fastcall hk_GetTakeAttackDmgMultiplier(
 
     if (cfg && cfg->log && result != before) {
         char line[96];
+        LONG slot;
         int n = _snprintf(line, sizeof(line) - 1,
                           "target=%p attacker=%p crit=%d mul %.3f -> %.3f",
                           self, attacker, isCritical ? 1 : 0,
@@ -110,6 +115,11 @@ static float __fastcall hk_GetTakeAttackDmgMultiplier(
         line[n] = '\0';
         cfg->log_count++;
         memcpy((char *)cfg->last_log, line, (size_t)n + 1);
+        /* 环形缓冲：先写条目再原子递增 head（head 单调递增，槽位=head%CAP），
+         * Python 端可安全按 [head-new, head) 增量抽取，不会读到半条。 */
+        slot = cfg->log_head & (DH_LOG_RING_CAP - 1);
+        memcpy(cfg->log_ring[slot], line, (size_t)n + 1);
+        InterlockedIncrement(&cfg->log_head);
     }
 
     return result;

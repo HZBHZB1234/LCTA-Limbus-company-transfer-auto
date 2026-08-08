@@ -3,10 +3,11 @@ tests/test_damage_hook.py
 伤害倍率 Hook 模块单元测试。
 
 覆盖：
-- DHConfig 结构大小/字段（与 C 端 DH_CONFIG 对齐，共 196 字节）
+- DHConfig 结构大小/字段（与 C 端 DH_CONFIG 对齐，共 16584 字节）
 - parse_multiplier 钳制 [0.1, 1000] 与非法输入回退
 - parse_prologue_bytes / validate_payload 校验
 - build_config 偏移 → 结构字段映射
+- drain_new_log_entries 环形缓冲增量抽取（回绕/溢出丢弃/重置清洗）
 - resolve_offsets 缓存命中 / API 刷新 / 游戏更新后自动失效（stale 降级）
 - DamageHookManager.apply() 写入共享内存后 get_status() 可读回
 """
@@ -26,12 +27,14 @@ from globalManagers.ConfigManager import ConfigManager
 from webutils.function_damage_hook import (
     DHConfig,
     DH_MAGIC,
+    LOG_RING_CAP,
     MULTIPLIER_MIN,
     MULTIPLIER_MAX,
     parse_multiplier,
     parse_prologue_bytes,
     validate_payload,
     build_config,
+    drain_new_log_entries,
     DamageHookManager,
     offsets_cache_path,
 )
@@ -47,10 +50,10 @@ OFFSETS_2026_08 = {
 
 
 class TestConfigStruct:
-    """DHConfig 必须是 196 字节、与 C 端字段一一对应。"""
+    """DHConfig 必须是 16584 字节、与 C 端字段一一对应。"""
 
-    def test_size_is_196(self):
-        assert ctypes.sizeof(DHConfig) == 196
+    def test_size_is_16584(self):
+        assert ctypes.sizeof(DHConfig) == 16584
 
     def test_magic_roundtrip(self):
         cfg = DHConfig()
@@ -69,6 +72,12 @@ class TestConfigStruct:
         assert cfg.multiplier == pytest.approx(3.0)
         cfg.rva_take_attack = 17105360
         assert cfg.rva_take_attack == 17105360
+
+    def test_log_ring_layout(self):
+        """log_head 偏移在 last_log 之后；环形缓冲为 CAP×128 字节。"""
+        assert DHConfig.log_head.offset == DHConfig.last_log.offset + 128
+        row = next(t for t in DHConfig._fields_ if t[0] == "log_ring")[1]
+        assert ctypes.sizeof(row) == LOG_RING_CAP * 128
 
 
 class TestParseMultiplier:
@@ -164,6 +173,94 @@ class TestBuildConfig:
         cfg = build_config(OFFSETS_2026_08, 3.0, False, False)
         assert cfg.enabled == 0
         assert cfg.log == 0
+
+
+def _fill_ring(cfg, entries, base=0):
+    """按 C 端语义写入环形缓冲：槽位 = (base + i) % CAP，head/count 单调递增。"""
+    cfg.log_head = base
+    cfg.log_count = base
+    for i, entry in enumerate(entries):
+        raw = entry.encode("utf-8")[:127]
+        slot = (base + i) % LOG_RING_CAP
+        cfg.log_ring[slot][: len(raw)] = raw
+    cfg.log_count = base + len(entries)
+    cfg.log_head = base + len(entries)
+
+
+class TestDrainLogEntries:
+    """drain_new_log_entries：按 log_count 增量从环形缓冲抽取新日志。"""
+
+    def test_no_new_entries(self):
+        cfg = DHConfig()
+        cfg.magic = DH_MAGIC
+        _fill_ring(cfg, ["a", "b", "c"], base=0)
+        result = drain_new_log_entries(cfg, 3)
+        assert result == {"entries": [], "count": 3, "dropped": 0}
+
+    def test_partial_drain_keeps_order(self):
+        cfg = DHConfig()
+        cfg.magic = DH_MAGIC
+        _fill_ring(cfg, ["first", "second", "third", "fourth"], base=0)
+        result = drain_new_log_entries(cfg, 2)
+        assert result["entries"] == ["third", "fourth"]
+        assert result["count"] == 4
+        assert result["dropped"] == 0
+
+    def test_wraparound_keeps_order(self):
+        cfg = DHConfig()
+        cfg.magic = DH_MAGIC
+        _fill_ring(cfg, ["e127", "e128", "e129"], base=127)
+        result = drain_new_log_entries(cfg, 127)
+        # 槽位回绕：e127 在 slot 127，e128 在 slot 0，e129 在 slot 1
+        assert result["entries"] == ["e127", "e128", "e129"]
+        assert result["dropped"] == 0
+
+    def test_overflow_reports_dropped_and_keeps_latest(self):
+        cfg = DHConfig()
+        cfg.magic = DH_MAGIC
+        _fill_ring(cfg, [f"e{i}" for i in range(LOG_RING_CAP + 10)], base=0)
+        result = drain_new_log_entries(cfg, 0)
+        assert result["count"] == LOG_RING_CAP + 10
+        assert result["dropped"] == 10
+        assert len(result["entries"]) == LOG_RING_CAP
+        assert result["entries"][-1] == f"e{LOG_RING_CAP + 9}"
+
+    def test_count_reset_treated_as_full_drain(self):
+        """共享内存被 apply() 重写（count 回 0）后，last_count 应重置。"""
+        cfg = DHConfig()
+        cfg.magic = DH_MAGIC
+        _fill_ring(cfg, ["a", "b"], base=0)
+        result = drain_new_log_entries(cfg, 99)
+        assert result["entries"] == ["a", "b"]
+        assert result["count"] == 2
+        assert result["dropped"] == 0
+
+    def test_empty_entries_filtered(self):
+        cfg = DHConfig()
+        cfg.magic = DH_MAGIC
+        _fill_ring(cfg, ["keep"], base=0)
+        cfg.log_count = 3  # 模拟两条空槽（0 填充）计入计数
+        cfg.log_head = 3
+        result = drain_new_log_entries(cfg, 0)
+        assert result["entries"] == ["keep"]
+        assert result["count"] == 3
+
+    def test_nul_truncation_and_bad_bytes(self):
+        cfg = DHConfig()
+        cfg.magic = DH_MAGIC
+        raw = b"target=OK\x00\xff\xfe"
+        cfg.log_ring[0][: len(raw)] = raw
+        cfg.log_count = 1
+        cfg.log_head = 1
+        result = drain_new_log_entries(cfg, 0)
+        assert result["entries"] == ["target=OK"]
+
+    def test_invalid_magic_still_parses(self):
+        """纯函数不做 magic 校验（由调用方决定），结构读取即可解析。"""
+        cfg = DHConfig()
+        _fill_ring(cfg, ["x"], base=0)
+        result = drain_new_log_entries(cfg, 0)
+        assert result["entries"] == ["x"]
 
 
 class TestOffsetsCache:

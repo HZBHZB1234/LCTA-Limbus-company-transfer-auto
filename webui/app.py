@@ -68,6 +68,7 @@ def main():
     atexit.register(api.save_config_to_file)
     atexit.register(lambda: SpeedManager.close())
     atexit.register(lambda: InputBypassManager.close())
+    atexit.register(lambda: DamageHookManager.close())
     # 设置模态窗口相关的回调
     LogManager().set_modal_callbacks(
         status_callback=api.set_modal_status,

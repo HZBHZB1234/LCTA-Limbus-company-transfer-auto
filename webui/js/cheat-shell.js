@@ -131,7 +131,7 @@ let cheatPage = {
         if (missing) missing.style.display = 'none';
         if (msg) {
             if (reason === 'invalid_key') {
-                msg.textContent = '密钥错误，请重试（密钥可通过明文碰撞分析获取或联系社区）';
+                msg.textContent = '密钥错误，请重试';
                 msg.style.color = 'var(--danger-color, #e74c3c)';
             } else {
                 msg.textContent = '';

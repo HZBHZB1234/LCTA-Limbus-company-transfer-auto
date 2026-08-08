@@ -262,13 +262,10 @@ Files: `webutils/function_input_bypass.py`, `hooks/rawinput_hook.c`, `hooks/buil
 > 新增工具只需改私有仓库：C 源 + 管理器 + registry.py 注册 + 前端卡片）。
 
 ```
-Hidden entry (page nav button hidden by default, `data-hidden-default="1"`,
-search-filtered; shown only from the debug page):
-  → webui/sections/test.html              按钮「显示作弊工具箱」→ goCheatSection(true)
-  → webui/js/modals.js                    goCheatSection(true/false) → show+click / hide
-  → webui/js/utils.js                     section switch hides the button when leaving
-                                          (goCheatSection(false)); sidebar search
-                                          never reveals data-hidden-default buttons
+Sidebar entry (常驻显示，与 speed/input-bypass 同级):
+  → webui/index.html                #cheat-btn 无 display:none/data-hidden-default，
+                                     侧边栏「常用工具」组内常驻；侧边栏搜索可命中
+  → webui/js/utils.js               导航生命周期绑定 cheatPage.init/stop
 
 Key gate (解锁门) + first-time gate (risk notice):
   → webui/js/cheat-shell.js               cheatPage 壳（init/stop 生命周期，
@@ -373,7 +370,7 @@ Status query (WebUI):
   build --src <clone> --key <clone>/keys/current.txt --out cheat_core.bin`
 - 复制到三个目录 `code/cheat_core/cheat_core.bin`
 
-Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, `scripts/cheat_encrypt.py`, `webui/app_api/cheat_core.py`（含 cheat_plugins_list/invoke）, `webui/sections/cheat.html`（密钥门）, `webui/sections/launcher-config.html`（#cheat-plugin-launcher 占位）, `webui/js/cheat-shell.js`, `webui/js/risk-gate.js`（cheat 无 launcherCheckboxId）, `launcher/game_launch.py`, `cheat_damage.json`（API 样例，公开仓库）, `tests/test_cheat_core.py`；私有仓库：`cheatcore/registry.py`（插件契约）, `cheatcore/cheat_damage_hook.py`（含 start/stop_launcher）, `hooks/cheat_damage.c`, `vendor/minhook/`, `webui/*`, `keys/current.txt`, `manifest.json`, `docs/CHEAT_TOOLBOX.md`, `tests/test_cheat_damage_hook.py`, `tests/test_registry.py`
+Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, `scripts/cheat_encrypt.py`, `webui/app_api/cheat_core.py`（含 cheat_plugins_list/invoke）, `webui/sections/cheat.html`（密钥门）, `webui/sections/launcher-config.html`（#cheat-plugin-launcher 占位）, `webui/js/cheat-shell.js`, `webui/js/risk-gate.js`（cheat 无 launcherCheckboxId）, `launcher/game_launch.py`, `tests/test_cheat_core.py`；私有仓库：`cheatcore/registry.py`（插件契约）, `cheatcore/cheat_damage_hook.py`（含 start/stop_launcher）, `hooks/cheat_damage.c`, `vendor/minhook/`, `webui/*`, `tools/gen_cheat_damage_json.py`（自动生成偏移 JSON）, `keys/current.txt`, `manifest.json`, `docs/CHEAT_TOOLBOX.md`, `tests/test_cheat_damage_hook.py`, `tests/test_registry.py`
 
 ## 7. Rule Editor — File Edit → Smart Ruleset Generation
 

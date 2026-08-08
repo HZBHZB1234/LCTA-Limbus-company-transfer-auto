@@ -213,17 +213,6 @@ function goCleanSection(DIEPLAY){
     }
 };
 
-function goCheatSection(DIEPLAY){
-    const cheatButton = document.getElementById('cheat-btn');
-    if (DIEPLAY) {
-        cheatButton.style.display = 'block';
-        cheatButton.click();
-    } 
-    else {
-        cheatButton.style.display = 'none';
-    }
-};
-
 function copySteamPath() {
     const cmdElement = document.getElementById('steam-cmd');
 

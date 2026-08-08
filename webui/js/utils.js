@@ -144,11 +144,6 @@ function initNavigation() {
                     if (sectionId !== 'clean-section') {
                         goCleanSection(false);
                     }
-
-                    // 作弊工具箱页（隐藏入口，仅从调试界面进入）离开时隐藏导航按钮
-                    if (sectionId !== 'cheat-section') {
-                        goCheatSection(false);
-                    }                    
                 }, 150);
             }
         });

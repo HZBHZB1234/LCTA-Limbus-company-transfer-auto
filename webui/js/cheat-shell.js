@@ -37,6 +37,18 @@ let cheatPage = {
             const sectionEl = document.getElementById('cheat-section');
             if (sectionEl) this._gateHtml = sectionEl.innerHTML;
         }
+        // 风险服务门控：与 speed/input-bypass 一致。未同意时显示风险须知覆盖层并
+        // 隐藏内容区（#cheat-main-content 默认 display:none），同意后由 onAccepted
+        // 恢复可见；覆盖层缺失时兜底直接显示，避免整页空白。
+        if (typeof RiskGate !== 'undefined' && RiskGate.gatePage
+                && document.querySelector('[data-risk-overlay="cheat"]')) {
+            await RiskGate.gatePage('cheat', {
+                onAccepted: () => this._showMainContent(),
+                onRejected: () => this._hideMainContent(),
+            });
+        } else {
+            this._showMainContent();
+        }
         try {
             const st = await pywebview.api.cheat_core_status();
             if (st && st.success && st.data && st.data.unlocked) {
@@ -102,6 +114,11 @@ let cheatPage = {
     },
 
     _showGate(reason) {
+        // 密钥门/缺失卡片都在 #cheat-main-content 内（默认 display:none），必须先
+        // 让父容器可见；风险覆盖层激活时保持内容隐藏（同意前只见风险须知）。
+        const overlay = document.querySelector('[data-risk-overlay="cheat"]');
+        const overlayActive = overlay && overlay.style.display !== 'none';
+        if (!overlayActive) this._showMainContent();
         const keygate = document.getElementById('cheat-core-keygate');
         const missing = document.getElementById('cheat-core-missing');
         const msg = document.getElementById('cheat-core-keygate-msg');
@@ -122,6 +139,16 @@ let cheatPage = {
             }
         }
         this._bindGateEvents();
+    },
+
+    _showMainContent() {
+        const main = document.getElementById('cheat-main-content');
+        if (main) main.style.display = '';
+    },
+
+    _hideMainContent() {
+        const main = document.getElementById('cheat-main-content');
+        if (main) main.style.display = 'none';
     },
 
     _bindGateEvents() {

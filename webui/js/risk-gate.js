@@ -30,7 +30,38 @@ const RISK_SERVICES = {
         name: '作弊工具箱',
         consentKey: 'cheat.disclaimer_accepted',
         specific: '作弊工具箱通过 MinHook 对游戏客户端进行原生 detour，修改游戏运行数值（如伤害倍率）。',
+        consentLabel: '我已阅读并同意上述使用与分发协议及风险须知，并自愿承担相关风险',
         hideUntilConsent: true, // 未同意前在 Launcher 配置页隐藏该选项，须先在源页面同意
+        // 仅作弊工具箱显示的协议章节（追加于公共风险须知之后）
+        agreementSections: [
+            {
+                title: '作者承诺',
+                items: [
+                    '不向任何非 LCTA 开发者分发作弊者工具箱及其工作流源码。',
+                    '不向任何人分发密钥数据。',
+                    '不在任何平台分发密钥数据。',
+                    '不进行任何出售密钥的行为。',
+                    '不在任何平台将作弊者工具箱的功能作为卖点介绍。',
+                ],
+            },
+            {
+                title: '使用者义务',
+                items: [
+                    '不在任何平台分发密钥数据。',
+                    '不向任何人分发密钥数据。',
+                    '不进行任何出售密钥的行为。',
+                    '不分发经过解密的 LCTA 工具箱。',
+                    '不在任何公开平台宣传作弊者工具箱的功能。',
+                ],
+            },
+            {
+                title: '服务可用性说明',
+                items: [
+                    '作弊者工具箱的功能依赖作者的在线服务支持，该服务可能随时不可用或失效，敬请谅解。',
+                    '如您具备相应技术能力并愿意参与维护，欢迎加入 QQ 交流群：1081988645。',
+                ],
+            },
+        ],
     },
 };
 
@@ -76,6 +107,11 @@ const RiskGate = {
         return RISK_SERVICES[id] || null;
     },
 
+    // 服务的同意文案：优先使用服务自身的 consentLabel，否则回退公共文案
+    _consentLabel(service) {
+        return (service && service.consentLabel) ? service.consentLabel : this.consentLabel;
+    },
+
     // 读取某服务的同意状态（API 优先，失败回退配置缓存）
     async getConsent(id) {
         const svc = this.getService(id);
@@ -113,7 +149,11 @@ const RiskGate = {
     },
 
     _disclaimerBody(service) {
-        return this._commonSections.map(section => {
+        const sections = this._commonSections.slice();
+        if (service.agreementSections && service.agreementSections.length) {
+            sections.push(...service.agreementSections);
+        }
+        return sections.map(section => {
             const items = section.title === '功能说明'
                 ? [service.specific].concat(section.items)
                 : section.items;
@@ -136,7 +176,7 @@ const RiskGate = {
                     <label class="checkbox-container">
                         <input type="checkbox" id="risk-gate-checkbox-${service.id}">
                         <span class="checkmark"></span>
-                        ${this.consentLabel}
+                        ${this._consentLabel(service)}
                     </label>
                 </div>
                 <button id="risk-gate-confirm-${service.id}" class="primary-btn">
@@ -155,7 +195,7 @@ const RiskGate = {
             <label class="checkbox-container" style="margin-top:1rem;">
                 <input type="checkbox" id="risk-gate-checkbox-${service.id}-${modalId}">
                 <span class="checkmark"></span>
-                ${this.consentLabel}
+                ${this._consentLabel(service)}
             </label>` : ''}`;
     },
 
@@ -179,7 +219,7 @@ const RiskGate = {
         if (confirmBtn) {
             confirmBtn.addEventListener('click', async () => {
                 if (checkbox && !checkbox.checked) {
-                    showMessage('提示', `请先勾选"${this.consentLabel}"`);
+                    showMessage('提示', `请先勾选"${this._consentLabel(svc)}"`);
                     return;
                 }
                 const ok = await this.acceptConsent(id);
@@ -216,7 +256,7 @@ const RiskGate = {
         document.getElementById(`risk-gate-modal-confirm-${modal.id}`).addEventListener('click', async () => {
             const checkbox = document.getElementById(`risk-gate-checkbox-${svc.id}-${modal.id}`);
             if (checkbox && !checkbox.checked) {
-                showMessage('提示', `请先勾选"${this.consentLabel}"`);
+                showMessage('提示', `请先勾选"${this._consentLabel(svc)}"`);
                 return;
             }
             const ok = await this.acceptConsent(svc.id);

@@ -129,6 +129,9 @@
 - 部分前端依赖代码引用自互联网，遵循其原有使用条款。前端依赖详细信息请查看 [InitCode.py](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/blob/main/.github/InitCode.py)
 - `CFST/cfst.exe`（CloudflareSpeedTest v2.3.5）来自 [CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest)，遵循 **[GPL-3.0 许可证](https://github.com/XIU2/CloudflareSpeedTest/blob/master/LICENSE)**。该工具以独立进程方式被调用，CDN 优选模块的主程序代码不受 GPL-3.0 约束。同目录下的 `ip.txt` 候选地址文件也来源于 CloudflareSpeedTest 项目。
 - CDN 优选功能的设计参考了 [LLC_BABEL](https://github.com/LocalizeLimbusCompany/LLC_BABEL)（MIT License, Copyright (c) 2026 ZengXiaoPi）。本项目采用 Python 独立实现，不包含 LLC_BABEL 的 .NET 代码。
+- `tools/aria2/aria2c.exe`（aria2 v1.37.0）来自 [aria2](https://github.com/aria2/aria2)，遵循 **[GPL-2.0-or-later 许可证](https://github.com/aria2/aria2/blob/master/COPYING)**。该工具以独立进程方式被调用，官方资源预下载模块的主程序代码不受 GPL-2.0-or-later 约束。随包附带的 `COPYING` 文件即其许可证文本。
+- MinHook（私有仓库 `LCTA_CheatingCore` 的 `vendor/minhook`，随作弊工具箱编译进 hook DLL）来自 [MinHook](https://github.com/TsudaKageyu/minhook)，遵循 **[BSD 3-Clause 许可证](https://github.com/TsudaKageyu/minhook/blob/master/LICENSE.txt)**。
+- **作弊者工具箱（Cheater's Toolbox，`LCTA_CheatingCore` 私有仓库）**：**No License（无许可证）**。该仓库未附带任何开源许可证，默认保留所有权利，未经作者书面许可不得复制、修改、分发或商用其代码；随包加密分发的 `cheat_core.bin` 亦遵循此约定。
 
 ### 数据许可
 - **零协会汉化包**：遵循 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) 许可。

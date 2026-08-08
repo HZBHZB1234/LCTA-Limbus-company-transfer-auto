@@ -284,7 +284,9 @@ Key gate (解锁门) + first-time gate (risk notice):
       cheat.disclaimer_accepted 时渲染覆盖层，同意后解锁页面。
       该服务标记 hideUntilConsent：同意前 Launcher 配置页的插件集成
       区整组隐藏（refreshLauncherVisibility），需先在源页面同意；
-      同意写入在 acceptConsent() 与每次进入 launcher-config 页时刷新可见性
+      同意写入在 acceptConsent() 与每次进入 launcher-config 页时刷新可见性。
+      cheat 服务额外带 agreementSections（作者承诺/使用者义务/服务可用性
+      说明，追加于公共风险须知后）与专属 consentLabel，仅作弊工具箱显示
 
 Launcher 集成（动态渲染，AGENTS 规则：开关仍只出现在 launcher-config.html）:
   → webui/sections/launcher-config.html            占位容器 #cheat-plugin-launcher

@@ -308,7 +308,7 @@ if (-not $gcc -or -not $windres) {
 
     # ---- 打包 Cheat Core（作弊工具箱，私有仓库 + XOR 加密分发） ----
     # 源码位于私有仓库 LCTA_CheatingCore（根目录克隆或 .build_cache/cheat_core 预克隆）；
-    # 扫描 hooks/*.c 逐个编译为同名 DLL 后经 tools/cheat_encrypt.py 加密打包为 cheat_core.bin。
+    # 扫描 hooks/*.c 逐个编译为同名 DLL 后经 scripts/cheat_encrypt.py 加密打包为 cheat_core.bin。
     # 新增作弊工具：在私有仓库 hooks/ 放入新 .c 源即可，本步骤自动编译打包。
     # 无克隆目录时跳过（产物不包含作弊工具箱功能）。
     $cheatSrc = "$ProjectRoot\LCTA_CheatingCore"
@@ -365,7 +365,7 @@ if (-not $gcc -or -not $windres) {
         $cheatDlls = Get-ChildItem -Path "$cheatSrc\hooks" -Filter "*.dll" -ErrorAction SilentlyContinue
         if ($cheatDlls) {
             $cheatBlob = "$CCompileCache\cheat_core.bin"
-            $encryptOut = & python "$ProjectRoot\tools\cheat_encrypt.py" build --src $cheatSrc --key "$cheatSrc\keys\current.txt" --out $cheatBlob 2>&1
+            $encryptOut = & python "$ProjectRoot\scripts\cheat_encrypt.py" build --src $cheatSrc --key "$cheatSrc\keys\current.txt" --out $cheatBlob 2>&1
             if ($LASTEXITCODE -eq 0 -and (Test-Path $cheatBlob)) {
                 Write-Host "  $encryptOut" -ForegroundColor Green
                 Write-Host "  cheat_core.bin 生成完成" -ForegroundColor Green

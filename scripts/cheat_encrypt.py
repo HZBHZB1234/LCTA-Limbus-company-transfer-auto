@@ -7,8 +7,8 @@ cheat_core.bin，随 LCTA 发布包分发。格式说明见私有仓库 README�
 
 用法::
 
-    python tools/cheat_encrypt.py build --src <私有仓库克隆目录> --key <密钥文件> --out <cheat_core.bin>
-    python tools/cheat_encrypt.py info  --in <cheat_core.bin>
+    python scripts/cheat_encrypt.py build --src <私有仓库克隆目录> --key <密钥文件> --out <cheat_core.bin>
+    python scripts/cheat_encrypt.py info  --in <cheat_core.bin>
 """
 
 import argparse

@@ -37,7 +37,7 @@ The build downloads aria2 1.37.0 from the official GitHub release, retries and r
 伤害倍率实现位于私有仓库 `LCTA_CheatingCore`（公共仓库根目录克隆或 `.build_cache/cheat_core` 预克隆，缺失时构建**跳过**该功能）。构建步骤（`build.ps1` 与 `.github/workflows/release.yml` 同步）：
 
 1. 扫描 `hooks/*.c` 逐个 gcc 编译同名 DLL（含 `vendor/minhook/`，缓存键含 minhook 源码；新增作弊工具自动编译）
-2. `python tools/cheat_encrypt.py build --src <clone> --key <clone>/keys/current.txt --out cheat_core.bin`
+2. `python scripts/cheat_encrypt.py build --src <clone> --key <clone>/keys/current.txt --out cheat_core.bin`
 3. 复制到三个产物 `code/cheat_core/cheat_core.bin`
 
 CI 通过 `secrets.LCTA_CHEAT_TOKEN`（PAT）克隆私有仓库。本地开发无需构建 blob：运行时加载器自动检测仓库根 `LCTA_CheatingCore/` 克隆（或 `LCTA_CHEAT_DEV_SRC` 环境变量），免密钥直连源码；开发前先运行 `LCTA_CheatingCore\hooks\build.ps1` 编译 DLL。密钥轮换见私有仓库 README。

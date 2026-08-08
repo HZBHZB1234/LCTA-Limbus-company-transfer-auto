@@ -7,7 +7,7 @@
 ``cheatcore`` 包，并触发插件注册（webutils/cheat_plugins.py）。未解锁前公共仓库
 只有密钥门，不包含任何实现代码。
 
-加密格式与门槛说明见私有仓库 README 与 tools/cheat_encrypt.py。错误密钥不落日志。
+加密格式与门槛说明见私有仓库 README 与 scripts/cheat_encrypt.py。错误密钥不落日志。
 """
 
 import hashlib
@@ -89,7 +89,7 @@ def runtime_dir() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Blob 解析（与 tools/cheat_encrypt.py 的 parse/decrypt 逻辑一致）
+# Blob 解析（与 scripts/cheat_encrypt.py 的 parse/decrypt 逻辑一致）
 # ---------------------------------------------------------------------------
 
 

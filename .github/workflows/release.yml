@@ -143,7 +143,7 @@ jobs:
                 -I cheat_core/vendor/minhook/include -I cheat_core/vendor/minhook/src/hde
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
-        python LCTA\tools\cheat_encrypt.py build --src cheat_core --key cheat_core/keys/current.txt --out cheat_core.bin
+        python LCTA\scripts\cheat_encrypt.py build --src cheat_core --key cheat_core/keys/current.txt --out cheat_core.bin
         $targets = @(
             "release\${{ env.APP_NAME }}\code\cheat_core",
             "release\${{ env.APP_NAME }}-Compatible\code\cheat_core",

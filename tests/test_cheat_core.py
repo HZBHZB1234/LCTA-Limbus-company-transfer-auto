@@ -3,7 +3,7 @@ tests/test_cheat_core.py
 CheatCore 加密分发 / 密钥门测试。
 
 覆盖：
-- tools/cheat_encrypt.py：build_blob / parse_blob / decrypt_blob 往返、密钥校验
+- scripts/cheat_encrypt.py：build_blob / parse_blob / decrypt_blob 往返、密钥校验
 - 门槛设计验证：repeating-key XOR 下已知明文可恢复密钥（明文碰撞分析）
 - webutils/cheat_core.py：解锁（正确/错误/过短密钥）、blob 损坏、锁定清理、
   持久化密钥自动解锁、开发模式、功能页资源读取
@@ -18,7 +18,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.cheat_encrypt import (
+from scripts.cheat_encrypt import (
     MAGIC,
     ANCHOR,
     xor,

@@ -252,7 +252,7 @@ Files: `webutils/function_input_bypass.py`, `hooks/rawinput_hook.c`, `hooks/buil
 ## 6.6 Cheat Toolbox (作弊工具箱, MinHook detour, 密钥门 + 私有分发 + 插件模型)
 
 > 实现代码全部位于**私有仓库 LCTA_CheatingCore**（根目录克隆被 gitignore 排除），
-> 构建期扫描 `hooks/*.c` 逐个编译为 DLL 后经 `tools/cheat_encrypt.py` 加密为
+> 构建期扫描 `hooks/*.c` 逐个编译为 DLL 后经 `scripts/cheat_encrypt.py` 加密为
 > `cheat_core/cheat_core.bin` 随包分发；运行期需输入解密密钥（可经已知明文
 > 碰撞分析恢复，属"门槛"而非"加密"，见私有仓库 README）。
 > 解锁后私有仓库 `cheatcore/registry.py` 以**插件描述符**自动注册（宿主
@@ -369,11 +369,11 @@ Status query (WebUI):
 构建（build.ps1 与 release.yml 同步）：
 - 源码来源：根目录 `LCTA_CheatingCore/` 克隆（CI 用 `secrets.LCTA_CHEAT_TOKEN`
   git clone 到 `cheat_core/`）；缺失则跳过（产物不含作弊工具箱功能）
-- 扫描 `hooks/*.c` 逐个 gcc 编译同名 DLL（含 vendor/minhook）→ `python tools/cheat_encrypt.py
+- 扫描 `hooks/*.c` 逐个 gcc 编译同名 DLL（含 vendor/minhook）→ `python scripts/cheat_encrypt.py
   build --src <clone> --key <clone>/keys/current.txt --out cheat_core.bin`
 - 复制到三个目录 `code/cheat_core/cheat_core.bin`
 
-Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, `tools/cheat_encrypt.py`, `webui/app_api/cheat_core.py`（含 cheat_plugins_list/invoke）, `webui/sections/cheat.html`（密钥门）, `webui/sections/launcher-config.html`（#cheat-plugin-launcher 占位）, `webui/js/cheat-shell.js`, `webui/js/risk-gate.js`（cheat 无 launcherCheckboxId）, `launcher/game_launch.py`, `cheat_damage.json`（API 样例，公开仓库）, `tests/test_cheat_core.py`；私有仓库：`cheatcore/registry.py`（插件契约）, `cheatcore/cheat_damage_hook.py`（含 start/stop_launcher）, `hooks/cheat_damage.c`, `vendor/minhook/`, `webui/*`, `keys/current.txt`, `manifest.json`, `docs/CHEAT_TOOLBOX.md`, `tests/test_cheat_damage_hook.py`, `tests/test_registry.py`
+Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, `scripts/cheat_encrypt.py`, `webui/app_api/cheat_core.py`（含 cheat_plugins_list/invoke）, `webui/sections/cheat.html`（密钥门）, `webui/sections/launcher-config.html`（#cheat-plugin-launcher 占位）, `webui/js/cheat-shell.js`, `webui/js/risk-gate.js`（cheat 无 launcherCheckboxId）, `launcher/game_launch.py`, `cheat_damage.json`（API 样例，公开仓库）, `tests/test_cheat_core.py`；私有仓库：`cheatcore/registry.py`（插件契约）, `cheatcore/cheat_damage_hook.py`（含 start/stop_launcher）, `hooks/cheat_damage.c`, `vendor/minhook/`, `webui/*`, `keys/current.txt`, `manifest.json`, `docs/CHEAT_TOOLBOX.md`, `tests/test_cheat_damage_hook.py`, `tests/test_registry.py`
 
 ## 7. Rule Editor — File Edit → Smart Ruleset Generation
 

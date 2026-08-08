@@ -16,7 +16,7 @@
 | `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
 | `hooks/` | C source for native DLLs | `rawinput_hook.c` (input bypass), compiled to `rawinput_hook.dll` by build.ps1 / CI; 作弊工具箱的 hook DLL 源码已迁往私有仓库 LCTA_CheatingCore（`hooks/*.c` 扫描编译，见 `cheat_core/`） |
 | `vendor/minhook/` | 空（MinHook 已随作弊工具箱功能迁往私有仓库） | — |
-| `tools/` | 构建期工具 | `cheat_encrypt.py` — CheatCore 加密器（私有仓库功能文件 → `cheat_core.bin`，格式见私有仓库 README） |
+| `scripts/` | 单文件脚本 | `cheat_encrypt.py` — CheatCore 加密器（私有仓库功能文件 → `cheat_core.bin`，格式见私有仓库 README） |
 | `cheat_core/` | 运行期加密数据（构建产物，不入库） | `cheat_core.bin` — 加密的作弊工具箱功能包，由 webutils/cheat_core.py 在用户输入密钥后解密加载 |
 | `fancy/` | User rule sets (one JSON file per ruleset) | auto-created |
 | `tests/` | Pytest test suite | 27 Python files |

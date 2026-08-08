@@ -5,16 +5,9 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 
-try:
-    import clr
-except Exception:
-    try:
-        import os
-        os.environ['PYTHONNET_RUNTIME'] = 'coreclr'
-        import clr
-    except Exception:
-        os.environ['PYTHONNET_RUNTIME'] = 'mono'
-        import clr
+from webutils.clr_bootstrap import ensure_clr
+
+clr = ensure_clr()
 
 clr.AddReference('System.Windows.Forms')
 clr.AddReference('System.Drawing')

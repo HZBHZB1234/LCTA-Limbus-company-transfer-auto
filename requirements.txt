@@ -1,6 +1,8 @@
 requests
 jsonpatch
-pywebview
+pywebview==6.2.1
+pythonnet==3.0.5
+clr_loader==0.2.10
 Brotli==1.1.0
 etcpak==0.9.8 # 0.9.9 crashes when trying to improt dll
 fsspec==2024.9.0

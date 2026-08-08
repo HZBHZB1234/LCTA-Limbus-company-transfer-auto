@@ -1,7 +1,6 @@
 import ctypes
 import webbrowser
 import webview
-import os
 import sys
 
 class customStdout:
@@ -24,24 +23,13 @@ class customStdout:
 
 def evalRuntime():
     try:
-        try:
-            import clr
-            print('clr导入成功，使用netfx')
-        except Exception as e:
-            print(f'clr使用netfx导入失败: {e}')
-            try:
-                os.environ['PYTHONNET_RUNTIME']='coreclr'
-                import clr
-                print('clr导入成功，使用coreclr')
-            except Exception as e:
-                print(f'clr使用coreclr导入失败: {e}')
-                os.environ['PYTHONNET_RUNTIME']='mono'
-                import clr
-                print('clr导入成功，使用mono')
-    except:
-        print('clr导入失败')
-        webbrowser.open('https://download.mono-project.com/archive/6.12.0/windows-installer/mono-6.12.0.206-x64-0.msi')
+        from webutils.clr_bootstrap import ensure_clr
+        ensure_clr()
+        print('clr导入成功，使用netfx')
+    except Exception as e:
+        print(f'clr导入失败: {e}')
         return True
+    return False
 
 def evalHtml():
     out = customStdout()

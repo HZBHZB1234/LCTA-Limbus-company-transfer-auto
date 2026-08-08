@@ -109,6 +109,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | File | Feature | Key Points |
 |------|---------|------------|
 | `__init__.py` | Public API surface | Re-exports all feature functions consumed by `webui/app.py` |
+| `clr_bootstrap.py` | pythonnet/clr_loader 引导 | `ensure_clr()` 强制 netfx 并导入 clr:预检 `Python.Runtime.dll` 存在性、clr_loader 版本(<0.2.8 警告)、.NET Framework >=4.7.2;失败时用 PowerShell 反射探针暴露 clr_loader 吞掉的真实异常并给出修复指引,不再自动回退 coreclr/mono。被 `start_webui.py`、`launcher/gui_progress.py`、`launcher/speed_hotkey.py`、`scripts/test_environment.py` 共用 |
 | `utils/` | Shared utility package | `io.py` zip/unzip, hashing, 7z integration; `net.py` downloads; `shell.py` Windows Shell API; `font.py` font caching; `misc.py` steam command/icon; facade re-exported via `utils/__init__.py` |
 | `load.py` | Config & game detection | Config loading/validation, Steam registry game path detection |
 | `update.py` | Self-updater | GitHub Releases-based auto-update |

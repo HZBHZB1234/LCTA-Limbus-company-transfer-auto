@@ -130,16 +130,9 @@ def _show_speed_slider_window():
     """弹出 WinForms 倍率选择窗口（置顶、不抢夺焦点）。"""
     from webutils.function_speed import SpeedManager
 
-    # 初始化 clr（参照 start_webui.py 的回退链）
-    try:
-        import clr
-    except Exception:
-        try:
-            os.environ['PYTHONNET_RUNTIME'] = 'coreclr'
-            import clr
-        except Exception:
-            os.environ['PYTHONNET_RUNTIME'] = 'mono'
-            import clr
+    # 初始化 clr(固定使用 netfx,失败会给出明确指引,不再回退 coreclr)
+    from webutils.clr_bootstrap import ensure_clr
+    clr = ensure_clr()
 
     clr.AddReference('System.Windows.Forms')
     clr.AddReference('System.Drawing')

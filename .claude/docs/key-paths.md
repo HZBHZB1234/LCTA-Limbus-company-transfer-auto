@@ -249,53 +249,101 @@ Status query (WebUI / status bar):
 
 Files: `webutils/function_input_bypass.py`, `hooks/rawinput_hook.c`, `hooks/build.ps1`, `build.ps1`, `.github/workflows/release.yml`, `tests/test_input_bypass.py`
 
-## 6.6 Damage Hook (伤害倍率, MinHook detour)
+## 6.6 Cheat Toolbox (作弊工具箱, MinHook detour, 密钥门 + 私有分发 + 插件模型)
+
+> 实现代码全部位于**私有仓库 LCTA_CheatingCore**（根目录克隆被 gitignore 排除），
+> 构建期扫描 `hooks/*.c` 逐个编译为 DLL 后经 `tools/cheat_encrypt.py` 加密为
+> `cheat_core/cheat_core.bin` 随包分发；运行期需输入解密密钥（可经已知明文
+> 碰撞分析恢复，属"门槛"而非"加密"，见私有仓库 README）。
+> 解锁后私有仓库 `cheatcore/registry.py` 以**插件描述符**自动注册（宿主
+> `webutils/cheat_plugins.py` 读取），**主仓库不感知具体工具**（工具名/API/
+> 配置键/Launcher 元数据全部来自注册表）。工具箱页面 = `webui/sections/cheat.html`
+> + `webui/js/cheat.js`（单页多工具卡片；当前含伤害倍率，命名空间 `cheat-damage-*`；
+> 新增工具只需改私有仓库：C 源 + 管理器 + registry.py 注册 + 前端卡片）。
 
 ```
 Hidden entry (page nav button hidden by default, `data-hidden-default="1"`,
 search-filtered; shown only from the debug page):
-  → webui/sections/test.html              按钮「显示伤害倍率页面」→ goDamageHookSection(true)
-  → webui/js/modals.js                    goDamageHookSection(true/false) — show+click / hide
+  → webui/sections/test.html              按钮「显示作弊工具箱」→ goCheatSection(true)
+  → webui/js/modals.js                    goCheatSection(true/false) → show+click / hide
   → webui/js/utils.js                     section switch hides the button when leaving
-                                          (goDamageHookSection(false)); sidebar search
+                                          (goCheatSection(false)); sidebar search
                                           never reveals data-hidden-default buttons
 
-First-time gate (risk notice):
-  → webui/js/risk-gate.js          RiskGate.gatePage('damage_hook') — 未同意
-      damage_hook.disclaimer_accepted 时渲染覆盖层，同意后解锁页面。
-      该服务标记 hideUntilConsent：同意前 Launcher 配置页的「启用伤害倍率」
-      选项整组隐藏（refreshLauncherVisibility），需先在源页面同意；
-      同意写入后 acceptConsent() 与每次进入 launcher-config 页时刷新可见性
+Key gate (解锁门) + first-time gate (risk notice):
+  → webui/js/cheat-shell.js               cheatPage 壳（init/stop 生命周期，
+                                          utils.js 导航绑定）：cheat_core_status() 查状态
+                                          → 未解锁显示密钥门；已解锁/自动解锁后经
+                                          cheat_plugins_list() 遍历插件，逐个
+                                          cheat_core_get_section_html/js(webui.*) 拉取
+                                          解密 HTML/JS，new Function 注入后调
+                                          initCheatPage()（解密 JS 挂到 window）；
+                                          另暴露 cheatCoreLockAndReload()（「锁定」按钮）；
+                                          renderLauncherPlugins() 按注册表动态渲染
+                                          Launcher 配置页的插件集成开关
+  → webui/sections/cheat.html             公共版本 = 密钥门 UI（密钥输入 + 解锁按钮 +
+                                          功能数据缺失提示）；完整工具箱 UI 来自私有仓库
+  → webui/js/risk-gate.js          RiskGate.gatePage('cheat') → 未同意
+      cheat.disclaimer_accepted 时渲染覆盖层，同意后解锁页面。
+      该服务标记 hideUntilConsent：同意前 Launcher 配置页的插件集成
+      区整组隐藏（refreshLauncherVisibility），需先在源页面同意；
+      同意写入在 acceptConsent() 与每次进入 launcher-config 页时刷新可见性
 
-User toggles damage hook on Launcher config page
-  → webui/sections/launcher-config.html              checkbox (launcher.work.damage_hook) +
-                                                      goAndShow('launcher-config');
-                                                      未同意前该选项隐藏（data-risk-service=damage_hook）
-  → webui/js/damage-hook.js                          倍率/日志/API 地址 → update_config_batch
-  → webui/sections/damage-hook.html                  倍率(0.1-1000)、日志开关（记录伤害日志）、
-                                                      偏移 API 地址、注入/弹出/立即刷新偏移 按钮
+Launcher 集成（动态渲染，AGENTS 规则：开关仍只出现在 launcher-config.html）:
+  → webui/sections/launcher-config.html            占位容器 #cheat-plugin-launcher
+                                                      （data-risk-service=cheat）
+  → webui/js/cheat-shell.js renderLauncherPlugins() 按插件 launcher 元数据生成
+                                                      checkbox（enabled_key/checkbox_id/
+                                                      label/hint），change 时未同意就地
+                                                      RiskGate.showConsentModal；值直写
+                                                      configManager.updateConfigValues
+  → 私有仓库 webui/sections/cheat.html         倍率(0.1-1000)、日志开关、偏移 API、
+                                                      注入/弹出/立即刷新偏移、锁定按钮
+                                                      （配置经 update_config_batch 落库）
+
+Unlock (解锁链路) + 插件注册:
+  → webui/app_api/cheat_core.py CheatCoreMixin        cheat_core_status/unlock/lock/
+                                                      get_section_html/get_script_js/
+                                                      cheat_plugins_list/cheat_plugin_invoke
+  → webutils/cheat_core.py
+      ensure_unlocked()           dev 克隆存在 → 直接解锁（source=dev）；
+                                  否则 blob 缺失 → blob_missing；配置有持久化密钥
+                                  → 自动 unlock；否则 need_key
+      unlock(key)                 解析 blob → 解密 → anchor + 逐文件 SHA-256 校验
+                                  → 释放到 %LOCALAPPDATA%/LCTA/cheat-core/
+                                  → sys.path 插入 → import cheatcore（get_package）
+                                  → _reload_plugins() 触发插件注册
+      lock()                      清配置密钥 + 内存态 + 插件注册 + sys.path + 删除运行时目录
+  → webutils/cheat_plugins.py CheatPluginHost（公共仓库，替代旧门面）
+      reload()                    读 cheatcore.get_plugins() 描述符 + 播种配置默认值
+      list()                      插件摘要（id/name/webui/config/launcher）
+      invoke(action, args)        按白名单分发到插件管理器方法（未解锁/非法抛错）
+      run_launcher_phase(phase)   查 enabled_key + consent 后调 on_start/on_stop
+      close_all()                 atexit 兜底调各插件 close
 
 Launcher startup:
-  → launcher/main.py                                PHASE_RUNNING → start_damage_hook()
-  → launcher/game_launch.py start_damage_hook()     先查 launcher.work.damage_hook 与
-                                                      damage_hook.disclaimer_accepted（未同意则跳过
-                                                      并记日志），通过后后台线程等
-                                                      LimbusCompany.exe（180s）
-  → webutils/function_damage_hook.py
-      resolve_offsets()                             GameAssembly.dll SHA-256 版本锚定：
+  → launcher/main.py                                PHASE_RUNNING → start_cheat_plugins()
+  → launcher/game_launch.py start_cheat_plugins()   先 cheat_core.ensure_unlocked()（未解锁
+                                                      跳过），通过后
+                                                      CheatPluginHost.run_launcher_phase('start')
+  → CheatPluginHost → 私有仓库 cheat_damage_hook.py start_launcher()（注册表 on_start）
+      后台线程等 LimbusCompany.exe（180s）→ resolve_offsets() → apply() → inject(pid)
+  → 私有仓库 cheatcore/cheat_damage_hook.py
+      resolve_offsets()                             GameAssembly.dll SHA-256 版本锚定
         - 缓存命中（hash 一致）→ 直接用缓存
-        - hash 变化（游戏更新）→ 拉 API (web.lcta.top/damage_hook.json)
-          · API 已发布新版 → 更新 %LOCALAPPDATA%/LCTA/damage-hook/offsets-cache.json
+        - hash 变化（游戏更新）→ 拉 API (web.lcta.top/cheat_damage.json)
+          · API 已发布新版 → 更新 %LOCALAPPDATA%/LCTA/cheat-damage/offsets-cache.json
           · API 未发布 / 网络失败 → 旧缓存降级 + stale 标记
       apply()                                       writes 16584-byte DHConfig to shared map
-                                                      (Local\LCTA_DamageHook_Config)
-      inject(pid)                                   remote-thread LoadLibraryW damage_hook.dll
-    → hooks/damage_hook.dll + vendor/minhook        waits GameAssembly.dll → VerifyPrologue
+                                                      (Local\LCTA_CheatDamage_Config)
+      inject(pid)                                   remote-thread LoadLibraryW cheat_damage.dll
+  → 私有仓库 hooks/cheat_damage.dll + vendor/minhook
+                                                      waits GameAssembly.dll → VerifyPrologue
                                                       (16B, from shared config) →
                                                       MH_CreateHook on
                                                       GetTakeAttackDmgMultiplier
                                                       (enemy-only ×multiplier; 0→multiplier)
-      Damage log (damage_hook_log on):
+      Damage log (cheat_damage_log on):
       → DLL hk_GetTakeAttackDmgMultiplier           per effective event writes
                                                       "target=.. attacker=.. crit=.. mul X -> X"
                                                       to shared ring buffer log_ring[128][128]
@@ -318,7 +366,14 @@ Status query (WebUI):
                                                      offsets_stale / game_version
 ```
 
-Files: `webutils/function_damage_hook.py`, `hooks/damage_hook.c`, `vendor/minhook/`, `webui/app_api/damage_hook.py`, `webui/sections/damage-hook.html`, `webui/js/damage-hook.js`, `docs/DAMAGE_HOOK.md`, `damage_hook.json`（API 样例）, `tests/test_damage_hook.py`
+构建（build.ps1 与 release.yml 同步）：
+- 源码来源：根目录 `LCTA_CheatingCore/` 克隆（CI 用 `secrets.LCTA_CHEAT_TOKEN`
+  git clone 到 `cheat_core/`）；缺失则跳过（产物不含作弊工具箱功能）
+- 扫描 `hooks/*.c` 逐个 gcc 编译同名 DLL（含 vendor/minhook）→ `python tools/cheat_encrypt.py
+  build --src <clone> --key <clone>/keys/current.txt --out cheat_core.bin`
+- 复制到三个目录 `code/cheat_core/cheat_core.bin`
+
+Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, `tools/cheat_encrypt.py`, `webui/app_api/cheat_core.py`（含 cheat_plugins_list/invoke）, `webui/sections/cheat.html`（密钥门）, `webui/sections/launcher-config.html`（#cheat-plugin-launcher 占位）, `webui/js/cheat-shell.js`, `webui/js/risk-gate.js`（cheat 无 launcherCheckboxId）, `launcher/game_launch.py`, `cheat_damage.json`（API 样例，公开仓库）, `tests/test_cheat_core.py`；私有仓库：`cheatcore/registry.py`（插件契约）, `cheatcore/cheat_damage_hook.py`（含 start/stop_launcher）, `hooks/cheat_damage.c`, `vendor/minhook/`, `webui/*`, `keys/current.txt`, `manifest.json`, `docs/CHEAT_TOOLBOX.md`, `tests/test_cheat_damage_hook.py`, `tests/test_registry.py`
 
 ## 7. Rule Editor — File Edit → Smart Ruleset Generation
 

@@ -247,7 +247,7 @@ js_files = [
     'js/risk-gate.js',
     'js/speed.js',
     'js/input-bypass.js',
-    'js/damage-hook.js',
+    'js/cheat-shell.js',
 ]
 js_content = ''
 for f in js_files:

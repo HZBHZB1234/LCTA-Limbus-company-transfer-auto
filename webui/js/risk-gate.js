@@ -25,12 +25,11 @@ const RISK_SERVICES = {
         specific: '输入反检测通过注入 hook 对游戏上报的输入数据进行调整，使其更接近真实输入特征。',
         launcherCheckboxId: 'launcher-work-input-bypass',
     },
-    damage_hook: {
-        id: 'damage_hook',
-        name: '伤害倍率',
-        consentKey: 'damage_hook.disclaimer_accepted',
-        specific: '伤害倍率通过 MinHook 对游戏战斗伤害计算函数进行原生 detour，修改敌方单位受到的伤害数值。',
-        launcherCheckboxId: 'launcher-work-damage-hook',
+    cheat: {
+        id: 'cheat',
+        name: '作弊工具箱',
+        consentKey: 'cheat.disclaimer_accepted',
+        specific: '作弊工具箱通过 MinHook 对游戏客户端进行原生 detour，修改游戏运行数值（如伤害倍率）。',
         hideUntilConsent: true, // 未同意前在 Launcher 配置页隐藏该选项，须先在源页面同意
     },
 };

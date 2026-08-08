@@ -306,47 +306,78 @@ if (-not $gcc -or -not $windres) {
         Write-Host "  WARNING: hooks/rawinput_hook.c 未找到，跳过 hook DLL 编译" -ForegroundColor Yellow
     }
 
-    # ---- 编译 damage hook DLL（伤害倍率，MinHook） ----
-    $damageSrc = "$ProjectRoot\hooks\damage_hook.c"
-    $minhookInclude = "$ProjectRoot\vendor\minhook\include"
-    $minhookHde = "$ProjectRoot\vendor\minhook\src\hde"
-    if (Test-Path $damageSrc -and (Test-Path "$minhookInclude\MinHook.h")) {
-        $damageCacheDll = "$CCompileCache\damage_hook.dll"
-        $damageHashFile = "$CCompileCache\damage_hook.dll.hash"
-        # 缓存键含 minhook 源码（改源码必须重编）
-        $damageInputs = @($damageSrc,
-                          "$ProjectRoot\vendor\minhook\src\hook.c",
-                          "$ProjectRoot\vendor\minhook\src\buffer.c",
-                          "$ProjectRoot\vendor\minhook\src\trampoline.c",
-                          "$MinHookHde\hde64.c")
-        $damageHashParts = foreach ($f in $damageInputs) {
-            if (Test-Path $f) { (Get-FileHash -Path $f -Algorithm MD5).Hash } else { "MISSING" }
-        }
-        $damageHash = $damageHashParts -join "|"
-        $cacheHit = $false
-        if ((Test-Path $damageCacheDll) -and (Test-Path $damageHashFile)) {
-            $cachedHash = (Get-Content $damageHashFile -Raw).Trim()
-            if ($cachedHash -eq $damageHash) { $cacheHit = $true }
-        }
-        if ($cacheHit) {
-            Write-Host "  使用缓存: damage_hook.dll" -ForegroundColor Green
-        } else {
-            Write-Host "  编译 hooks/damage_hook.c -> damage_hook.dll..."
-            gcc -shared -O2 -s -static-libgcc -o $damageCacheDll $damageSrc `
-                "$ProjectRoot\vendor\minhook\src\hook.c" `
-                "$ProjectRoot\vendor\minhook\src\buffer.c" `
-                "$ProjectRoot\vendor\minhook\src\trampoline.c" `
-                "$MinHookHde\hde64.c" `
-                -I $minhookInclude -I $minhookHde
-            if ($LASTEXITCODE -eq 0) {
-                $damageHash | Out-File -FilePath $damageHashFile -Encoding ASCII
-                Write-Host "    damage_hook.dll 完成" -ForegroundColor Green
-            } else {
-                Write-Host "    damage_hook.dll 编译失败" -ForegroundColor Red
+    # ---- 打包 Cheat Core（作弊工具箱，私有仓库 + XOR 加密分发） ----
+    # 源码位于私有仓库 LCTA_CheatingCore（根目录克隆或 .build_cache/cheat_core 预克隆）；
+    # 扫描 hooks/*.c 逐个编译为同名 DLL 后经 tools/cheat_encrypt.py 加密打包为 cheat_core.bin。
+    # 新增作弊工具：在私有仓库 hooks/ 放入新 .c 源即可，本步骤自动编译打包。
+    # 无克隆目录时跳过（产物不包含作弊工具箱功能）。
+    $cheatSrc = "$ProjectRoot\LCTA_CheatingCore"
+    if (-not (Test-Path "$cheatSrc\manifest.json")) {
+        $cheatSrc = "$BuildCacheDir\cheat_core"
+    }
+    if (Test-Path "$cheatSrc\manifest.json") {
+        Write-Host "  打包 Cheat Core（来源: $cheatSrc）..."
+        $minhookSrcs = @(
+            "$cheatSrc\vendor\minhook\src\hook.c",
+            "$cheatSrc\vendor\minhook\src\buffer.c",
+            "$cheatSrc\vendor\minhook\src\trampoline.c",
+            "$cheatSrc\vendor\minhook\src\hde\hde64.c"
+        )
+        # 1) 逐个编译 hooks/*.c -> 同名 .dll（缓存键含源码 + minhook 源码）
+        $cheatHookCfgs = Get-ChildItem -Path "$cheatSrc\hooks" -Filter "*.c" | Sort-Object Name
+        foreach ($c in $cheatHookCfgs) {
+            $cheatDll = [System.IO.Path]::ChangeExtension($c.FullName, ".dll")
+            $cheatDllCache = "$CCompileCache\cheat_$($c.BaseName).dll"
+            $cheatDllHashFile = "$CCompileCache\cheat_$($c.BaseName).dll.hash"
+            $cheatInputs = @($c.FullName) + $minhookSrcs
+            $cheatHashParts = foreach ($f in $cheatInputs) {
+                if (Test-Path $f) { (Get-FileHash -Path $f -Algorithm MD5).Hash } else { "MISSING" }
+            }
+            $cheatHash = $cheatHashParts -join "|"
+            $cheatCacheHit = $false
+            if ((Test-Path $cheatDllCache) -and (Test-Path $cheatDllHashFile)) {
+                $cachedHash = (Get-Content $cheatDllHashFile -Raw).Trim()
+                if ($cachedHash -eq $cheatHash) {
+                    Copy-Item $cheatDllCache $cheatDll -Force
+                    $cheatCacheHit = $true
+                    Write-Host "  使用缓存: $($c.BaseName).dll" -ForegroundColor Green
+                }
+            }
+            if (-not $cheatCacheHit -and -not (Test-Path $cheatDll)) {
+                Write-Host "  编译 $($c.Name) -> $($c.BaseName).dll..."
+                gcc -shared -O2 -s -static-libgcc -o $cheatDll `
+                    $c.FullName `
+                    "$cheatSrc\vendor\minhook\src\hook.c" `
+                    "$cheatSrc\vendor\minhook\src\buffer.c" `
+                    "$cheatSrc\vendor\minhook\src\trampoline.c" `
+                    "$cheatSrc\vendor\minhook\src\hde\hde64.c" `
+                    -I "$cheatSrc\vendor\minhook\include" -I "$cheatSrc\vendor\minhook\src\hde"
+                if ($LASTEXITCODE -eq 0) {
+                    Copy-Item $cheatDll $cheatDllCache -Force
+                    $cheatHash | Out-File -FilePath $cheatDllHashFile -Encoding ASCII
+                    Write-Host "    $($c.BaseName).dll 编译完成" -ForegroundColor Green
+                } else {
+                    Write-Host "    $($c.BaseName).dll 编译失败" -ForegroundColor Red
+                }
             }
         }
+        # 2) XOR 加密打包（存在任意编译产物即打包）
+        $cheatDlls = Get-ChildItem -Path "$cheatSrc\hooks" -Filter "*.dll" -ErrorAction SilentlyContinue
+        if ($cheatDlls) {
+            $cheatBlob = "$CCompileCache\cheat_core.bin"
+            $encryptOut = & python "$ProjectRoot\tools\cheat_encrypt.py" build --src $cheatSrc --key "$cheatSrc\keys\current.txt" --out $cheatBlob 2>&1
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $cheatBlob)) {
+                Write-Host "  $encryptOut" -ForegroundColor Green
+                Write-Host "  cheat_core.bin 生成完成" -ForegroundColor Green
+            } else {
+                Write-Host "  WARNING: cheat_core.bin 生成失败" -ForegroundColor Yellow
+                Write-Host "  $encryptOut" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "  WARNING: hooks/*.c 编译产物不可用，跳过加密打包" -ForegroundColor Yellow
+        }
     } else {
-        Write-Host "  WARNING: hooks/damage_hook.c 或 vendor/minhook 缺失，跳过 damage hook 编译" -ForegroundColor Yellow
+        Write-Host "  WARNING: 未找到 LCTA_CheatingCore 克隆（根目录或 .build_cache/cheat_core），跳过 Cheat Core 打包（产物不含作弊工具箱功能）" -ForegroundColor Yellow
     }
 }
 
@@ -644,18 +675,18 @@ if (Test-Path $hookCacheDll) {
     Write-Host "  WARNING: rawinput_hook.dll 未编译，跳过复制" -ForegroundColor Yellow
 }
 
-# ---- 复制 damage hook DLL（伤害倍率） ----
-Write-Host "  复制 damage hook DLL..."
-$damageCacheDll = "$CCompileCache\damage_hook.dll"
-if (Test-Path $damageCacheDll) {
+# ---- 复制 cheat_core.bin（伤害倍率，XOR 加密分发） ----
+Write-Host "  复制 cheat_core.bin..."
+$cheatBlob = "$CCompileCache\cheat_core.bin"
+if (Test-Path $cheatBlob) {
     foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
-        $destHook = "$dest\hooks"
-        New-Item -ItemType Directory -Path $destHook -Force | Out-Null
-        Copy-Item $damageCacheDll "$destHook\damage_hook.dll" -Force
+        $destCc = "$dest\cheat_core"
+        New-Item -ItemType Directory -Path $destCc -Force | Out-Null
+        Copy-Item $cheatBlob "$destCc\cheat_core.bin" -Force
     }
-    Write-Host "  damage_hook.dll 复制完成" -ForegroundColor Green
+    Write-Host "  cheat_core.bin 复制完成" -ForegroundColor Green
 } else {
-    Write-Host "  WARNING: damage_hook.dll 未编译，跳过复制" -ForegroundColor Yellow
+    Write-Host "  WARNING: cheat_core.bin 未生成，跳过复制（产物不含伤害倍率功能）" -ForegroundColor Yellow
 }
 
 # ---- 复制 venv（嵌入式 Python + site-packages + Scripts） ----

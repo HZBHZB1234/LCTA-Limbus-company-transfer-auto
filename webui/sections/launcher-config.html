@@ -166,14 +166,10 @@
             <small class="form-hint">相关设置请在输入反检测页面配置</small>
         </div>
 
-        <div class="form-group" data-risk-service="damage_hook">
-            <label class="checkbox-container">
-                <input type="checkbox" id="launcher-work-damage-hook">
-                <span class="checkmark"></span>
-                启用伤害倍率
-            </label>
-            <small class="form-hint">启动游戏后自动注入伤害倍率 hook，敌方单位受到的伤害乘以设定倍率（默认 3.0）。偏移数据从远程 API 获取并按游戏版本缓存。</small>
-            <small class="form-hint">相关设置请在伤害倍率页面配置</small>
+        <div class="form-group" data-risk-service="cheat">
+            <div id="cheat-plugin-launcher">
+                <p class="form-hint">解锁作弊工具箱后，此处显示工具箱内各功能的 Launcher 集成开关。</p>
+            </div>
         </div>
     </div>
 </div>

@@ -137,10 +137,10 @@ function onSectionLoaded(name) {
                 inputBypassPage.init();
             }
             break;
-        case 'damage-hook':
-            console.log('[LCTA] Init section: damage-hook');
-            if (typeof damageHookPage !== 'undefined' && damageHookPage) {
-                damageHookPage.init();
+        case 'cheat':
+            console.log('[LCTA] Init section: cheat');
+            if (typeof cheatPage !== 'undefined' && cheatPage) {
+                cheatPage.init();
             }
             break;
     }

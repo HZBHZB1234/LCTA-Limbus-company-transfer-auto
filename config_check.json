@@ -131,11 +131,7 @@
             "input_bypass_key_real": "str",
             "input_bypass_mouse_synth": "str",
             "input_bypass_key_synth": "str",
-            "input_bypass_volatility": "str",
-            "damage_hook": "bool",
-            "damage_hook_multiplier": "str",
-            "damage_hook_log": "bool",
-            "damage_hook_api": "str"
+            "input_bypass_volatility": "str"
         },
         "resource_update": {
             "enabled": "bool",
@@ -145,7 +141,11 @@
             "lang_en": "bool",
             "lang_kr": "bool",
             "jobs": "int",
-            "engine": ["auto", "aria2", "builtin"],
+            "engine": [
+                "auto",
+                "aria2",
+                "builtin"
+            ],
             "retry_max": "int",
             "retry_delay": "int",
             "connection_limit": "int"
@@ -162,7 +162,10 @@
     "input_bypass": {
         "disclaimer_accepted": "bool"
     },
-    "damage_hook": {
+    "cheat": {
         "disclaimer_accepted": "bool"
+    },
+    "cheat_core": {
+        "unlock_key": "str"
     }
 }

@@ -213,14 +213,14 @@ function goCleanSection(DIEPLAY){
     }
 };
 
-function goDamageHookSection(DIEPLAY){
-    const damageHookButton = document.getElementById('damage-hook-btn');
+function goCheatSection(DIEPLAY){
+    const cheatButton = document.getElementById('cheat-btn');
     if (DIEPLAY) {
-        damageHookButton.style.display = 'block';
-        damageHookButton.click();
+        cheatButton.style.display = 'block';
+        cheatButton.click();
     } 
     else {
-        damageHookButton.style.display = 'none';
+        cheatButton.style.display = 'none';
     }
 };
 

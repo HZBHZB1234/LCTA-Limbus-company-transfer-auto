@@ -1,0 +1,48 @@
+<div class="disclaimer-overlay" data-risk-overlay="cheat" style="display:none;"></div>
+
+<div id="cheat-main-content" style="display:none;">
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-toolbox"></i>
+        作弊工具箱
+    </h2>
+    <p class="section-subtitle">基于 MinHook 的原生游戏作弊工具集（当前含伤害倍率）。功能代码以加密形式随程序分发，解锁后使用。</p>
+    <a href="javascript:void(0)" class="risk-reread-link" onclick="RiskGate.showNoticeModal('cheat')">
+        <i class="fas fa-exclamation-triangle"></i> 查看风险须知
+    </a>
+</div>
+
+<div class="settings-grid">
+    <div class="setting-card" id="cheat-core-keygate">
+        <h3 class="setting-title">
+            <i class="fas fa-lock"></i> 功能解锁
+        </h3>
+        <p class="form-hint">工具箱功能代码以加密形式随程序分发，输入解密密钥解锁后方可使用。密钥可通过明文碰撞分析自行获取，或向社区/维护者索取。</p>
+        <div class="form-group">
+            <label for="cheat-core-key-input">解密密钥</label>
+            <input type="password" id="cheat-core-key-input" placeholder="输入解密密钥" autocomplete="off" spellcheck="false">
+            <small class="form-hint">解锁成功后密钥将保存在本地配置，无需重复输入；可在功能页底部「锁定（清除密钥）」移除。</small>
+        </div>
+        <div style="margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="cheat-core-unlock-btn" class="primary-btn">
+                <i class="fas fa-unlock"></i> 解锁
+            </button>
+        </div>
+        <p id="cheat-core-keygate-msg" class="form-hint"></p>
+    </div>
+
+    <div class="setting-card" id="cheat-core-missing" style="display:none;">
+        <h3 class="setting-title">
+            <i class="fas fa-exclamation-circle"></i> 功能数据缺失
+        </h3>
+        <p class="form-hint">当前安装不包含作弊工具箱功能数据（cheat_core.bin），可能由本次构建未集成导致。请重新安装完整版本。</p>
+    </div>
+</div>
+
+<div class="action-area">
+    <button class="primary-btn" onclick="saveSettings()">
+        <i class="fas fa-save"></i>
+        保存配置
+    </button>
+</div>
+</div>

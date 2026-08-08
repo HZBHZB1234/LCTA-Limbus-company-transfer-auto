@@ -15,7 +15,7 @@ from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 from webutils import SpeedManager
 from webutils import InputBypassManager
-from webutils import DamageHookManager
+from webutils import CheatPluginHost
 
 from webui.app_api.exceptions import CancelRunning
 from webui.app_api.core import CoreMixin
@@ -28,7 +28,7 @@ from webui.app_api.windows import WindowMixin
 from webui.app_api.cdn import CdnMixin
 from webui.app_api.speed import SpeedMixin
 from webui.app_api.input_bypass import InputBypassMixin
-from webui.app_api.damage_hook import DamageHookMixin
+from webui.app_api.cheat_core import CheatCoreMixin
 from webui.app_api.update import UpdateMixin
 from webui.app_api.drops import DropMixin
 from webui.app_api.resources import ResourceMixin
@@ -40,7 +40,7 @@ from webui.translation_log_api import TranslationLogViewerAPI
 
 class LCTA_API(CoreMixin, TranslatorMixin, PackagesMixin, DownloadMixin, FancyMixin,
                WindowMixin, CdnMixin, SpeedMixin, UpdateMixin, DropMixin,
-               ResourceMixin, ConfigMixin, InputBypassMixin, DamageHookMixin):
+               ResourceMixin, ConfigMixin, InputBypassMixin, CheatCoreMixin):
     """主窗�?-API 桥接类。方法按功能域拆分至 webui/app_api/ �?mixin�?"""
     pass
 
@@ -68,7 +68,7 @@ def main():
     atexit.register(api.save_config_to_file)
     atexit.register(lambda: SpeedManager.close())
     atexit.register(lambda: InputBypassManager.close())
-    atexit.register(lambda: DamageHookManager.close())
+    atexit.register(lambda: CheatPluginHost.close_all())
     # 设置模态窗口相关的回调
     LogManager().set_modal_callbacks(
         status_callback=api.set_modal_status,

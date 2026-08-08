@@ -32,6 +32,16 @@ Requirements: PowerShell 5.0+, MinGW-w64 (optional, skips if unavailable), Pytho
 
 The build downloads aria2 1.37.0 from the official GitHub release, retries and rejects undersized responses, then places `aria2c.exe` (and `COPYING` when present) under `tools/aria2/` in all three artifacts. Runtime `engine=auto` falls back to urllib when aria2c is unavailable in a source checkout.
 
+### Cheat Core（作弊工具箱）构建
+
+伤害倍率实现位于私有仓库 `LCTA_CheatingCore`（公共仓库根目录克隆或 `.build_cache/cheat_core` 预克隆，缺失时构建**跳过**该功能）。构建步骤（`build.ps1` 与 `.github/workflows/release.yml` 同步）：
+
+1. 扫描 `hooks/*.c` 逐个 gcc 编译同名 DLL（含 `vendor/minhook/`，缓存键含 minhook 源码；新增作弊工具自动编译）
+2. `python tools/cheat_encrypt.py build --src <clone> --key <clone>/keys/current.txt --out cheat_core.bin`
+3. 复制到三个产物 `code/cheat_core/cheat_core.bin`
+
+CI 通过 `secrets.LCTA_CHEAT_TOKEN`（PAT）克隆私有仓库。本地开发无需构建 blob：运行时加载器自动检测仓库根 `LCTA_CheatingCore/` 克隆（或 `LCTA_CHEAT_DEV_SRC` 环境变量），免密钥直连源码；开发前先运行 `LCTA_CheatingCore\hooks\build.ps1` 编译 DLL。密钥轮换见私有仓库 README。
+
 ## How to Test
 
 ```bash
@@ -50,11 +60,13 @@ pytest tests/test_llm_fancy.py
 # Run official-resource updater coverage
 pytest tests/test_resource_updater.py
 
-# Run damage hook module tests
-pytest tests/test_damage_hook.py
+# Run CheatCore 密钥门/加密分发测试（工具箱实现测试已迁往私有仓库 LCTA_CheatingCore）
+pytest tests/test_cheat_core.py
 ```
 
-Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`, `tests/test_llm_fancy.py`, `tests/test_resource_updater.py`, `tests/test_input_bypass.py`, `tests/test_damage_hook.py`
+Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`, `tests/test_llm_fancy.py`, `tests/test_resource_updater.py`, `tests/test_input_bypass.py`, `tests/test_cheat_core.py`
+
+> 作弊工具箱管理器测试（`tests/test_cheat_damage_hook.py`）已随实现迁往私有仓库，在私有仓库内运行 `pytest tests/`（需要 Windows）。公共仓库侧 `tests/test_cheat_core.py` 覆盖加密/解密/解锁/锁定全链路（纯逻辑，跨平台）。
 
 ## Project Conventions
 

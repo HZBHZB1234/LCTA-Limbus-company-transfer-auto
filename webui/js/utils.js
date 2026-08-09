@@ -75,10 +75,6 @@ function initNavigation() {
                     section.classList.add('active');
                     AnimationManager.fadeIn(section, 150);
                     
-                    if (sectionId === 'log-section') {
-                        scrollLogToBottom();
-                    }
-                    
                     if (sectionId === 'install-section') {
                         refreshInstallPackageList();
                     }
@@ -153,16 +149,6 @@ function initNavigation() {
             }
         });
     });
-}
-
-// 滚动日志到底部
-function scrollLogToBottom() {
-    const logDisplay = document.getElementById('log-display');
-    if (logDisplay) {
-        setTimeout(() => {
-            logDisplay.scrollTop = logDisplay.scrollHeight;
-        }, 100);
-    }
 }
 
 // 密码显示/隐藏切换
@@ -340,28 +326,12 @@ function updateProgress(percent, text) {
     }
 }
 
-// 添加日志消息
+// 添加日志消息（写入后端日志文件）
 function addLogMessage(message, level = 'info') {
-    const logDisplay = document.getElementById('log-display');
-    if (logDisplay) {
-        const now = new Date();
-        const timestamp = `[${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
-        
-        const logEntry = document.createElement('div');
-        logEntry.className = `log-entry ${level}`;
-        logEntry.innerHTML = `
-            <div class="log-timestamp">${timestamp}</div>
-            <div class="log-level">[${level.toUpperCase()}]</div>
-            <div class="log-message">${message}</div>
-        `;
-        
-        logDisplay.appendChild(logEntry);
-        logDisplay.scrollTop = logDisplay.scrollHeight;
-    };
     if (window.apiReady) {
         pywebview.api.log(message).catch(
             function(error) { console.log(error); })
-    };
+    }
 }
 
 const renderer = new marked.Renderer();

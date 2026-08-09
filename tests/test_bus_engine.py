@@ -784,7 +784,7 @@ def test_selector_workload_growth_is_bounded():
     assert large_elapsed < max(3.0, small_elapsed * 3 + 0.1)
 
 
-def test_fancy_main_preserves_v2_bus_ruleset_order(tmp_path):
+def test_fancy_main_runs_bus_before_v2(tmp_path):
     lang_dir = tmp_path / "LimbusCompany_Data" / "lang" / "LLC_zh-CN"
     lang_dir.mkdir(parents=True)
     target = lang_dir / "Skills.json"
@@ -808,9 +808,57 @@ def test_fancy_main_preserves_v2_bus_ruleset_order(tmp_path):
 
     stats = fancy_main(str(tmp_path), "LLC_zh-CN", [v2, bus])
 
-    assert target.read_text(encoding="utf-8-sig").strip().endswith('"C"\n}')
+    # bus 先执行：B→C 不命中原文"A"；随后 v2 执行 A→B
+    assert target.read_text(encoding="utf-8-sig").strip().endswith('"B"\n}')
     assert stats.files_changed == 1
     assert stats.values_changed == 1
+
+
+def test_fancy_main_preserves_order_within_same_kind(tmp_path):
+    lang_dir = tmp_path / "LimbusCompany_Data" / "lang" / "LLC_zh-CN"
+    lang_dir.mkdir(parents=True)
+    target = lang_dir / "Skills.json"
+    target.write_text('{"name":"A","desc":"X"}', encoding="utf-8")
+    bus1 = make_ruleset([{
+        "path": "name",
+        "replacements": [{"from": "A", "to": "B"}],
+    }])
+    bus1["name"] = "bus1"
+    bus2 = make_ruleset([{
+        "path": "name",
+        "replacements": [{"from": "B", "to": "C"}],
+    }])
+    bus2["name"] = "bus2"
+    v2_1 = {
+        "version": 2,
+        "name": "v2_1",
+        "rules": [{
+            "files": ["Skills.json"],
+            "scope": "",
+            "targets": ["desc"],
+            "where": [],
+            "actions": [{"type": "replace", "mode": "literal", "from": "X", "to": "Y"}],
+        }],
+    }
+    v2_2 = {
+        "version": 2,
+        "name": "v2_2",
+        "rules": [{
+            "files": ["Skills.json"],
+            "scope": "",
+            "targets": ["desc"],
+            "where": [],
+            "actions": [{"type": "replace", "mode": "literal", "from": "Y", "to": "Z"}],
+        }],
+    }
+
+    fancy_main(str(tmp_path), "LLC_zh-CN", [v2_1, bus1, v2_2, bus2])
+
+    # 同一引擎内按原有相对顺序执行：bus1→bus2 (A→B→C)，v2_1→v2_2 (X→Y→Z)
+    content = target.read_text(encoding="utf-8-sig")
+    assert '"name": "C"' in content
+    assert content.strip().endswith('"desc": "Z"\n}')
+
 
 
 def test_bus_ruleset_load_and_save_keep_version(monkeypatch, tmp_path):

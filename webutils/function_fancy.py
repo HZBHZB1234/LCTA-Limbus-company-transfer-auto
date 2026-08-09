@@ -102,12 +102,15 @@ def _select_enabled_rulesets(config: list, enable_map: Optional[Mapping] = None)
 
 
 def _compile_mixed_rulesets(rulesets: list) -> tuple[_CompiledRuleset, ...]:
+    """编译混合规则集；执行顺序固定为 bus 文本替换先于 v2 文本美化，
+    同引擎内保持规则集原有相对顺序（稳定排序）。"""
     compiled: list[_CompiledRuleset] = []
     for ruleset in rulesets:
         if is_bus_ruleset(ruleset):
             compiled.append(_CompiledRuleset("bus", compile_bus_ruleset(ruleset)))
         else:
             compiled.append(_CompiledRuleset("v2", compile_rulesets([ruleset])))
+    compiled.sort(key=lambda item: 0 if item.kind == "bus" else 1)
     return tuple(compiled)
 
 
@@ -123,6 +126,7 @@ def fancy_main(
     config: 规则集列表，每个元素包含 "rules" 列表。
     enable_map: 可选的规则集启用状态；传入时仅编译和执行明确启用的规则集。
     modal_id: 可选的模态窗口 ID；传入时状态日志会同步推送到前端弹窗。
+    执行顺序：先执行 bus 文本替换规则集，再执行 v2 文本美化规则集。
     """
     started_at = time.perf_counter()
     enabled_rulesets = _select_enabled_rulesets(config, enable_map)
@@ -148,7 +152,8 @@ def fancy_main(
         len(item.compiled.rules) for item in compiled_rulesets if item.kind == "bus"
     )
     _log_manager.log_modal_process(
-        f'编译规则完成：v2 {v2_rule_count} 条 / bus {bus_rule_count} 条',
+        f'编译规则完成：v2 {v2_rule_count} 条 / bus {bus_rule_count} 条'
+        f'（执行顺序：bus 文本替换 → v2 文本美化）',
         modal_id,
     )
     resource_cache_hit = False

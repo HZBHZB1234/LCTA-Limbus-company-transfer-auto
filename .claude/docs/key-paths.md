@@ -477,9 +477,11 @@ Launcher finishes an enabled translation update
 Both paths
   → webutils/function_fancy.py fancy_main(gamePath, package, rulesets, enableMap, modal_id=None)
     → _select_enabled_rulesets()                    discard disabled rules before compilation
-    → compile each enabled ruleset in original order
+    → compile each enabled ruleset, ordered bus-first
       → webutils/fancy/engine.py compile_rulesets()  v2 conditions/actions
       → webutils/fancy/bus.py compile_bus_ruleset() bus selectors/replacements + exact/dynamic file index
+      (fancy_main fixed execution order: all bus 文本替换 rulesets run before all v2 文本美化 rulesets,
+       stable within each engine — see _compile_mixed_rulesets)
       → CompiledRules.requires_skill_color
         → webutils/fancy/builtin_func.py SkillColorHandler.prepare() only when an enabled rule needs it
           → function_resource.py load_text_assets() (skips objects with missing/None containers)
@@ -488,7 +490,7 @@ Both paths
       → v2/bus per-file matching and bus directory exclusions
         → bus reuses deduplicated matcher results and exact-file indexes
       → read UTF-8-SIG JSON
-      → apply_rules()/apply_bus() in ruleset order
+      → apply_bus() before apply_rules() in bus-first order
         → bus reuses resolved paths/string leaves and selector indexes within each file
       → compare final JSON with original and atomically replace only when changed
     → FancyRunStats                                  scanned/matched/changed/value/time/cache data

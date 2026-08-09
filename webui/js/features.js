@@ -1127,11 +1127,6 @@ const helpDrawer = {
                         <h4 style="margin-top:0;"><i class="fas fa-comments"></i> 常见问题</h4>
                         <p style="font-size:13px;color:var(--color-text-secondary);">常见问题与排查方法</p>
                     </div>
-                    <div class="setting-card" style="padding:16px;cursor:pointer;margin:0;"
-                         onclick="goAndShow('elder');helpDrawer.close();">
-                        <h4 style="margin-top:0;"><i class="fas fa-play-circle"></i> 快速上手</h4>
-                        <p style="font-size:13px;color:var(--color-text-secondary);">三步选择目标并直接开始</p>
-                    </div>
                 </div>
             </div>
         `;

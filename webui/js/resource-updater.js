@@ -198,9 +198,9 @@ class ResourceUpdaterPage {
             } else if (status === 'cancelled') {
                 description = '任务已停止，已完成的文件会保留并可在下次继续使用。';
             } else if (failedItems.length) {
-                description = `以下 ${failedItems.length} 个文件下载失败：${failedItems.map((item) => item.name).join('、')}。详情见日志。`;
+                description = `以下 ${failedItems.length} 个文件下载失败：${failedItems.map((item) => item.name).join('、')}。详情见 logs/app.log。`;
             } else {
-                description = '部分资源未能完成，请前往日志页面查看详情后重试。';
+                description = '部分资源未能完成，请查看 logs/app.log 中的日志后重试。';
             }
             this.setStatus(event.message, status, description);
         }

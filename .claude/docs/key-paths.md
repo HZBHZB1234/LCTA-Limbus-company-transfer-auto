@@ -618,7 +618,10 @@ start_webui.py main()
                                                 webbrowser 打开官方下载页 + return（不启动窗口）
     → from webutils.clr_bootstrap import ensure_clr  导入 pythonnet（netfx）
     → webui/app.py:main()                      (WebUI mode)
-    → globalManagers/ConfigManager.py          init singleton, load config.json
+    → globalManagers/ConfigManager.py          init singleton, load config.json；
+                                                 `from_disk` 标记 config.json 是否真实存在于磁盘，
+                                                 init_config 据此判定 first_use（缺文件回退默认配置即首启，
+                                                 调用 use_default() 写盘并 first_use=True）
     → globalManagers/LogManager.py             init logger
     → webui/app.py LCTA_API.__init__()         register all pywebview API methods
     → pywebview.create_window()                create native window

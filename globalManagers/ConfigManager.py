@@ -38,6 +38,7 @@ class ConfigManager:
             os.getenv("path_", ""), "config_check.json"
         )
         self._data: Dict[str, Any] = {}
+        self._from_disk = False
         self._load()
 
     # ---------- 内部方法 ----------
@@ -46,8 +47,10 @@ class ConfigManager:
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
                 self._data = json.load(f)
+            self._from_disk = True
         except (FileNotFoundError, json.JSONDecodeError):
             self._data = self._load_default()
+            self._from_disk = False
 
     def _load_default(self) -> Dict[str, Any]:
         """加载默认配置"""
@@ -225,6 +228,7 @@ class ConfigManager:
         with self._lock:
             self._data = self._load_default()
             self.save()
+            self._from_disk = True
 
     def reset(self):
         """删除配置文件并重置单例（下次访问重新初始化）"""
@@ -237,3 +241,8 @@ class ConfigManager:
     def raw(self) -> Dict[str, Any]:
         """访问原始配置字典（用于需要遍历或批量操作的场景）"""
         return self._data
+
+    @property
+    def from_disk(self) -> bool:
+        """config.json 是否真实存在于磁盘并成功加载（False 表示回退到了默认配置）"""
+        return self._from_disk

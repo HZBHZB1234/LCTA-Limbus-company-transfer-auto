@@ -82,8 +82,7 @@ class CoreMixin:
 
     def init_config(self):
         self.first_use = False
-        config_data = ConfigManager().raw
-        if not config_data:
+        if not ConfigManager().from_disk:
             self.log("在初始化时未找到配置文件")
             ConfigManager().use_default()
             if not ConfigManager().raw:

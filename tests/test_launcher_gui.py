@@ -9,7 +9,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -962,6 +962,55 @@ class TestCheckShow:
         result = api.check_show()
         assert result["show"] is True
         instance.set.assert_called_once_with("last_version", "5.0.1")
+
+
+class TestFirstUse:
+    """init_config 的 first_use 判定：config.json 不在磁盘（回退默认配置）时视为首次使用。"""
+
+    def _patch_cm(self, from_disk, raw):
+        from webui.app_api import core as core_mod
+
+        p_from_disk = patch.object(
+            core_mod.ConfigManager, "from_disk", new_callable=PropertyMock
+        )
+        p_raw = patch.object(
+            core_mod.ConfigManager, "raw", new_callable=PropertyMock
+        )
+        p_use_default = patch.object(core_mod.ConfigManager, "use_default")
+        p_validate = patch.object(
+            core_mod.ConfigManager, "validate", return_value=(True, [])
+        )
+        p_get = patch.object(core_mod.ConfigManager, "get", return_value=False)
+        m_from_disk = p_from_disk.start()
+        m_raw = p_raw.start()
+        m_use_default = p_use_default.start()
+        p_validate.start()
+        p_get.start()
+        m_from_disk.return_value = from_disk
+        m_raw.return_value = raw
+        return _make_api(), m_use_default, (
+            p_from_disk, p_raw, p_use_default, p_validate, p_get,
+        )
+
+    def test_first_use_true_when_config_missing(self):
+        api, m_use_default, patches = self._patch_cm(False, {"debug": False})
+        try:
+            api.init_config()
+            assert api.first_use is True
+            m_use_default.assert_called_once()
+        finally:
+            for p in patches:
+                p.stop()
+
+    def test_first_use_false_when_config_exists(self):
+        api, m_use_default, patches = self._patch_cm(True, {"debug": False})
+        try:
+            api.init_config()
+            assert api.first_use is False
+            m_use_default.assert_not_called()
+        finally:
+            for p in patches:
+                p.stop()
 
 
 class TestEditorWindowsCleanup:

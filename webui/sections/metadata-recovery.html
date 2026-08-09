@@ -1,0 +1,149 @@
+<div class="section-header">
+    <h2 class="section-title">
+        <i class="fas fa-key"></i>
+        Metadata 恢复
+    </h2>
+    <p class="section-subtitle">自动恢复《边狱公司》IL2CPP global-metadata.dat 的解密参数与 31 段映射，输出可直接用于 Il2CppDumper 的正式 profile</p>
+</div>
+
+<div class="settings-grid">
+
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <span class="step-badge">步骤 1-2</span>
+            <i class="fas fa-bullseye"></i> 定位器（IDA 插件）
+        </h3>
+        <p class="form-hint">阶段 0 定位器在 IDA 内运行：扫描 xorshift 模式与反编译特征，对解密入口函数候选评分（top-K）。本页提供一键安装 IDA 插件。</p>
+        <div class="form-group">
+            <label for="metadata-recovery-ida-dir">IDA plugins 目录（留空自动探测）</label>
+            <input type="text" id="metadata-recovery-ida-dir" placeholder="如 C:\Program Files\IDA Professional 9.3\plugins">
+            <div style="margin-top: 0.4rem; display: flex; gap: 8px; flex-wrap: wrap;">
+                <button id="metadata-recovery-btn-install-plugin" class="action-btn primary">
+                    <i class="fas fa-plug"></i> 安装定位器插件
+                </button>
+                <button id="metadata-recovery-btn-browse-ida" class="action-btn secondary">选择目录</button>
+            </div>
+        </div>
+        <small class="form-hint" id="metadata-recovery-plugin-status">正在检测插件状态...</small>
+        <small class="form-hint">安装后在 IDA 中打开 GameAssembly.dll 的 IDB，按 <kbd>Ctrl-Alt-Shift-M</kbd> 运行；导出写入 <code>&lt;IDB目录&gt;/locator_out/</code>（<code>locate_candidates.json</code> + <code>decompile_rank*.c</code>）。下一步直接导入该目录即可，无需手动传参。</small>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <span class="step-badge current">步骤 3</span>
+            <i class="fas fa-file-import"></i> 导入定位器导出
+        </h3>
+        <p class="form-hint">选择 IDA 插件导出（<code>locate_candidates.json</code> 或其所在目录），载入后自动填充替换表 hex 与反编译文本，其余参数继续由游戏目录推导。</p>
+        <div class="form-group">
+            <label for="metadata-recovery-export-path">locate_candidates.json 或导出目录</label>
+            <input type="text" id="metadata-recovery-export-path" placeholder="如 E:\IDA\GameAssembly.dll.i64 同目录的 locator_out">
+            <div style="margin-top: 0.4rem; display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="action-btn secondary" onclick="pywebview.api.browse_file('metadata-recovery-export-path')">选择文件</button>
+                <button class="action-btn secondary" onclick="pywebview.api.browse_folder('metadata-recovery-export-path')">选择目录</button>
+                <button id="metadata-recovery-btn-load-export" class="action-btn primary">
+                    <i class="fas fa-download"></i> 载入导出
+                </button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="metadata-recovery-candidate-rank">候选（top-1 通常为真值，可切换 rank 1-5）</label>
+            <div class="select-wrapper">
+                <select id="metadata-recovery-candidate-rank"></select>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+            <small class="form-hint">切换候选后自动重新载入对应的反编译文本与替换表 hex。</small>
+        </div>
+        <small class="form-hint" id="metadata-recovery-export-info"></small>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <span class="step-badge">步骤 4</span>
+            <i class="fas fa-file-archive"></i> 输入文件
+        </h3>
+        <small class="form-hint" id="metadata-recovery-derived-hint"></small>
+        <div class="form-group">
+            <label for="metadata-recovery-metadata">加密的 global-metadata.dat <span style="color:#e74c3c;">*</span></label>
+            <input type="text" id="metadata-recovery-metadata" placeholder="游戏目录 LimbusCompany_Data/il2cpp_data/Metadata/global-metadata.dat">
+            <div style="margin-top: 0.4rem;"><button class="action-btn secondary" onclick="pywebview.api.browse_file('metadata-recovery-metadata')">选择文件</button></div>
+        </div>
+        <div class="form-group">
+            <label for="metadata-recovery-reference">参考标准文件 global-metadata-standard-*.dat（阶段 3/4 需要）</label>
+            <input type="text" id="metadata-recovery-reference" placeholder="旧版本的标准 v39 布局文件，提供 31 节 (offset,size,count) 与内容锚点">
+            <div style="margin-top: 0.4rem;"><button class="action-btn secondary" onclick="pywebview.api.browse_file('metadata-recovery-reference')">选择文件</button></div>
+        </div>
+        <div class="form-group">
+            <label for="metadata-recovery-decompile-file">反编译文本 .c 文件（定位器导出或 IDA 手动导出）</label>
+            <input type="text" id="metadata-recovery-decompile-file" placeholder="解密入口函数的反编译文本">
+            <div style="margin-top: 0.4rem;"><button class="action-btn secondary" onclick="pywebview.api.browse_file('metadata-recovery-decompile-file')">选择文件</button></div>
+        </div>
+        <div class="form-group">
+            <label for="metadata-recovery-dll">GameAssembly.dll（可选，自动读取替换表 256 字节）</label>
+            <input type="text" id="metadata-recovery-dll" placeholder="提供后按反编译文本中的 byte_XXXX 地址自动提取替换表">
+            <div style="margin-top: 0.4rem;"><button class="action-btn secondary" onclick="pywebview.api.browse_file('metadata-recovery-dll')">选择文件</button></div>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <span class="step-badge">步骤 5</span>
+            <i class="fas fa-paste"></i> 反编译文本 / 高级参数
+        </h3>
+        <div class="form-group">
+            <label for="metadata-recovery-decompile-text">反编译文本（步骤 3 载入后自动填充，可手改）</label>
+            <textarea id="metadata-recovery-decompile-text" rows="6" placeholder="解密入口函数反编译文本，如 IDA 伪代码视图全选复制"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="metadata-recovery-table-hex">替换表 hex（256 字节；步骤 3 载入后自动填充）</label>
+            <input type="text" id="metadata-recovery-table-hex" placeholder="512 位十六进制字符">
+        </div>
+        <div class="form-group">
+            <label for="metadata-recovery-expect-sha">期望重建 SHA-256（可选，用于自检比对）</label>
+            <input type="text" id="metadata-recovery-expect-sha" placeholder="64 位十六进制字符">
+        </div>
+        <div class="form-group">
+            <label for="metadata-recovery-candidate-profile">已有 candidate_profile.json（可选，跳过参数提取阶段）</label>
+            <input type="text" id="metadata-recovery-candidate-profile" placeholder="直接从此文件开始验证/求解">
+            <div style="margin-top: 0.4rem;"><button class="action-btn secondary" onclick="pywebview.api.browse_file('metadata-recovery-candidate-profile')">选择文件</button></div>
+        </div>
+    </div>
+
+    <div class="setting-card">
+        <h3 class="setting-title">
+            <span class="step-badge">步骤 6</span>
+            <i class="fas fa-play-circle"></i> 运行流水线
+        </h3>
+        <p class="form-hint">执行顺序：替换表解析 → 参数提取 → 参数验证 → 31 段映射求解 → 正式 profile 提升。每个阶段独立裁决并产出报告。</p>
+        <div style="margin-top: 0.6rem; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <button id="metadata-recovery-btn-run" class="primary-btn">
+                <i class="fas fa-play"></i> 开始完整恢复
+            </button>
+            <small class="form-hint">产物目录：<code id="metadata-recovery-out-dir">—</code></small>
+        </div>
+        <div id="metadata-recovery-result" style="display:none; margin-top: 1rem;">
+            <h4 style="margin: 0 0 0.5rem;"><i class="fas fa-clipboard-check"></i> 运行结果</h4>
+            <div id="metadata-recovery-verdicts" class="form-group"></div>
+            <div class="form-group">
+                <label>输出文件</label>
+                <div id="metadata-recovery-outputs" style="font-size: 0.85em; line-height: 1.7;"></div>
+            </div>
+            <button class="action-btn secondary" onclick="pywebview.api.open_explorer(document.getElementById('metadata-recovery-out-dir').textContent)">打开输出目录</button>
+        </div>
+    </div>
+
+    <div class="setting-card" style="grid-column: 1 / -1;">
+        <h3 class="setting-title">
+            <i class="fas fa-graduation-cap"></i> 使用教程
+        </h3>
+        <p class="form-hint">本页面包含完整的六步骤结构化教程：背景原理、IDA 定位器使用、导出导入、参数提取/验证/求解/提升每一步的输入与判读、常见问题。点击右上角 <i class="fas fa-question"></i> 或下方按钮查看。</p>
+        <div style="margin-top: 0.5rem; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="action-btn primary" onclick="showGuide('metadata-recovery')">
+                <i class="fas fa-book-open"></i> 查看完整教程
+            </button>
+            <button class="action-btn secondary" onclick="window.open('https://github.com/HZBHZB1234/Il2CppDumper', '_blank')">
+                <i class="fas fa-external-link-alt"></i> Il2CppDumper（修复版）
+            </button>
+        </div>
+    </div>
+
+</div>

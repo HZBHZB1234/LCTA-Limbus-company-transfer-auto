@@ -144,6 +144,12 @@ function onSectionLoaded(name) {
                 cheatPage.init();
             }
             break;
+        case 'metadata-recovery':
+            console.log('[LCTA] Init section: metadata-recovery');
+            if (typeof metadataRecoveryPage !== 'undefined' && metadataRecoveryPage) {
+                metadataRecoveryPage.init();
+            }
+            break;
     }
 
     if (configManager) configManager.applyConfigToUI();

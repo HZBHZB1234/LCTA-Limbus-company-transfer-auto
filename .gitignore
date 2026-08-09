@@ -7,6 +7,8 @@ native
 *\example/
 fancy/
 !webutils/fancy
+metadata_recovery
+!webutils/metadata_recovery
 .rmv
 *.pyc
 *.pyo

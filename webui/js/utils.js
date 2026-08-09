@@ -125,6 +125,11 @@ function initNavigation() {
                         }
                     }
 
+                    // Metadata 恢复页：每次进入刷新插件/输出目录状态（无轮询）
+                    if (sectionId === 'metadata-recovery-section' && typeof metadataRecoveryPage !== 'undefined') {
+                        metadataRecoveryPage.init();
+                    }
+
                     // Launcher 配置页每次进入时按同意态刷新风险选项可见性
                     // （section 只加载一次，同意态变化必须按导航生命周期重查）
                     if (sectionId === 'launcher-config-section') {

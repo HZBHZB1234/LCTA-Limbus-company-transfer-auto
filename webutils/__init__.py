@@ -41,6 +41,7 @@ from .cdn import (
 )
 from .function_speed import SpeedManager
 from .function_input_bypass import InputBypassManager
+from . import metadata_recovery
 from .cheat_plugins import CheatPluginHost
 from .function_steam_launcher import (
     get_steam_path,
@@ -104,6 +105,7 @@ __all__ = [
     'elevate_remove_hosts',
     'SpeedManager',
     'InputBypassManager',
+    'metadata_recovery',
     'CheatPluginHost',
     'get_steam_path',
     'resolve_localconfig_path',

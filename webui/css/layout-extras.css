@@ -1883,3 +1883,25 @@
     border-color: var(--color-primary);
     color: white;
 }
+
+/* ============================
+   步骤徽标（Metadata 恢复结构化流程）
+   ============================ */
+.step-badge {
+    display: inline-block;
+    background: color-mix(in srgb, var(--color-primary, #3498db) 18%, transparent);
+    color: var(--color-primary, #3498db);
+    border: 1px solid color-mix(in srgb, var(--color-primary, #3498db) 35%, transparent);
+    border-radius: var(--radius-sm, 6px);
+    padding: 1px 8px;
+    margin-right: 8px;
+    font-size: 0.72em;
+    font-weight: 600;
+    vertical-align: 2px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+.step-badge.current {
+    background: var(--color-primary, #3498db);
+    color: #fff;
+}

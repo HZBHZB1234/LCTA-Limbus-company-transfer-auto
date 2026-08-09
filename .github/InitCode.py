@@ -241,6 +241,7 @@ js_files = [
     'js/speed.js',
     'js/input-bypass.js',
     'js/cheat-shell.js',
+    'js/metadata-recovery.js',
 ]
 js_content = ''
 for f in js_files:

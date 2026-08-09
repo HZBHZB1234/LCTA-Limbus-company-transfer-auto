@@ -3081,63 +3081,13 @@ if (ts && ts.editor && _searchBridge.isOpen) {
                 score: { priority: priority },
                 merged_from: mergedFrom,
                 is_merged: files.length > 1,
+                _raw_changes: items.map(function (c) { return { old_val: c.old_val, new_val: c.new_val }; }),
                 merge_candidates: []
             });
         }
 
-        // 检测可合并的组对（本地简化版）
-        var candidates = [];
-        for (var i = 0; i < groups.length; i++) {
-            for (var j = i + 1; j < groups.length; j++) {
-                var g1 = groups[i], g2 = groups[j];
-                var f1 = g1.l3_options.fields || [];
-                var f2 = g2.l3_options.fields || [];
-                var fieldOverlap = false;
-                for (var fa = 0; fa < f1.length; fa++) {
-                    for (var fb = 0; fb < f2.length; fb++) {
-                        if (f1[fa] === f2[fb]) { fieldOverlap = true; break; }
-                    }
-                    if (fieldOverlap) break;
-                }
-                if (!fieldOverlap) continue;
-
-                var ap1 = g1.action_preview.map(function (a) { return a.from; });
-                var ap2 = g2.action_preview.map(function (a) { return a.from; });
-                if (ap1.join(',') === ap2.join(',')) continue;
-
-                var files1 = g1.l1_options.exact_files || [];
-                var files2 = g2.l1_options.exact_files || [];
-                var cats1 = (g1.l1_options.categories || []).map(function (c) { return c.name; });
-                var cats2 = (g2.l1_options.categories || []).map(function (c) { return c.name; });
-
-                var sharedFiles = 0;
-                for (var sf = 0; sf < files1.length; sf++) {
-                    for (var sg = 0; sg < files2.length; sg++) {
-                        if (files1[sf] === files2[sg]) { sharedFiles++; break; }
-                    }
-                }
-                var sharedCats = 0;
-                for (var ca = 0; ca < cats1.length; ca++) {
-                    for (var cb = 0; cb < cats2.length; cb++) {
-                        if (cats1[ca] === cats2[cb]) { sharedCats++; break; }
-                    }
-                }
-
-                var score = 10 + (sharedFiles >= 2 ? 5 : 0) + (sharedCats >= 2 ? 3 : 0);
-                if (score >= 8) {
-                    var sharedField = f1[0];  // we know there's at least one overlap
-                    for (var fa2 = 0; fa2 < f1.length; fa2++) {
-                        for (var fb2 = 0; fb2 < f2.length; fb2++) {
-                            if (f1[fa2] === f2[fb2]) { sharedField = f1[fa2]; break; }
-                        }
-                    }
-                    var reason = '相同字段 \'' + sharedField + '\'，可合并为更宽的作用域';
-                    candidates.push({ idx1: i, idx2: j, score: score, reason: reason });
-                    groups[i].merge_candidates.push([j, score, reason]);
-                    groups[j].merge_candidates.push([i, score, reason]);
-                }
-            }
-        }
+        // 语义化合并候选检测（规则推广验证）
+        var candidates = detectMergeCandidatesLocally(groups);
 
         groups.sort(function (a, b) { return (b.score.priority || 0) - (a.score.priority || 0); });
 
@@ -3682,16 +3632,102 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         if (applyBtn) { applyBtn.textContent = '✓ 已应用'; applyBtn.disabled = true; }
     }
 
-    function _mergeTwoGroups(g1, g2) {
-        // 合并 action_preview
-        var mergedActions = (g1.action_preview || []).slice();
-        for (var i = 0; i < (g2.action_preview || []).length; i++) {
-            var dup = false;
-            for (var j = 0; j < mergedActions.length; j++) {
-                if (mergedActions[j].from === g2.action_preview[i].from &&
-                    mergedActions[j].to === g2.action_preview[i].to) { dup = true; break; }
+    function ruleCoversItems(actions, items) {
+        // 判断规则 actions（按顺序的字面全局替换）能否在 items 上推广：
+        // 每条 item 的 old_val 应用规则后必须恰好等于 new_val
+        if (!actions || !actions.length || !items || !items.length) return false;
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            var oldVal = item.old_val;
+            var newVal = item.new_val;
+            if (typeof oldVal !== 'string' || typeof newVal !== 'string') return false;
+            var result = oldVal;
+            for (var j = 0; j < actions.length; j++) {
+                var frm = actions[j].from;
+                var to = actions[j].to;
+                if (typeof frm !== 'string' || typeof to !== 'string' || !frm) return false;
+                result = result.split(frm).join(to);
             }
-            if (!dup) mergedActions.push(g2.action_preview[i]);
+            if (result !== newVal) return false;
+        }
+        return true;
+    }
+
+    function detectMergeCandidatesLocally(groups) {
+        // 语义化合并候选检测：一组的规则能推广覆盖另一组的全部原始变更即可合并
+        var candidates = [];
+        for (var i = 0; i < groups.length; i++) {
+            for (var j = i + 1; j < groups.length; j++) {
+                var g1 = groups[i], g2 = groups[j];
+                if (g1.change_type !== g2.change_type) continue;
+                var ap1 = g1.action_preview || [];
+                var ap2 = g2.action_preview || [];
+                var it1 = g1._raw_changes || [];
+                var it2 = g2._raw_changes || [];
+                if (!ap1.length || !ap2.length || !it1.length || !it2.length) continue;
+                var cov1 = ruleCoversItems(ap1, it2);
+                var cov2 = ruleCoversItems(ap2, it1);
+                if (!cov1 && !cov2) continue;
+
+                var files1 = (g1.l1_options && g1.l1_options.exact_files) || [];
+                var files2 = (g2.l1_options && g2.l1_options.exact_files) || [];
+                var sharedFiles = 0;
+                for (var sf = 0; sf < files1.length; sf++) {
+                    if (files2.indexOf(files1[sf]) !== -1) sharedFiles++;
+                }
+                var cats1 = (g1.l1_options && g1.l1_options.categories || []).map(function (c) { return c.name; });
+                var cats2 = (g2.l1_options && g2.l1_options.categories || []).map(function (c) { return c.name; });
+                var sharedCats = 0;
+                for (var ca = 0; ca < cats1.length; ca++) {
+                    if (cats2.indexOf(cats1[ca]) !== -1) sharedCats++;
+                }
+
+                var score = 20 + (sharedFiles >= 2 ? 5 : 0) + (sharedCats >= 2 ? 3 : 0);
+                var ruleSrc = cov1 ? g1 : g2;
+                var apText = (ruleSrc.action_preview || []).map(function (a) {
+                    return String(a.from || '') + ' → ' + String(a.to || '');
+                }).join('、');
+                var reason = '规则 "' + apText + '" 可推广覆盖另外 ' + (cov1 ? it2.length : it1.length) + ' 项变更';
+                candidates.push({ idx1: i, idx2: j, score: score, reason: reason });
+                groups[i].merge_candidates.push([j, score, reason]);
+                groups[j].merge_candidates.push([i, score, reason]);
+            }
+        }
+        candidates.sort(function (a, b) { return b.score - a.score; });
+        return candidates;
+    }
+
+    function _mergeTwoGroups(g1, g2) {
+        var items1 = g1._raw_changes || [];
+        var items2 = g2._raw_changes || [];
+        var ap1 = g1.action_preview || [];
+        var ap2 = g2.action_preview || [];
+        var cov1 = ruleCoversItems(ap1, items2);
+        var cov2 = ruleCoversItems(ap2, items1);
+
+        // 语义合并：保留能推广覆盖对方变更的规则（不拼接冗余 action）
+        var mergedActions, ruleSrc, mergedSummary;
+        if (cov1 && cov2) {
+            ruleSrc = ap1.length <= ap2.length ? g1 : g2;
+            mergedActions = (ruleSrc.action_preview || []).slice();
+        } else if (cov1) {
+            ruleSrc = g1;
+            mergedActions = ap1.slice();
+        } else if (cov2) {
+            ruleSrc = g2;
+            mergedActions = ap2.slice();
+        } else {
+            // 防御回退：拼接 + 去重（旧行为）
+            ruleSrc = null;
+            mergedActions = ap1.slice();
+            for (var i = 0; i < ap2.length; i++) {
+                var dup = false;
+                for (var j = 0; j < mergedActions.length; j++) {
+                    if (mergedActions[j].from === ap2[i].from &&
+                        mergedActions[j].to === ap2[i].to) { dup = true; break; }
+                }
+                if (!dup) mergedActions.push(ap2[i]);
+            }
         }
 
         // 合并文件范围
@@ -3718,14 +3754,34 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         var mergedIds = uniqArr((g1.l2_options && g1.l2_options.item_ids || []).concat(
                                 g2.l2_options && g2.l2_options.item_ids || []));
 
+        var totalOccur = (g1.occurrence_count || 0) + (g2.occurrence_count || 0);
+        if (ruleSrc) {
+            mergedSummary = (ruleSrc.summary || '检测到 ' + totalOccur + ' 处相同修改')
+                .replace(/检测到 \d+ 处/, '检测到 ' + totalOccur + ' 处');
+        } else {
+            mergedSummary = '已合并 2 组规则: ' + (g1.summary || '') + ' + ' + (g2.summary || '');
+        }
+
+        // 合并原始变更（去重）
+        var mergedRaw = [];
+        var seenRaw = {};
+        var rawAll = (g1._raw_changes || []).concat(g2._raw_changes || []);
+        for (var ri = 0; ri < rawAll.length; ri++) {
+            var rk = String(rawAll[ri].old_val) + '::' + String(rawAll[ri].new_val);
+            if (!seenRaw[rk]) {
+                seenRaw[rk] = true;
+                mergedRaw.push({ old_val: rawAll[ri].old_val, new_val: rawAll[ri].new_val });
+            }
+        }
+
         return {
             change_type: g1.change_type,
-            summary: '已合并 2 组规则: ' + (g1.summary || '') + ' + ' + (g2.summary || ''),
+            summary: mergedSummary,
             suggestions: [],
             action_preview: mergedActions,
             file_count: mergedFiles.length,
             item_count: (g1.item_count || 0) + (g2.item_count || 0),
-            occurrence_count: (g1.occurrence_count || 0) + (g2.occurrence_count || 0),
+            occurrence_count: totalOccur,
             l1_options: { suggested: mergedCats.length <= 2 ? 'category' : 'multi_category', categories: mergedCats, exact_files: mergedFiles },
             l2_options: { suggested: mergedIds.length ? 'id' : 'full_text', item_ids: mergedIds },
             l3_options: { suggested: mergedFields.length === 1 ? 'restricted' : 'all_text', fields: mergedFields },
@@ -3734,6 +3790,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             merged_from: mergedFrom,
             is_merged: true,
             merge_candidates: [],
+            _raw_changes: mergedRaw,
             _original_groups: [JSON.parse(JSON.stringify(g1)), JSON.parse(JSON.stringify(g2))]
         };
     }
@@ -3852,35 +3909,9 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             stats: { group_count: newGroups.length }
         };
         // 重新检测合并候选
-        if (typeof analyzeChangesLocallyV3 !== 'undefined') {
-            // 使用本地检测重新计算 merge_candidates
-            result.merge_candidates = (function () {
-                var candidates = [];
-                for (var a = 0; a < newGroups.length; a++) {
-                    for (var b = a + 1; b < newGroups.length; b++) {
-                        var ga = newGroups[a], gb = newGroups[b];
-                        if (ga.change_type !== gb.change_type) continue;
-                        var fa = ga.l3_options && ga.l3_options.fields || [];
-                        var fb = gb.l3_options && gb.l3_options.fields || [];
-                        var overlap = false;
-                        for (var fi = 0; fi < fa.length; fi++) {
-                            if (fb.indexOf(fa[fi]) !== -1) { overlap = true; break; }
-                        }
-                        if (!overlap) continue;
-                        var filesA = ga.l1_options && ga.l1_options.exact_files || [];
-                        var filesB = gb.l1_options && gb.l1_options.exact_files || [];
-                        var sharedFiles = 0;
-                        for (var sfi = 0; sfi < filesA.length; sfi++) {
-                            if (filesB.indexOf(filesA[sfi]) !== -1) sharedFiles++;
-                        }
-                        var score = 10 + (sharedFiles >= 2 ? 5 : 0);
-                        if (score >= 8) {
-                            candidates.push({ idx1: a, idx2: b, score: score, reason: '相同字段，文件重叠 ' + sharedFiles + ' 个' });
-                        }
-                    }
-                }
-                return candidates;
-            })();
+        if (typeof detectMergeCandidatesLocally !== 'undefined') {
+            // 使用本地语义检测重新计算 merge_candidates
+            result.merge_candidates = detectMergeCandidatesLocally(newGroups);
         }
         renderV3Results(result, {});
         showToast('已拆分为 ' + originGroups.length + ' 个独立组', 'success');

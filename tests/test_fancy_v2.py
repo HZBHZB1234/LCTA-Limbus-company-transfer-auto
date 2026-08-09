@@ -340,6 +340,63 @@ def test_rule_editor_analyze_changes_clusters_wraps(monkeypatch, tmp_path):
     assert wrap_group["score"]["s2_purity"] == 95
 
 
+def test_rule_covers_items():
+    covers = rule_editor_generate._rule_covers_items
+
+    assert covers([{"from": "a", "to": "b"}], [{"old_val": "aa", "new_val": "bb"}])
+    assert covers([{"from": "a", "to": "b"}], [{"old_val": "ac", "new_val": "bc"}])
+    assert covers([{"from": "a", "to": "b"}], [{"old_val": "da", "new_val": "db"}])
+    assert covers(
+        [{"from": "a", "to": "b"}, {"from": "c", "to": "d"}],
+        [{"old_val": "ac", "new_val": "bd"}],
+    )
+
+    assert not covers([{"from": "aa", "to": "bb"}], [{"old_val": "ac", "new_val": "bc"}])
+    assert not covers([{"from": "a", "to": "b"}], [{"old_val": "ab", "new_val": "cd"}])
+    assert not covers([{"from": "a", "to": "b"}], [{"old_val": 5, "new_val": "b"}])
+    assert not covers([], [{"old_val": "aa", "new_val": "bb"}])
+    assert not covers([{"from": "a", "to": "b"}], [])
+    assert not covers([{"from": "a", "to": "b"}], [{"old_val": "ac", "new_val": "bd"}])
+    assert not covers([{"from": "a", "to": "b"}], [{"old_val": "ac", "new_val": "bc"}, {"old_val": "xa", "new_val": "yy"}])
+
+
+def test_analyze_changes_v3_semantic_merge_candidates():
+    """一个文本项包含两个修改（aa->bb 实际是规则 a->b 应用两次）时，
+    必须能与 ac->bc / da->db 语义合并。
+    """
+    changes = [
+        {"file": "Skill_1.json", "field_path": "desc", "old_val": "aa", "new_val": "bb"},
+        {"file": "Skill_2.json", "field_path": "desc", "old_val": "ac", "new_val": "bc"},
+        {"file": "Skill_3.json", "field_path": "desc", "old_val": "da", "new_val": "db"},
+    ]
+
+    result = rule_editor_generate.analyze_changes_v3(changes)
+
+    assert len(result["groups"]) == 3
+    pairs = {(c["idx1"], c["idx2"]) for c in result["merge_candidates"]}
+    assert pairs == {(0, 1), (0, 2), (1, 2)}, pairs
+    for c in result["merge_candidates"]:
+        assert c["score"] >= 20
+        assert "可推广" in c["reason"]
+    raw_changes = [g["_raw_changes"] for g in result["groups"]]
+    assert raw_changes == [
+        [{"old_val": "aa", "new_val": "bb"}],
+        [{"old_val": "ac", "new_val": "bc"}],
+        [{"old_val": "da", "new_val": "db"}],
+    ]
+
+
+def test_analyze_changes_v3_no_candidate_for_unrelated_groups():
+    changes = [
+        {"file": "Skill_1.json", "field_path": "desc", "old_val": "ab", "new_val": "cd"},
+        {"file": "Skill_2.json", "field_path": "desc", "old_val": "ac", "new_val": "bc"},
+    ]
+
+    result = rule_editor_generate.analyze_changes_v3(changes)
+
+    assert result["merge_candidates"] == []
+
+
 def test_rule_editor_validates_ruleset_payload():
     ruleset = {"version": 2, "name": "t", "rules": [{
         "files": ["*.json"],

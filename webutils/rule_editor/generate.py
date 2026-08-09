@@ -297,9 +297,39 @@ def analyze_changes_v2(changes: list, bias: str = 'conservative') -> dict:
     return {"groups": result_groups, "merge_suggestions": merge_suggestions}
 
 
+def _rule_covers_items(actions: list, items: list) -> bool:
+    """判断规则 actions（按顺序的字面全局替换）是否能在 items 上推广。
+
+    将 actions 依次应用到每条 item 的 old_val（与引擎 literal 模式一致，
+    即 str.replace 全局替换），若所有 item 的结果都恰好等于其 new_val，
+    则说明该规则可以覆盖这些变更，满足合并条件。
+    """
+    if not actions or not items:
+        return False
+    for item in items:
+        old_val = item.get("old_val")
+        new_val = item.get("new_val")
+        if not isinstance(old_val, str) or not isinstance(new_val, str):
+            return False
+        result = old_val
+        for action in actions:
+            from_str = action.get("from")
+            to_str = action.get("to")
+            if not isinstance(from_str, str) or not isinstance(to_str, str) or not from_str:
+                return False
+            result = result.replace(from_str, to_str)
+        if result != new_val:
+            return False
+    return True
+
+
 def _detect_merge_candidates(groups: list) -> list:
-    """Detect pairs of groups that could be merged into broader rules.
-    Returns list of (idx1, idx2, score, reason) sorted by score desc.
+    """检测可合并的组对（语义验证）。
+
+    合并条件：某一组的规则（action_preview，按字面全局替换语义）能推广到
+    另一组的全部原始变更上（old_val 应用规则后恰等于 new_val）。同规则的
+    组对天然双向通过，也能合并以扩大文件范围。
+    返回 (idx1, idx2, score, reason) 列表，按 score 降序。
     """
     candidates = []
     for i in range(len(groups)):
@@ -309,15 +339,17 @@ def _detect_merge_candidates(groups: list) -> list:
             if g1.get("change_type") != g2.get("change_type"):
                 continue
 
-            f1 = set(g1.get("l3_options", {}).get("fields", []))
-            f2 = set(g2.get("l3_options", {}).get("fields", []))
-            field_overlap = len(f1 & f2)
-            if field_overlap == 0:
+            actions1 = g1.get("action_preview", [])
+            actions2 = g2.get("action_preview", [])
+            items1 = g1.get("_raw_changes", [])
+            items2 = g2.get("_raw_changes", [])
+
+            if not actions1 or not actions2 or not items1 or not items2:
                 continue
 
-            ap1 = [a.get("from") for a in g1.get("action_preview", [])]
-            ap2 = [a.get("from") for a in g2.get("action_preview", [])]
-            if ap1 == ap2:
+            cov1 = _rule_covers_items(actions1, items2)
+            cov2 = _rule_covers_items(actions2, items1)
+            if not cov1 and not cov2:
                 continue
 
             files1 = set(g1.get("l1_options", {}).get("exact_files", []))
@@ -325,19 +357,22 @@ def _detect_merge_candidates(groups: list) -> list:
             cats1 = set(c["name"] for c in g1.get("l1_options", {}).get("categories", []))
             cats2 = set(c["name"] for c in g2.get("l1_options", {}).get("categories", []))
 
-            score = 0
-            if field_overlap > 0:
-                score += 10
+            score = 20
             if len(files1 & files2) >= 2:
                 score += 5
             if len(cats1 & cats2) >= 2:
                 score += 3
 
-            if score >= 8:
-                shared_field = list(f1 & f2)[0]
-                shared_files = len(files1 & files2)
-                reason = f"相同字段 '{shared_field}'，文件重叠 {shared_files} 个，分类重叠 {len(cats1 & cats2)} 个"
-                candidates.append((i, j, score, reason))
+            if cov1 and cov2:
+                rule_src = g1 if len(actions1) <= len(actions2) else g2
+            else:
+                rule_src = g1 if cov1 else g2
+            covered_count = len(items2) if cov1 else len(items1)
+            ap_text = "、".join(
+                f'{a.get("from", "")} → {a.get("to", "")}' for a in rule_src.get("action_preview", [])
+            )
+            reason = f'规则 "{ap_text}" 可推广覆盖另外 {covered_count} 项变更'
+            candidates.append((i, j, score, reason))
 
     candidates.sort(key=lambda x: x[2], reverse=True)
     return candidates
@@ -464,6 +499,10 @@ def analyze_changes_v3(changes: list) -> dict:
                 ]
             },
             "score": _score_group(_make_scorable(items)),
+            "_raw_changes": [
+                {"old_val": c.get("old_val", ""), "new_val": c.get("new_val", "")}
+                for c in items
+            ],
             "merged_from": [
                 {"file": f, "count": sum(1 for c in items if c["file"] == f)}
                 for f in files

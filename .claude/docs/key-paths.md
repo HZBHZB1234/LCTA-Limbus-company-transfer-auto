@@ -450,14 +450,20 @@ User clicks "保存到游戏" (optional direct save)
 User clicks "智能生成规则集" (from changes panel or ruleset-edit tab)
   → generateRulesFromChanges()
     → state.smartChanges = state.pendingChanges
-    → openSmartGeneration()                         existing smart gen dialog
-      → api.analyze_changes(changes)                LCS grouping + 5-dimension scoring
-      → webutils/rule_editor/generate.py analyze_changes()
-      → showSmartGenDialog(groups)                  L1-L4 tiered scope selectors
-    → user selects scope → applySmartGroup()
+    → openSmartGenerationV3()                       当前主流程 (V3)
+      → analyzeChangesV3(changes)
+        → api.analyze_changes_v3(changes)           webutils/rule_editor/generate.py analyze_changes_v3()
+        → 回退 analyzeChangesLocallyV3()            JS 本地分析
+      → 按 (old_val, new_val, field_path) 分桶成组，每组附 _raw_changes 原始变更
+      → 合并候选 = 语义验证（_detect_merge_candidates / detectMergeCandidatesLocally）：
+        一组的规则(action_preview，字面全局替换)能推广覆盖另一组全部变更即可合并
+      → _autoMergeCandidates() + _mergeTwoGroups() 自动合并高置信候选（保留推广方规则，不拼接冗余 action）
+    → user selects scope → applyV3Group() / applyAllV3WithDedup()
       → builds rule → pushes to state.currentRuleset.rules
       → api.save_ruleset()                          persists to fancy/{name}.json
 ```
+
+> 注：V1/V2 旧流程（analyze_changes / analyze_changes_v2 + _cluster_changes LCS 分组）仍保留，但入口已走 V3。
 
 Key files: `webui/rule-editor.html`, `webui/js/rule-editor.js`, `webui/app.py` (RuleEditorAPI), `webutils/rule_editor/`
 

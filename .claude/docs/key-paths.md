@@ -607,7 +607,15 @@ Files: `webui/js/features.js`, `webui/app.py`, `webutils/drop/`, `webutils/funct
 ```
 start_webui.py main()
   → if -launcher flag: start_launcher()        (launcher mode, see section 5)
-  → else: webui/app.py:main()                 (WebUI mode)
+  → else: start_webui()                        (WebUI mode)
+    → init_env()                               设置 path_/is_frozen 等环境变量
+    → check_webview2_environment()             WebView2 预检（与 pywebview edgechromium 探测一致）：
+                                                64 位机器 HKLM 走 WOW6432Node\EdgeUpdate\Clients\{4个GUID}，
+                                                HKCU 走普通路径；PYWEBVIEW_GUI=qt 直接放行。
+                                                全部未安装 → MessageBox「缺少 WebView2 Runtime」+
+                                                webbrowser 打开官方下载页 + return（不启动窗口）
+    → from webutils.clr_bootstrap import ensure_clr  导入 pythonnet（netfx）
+    → webui/app.py:main()                      (WebUI mode)
     → globalManagers/ConfigManager.py          init singleton, load config.json
     → globalManagers/LogManager.py             init logger
     → webui/app.py LCTA_API.__init__()         register all pywebview API methods

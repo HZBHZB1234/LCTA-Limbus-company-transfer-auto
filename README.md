@@ -30,7 +30,6 @@
 1. 从 [Release 页面](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/releases) 下载最新版本
    > 文件下载指导  
    - LCTA-Portable-Full.zip 正常版本。推荐下载此版本  
-   - LCTA-Portable-Full-Compatible.zip 兼容版，空间占用较大且存在可能出现的UI界面错误，请在无法使用正常版本时使用该版本  
    - LCTA-update.zip 完整版自动更新功能需求文件，包含项目源码 
 2. 解压到任意目录
 3. 运行 **可执行文件(.exe)** 即可启动工具箱
@@ -44,7 +43,6 @@
 ### 构建发布包
 运行 `.\build.ps1` 完成完整构建打包，产物输出到 `dist/` 目录：
 - `LCTA-Portable-Full.zip` — 正常版本
-- `LCTA-Portable-Full-Compatible.zip` — 兼容版（含 PyQt 后备）
 - `LCTA-update.zip` — 源码更新包
 
 构建要求：

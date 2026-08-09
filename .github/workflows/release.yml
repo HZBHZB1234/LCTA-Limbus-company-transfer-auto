@@ -12,7 +12,6 @@ env:
   PYTHON_VERSION: 3.9.6  # 使用嵌入式Python版本
   ARIA2_VERSION: 1.37.0
   APP_NAME: "LCTA"
-  TESTER_NAME: "无法打开？运行环境检测"
   PYINSTALLER_ARGU: "--add-data \"LCTA_backup/config_default.json;.\" --add-data \"LCTA_backup/config_check.json;.\" --add-data \"LCTA_backup/webui;webui\" -i \"LCTA_backup/favicon.ico\""
 
 jobs:
@@ -44,8 +43,6 @@ jobs:
         mkdir release
         mkdir release/${{ env.APP_NAME }}
         mkdir release/${{ env.APP_NAME }}/code
-        mkdir release/${{ env.APP_NAME }}-Compatible
-        mkdir release/${{ env.APP_NAME }}-Compatible/code
     
     - name: Setup MSYS2 and MinGW (for C compilation)
       uses: msys2/setup-msys2@v2
@@ -74,19 +71,6 @@ jobs:
         strip launcher_debug.exe
         mv launcher_debug.exe release\${{ env.APP_NAME }}\launcher_debug.exe
 
-        gcc -O2 -mwindows -o launcher.exe launcher_qt.c launcher_res.o -lshlwapi
-        strip launcher.exe
-        mv launcher.exe release\${{ env.APP_NAME }}-Compatible\launcher.exe
-
-        gcc -O2 -mwindows -o launcher_debug.exe launcher_qt_debug.c launcher_res.o -lshlwapi
-        strip launcher_debug.exe
-        mv launcher_debug.exe release\${{ env.APP_NAME }}-Compatible\launcher_debug.exe
-
-        # tester.exe 不加 -mwindows，因其为诊断工具需要控制台
-        gcc -O2 -o tester.exe test.c launcher_res.o -lshlwapi
-        strip tester.exe
-        cp tester.exe release\${{ env.APP_NAME }}\${{ env.TESTER_NAME }}.exe
-        mv tester.exe release\${{ env.APP_NAME }}-Compatible\${{ env.TESTER_NAME }}.exe
     - name: Install Dependencies
       run: |
         python -m venv venv
@@ -108,15 +92,11 @@ jobs:
         dir release -Recurse
         Copy-Item LCTA\* release\${{ env.APP_NAME }}\code\ -Recurse -Force
         Copy-Item venv release\${{ env.APP_NAME }}\code\venv -Recurse
-        Copy-Item LCTA\* release\${{ env.APP_NAME }}-Compatible\code\ -Recurse -Force
-        Copy-Item venv release\${{ env.APP_NAME }}-Compatible\code\venv -Recurse
-        release\${{ env.APP_NAME }}-Compatible\code\venv\Bins\python.exe -m pip install PyQt5 qtpy PyQtWebEngine
 
     - name: Bundle rawinput hook DLL (input bypass)
       run: |
         $targets = @(
             "release\${{ env.APP_NAME }}\code\hooks",
-            "release\${{ env.APP_NAME }}-Compatible\code\hooks",
             ".\LCTA_update\hooks"
         )
         foreach ($target in $targets) {
@@ -124,7 +104,6 @@ jobs:
         }
         gcc -shared -O2 -s -static-libgcc -o rawinput_hook.dll LCTA/hooks/rawinput_hook.c -lpsapi
         Copy-Item rawinput_hook.dll "release\${{ env.APP_NAME }}\code\hooks\rawinput_hook.dll" -Force
-        Copy-Item rawinput_hook.dll "release\${{ env.APP_NAME }}-Compatible\code\hooks\rawinput_hook.dll" -Force
         Copy-Item rawinput_hook.dll ".\LCTA_update\hooks\rawinput_hook.dll" -Force
 
     - name: Fetch & bundle Cheat Core (toolbox, private + encrypted)
@@ -146,7 +125,6 @@ jobs:
         python LCTA\scripts\cheat_encrypt.py build --src cheat_core --key cheat_core/keys/current.txt --out cheat_core.bin
         $targets = @(
             "release\${{ env.APP_NAME }}\code\cheat_core",
-            "release\${{ env.APP_NAME }}-Compatible\code\cheat_core",
             ".\LCTA_update\cheat_core"
         )
         foreach ($target in $targets) {
@@ -161,7 +139,6 @@ jobs:
             # （copy files 步骤中 LCTA\* 可能已复制了 tools\cfst，此处必须清理旧目标）
             $targets = @(
                 "release\${{ env.APP_NAME }}\code\tools\cfst",
-                "release\${{ env.APP_NAME }}-Compatible\code\tools\cfst",
                 ".\LCTA_update\tools\cfst"
             )
             foreach ($t in $targets) {
@@ -196,7 +173,6 @@ jobs:
         $aria2License = Get-ChildItem $extract -Recurse -Filter "COPYING" -File | Select-Object -First 1
         $targets = @(
             "release\${{ env.APP_NAME }}\code\tools\aria2",
-            "release\${{ env.APP_NAME }}-Compatible\code\tools\aria2",
             ".\LCTA_update\tools\aria2"
         )
         foreach ($target in $targets) {
@@ -204,14 +180,6 @@ jobs:
             Copy-Item $aria2Exe.FullName "$target\aria2c.exe" -Force
             if ($aria2License) { Copy-Item $aria2License.FullName "$target\COPYING" -Force }
         }
-
-    - name: Upload Compatible portable application folder
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ env.APP_NAME }}-Portable-Full-Compatible
-        path: |
-          release/${{ env.APP_NAME }}-Compatible
-        retention-days: 7
 
     - name: Upload portable application folder
       uses: actions/upload-artifact@v4
@@ -235,7 +203,6 @@ jobs:
       run: |
         # 压缩便携版完整文件夹
         Compress-Archive -Path release/${{ env.APP_NAME }} -DestinationPath release/${{ env.APP_NAME }}-Portable-Full.zip
-        Compress-Archive -Path release/${{ env.APP_NAME }}-Compatible -DestinationPath release/${{ env.APP_NAME }}-Portable-Full-Compatible.zip
         
         # 压缩更新文件夹
         Remove-Item -Path ./LCTA_update/.git -Recurse -Force
@@ -252,7 +219,6 @@ jobs:
         prerelease: false
         files: |
           release/${{ env.APP_NAME }}-Portable-Full.zip
-          release/${{ env.APP_NAME }}-Portable-Full-Compatible.zip
           release/${{ env.APP_NAME }}-update.zip
         tag_name: ${{ github.ref_name }}
       env:

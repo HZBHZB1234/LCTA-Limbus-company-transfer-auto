@@ -236,14 +236,13 @@ pytest tests/test_config.py::test_load_config
 3. **嵌入式 Python** — 下载 Python 3.9.6 embeddable，安装 pip 依赖，修补 `requests` 禁用 SSL 验证
 4. **dist/ 组装** — 复制源码文件，替换 webui 为 InitCode 修改版，捆绑嵌入式 Python venv
 5. **更新包清理** — 从更新包中移除 `.git` 和 `.github`
-6. **ZIP 打包** — 创建三个输出包
+6. **ZIP 打包** — 创建两个输出包
 
 ### 构建产物
 
 | 文件 | 说明 |
 |------|------|
 | `LCTA-Portable-Full.zip` | 标准发布包 |
-| `LCTA-Portable-Full-Compatible.zip` | 兼容版发布包（含 PyQt 回退） |
 | `LCTA-update.zip` | 源文件更新包（不含嵌入式 Python） |
 
 ### 构建要求
@@ -289,7 +288,7 @@ pytest tests/test_config.py::test_load_config
 | 问题 | 原因 | 解决 |
 |------|------|------|
 | 启动后窗口闪退 | Python 环境问题或缺少依赖 | 运行 `debug_environ_test.py` 诊断 |
-| WebView 白屏 | WebView2 未安装或版本过低 | 安装/更新 Edge WebView2 Runtime |
+| WebView 白屏 | WebView2 未安装或版本过低 | 启动时会自动检测：缺少 WebView2 Runtime 时弹窗提示并打开下载页（`start_webui.py::check_webview2_environment`）；安装后重启 |
 | API 调用失败 | API 密钥无效或网络问题 | 检查 `.env` 配置，使用 API 测试页面 |
 | 翻译卡住不动 | LLM API 速率限制或超时 | 减少并发 worker 数，检查 API 配额 |
 | 游戏启动失败 | 游戏路径配置错误 | 检查 config.json 中的游戏路径，确认 Steam 安装 |

@@ -15,7 +15,7 @@ python start_webui.py
 python start_webui.py -launcher
 ```
 
-> pythonnet 引导:所有入口(`start_webui.py` / launcher 模块 / `scripts/test_environment.py`)统一经 `webutils/clr_bootstrap.py::ensure_clr()` 以 netfx 运行时导入 clr。依赖版本已在 `requirements.txt` 固定(`pythonnet==3.0.5`, `clr_loader==0.2.10`, `pywebview==6.2.1`),请勿随意升级 clr_loader(0.2.8 以下存在 netfx 加载缺陷)。若 `import clr` 失败,错误信息会包含真实异常与修复指引,不会再自动回退 coreclr/mono。
+> pythonnet 引导:所有入口(`start_webui.py` / launcher 模块)统一经 `webutils/clr_bootstrap.py::ensure_clr()` 以 netfx 运行时导入 clr。依赖版本已在 `requirements.txt` 固定(`pythonnet==3.0.5`, `clr_loader==0.2.10`, `pywebview==6.2.1`),请勿随意升级 clr_loader(0.2.8 以下存在 netfx 加载缺陷)。若 `import clr` 失败,错误信息会包含真实异常与修复指引,不会再自动回退 coreclr/mono。
 
 ## How to Build
 
@@ -27,7 +27,6 @@ python start_webui.py -launcher
 
 Outputs:
 - `LCTA-Portable-Full.zip` — normal release
-- `LCTA-Portable-Full-Compatible.zip` — compatible release
 - `LCTA-update.zip` — source update package
 
 Requirements: PowerShell 5.0+, MinGW-w64 (optional, skips if unavailable), Python 3.9.6, network.

@@ -13,6 +13,60 @@ sys.path.insert(0, str(project_root))
 
 debug = False
 
+# 缺少 WebView2 Runtime 时打开官方下载页
+WEBVIEW2_DOWNLOAD_URL = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+
+
+def check_webview2_environment():
+    """预检 WebView2 Runtime；缺失时弹窗提示并打开下载页。返回 False 表示应终止启动。"""
+    if os.getenv('PYWEBVIEW_GUI') == 'qt':
+        return True
+    try:
+        import platform
+        import winreg
+    except Exception:
+        return True
+
+    webview2_guids = (
+        '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',   # WebView2 Runtime
+        '{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}',   # WebView2 Beta
+        '{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}',   # WebView2 Developer
+        '{65C35B14-6C1D-4122-AC46-7148CC9D6497}',   # WebView2 Canary
+    )
+
+    # 与 pywebview 的 edgechromium 探测保持一致（64 位机器上 HKLM 走 WOW6432Node 视图）
+    def edge_build(key_type, guid):
+        try:
+            if platform.machine() == 'x86' or key_type == 'HKEY_CURRENT_USER':
+                path = r'Microsoft\EdgeUpdate\Clients\%s' % guid
+            else:
+                path = r'WOW6432Node\Microsoft\EdgeUpdate\Clients\%s' % guid
+            with winreg.OpenKey(getattr(winreg, key_type), r'SOFTWARE\%s' % path) as key:
+                build, _ = winreg.QueryValueEx(key, 'pv')
+                return str(build)
+        except Exception:
+            return '0'
+
+    for guid in webview2_guids:
+        for key_type in ('HKEY_CURRENT_USER', 'HKEY_LOCAL_MACHINE'):
+            if edge_build(key_type, guid) != '0':
+                return True
+
+    try:
+        import ctypes
+        import webbrowser
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            '检测到系统缺少 Microsoft Edge WebView2 Runtime，LCTA 界面将无法正常显示。\n\n'
+            '即将打开下载页面，请安装 WebView2 Runtime 后重新启动 LCTA。',
+            'LCTA - 缺少运行环境',
+            0x10 | 0x1000
+        )
+        webbrowser.open(WEBVIEW2_DOWNLOAD_URL)
+    except Exception:
+        pass
+    return False
+
 
 
 def get_resource_path():
@@ -44,6 +98,8 @@ def start_webui():
     """启动PyWebGUI界面"""
     try:
         init_env()
+        if not check_webview2_environment():
+            return
         if os.getenv('__debug_exe__', 'false') == 'true':
             os.environ['COREHOST_TRACE'] = '1'
             os.environ["COREHOST_TRACEFILE"] = "hostfxr.log"

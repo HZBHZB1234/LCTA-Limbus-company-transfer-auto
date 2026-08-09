@@ -129,8 +129,7 @@ if (Test-Path $initScript) {
             Remove-Item $initCodeCSourcesCache -Recurse -Force
         }
         New-Item -ItemType Directory -Path $initCodeCSourcesCache -Force | Out-Null
-        $generatedCSources = @("launcher.c", "launcher_debug.c", "launcher_qt.c",
-                               "launcher_qt_debug.c", "test.c")
+        $generatedCSources = @("launcher.c", "launcher_debug.c")
         foreach ($cf in $generatedCSources) {
             $srcPath = "$ParentDir\$cf"
             if (Test-Path $srcPath) {
@@ -237,10 +236,7 @@ if (-not $gcc -or -not $windres) {
 
     $targets = @(
         @{Src="launcher.c";            Out="launcher.exe"},
-        @{Src="launcher_debug.c";      Out="launcher_debug.exe"},
-        @{Src="launcher_qt.c";         Out="launcher_qt.exe"},
-        @{Src="launcher_qt_debug.c";   Out="launcher_qt_debug.exe"},
-        @{Src="test.c";                Out="tester.exe"}
+        @{Src="launcher_debug.c";      Out="launcher_debug.exe"}
     )
 
     foreach ($t in $targets) {
@@ -266,9 +262,7 @@ if (-not $gcc -or -not $windres) {
         if (-not $cacheHit) {
             Write-Host "  编译 $($t.Src) -> $($t.Out)..."
             # -mwindows: 编译为GUI子系统，双击启动时不显示控制台窗口
-            # tester.exe 不加 -mwindows，因其为诊断工具需要控制台
-            $guiFlag = if ($t.Out -eq "tester.exe") { "" } else { "-mwindows" }
-            gcc -O2 $guiFlag -o $t.Out $t.Src launcher_res.o -lshlwapi
+            gcc -O2 -mwindows -o $t.Out $t.Src launcher_res.o -lshlwapi
             strip $t.Out
             Copy-Item $t.Out $cachedExe -Force
             $srcHash | Out-File -FilePath $hashFile -Encoding ASCII
@@ -543,7 +537,6 @@ Write-Host "`n[4/6] 组装 dist/ 目录..." -ForegroundColor Yellow
 
 $distDir = "$ProjectRoot\dist"
 $lctaCode = "$distDir\LCTA\code"
-$lctaCompatCode = "$distDir\LCTA-Compatible\code"
 $lctaUpdate = "$distDir\LCTA-update"
 
 if (Test-Path $distDir) {
@@ -551,7 +544,7 @@ if (Test-Path $distDir) {
     Write-Host "  已清理旧的 dist/"
 }
 
-$dirs = @($lctaCode, $lctaCompatCode, $lctaUpdate)
+$dirs = @($lctaCode, $lctaUpdate)
 foreach ($d in $dirs) {
     New-Item -ItemType Directory -Path $d -Force | Out-Null
 }
@@ -618,7 +611,6 @@ function Copy-ProjectFiles {
 }
 
 Copy-ProjectFiles $lctaCode
-Copy-ProjectFiles $lctaCompatCode
 Copy-ProjectFiles $lctaUpdate
 
 Write-Host "  源文件复制完成" -ForegroundColor Green
@@ -626,7 +618,7 @@ Write-Host "  源文件复制完成" -ForegroundColor Green
 # ---- 替换 webui 为 InitCode 修改版 ----
 if (Test-Path $WebuiBuildCache) {
     Write-Host "  使用 InitCode 修改版 webui..."
-    foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+    foreach ($dest in @($lctaCode, $lctaUpdate)) {
         $destWebui = "$dest\webui"
         if (Test-Path $destWebui) { Remove-Item $destWebui -Recurse -Force }
         Copy-Item $WebuiBuildCache $destWebui -Recurse -Force
@@ -638,7 +630,7 @@ if (Test-Path $WebuiBuildCache) {
 Write-Host "  复制 tools/cfst/ 目录..."
 $cfstSource = "$ProjectRoot\tools\cfst"
 if (Test-Path $cfstSource) {
-    foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+    foreach ($dest in @($lctaCode, $lctaUpdate)) {
         $destCfst = "$dest\tools\cfst"
         # 先删除旧目标再复制，避免 Copy-Item 在目标已存在时将源文件夹嵌套复制
         if (Test-Path $destCfst) { Remove-Item $destCfst -Recurse -Force -ErrorAction Stop }
@@ -652,7 +644,7 @@ if (Test-Path $cfstSource) {
 
 # ---- 复制 aria2c（官方资源预下载用） ----
 Write-Host "  复制 aria2c..."
-foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+foreach ($dest in @($lctaCode, $lctaUpdate)) {
     $destAria2 = "$dest\tools\aria2"
     New-Item -ItemType Directory -Path $destAria2 -Force | Out-Null
     Copy-Item $Aria2ExeCache "$destAria2\aria2c.exe" -Force
@@ -666,7 +658,7 @@ Write-Host "  aria2c 复制完成" -ForegroundColor Green
 Write-Host "  复制 rawinput hook DLL..."
 $hookCacheDll = "$CCompileCache\rawinput_hook.dll"
 if (Test-Path $hookCacheDll) {
-    foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+    foreach ($dest in @($lctaCode, $lctaUpdate)) {
         $destHook = "$dest\hooks"
         New-Item -ItemType Directory -Path $destHook -Force | Out-Null
         Copy-Item $hookCacheDll "$destHook\rawinput_hook.dll" -Force
@@ -680,7 +672,7 @@ if (Test-Path $hookCacheDll) {
 Write-Host "  复制 cheat_core.bin..."
 $cheatBlob = "$CCompileCache\cheat_core.bin"
 if (Test-Path $cheatBlob) {
-    foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
+    foreach ($dest in @($lctaCode, $lctaUpdate)) {
         $destCc = "$dest\cheat_core"
         New-Item -ItemType Directory -Path $destCc -Force | Out-Null
         Copy-Item $cheatBlob "$destCc\cheat_core.bin" -Force
@@ -694,14 +686,11 @@ if (Test-Path $cheatBlob) {
 Write-Host "  复制嵌入式 Python venv..."
 
 $targetVenvLcta = "$lctaCode\venv"
-$targetVenvCompat = "$lctaCompatCode\venv"
 if (Test-Path $targetVenvLcta) { Remove-Item $targetVenvLcta -Recurse -Force }
-if (Test-Path $targetVenvCompat) { Remove-Item $targetVenvCompat -Recurse -Force }
 
 Copy-Item $PythonEmbedCache $targetVenvLcta -Recurse -Force
-Copy-Item $PythonEmbedCache $targetVenvCompat -Recurse -Force
 
-foreach ($targetVenv in @($targetVenvLcta, $targetVenvCompat)) {
+foreach ($targetVenv in @($targetVenvLcta)) {
     Copy-Item "$localVenv\Scripts" "$targetVenv\Scripts" -Recurse -Force
     Copy-Item "$localVenv\pyvenv.cfg" "$targetVenv\pyvenv.cfg" -Force
     if (Test-Path "$localVenv\Include") {
@@ -711,31 +700,12 @@ foreach ($targetVenv in @($targetVenvLcta, $targetVenvCompat)) {
 
 Write-Host "  复制 pip 依赖到 dist..."
 Copy-Item "$localSitePackages\*" "$targetVenvLcta\Lib\site-packages" -Recurse -Force
-Copy-Item "$localSitePackages\*" "$targetVenvCompat\Lib\site-packages" -Recurse -Force
 Write-Host "  pip 依赖复制完成" -ForegroundColor Green
-
-# ---- 兼容版额外安装 PyQt ----
-Write-Host "  为兼容版安装 PyQt..."
-$compatPython = "$lctaCompatCode\venv\Bins\python.exe"
-
-if (Test-Path $compatPython) {
-    $pyqtOutput = & $compatPython -m pip install PyQt5 qtpy PyQtWebEngine 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  WARNING: PyQt 安装失败" -ForegroundColor Yellow
-        Write-Host $pyqtOutput
-    } else {
-        Write-Host "  PyQt 安装完成" -ForegroundColor Green
-    }
-} else {
-    Write-Host "  WARNING: 嵌入式 Python 不可用，跳过 PyQt 安装" -ForegroundColor Yellow
-}
 
 Write-Host "  venv 复制完成" -ForegroundColor Green
 
 # ---- 复制 C 启动器 ----
 Write-Host "  复制 C 启动器..."
-
-$testerName = "无法打开？运行环境检测.exe"
 
 if (Test-Path "$ParentDir\launcher.exe") {
     Copy-Item "$ParentDir\launcher.exe" "$distDir\LCTA\launcher.exe" -Force
@@ -744,23 +714,6 @@ if (Test-Path "$ParentDir\launcher.exe") {
 if (Test-Path "$ParentDir\launcher_debug.exe") {
     Copy-Item "$ParentDir\launcher_debug.exe" "$distDir\LCTA\launcher_debug.exe" -Force
     Write-Host "    LCTA/launcher_debug.exe" -ForegroundColor Green
-}
-if (Test-Path "$ParentDir\tester.exe") {
-    Copy-Item "$ParentDir\tester.exe" "$distDir\LCTA\$testerName" -Force
-    Write-Host "    LCTA/$testerName" -ForegroundColor Green
-}
-
-if (Test-Path "$ParentDir\launcher_qt.exe") {
-    Copy-Item "$ParentDir\launcher_qt.exe" "$distDir\LCTA-Compatible\launcher.exe" -Force
-    Write-Host "    LCTA-Compatible/launcher.exe (qt)" -ForegroundColor Green
-}
-if (Test-Path "$ParentDir\launcher_qt_debug.exe") {
-    Copy-Item "$ParentDir\launcher_qt_debug.exe" "$distDir\LCTA-Compatible\launcher_debug.exe" -Force
-    Write-Host "    LCTA-Compatible/launcher_debug.exe (qt)" -ForegroundColor Green
-}
-if (Test-Path "$ParentDir\tester.exe") {
-    Copy-Item "$ParentDir\tester.exe" "$distDir\LCTA-Compatible\$testerName" -Force
-    Write-Host "    LCTA-Compatible/$testerName" -ForegroundColor Green
 }
 
 Remove-Item "$ParentDir\launcher.ico" -ErrorAction SilentlyContinue
@@ -789,14 +742,10 @@ Write-Host "`n[6/6] ZIP 打包..." -ForegroundColor Yellow
 Remove-Item "$distDir\*.zip" -ErrorAction SilentlyContinue
 
 $zipFull = "$distDir\$APP_NAME-Portable-Full.zip"
-$zipCompat = "$distDir\$APP_NAME-Portable-Full-Compatible.zip"
 $zipUpdate = "$distDir\$APP_NAME-update.zip"
 
 Write-Host "  创建 $APP_NAME-Portable-Full.zip..."
 Compress-Archive -Path "$distDir\LCTA\*" -DestinationPath $zipFull -Force
-
-Write-Host "  创建 $APP_NAME-Portable-Full-Compatible.zip..."
-Compress-Archive -Path "$distDir\LCTA-Compatible\*" -DestinationPath $zipCompat -Force
 
 Write-Host "  创建 $APP_NAME-update.zip..."
 Compress-Archive -Path "$distDir\LCTA-update\*" -DestinationPath $zipUpdate -Force

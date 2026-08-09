@@ -15,7 +15,6 @@ update_note = projext_path / 'webui' / 'assets' / "update.md"
 ABOUT = '''
 ## 文件下载指导  
 - LCTA-Portable-Full.zip 正常版本。推荐下载此版本  
-- LCTA-Portable-Full-Compatible.zip 兼容版，空间占用较大且存在可能出现的UI界面错误，请在无法使用正常版本时使用该版本  
 - LCTA-update.zip 完整版自动更新功能需求文件，包含项目源码 
 '''
 update_note = update_note.read_text(encoding='utf-8').split('\n')
@@ -35,12 +34,6 @@ print('开始创建c语言脚本')
 createC: List[Tuple[str, List[Tuple[str, str]]]] = [
     ('launcher.c', []),
     ('launcher_debug.c', [('int is_debug = 0;', 'int is_debug = 1;')]),
-    ('launcher_qt.c', [('int use_qt = 0;', 'int use_qt = 1;')]),
-    ('launcher_qt_debug.c', [('int use_qt = 0;', 'int use_qt = 1;'),
-                       ('int is_debug = 0;', 'int is_debug = 1;')]),
-    ('test.c', [('char script_name[MAX_PATH] = "code\\start_webui.py";', 
-    'char script_name[MAX_PATH] = "code\\webutils\\test.py";'),
-    ('int is_debug = 0;', 'int is_debug = 1;')])                   
 ]
 os.chdir(projext_path)
 codeC = Path('launcher.c').read_text(encoding='utf-8')

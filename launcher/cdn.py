@@ -39,9 +39,9 @@ def run_cdn_optimization(
     _log_manager.log("开始CDN优选...")
     try:
         from webutils import cdn
-        cdn_dir = os.path.join(str(project_root), 'CFST')
+        cdn_dir = os.path.join(str(project_root), 'tools', 'cfst')
         if not os.path.isdir(cdn_dir):
-            _log_manager.log("CFST目录不存在，跳过CDN优选")
+            _log_manager.log("CFST目录不存在(tools/cfst)，跳过CDN优选")
             return
 
         def launcher_log(msg):

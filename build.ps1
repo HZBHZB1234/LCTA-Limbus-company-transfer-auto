@@ -634,19 +634,20 @@ if (Test-Path $WebuiBuildCache) {
     Write-Host "  webui 已替换为 InitCode 修改版" -ForegroundColor Green
 }
 
-# ---- 复制 CFST/ 目录（CDN优选用） ----
-Write-Host "  复制 CFST/ 目录..."
-$cfstSource = "$ProjectRoot\CFST"
+# ---- 复制 tools/cfst/ 目录（CDN优选用） ----
+Write-Host "  复制 tools/cfst/ 目录..."
+$cfstSource = "$ProjectRoot\tools\cfst"
 if (Test-Path $cfstSource) {
     foreach ($dest in @($lctaCode, $lctaCompatCode, $lctaUpdate)) {
-        $destCfst = "$dest\CFST"
+        $destCfst = "$dest\tools\cfst"
         # 先删除旧目标再复制，避免 Copy-Item 在目标已存在时将源文件夹嵌套复制
         if (Test-Path $destCfst) { Remove-Item $destCfst -Recurse -Force -ErrorAction Stop }
+        New-Item -ItemType Directory -Path "$dest\tools" -Force | Out-Null
         Copy-Item $cfstSource $destCfst -Recurse -Force
     }
-    Write-Host "  CFST/ 复制完成" -ForegroundColor Green
+    Write-Host "  tools/cfst/ 复制完成" -ForegroundColor Green
 } else {
-    Write-Host "  WARNING: CFST/ 目录不存在，跳过（请先运行 InitCode）" -ForegroundColor Yellow
+    Write-Host "  WARNING: tools/cfst/ 目录不存在，跳过（请先运行 InitCode）" -ForegroundColor Yellow
 }
 
 # ---- 复制 aria2c（官方资源预下载用） ----

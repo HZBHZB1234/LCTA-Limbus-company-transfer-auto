@@ -28,15 +28,15 @@ def _get_app_dir() -> str:
 
 
 def _get_cfst_dir() -> str:
-    """获取 CFST 目录路径。"""
-    return os.path.join(_get_app_dir(), "CFST")
+    """获取 CFST 目录路径（code 目录下 tools/cfst/）。"""
+    return os.path.join(_get_app_dir(), "tools", "cfst")
 
 
 def _ensure_cfst_available(log_cb=None) -> bool:
     """
-    确保 CFST/ 目录包含 cfst.exe 和 ip.txt。
+    确保 tools/cfst/ 目录包含 cfst.exe 和 ip.txt。
     如果缺失，运行时自动从 GitHub 下载（InitCode 仅在 build 时运行，
-    开发调试时 CFST/ 不存在，需要懒加载）。
+    开发调试时 tools/cfst/ 不存在，需要懒加载）。
     返回是否可用。
     """
     cfst_dir = _get_cfst_dir()

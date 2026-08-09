@@ -37,5 +37,7 @@ LLc-CN_LCTA
 LCTA_CheatingCore/
 webui/assets/README.md
 CFST/
+tools/cfst/
+tools/7z/
 /*.zip
 /tmp/*

@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-08-08 -->
+<!-- Last updated: 2026-08-09 -->
 
 ## Project Purpose
 
@@ -54,7 +54,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │  webFunc/                 GitHub API, file upload,   │
 │                           Lanzou downloads, web notes│
 │  globalManagers/          ConfigManager, LogManager  │
-│  CFST/                    CloudflareSpeedTest binary │
+│  tools/cfst/            CloudflareSpeedTest binary │
 ├─────────────────────────────────────────────────────┤
 │               EXTERNAL TOOLS                         │
 │  translatekit  openspeedy  UnityPy  pywebview  etcpak│
@@ -115,14 +115,14 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 - **Python ↔ JS**: `pywebview` exposes `LCTA_API` instance as `window.pywebview.api` in JS. JS calls Python methods, Python calls JS via `webview.windows[0].evaluate_js()`
 - **HTML <> JS**: Section HTML fragments in `webui/sections/*.html` are lazy-loaded by `preload.js` via `loadSection()` on first navigation; `onSectionLoaded()` callback re-runs per-section initialization (config, tooltips, toggle funcs, list manager DOM refs, select box values). Markdown assets loaded on-demand with fetch-caching via `_loadedMarkdowns`; welcome content deferred via `_pendingWelcomeContent`
 - **C → Python**: Native `launcher.c` compiled with `-mwindows` (GUI subsystem, no console). Python process always started with `CREATE_NO_WINDOW`; stdout/stderr captured via pipe. If Python exits with non-zero code, C layer allocates an error console to display captured output. Console management (AllocConsole for legacy mode, GUI window for gui_mode) handled by `start_webui.py` before importing launcher modules.
-- **Python → C binaries**: Subprocess calls to `CFST/cfst.exe` (CloudflareSpeedTest), `tools/aria2/aria2c.exe` (official resource downloads), and `7z.exe` (7-Zip)
+- **Python → C binaries**: Subprocess calls to `tools/cfst/cfst.exe` (CloudflareSpeedTest), `tools/aria2/aria2c.exe` (official resource downloads), and `7zr.exe` (7-Zip, stored in `tools/7z/`)
 
 ## External Binaries
 
 | Binary | Source | Purpose |
 |--------|--------|---------|
-| `cfst.exe` v2.3.5 | Bundled in `CFST/` | Cloudflare CDN speed testing |
+| `cfst.exe` v2.3.5 | Bundled in `tools/cfst/` | Cloudflare CDN speed testing |
 | `aria2c.exe` v1.37.0 | Downloaded during build into `tools/aria2/` | Multi-connection localize and AssetBundle downloads through localhost JSON-RPC; built-in urllib fallback remains available |
-| `7z.exe` | Downloaded at runtime | Archive extraction |
+| `7zr.exe` | Downloaded at runtime from 7-zip.org into `tools/7z/` | Archive extraction |
 | Embedded Python 3.9.6 | Downloaded during build | Bundled into release packages |
 | `openspeedy` DLL | pip package | DLL injection for game speed acceleration |

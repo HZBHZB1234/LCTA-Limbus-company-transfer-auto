@@ -154,23 +154,24 @@ jobs:
             Copy-Item cheat_core.bin "$target\cheat_core.bin" -Force
         }
 
-    - name: Copy CFST directory (CDN optimization)
+    - name: Copy CFST directory to tools/cfst (CDN optimization)
       run: |
-        if (Test-Path .\LCTA\CFST) {
+        if (Test-Path .\LCTA\tools\cfst) {
             # 先删除目标再复制，避免 Copy-Item 在目标已存在时将源文件夹嵌套复制
-            # （copy files 步骤中 LCTA\* 可能已复制了 CFST，此处必须清理旧目标）
+            # （copy files 步骤中 LCTA\* 可能已复制了 tools\cfst，此处必须清理旧目标）
             $targets = @(
-                "release\${{ env.APP_NAME }}\code\CFST",
-                "release\${{ env.APP_NAME }}-Compatible\code\CFST",
-                ".\LCTA_update\CFST"
+                "release\${{ env.APP_NAME }}\code\tools\cfst",
+                "release\${{ env.APP_NAME }}-Compatible\code\tools\cfst",
+                ".\LCTA_update\tools\cfst"
             )
             foreach ($t in $targets) {
                 if (Test-Path $t) { Remove-Item $t -Recurse -Force }
-                Copy-Item .\LCTA\CFST $t -Recurse -Force
+                New-Item -ItemType Directory -Path (Split-Path $t) -Force | Out-Null
+                Copy-Item .\LCTA\tools\cfst $t -Recurse -Force
             }
-            Write-Host "CFST/ copied to release artifacts"
+            Write-Host "tools/cfst/ copied to release artifacts"
         } else {
-            Write-Host "WARNING: CFST/ directory not found, skipping"
+            Write-Host "WARNING: tools/cfst/ directory not found, skipping"
         }
 
     - name: Bundle aria2c (official resource updater)

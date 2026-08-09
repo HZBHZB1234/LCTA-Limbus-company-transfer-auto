@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-08-08 -->
+<!-- Last updated: 2026-08-09 -->
 
 ## How to Run
 
@@ -32,7 +32,7 @@ Outputs:
 
 Requirements: PowerShell 5.0+, MinGW-w64 (optional, skips if unavailable), Python 3.9.6, network.
 
-The build downloads aria2 1.37.0 from the official GitHub release, retries and rejects undersized responses, then places `aria2c.exe` (and `COPYING` when present) under `tools/aria2/` in all three artifacts. Runtime `engine=auto` falls back to urllib when aria2c is unavailable in a source checkout.
+The build downloads aria2 1.37.0 from the official GitHub release, retries and rejects undersized responses, then places `aria2c.exe` (and `COPYING` when present) under `tools/aria2/` in all three artifacts. Runtime `engine=auto` falls back to urllib when aria2c is unavailable in a source checkout. `CFST` binaries are downloaded by `InitCode.py` into `tools/cfst/` (runtime `webutils/cdn/cfst.py` lazy-downloads them as a fallback). 7z 解压：环境无 7-Zip 时，`webutils/utils/io.py` 运行时自动从官网下载 `7zr.exe` 到 code 目录 `tools/7z/` 后调用。
 
 ### Cheat Core（作弊工具箱）构建
 

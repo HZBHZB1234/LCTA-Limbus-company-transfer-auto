@@ -11,9 +11,19 @@ from pathlib import Path
 from typing import Optional, Set
 
 from globalManagers.LogManager import LogManager
+from .net import download_with
 
 _log_manager = LogManager()
 _7Z_DOWNLOAD_URL = "https://www.7-zip.org/"
+# 官网直连的 7zr.exe（独立单文件控制台版，无需安装、无需再解压 7z），仅需解压 .7z 时足够
+_7ZR_DOWNLOAD_URL = "https://www.7-zip.org/a/7zr.exe"
+# 下载后大小校验阈值（约 1MB 的可执行文件，远小于此值视为下载不完整）
+_7Z_MIN_SIZE = 500 * 1024
+# 常见 7-Zip 安装路径（测试可覆盖为空以强制走自动下载分支）
+_SYSTEM_7Z_PATHS = (
+    r'C:\Program Files\7-Zip\7z.exe',
+    r'C:\Program Files (x86)\7-Zip\7z.exe',
+)
 
 
 # ============================================================
@@ -103,26 +113,72 @@ def decompress_zip(file_path, output_dir='.'):
 # 7-Zip 相关
 # ----------------------------------------------------------
 
+def _code_root_dir() -> str:
+    """获取 code 目录（path_ 环境变量，开发时为项目根，打包后为 <app>/code/）。"""
+    path_ = os.getenv('path_')
+    if path_:
+        return path_
+    return str(Path(__file__).resolve().parent.parent.parent)
+
+
+def _downloaded_7z_exe() -> Path:
+    """自动下载的 7z 可执行文件路径（code 目录下 tools/7z/）。"""
+    return Path(_code_root_dir()) / 'tools' / '7z' / '7zr.exe'
+
+
+def _ensure_7z_exe() -> str:
+    """若环境无 7z，从官网自动下载 7zr.exe 到 code 目录 tools/7z/，返回其路径。"""
+    target = _downloaded_7z_exe()
+    if target.exists():
+        return str(target)
+
+    os.makedirs(target.parent, exist_ok=True)
+    try:
+        _log_manager.log(f"未找到 7-Zip，正在从官网自动下载 7zr.exe...")
+        if not download_with(_7ZR_DOWNLOAD_URL, str(target)):
+            raise RuntimeError("下载失败")
+        if target.stat().st_size < _7Z_MIN_SIZE:
+            raise RuntimeError(f"下载文件大小异常: {target.stat().st_size} 字节")
+        with open(target, 'rb') as f:
+            if f.read(2) != b'MZ':
+                raise RuntimeError("下载文件不是有效的可执行程序")
+        _log_manager.log(f"7zr.exe 已下载到 {target}")
+        return str(target)
+    except Exception as e:
+        try:
+            target.unlink(missing_ok=True)
+        except Exception:
+            pass
+        _log_manager.log(f"自动下载 7zr.exe 失败: {e}")
+        raise FileNotFoundError("未找到 7z 可执行文件") from e
+
+
 def _find_7z_exe() -> str:
-    """查找 7z 可执行文件，找不到抛出 FileNotFoundError。"""
+    """查找 7z 可执行文件；环境无 7z 时自动从官网下载，仍失败抛出 FileNotFoundError。"""
     # 1. 项目自带（assets/7za.exe）
     bundled = Path(__file__).parent.parent / 'assets' / '7za.exe'
     if bundled.exists():
         return str(bundled)
 
-    # 2. 系统 PATH
+    # 2. 已自动下载的 7z（tools/7z/）
+    for cached in (_downloaded_7z_exe(),
+                   Path(_code_root_dir()) / 'tools' / '7z' / '7za.exe'):
+        if cached.exists():
+            return str(cached)
+
+    # 3. 系统 PATH
     for name in ('7z', '7za', '7z.exe', '7za.exe'):
         found = shutil.which(name)
         if found:
             return found
 
-    # 3. 常见安装路径
-    for p in (r'C:\Program Files\7-Zip\7z.exe',
-              r'C:\Program Files (x86)\7-Zip\7z.exe'):
+    # 4. 常见安装路径
+    for p in _SYSTEM_7Z_PATHS:
         if os.path.exists(p):
             return p
 
-    raise FileNotFoundError("未找到 7z 可执行文件")
+    # 5. 环境无 7z：自动从官网下载到 code 目录
+    return _ensure_7z_exe()
 
 
 def _extract_7z(file_path, output_dir) -> bool:
@@ -133,9 +189,9 @@ def _extract_7z(file_path, output_dir) -> bool:
         _log_manager.log(
             "================================================================"
         )
-        _log_manager.log("未找到 7-Zip，无法解压 .7z 文件。")
-        _log_manager.log(f"请安装 7-Zip：{_7Z_DOWNLOAD_URL}")
-        _log_manager.log("（或手动将 7z.exe 放置到程序 assets/ 目录下）")
+        _log_manager.log("未找到 7-Zip 且自动下载失败，无法解压 .7z 文件。")
+        _log_manager.log(f"请检查网络后重试，或手动安装 7-Zip：{_7Z_DOWNLOAD_URL}")
+        _log_manager.log("（或将 7z.exe 放置到程序 code 目录 tools/7z/ 下）")
         _log_manager.log(
             "================================================================"
         )

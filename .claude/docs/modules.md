@@ -13,7 +13,7 @@
 | `globalManagers/` | Cross-cutting singletons | 2 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `resource_updater/` | Official localize/Bundle updater and Launcher fingerprint gate | 4 |
-| `CFST/` | CloudflareSpeedTest binary + IP lists | 3 |
+| `tools/cfst/` | CloudflareSpeedTest binary + IP lists（构建时由 InitCode 下载，运行时懒加载兜底） | 3 |
 | `hooks/` | C source for native DLLs | `rawinput_hook.c` (input bypass), compiled to `rawinput_hook.dll` by build.ps1 / CI; 作弊工具箱的 hook DLL 源码已迁往私有仓库 LCTA_CheatingCore（`hooks/*.c` 扫描编译，见 `cheat_core/`） |
 | `vendor/minhook/` | 空（MinHook 已随作弊工具箱功能迁往私有仓库） | — |
 | `scripts/` | 单文件脚本 | `cheat_encrypt.py` — CheatCore 加密器（私有仓库功能文件 → `cheat_core.bin`，格式见私有仓库 README） |
@@ -110,7 +110,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 |------|---------|------------|
 | `__init__.py` | Public API surface | Re-exports all feature functions consumed by `webui/app.py` |
 | `clr_bootstrap.py` | pythonnet/clr_loader 引导 | `ensure_clr()` 强制 netfx 并导入 clr:预检 `Python.Runtime.dll` 存在性、clr_loader 版本(<0.2.8 警告)、.NET Framework >=4.7.2;失败时用 PowerShell 反射探针暴露 clr_loader 吞掉的真实异常并给出修复指引,不再自动回退 coreclr/mono。被 `start_webui.py`、`launcher/gui_progress.py`、`launcher/speed_hotkey.py`、`scripts/test_environment.py` 共用 |
-| `utils/` | Shared utility package | `io.py` zip/unzip, hashing, 7z integration; `net.py` downloads; `shell.py` Windows Shell API; `font.py` font caching; `misc.py` steam command/icon; facade re-exported via `utils/__init__.py` |
+| `utils/` | Shared utility package | `io.py` zip/unzip, hashing, 7z integration（环境无 7z 时自动从官网下载 7zr.exe 到 `tools/7z/`）; `net.py` downloads; `shell.py` Windows Shell API; `font.py` font caching; `misc.py` steam command/icon; facade re-exported via `utils/__init__.py` |
 | `load.py` | Config & game detection | Config loading/validation, Steam registry game path detection |
 | `update.py` | Self-updater | GitHub Releases-based auto-update |
 | `translator_constants.py` | API provider configs | TranslateKit provider definitions (Baidu, Google, DeepL, etc.) |

@@ -108,8 +108,8 @@ JS: user clicks "test speed" or "optimize"
   → webui/js/cdn.js                UI logic, progress display
   → webui/app.py                   LCTA_API.cdn_test() / .cdn_optimize()
   → webutils/cdn/                  CDN logic (package)
-    → subprocess: CFST/cfst.exe    CloudflareSpeedTest binary
-    → parse: CFST/result_cf.csv    speed test results
+    → subprocess: tools/cfst/cfst.exe    CloudflareSpeedTest binary
+    → parse: tools/cfst/result_cf.csv    speed test results
     → modify: system hosts file    apply optimal CDN IP
 
 Launcher mode (auto-start):
@@ -118,7 +118,7 @@ Launcher mode (auto-start):
     → ConfigManager.set()          store last_cdn_test_time on success
 ```
 
-Files: `webui/js/cdn.js`, `webui/app.py`, `webutils/cdn/`, `launcher/cdn.py`, `CFST/cfst.exe`, `CFST/ip.txt`
+Files: `webui/js/cdn.js`, `webui/app.py`, `webutils/cdn/`, `launcher/cdn.py`, `tools/cfst/cfst.exe`, `tools/cfst/ip.txt`
 
 ## 5. Game Launch (with Mods)
 
@@ -657,7 +657,7 @@ User clicks 「下载(导入)调爪文本修改包」(download.html)
           → cache guard (cache_path/tiaozhua_version.txt, tiaozhua.7z)
           → download_tiaozhua()                   get_direct_download(fileId with ?webpage= token)
                                                  → download_with(parser url 302) → cache_path/tiaozhua.7z
-          → if install: install_tiaozhua()        decompress_7z (7-Zip exe) → temp dir
+          → if install: install_tiaozhua()        decompress_7z (7zr.exe，无 7z 时自动下载) → temp dir
               → scan root *.json → is_tiaozhua_config/is_bus_ruleset
               → import_bus_rules_file()           save as ruleset in fancy ruleset folder
 ```

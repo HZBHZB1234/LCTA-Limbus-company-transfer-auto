@@ -3,7 +3,7 @@
 > 面向开发者的完整开发环境搭建、构建、调试和发布指南。
 > AI 快速参考请见 `.claude/docs/dev-guide.md`
 
-<!-- Last updated: 2026-08-04 -->
+<!-- Last updated: 2026-08-09 -->
 
 ## 前置条件
 
@@ -119,7 +119,10 @@ LCTA-Limbus-company-transfer-auto/
 │   ├── updates.py
 │   └── ...
 │
-├── CFST/                       # CloudflareSpeedTest
+├── tools/                       # 外部二进制（构建/运行时下载）
+│   ├── aria2/                   # aria2c（官方资源预下载）
+│   ├── cfst/                    # CloudflareSpeedTest
+│   └── 7z/                      # 7zr.exe（环境无 7z 时运行时自动下载）
 ├── tests/                      # 测试套件
 ├── docs/                       # 面向人类的文档（你在这里）
 ├── .claude/docs/              # AI 快速参考文档

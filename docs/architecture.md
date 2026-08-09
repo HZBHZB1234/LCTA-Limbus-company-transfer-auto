@@ -3,7 +3,7 @@
 > 面向开发者的详细架构说明，包含技术决策理由和权衡分析。
 > AI 快速参考请见 `.claude/docs/architecture.md`
 
-<!-- Last updated: 2026-08-02 -->
+<!-- Last updated: 2026-08-09 -->
 
 ## 项目概述
 
@@ -89,7 +89,7 @@ launcher/ 的模组功能基于 LimbusModLoader（GPL-3.0），因此该子目�
 │                                                              │
 │  webFunc/          GitHub API / 文件上传 / 蓝奏云 / Webnote  │
 │  globalManagers/   ConfigManager & LogManager (单例)         │
-│  CFST/             CloudflareSpeedTest (第三方二进制)        │
+│  tools/cfst/          CloudflareSpeedTest (第三方二进制)      │
 ├──────────────────────────────────────────────────────────────┤
 │                    EXTERNAL TOOLS                             │
 │  translatekit  openspeedy  UnityPy  pywebview  etcpak          │
@@ -185,8 +185,8 @@ C 代码（`launcher.c`）仅在发布包中使用，作为 PE 入口点：
 
 ### Python → 外部二进制
 
-- **CFST/cfst.exe**：通过 `subprocess.run()` 调用，解析 CSV 输出
-- **7z.exe**：运行时从 GitHub 下载，通过 `subprocess` 调用进行压缩/解压
+- **tools/cfst/cfst.exe**：通过 `subprocess.run()` 调用，解析 CSV 输出
+- **tools/7z/7zr.exe**：环境无 7z 时运行时从官网（7-zip.org）自动下载到 code 目录 `tools/7z/`，通过 `subprocess` 调用进行 7z 解压
 - **openspeedy**：通过 Python 包的 DLL 注入机制实现游戏变速
 
 ## 外部依赖
@@ -206,8 +206,8 @@ C 代码（`launcher.c`）仅在发布包中使用，作为 PE 入口点：
 
 | 二进制 | 来源 | 用途 |
 |--------|------|------|
-| cfst.exe v2.3.5 | 打包在 `CFST/` | Cloudflare CDN 测速 |
-| 7z.exe | 运行时下载 | 压缩/解压 |
+| cfst.exe v2.3.5 | 打包在 `tools/cfst/` | Cloudflare CDN 测速 |
+| 7zr.exe | 运行时从官网自动下载到 `tools/7z/` | 7z 解压 |
 | Python 3.9.6 embeddable | 构建时下载 | 发布包内嵌解释器 |
 | ChineseFont.ttf | LLC GitHub 仓库 | 中文字体渲染 |
 

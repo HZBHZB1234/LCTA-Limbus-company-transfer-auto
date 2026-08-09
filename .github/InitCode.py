@@ -326,7 +326,7 @@ CFST_DOWNLOAD_URL = (
 )
 IP_TXT_URL = "https://raw.githubusercontent.com/XIU2/CloudflareSpeedTest/master/ip.txt"
 
-cfst_dir = projext_path / "CFST"
+cfst_dir = projext_path / "tools" / "cfst"
 cfst_dir.mkdir(parents=True, exist_ok=True)
 
 # 下载 ip.txt

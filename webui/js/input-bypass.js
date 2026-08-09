@@ -28,12 +28,29 @@ class InputBypassPage {
     async init() {
         this._initDomRefs();
         this._bindEvents();
-        this._syncManualVisibility();
+        // 下拉框由配置驱动（applyConfigToUI 仅在 section 首次加载时执行，
+        // 重新导航时需主动从配置缓存恢复，避免显示失效/被轮询覆盖）
+        this._loadModeFromConfig();
         // 风险服务门控：未同意风险须知时显示覆盖层，同意后解锁并启动轮询
         RiskGate.gatePage('input_bypass', {
             onAccepted: () => this._showMain(),
             onRejected: () => this._hideMain()
         });
+    }
+
+    _loadModeFromConfig() {
+        if (!this.modeSelect) return;
+        try {
+            if (typeof configManager !== 'undefined' && configManager.getCachedValue) {
+                const mode = configManager.getCachedValue('launcher.work.input_bypass_mode');
+                if (mode === 'auto' || mode === 'manual') {
+                    this.modeSelect.value = mode;
+                }
+            }
+        } catch (e) {
+            console.error('加载输入反检测上报模式失败:', e);
+        }
+        this._syncManualVisibility();
     }
 
     _hideMain() {
@@ -178,11 +195,9 @@ class InputBypassPage {
             this._setValue(this.installedEl, s.installed ? '● 已安装' : '× 未安装', s.installed ? 'active' : 'inactive');
             this._setValue(this.installedRealEl, s.installed_real ? '● 已安装' : '× 未安装', s.installed_real ? 'active' : 'inactive');
 
-            // 当前生效模式回填到下拉框
-            if (this.modeSelect && this.modeSelect.value !== s.mode) {
-                this.modeSelect.value = s.mode;
-                this._syncManualVisibility();
-            }
+            // 注意：不再用状态中的生效模式覆盖下拉框。
+            // 共享内存反映的是"上次 apply 的生效模式"，未应用/共享内存为零值时
+            // 恒报 auto，轮询强制回填会把用户的配置选择改回 auto。
 
             if (s.error) {
                 addLogMessage('状态检测: ' + s.error, 'warning');

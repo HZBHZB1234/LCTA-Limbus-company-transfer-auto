@@ -10,6 +10,7 @@ from .packages import (
     export_system_font
 )
 from .function_fetch import function_fetch_main
+from .utils.font import save_cache_font
 from .function_LCTA_auto import function_LCTA_auto_main, check_ver_github_M
 from .function_lanzou_tiaozhua import function_lanzou_tiaozhua_main
 from .packages import clean_config_main
@@ -67,6 +68,7 @@ __all__ = [
     'function_ourplay_new_main',
     'check_ver_ourplay_new',
     'function_fetch_main',
+    'save_cache_font',
     'function_LCTA_auto_main',
     'check_ver_github_M',
     'clean_config_main',

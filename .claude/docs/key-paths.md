@@ -597,6 +597,7 @@ JS: user drags files onto window
     → full/nofont:                handlers/translation.py install_translation_package() (7z support)
     → FLmod/jsononly:             handlers/archive_mod.py extract_zip_smartly() or copytree to mod_path
     → carra/bank/textFile/...:    handlers/copy_mod.py copy to mod_path
+    → font:                       handlers/font.py save_cache_font() replace cache ChineseFont.ttf
     → busimport:                  handlers/bus_import.py import_bus_rules_file() to fancy/
     → update:                     handlers/update.py Updater() via webutils/update.py
     → progress:                   LogManager modal callbacks

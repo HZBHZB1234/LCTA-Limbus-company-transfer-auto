@@ -19,6 +19,7 @@ class EvalFilesResult(TypedDict):
     modded: int
     updated: int
     imported: int
+    fonts: int
     skipped: int
     errors: int
     error_details: list[dict[str, str]]
@@ -34,6 +35,8 @@ def _build_execution_summary(results: Mapping[str, int]) -> str:
         parts.append(f"{results['updated']}个更新")
     if results["imported"] > 0:
         parts.append(f"{results['imported']}个规则集")
+    if results["fonts"] > 0:
+        parts.append(f"{results['fonts']}个字体")
     if results["skipped"] > 0:
         parts.append(f"跳过{results['skipped']}个")
     if results["errors"] > 0:
@@ -52,6 +55,7 @@ def evalFiles(files_data: Mapping[str, str], modal_id: str = "false") -> EvalFil
             "modded": 0,
             "updated": 0,
             "imported": 0,
+            "fonts": 0,
             "skipped": 0,
             "errors": 0,
             "error_details": [],
@@ -68,6 +72,7 @@ def evalFiles(files_data: Mapping[str, str], modal_id: str = "false") -> EvalFil
         "modded": 0,
         "updated": 0,
         "imported": 0,
+        "fonts": 0,
         "skipped": 0,
         "errors": 0,
     }
@@ -125,6 +130,7 @@ def evalFiles(files_data: Mapping[str, str], modal_id: str = "false") -> EvalFil
         "modded": results["modded"],
         "updated": results["updated"],
         "imported": results["imported"],
+        "fonts": results["fonts"],
         "skipped": results["skipped"],
         "errors": results["errors"],
         "error_details": error_details,

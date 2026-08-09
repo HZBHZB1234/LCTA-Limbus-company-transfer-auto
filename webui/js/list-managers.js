@@ -268,6 +268,26 @@ async function changeFontForPackage() {
     )
 }
 
+async function uploadCacheFont() {
+    const fontPath = await pywebview.api.browse_file('');
+    if (!fontPath) return;
+
+    const modal = new ProgressModal('更换默认字体');
+    modal.setStatus('正在替换缓存字体...');
+    modal.addLog(`选择字体: ${fontPath}`);
+    try {
+        const result = await pywebview.api.upload_cache_font(fontPath);
+        modal.addLog(result.message);
+        if (result.success) {
+            modal.complete(true, '缓存字体替换成功');
+        } else {
+            modal.complete(false, result.message);
+        }
+    } catch (error) {
+        modal.complete(false, '替换缓存字体时出错: ' + error);
+    }
+}
+
 function getFontFromInstalled() {
     pywebview.api.get_system_fonts_list()
         .then(function(result) {

@@ -703,6 +703,23 @@ button {
     border-color: var(--color-primary);
 }
 
+.feature-btn-group {
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: auto;
+}
+
+.feature-btn-group .feature-btn {
+    margin-top: 0;
+}
+
+.feature-btn-group .feature-btn.secondary:hover {
+    background: var(--color-text-secondary);
+    border-color: var(--color-text-secondary);
+}
+
 /* 进度条样式 */
 .progress-container {
     margin: var(--spacing-xl) 0;

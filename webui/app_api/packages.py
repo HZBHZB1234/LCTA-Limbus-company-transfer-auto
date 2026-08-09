@@ -22,6 +22,7 @@ from webutils import (
     change_font_for_package,
     get_system_fonts,
     export_system_font,
+    save_cache_font,
     clean_config_main,
 )
 from webutils.utils import _move_folders
@@ -280,6 +281,22 @@ class PackagesMixin:
             self.log(error_msg)
             self.log_manager.log_error(e)
             return {"success": False, "message": error_msg}
+
+    def upload_cache_font(self, file_path=None):
+        '''上传本地字体文件，替换缓存中的默认字体 ChineseFont.ttf'''
+        if not file_path or not os.path.isfile(file_path):
+            return {"success": False, "message": "字体文件不存在"}
+        if Path(file_path).suffix.lower() not in ('.ttf', '.otf'):
+            return {"success": False, "message": "仅支持 .ttf / .otf 格式的字体文件"}
+        try:
+            target = save_cache_font(file_path)
+            self.log(f"缓存字体已替换: {Path(file_path).name} → {target}")
+            if not ConfigManager().get('enable_cache', True):
+                return {"success": True, "message": "缓存字体已替换，但「启用资源缓存」未开启，该字体暂不会被使用"}
+            return {"success": True, "message": "缓存字体已替换，后续安装汉化包时将使用该字体"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": f"替换缓存字体失败: {str(e)}"}
 
     def clean_cache(self, modal_id= "false", custom_files=None, clean_progress=None, clean_notice=None, clean_mods=None):
         """清理缓存"""

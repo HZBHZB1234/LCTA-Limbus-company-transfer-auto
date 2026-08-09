@@ -97,7 +97,7 @@ class TestRegistryOrder:
         for file_type in (
             'full', 'nofont', 'FLmod', 'jsononly', 'update',
             'invalid', 'carra', 'bank', 'textFile', 'LCTAchange',
-            'FLchange', 'busimport',
+            'FLchange', 'busimport', 'font',
         ):
             assert handlers.REGISTRY.handler_for(file_type) is not None
 
@@ -397,3 +397,51 @@ class TestEvalFilesUpdate:
         result = eval_files.evalFiles({str(up_zip): 'update'}, 'modal')
         assert result['updated'] == 1
         assert result['success'] is True
+
+
+# ========== evalFile / evalFiles：缓存字体替换 ==========
+
+class TestCacheFontHandler:
+    def test_eval_file_ttf_detects_font(self, tmp_path):
+        f = tmp_path / 'myfont.ttf'
+        f.write_bytes(b'x')
+        assert detect.evalFile(str(f)) == 'font'
+
+    def test_eval_file_otf_detects_font(self, tmp_path):
+        f = tmp_path / 'myfont.otf'
+        f.write_bytes(b'x')
+        assert detect.evalFile(str(f)) == 'font'
+
+    def test_eval_file_uppercase_suffix_detects_font(self, tmp_path):
+        f = tmp_path / 'MYFONT.TTF'
+        f.write_bytes(b'x')
+        assert detect.evalFile(str(f)) == 'font'
+
+    def test_eval_file_other_suffix_invalid(self, tmp_path):
+        f = tmp_path / 'myfont.txt'
+        f.write_bytes(b'x')
+        assert detect.evalFile(str(f)) == 'invalid'
+
+    def test_eval_files_replaces_cache_font(self, tmp_path, monkeypatch):
+        cache_dir = tmp_path / 'cache'
+        saved = {}
+
+        def _fake_save(font_path):
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            target = cache_dir / 'ChineseFont.ttf'
+            target.write_bytes(Path(font_path).read_bytes())
+            saved['target'] = str(target)
+            return str(target)
+
+        monkeypatch.setattr(handlers.font, 'save_cache_font', _fake_save)
+        monkeypatch.setattr(eval_files, 'get_mod_path', lambda: str(tmp_path / 'mods'))
+
+        font_file = tmp_path / 'myfont.ttf'
+        font_file.write_bytes(b'fontdata')
+        result = eval_files.evalFiles({str(font_file): 'font'}, 'modal')
+        assert result['success'] is True
+        assert result['fonts'] == 1
+        assert result['errors'] == 0
+        assert Path(saved['target']).name == 'ChineseFont.ttf'
+        assert Path(saved['target']).read_bytes() == b'fontdata'
+

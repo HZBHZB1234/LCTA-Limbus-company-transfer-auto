@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -18,6 +19,17 @@ _log_manager = LogManager()
 # ============================================================
 # 字体缓存
 # ============================================================
+
+def save_cache_font(font_path: str) -> str:
+    """复制本地字体文件到缓存路径，替换缓存字体 ChineseFont.ttf，返回目标路径。"""
+    cache_dir = Path(ConfigManager().get('cache_path', 'tmp'))
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    target = cache_dir / 'ChineseFont.ttf'
+    shutil.copy2(font_path, target)
+    if not ConfigManager().get('enable_cache', True):
+        _log_manager.log("警告: 资源缓存未启用，上传的字体不会被使用")
+    return str(target)
+
 
 def get_cache_font() -> str:
     """获取缓存中的中文字体路径。"""

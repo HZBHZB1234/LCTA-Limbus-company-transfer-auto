@@ -4,7 +4,7 @@
 - zip: full → nofont → FLmod → update → jsononly（update 必须优先于 jsononly）
 - folder: full → nofont → FLmod → jsononly
 - json: busimport → textFile → LCTAchange → FLchange
-- path: carra → bank
+- path: carra → bank → font
 """
 
 from ..handler import DropFileHandlerRegistry
@@ -17,6 +17,7 @@ from .copy_mod import (
     LCTAChangeHandler,
     FLChangeHandler,
 )
+from .font import FontHandler
 from .bus_import import BusImportHandler
 from .update import UpdatePackageHandler
 from .invalid import InvalidHandler
@@ -28,6 +29,7 @@ JSONONLY = JsonOnlyHandler()
 UPDATE = UpdatePackageHandler()
 CARRA = CarraHandler()
 BANK = BankHandler()
+FONT = FontHandler()
 TEXT_FILE = TextFileHandler()
 LCTA_CHANGE = LCTAChangeHandler()
 FL_CHANGE = FLChangeHandler()
@@ -42,6 +44,7 @@ HANDLERS = [
     UPDATE,
     CARRA,
     BANK,
+    FONT,
     TEXT_FILE,
     LCTA_CHANGE,
     FL_CHANGE,
@@ -55,6 +58,6 @@ REGISTRY = DropFileHandlerRegistry(
         'zip': [FULL, NOFONT, FLMOD, UPDATE, JSONONLY],
         'folder': [FULL, NOFONT, FLMOD, JSONONLY],
         'json': [BUS_IMPORT, TEXT_FILE, LCTA_CHANGE, FL_CHANGE],
-        'path': [CARRA, BANK],
+        'path': [CARRA, BANK, FONT],
     },
 )

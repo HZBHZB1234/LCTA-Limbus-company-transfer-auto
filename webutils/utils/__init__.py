@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .font import get_cache_font
+from .font import get_cache_font, save_cache_font
 from .io import (
     zip_folder,
     extract_zip_smartly,
@@ -27,6 +27,7 @@ __all__ = [
     'calculate_sha256',
     'calculate_md5',
     'get_cache_font',
+    'save_cache_font',
     'get_steam_command',
     'change_icon',
     '_move_folders',

@@ -63,9 +63,14 @@
                 </div>
                 <h4>更换字体</h4>
                 <p>为选中的汉化包更换字体</p>
-                <button class="feature-btn" onclick="changeFontForPackage()">
-                    更换字体
-                </button>
+                <div class="feature-btn-group">
+                    <button class="feature-btn" onclick="changeFontForPackage()">
+                        更换字体
+                    </button>
+                    <button class="feature-btn secondary" onclick="uploadCacheFont()" title="上传 .ttf / .otf 字体文件替换缓存字体">
+                        更换默认字体
+                    </button>
+                </div>
             </div>
             
             <div class="feature-card">

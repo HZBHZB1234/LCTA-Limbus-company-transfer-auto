@@ -88,23 +88,6 @@
     "storage_path": "tmp",
     "last_version": "v5.0.1",
     "launcher": {
-        "zero": {
-            "zip_type": "seven",
-            "use_proxy": true,
-            "use_cache": true,
-            "download_source": "github"
-        },
-        "machine": {
-            "use_proxy": true,
-            "download_source": "github"
-        },
-        "ourplay": {
-            "font_option": "simplify",
-            "use_api": true,
-            "source": "pc",
-            "official": true,
-            "refer_package": ""
-        },
         "work": {
             "update": "LM-G",
             "mod": false,
@@ -115,7 +98,7 @@
             "cdn_cache_ttl": "12.0",
             "speed": false,
             "speed_factor": "2.0",
-            "gui_mode": false,
+            "gui_mode": true,
             "input_bypass": false,
             "input_bypass_mode": "manual",
             "input_bypass_mouse_real": "200",

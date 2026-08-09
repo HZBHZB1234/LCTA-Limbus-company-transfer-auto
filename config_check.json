@@ -97,23 +97,6 @@
     "storage_path": "str",
     "last_version": "str",
     "launcher": {
-        "zero": {
-            "zip_type": "str",
-            "use_proxy": "bool",
-            "use_cache": "bool",
-            "download_source": "str"
-        },
-        "machine": {
-            "use_proxy": "bool",
-            "download_source": "str"
-        },
-        "ourplay": {
-            "font_option": "str",
-            "use_api": "bool",
-            "source": "str",
-            "official": "bool",
-            "refer_package": "str"
-        },
         "work": {
             "update": "str",
             "mod": "bool",

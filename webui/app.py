@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import webview
 from webview.dom import DOMEventHandler
 import os
@@ -43,11 +42,15 @@ class LCTA_API(CoreMixin, TranslatorMixin, PackagesMixin, DownloadMixin, FancyMi
                WindowMixin, CdnMixin, SpeedMixin, UpdateMixin, DropMixin,
                ResourceMixin, ConfigMixin, InputBypassMixin, CheatCoreMixin,
                MetadataRecoveryMixin):
-    """主窗�?-API 桥接类。方法按功能域拆分至 webui/app_api/ �?mixin�?"""
+    """API 桥接类。方法按功能域拆分至 webui/app_api/"""
     pass
 
 
 def main():
+    import mimetypes
+    mimetypes.init()
+    mimetypes.add_type('application/javascript', '.js')
+
     # 获取HTML文件的绝对路径
     html_path = os.path.join(os.getenv('path_'), "webui\\index.html")
 

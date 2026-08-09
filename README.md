@@ -8,18 +8,22 @@
 
 ## ✨ 功能特点
 
-- ✅ **汉化安装与管理**：支持零协会汉化包、OurPlay 汉化包的下载与安装
-- 🔄 **自动汉化更新**：自动获取并应用最新的汉化资源
-- ⚙️ **API 配置与测试**：方便用户配置并测试翻译 API
-- 🚀 **集成启动器**：快速启动游戏并管理汉化包版本
-- 💭 **调爪文本修改包一键下载**：自动下载并导入调爪文本修改包
-- 🧹 **缓存清理工具**：清理游戏缓存，消除错误数据 (暂不保证可用性)
-- 📚 **零协会专有名词抓取**：自动提取翻译术语以支持翻译
-- 🧩 **模块化设计**：各功能独立，便于维护与扩展
-- 🌐 **CDN优选**：自动测速并选择最快的游戏CDN节点（Cloudflare + CloudFront），优化下载与API连接体验
+- **翻译工具**：将游戏文本（韩/日/英文）自动翻译成中文，内置百度、Google、DeepL 等机翻与大量 LLM 适配；多阶段管线（消歧→翻译→自检）、专有名词匹配、并发处理、翻译日志查看
+- **汉化包下载**：零协会、OurPlay、LCTA-AU 自动汉化等多平台汉化包一键下载与安装，支持 OurPlay 神人汉化、调爪文本修改包导入、字体精简、哈希校验与代理加速
+- **安装已有汉化**：安装本地已有的汉化包文件，支持更换字体、导出系统字体
+- **文本美化**：基于结构化规则（v2 / bus）修改语言包 JSON，支持文本替换、包裹、颜色渐变、技能属性着色；内置规则集编辑器、模板与智能生成，另有 LLM 文本美化窗口
+- **CDN优选**：自动测速并选择最快的游戏 CDN 节点（Cloudflare 下载 + CloudFront API），写入系统 hosts 优化下载与连接体验
+- **游戏资源更新**：提前预下载官方 Localize 与 AssetBundle 资源，减少版本更新后的等待，支持 Launcher 启动前自动预下载
+- **游戏加速**：通过 DLL 注入 + 时间 API Hook 实现游戏变速（0.1x–10x），支持 Launcher 模式全局热键
+- **输入反检测**：Hook CommonLib 的 RawInput 计数上报，控制游戏读取的合成/真实输入数据（auto/manual 模式）
+- **作弊工具箱**：基于 MinHook 的原生游戏工具集，功能以加密形式分发，输入密钥解锁后使用
+- **Metadata 恢复**：自动恢复 IL2CPP `global-metadata.dat` 的解密入口、参数与 31 段映射，输出可直接被修复版 Il2CppDumper 消费的正式 profile（含一键安装的 IDA 定位器插件）
+- **已安装数据管理**：管理已安装汉化包、模组目录与 C 盘数据软链接，支持一键切换汉化版本
+- **Launcher配置**：集成启动器，通过替换 Steam 启动命令实现汉化包自动更新、调爪文本自动导入、MOD 加载、文本美化、资源预下载、游戏加速、CDN 优选与图形化进度窗口
+- **配置汉化API**：配置各端点 LLM 与各种机翻服务的 API 密钥与参数，内置预设 LLM 服务与在线测试功能
+- **抓取专有词汇**：通过 ParaTranz API 抓取专有名词表并生成词汇文件（JSON/单文件/双文件），提高翻译一致性
 
-## ✨ 特色功能
-作为LCTA_auto_update作者，添加 [LCTA_auto_update](https://github.com/HZBHZB1234/LCTA_auto_update) 自动翻译仓库，基于原文与零协会汉化，自动进行高质量LLM翻译，延时仅3-5小时。无需用户进行额外配置与操作，通过启动器自动获取更新。
+作为LCTA_auto_update作者，添加 [LCTA_auto_update](https://github.com/HZBHZB1234/LCTA_auto_update) 自动翻译仓库，基于原文与零协会汉化，自动进行高质量LLM翻译，延时仅1-2小时。无需用户进行额外配置与操作，通过启动器自动获取更新。
 
 
 ---
@@ -52,55 +56,15 @@
 
 ---
 
-## 📅 开发计划 (TODO)
-
-- 添加专有名词分析功能
-- 添加 MOD 制作工具  
-- 集成letheLauncher功能
-- 使用vue重构webui
-<details>
-  <summary>点击展开已完成功能</summary>
-  <ul>
-    <li>统一配置与函数调用逻辑</li>
-    <li>翻译管线全面重构（AC自动机、三阶段策略、格式感知分片）</li>
-    <li>完成 CDN 优选功能</li>
-    <li>添加游戏加速功能</li>
-    <li>完成文件拖入功能及新格式模组支持</li>
-    <li>添加 OurPlay 神人汉化支持</li>
-    <li>下载气泡自动Fallback</li>
-    <li>修复已安装数据管理页面汉化包相关功能未预期工作问题</li>
-    <li>添加 C 盘链接创建功能</li>
-    <li>修改字体文件修改功能，使其可以自己选择字体</li>
-    <li>添加更新后自动显示更新内容窗口</li>
-    <li>优化新手指导</li>
-    <li>添加美化功能</li>
-    <li>添加运行环境自动诊断</li>
-    <li>修复在win11系统环境下由于cmd默认启动终端导致无法正确隐藏控制台</li>
-    <li>统一日志逻辑，使用单例化日志管理器 </li>
-  </ul>
-</details>
-<details>
-  <summary>点击展开已放弃功能</summary>
-  <ul>
-  </ul>
-</details>
-<details>
-  <summary>点击展开现已证实早已完成或不存在的功能</summary>
-  <ul>
-    <li>修复汉化相关非预期日志问题</li>
-    <li>修复汉化相关非预期漏翻问题</li>
-    <li>修复安装汉化包不会自动切换的问题</li>
-  </ul>
-</details>
-
----
-
 ## 🔗 相关链接
 
 ### 开发与发布
 - **GitHub 项目**：[HZBHZB1234/LCTA-Limbus-company-transfer-auto](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto)
 - **自动汉化仓库**：[LCTA_auto_update](https://github.com/HZBHZB1234/LCTA_auto_update)
 - **翻译工具库**：[Py-Translate-Kit](https://github.com/HZBHZB1234/Py-Translate-Kit)
+- **游戏变速库**：[PyOpenSpeedy](https://github.com/HZBHZB1234/pyOpenSpeedy)
+- **global-metadata解密**：[LimbusMetadataRecovery](https://github.com/HZBHZB1234/LimbusMetadataRecovery)
+- **适配版Il2cppDumper**：[Il2CppDumper](https://github.com/HZBHZB1234/Il2CppDumper)
 
 ### 作者与社区
 - **B站主页**：[ygdtpnn](https://space.bilibili.com/3493119444126599)  
@@ -140,7 +104,7 @@
 
 ## ⚠️ 免责声明
 
-本项目为开源工具，旨在为《边狱公司》玩家提供便利。尽管本项目没有任何违反ProjectMoon服务条款的功能与行为，处于免责考虑，使用者应自行承担因使用本工具而产生的任何风险，包括但不限于：
+本项目为开源工具，旨在为《边狱公司》玩家提供便利，使用者应自行承担因使用本工具而产生的任何风险，包括但不限于：
 
 - 游戏账号异常
 - 客户端文件损坏

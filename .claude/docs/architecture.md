@@ -33,7 +33,9 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │                  BUSINESS LOGIC                      │
 │  webutils/__init__.py    public API aggregation      │
 │  webutils/function_*.py  feature modules             │
-│  webutils/update.py      self-update via GitHub API  │
+│  webutils/update.py      self-update via GitHub API;   │
+│                          dep changes deferred to next  │
+│                          startup pre-import hook       │
 │  webutils/load.py        config loading/validation   │
 ├─────────────────────────────────────────────────────┤
 │                DOMAIN ENGINES                        │

@@ -94,6 +94,16 @@ def init_env():
     if not is_frozen:
         os.environ['PATH'] += os.pathsep + str(project_root / 'code' / 'venv' / 'Scripts')
 
+    # 在加载任何扩展包 DLL（pythonnet/clr_loader/pywebview 等）之前执行待处理的
+    # 依赖操作（更新延迟的卸载/升级）。此时扩展包尚未加载进进程，
+    # Windows 下可正常卸载/替换。注：导入 webutils 包会带入其他第三方库，
+    # 但关键约束是扩展包 DLL 未加载，而非无任何第三方库被导入。
+    try:
+        from webutils.update import apply_pending_pip_ops
+        apply_pending_pip_ops()
+    except Exception as e:
+        print(f"执行待处理依赖操作失败，将在下次启动时重试: {e}")
+
 def start_webui():
     """启动PyWebGUI界面"""
     try:

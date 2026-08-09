@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-09 -->
+<!-- Last updated: 2026-08-10 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -564,10 +564,17 @@ JS: user clicks "check for updates" or auto-check on startup
   → webutils/update.py              GitHub Releases API
     → webFunc/GithubDownload.py     fetch latest release info
     → compare versions              current vs latest tag
-  → download & extract              fetch ZIP, extract, replace files
+  → download & extract              fetch ZIP, extract (tempfile 临时目录，非应用目录内 updateCache)
+  → webutils/update.py              Updater.install_requirements() 按包名比对：
+      - 涉及依赖移除/版本变动 → 整个依赖修改写入 %LOCALAPPDATA%/LCTA/pending_pip_ops.json，
+        本次不执行任何 pip 操作，下次启动 start_webui.py init_env() 中
+        apply_pending_pip_ops() 在加载扩展包 DLL 之前先卸载后安装
+      - 仅全新依赖 → 立即 pip install，失败跳过继续
+  → webutils/update.py              Updater.update_files() 替换文件（失败 return False，缓存统一由 finally 清理）
+  → restart required                manual program restart needed（依赖变更同样在重启后生效）
 ```
 
-Files: `webui/app.py`, `webutils/update.py`, `webFunc/GithubDownload.py`
+Files: `webui/app.py`, `webutils/update.py`, `webFunc/GithubDownload.py`, `start_webui.py`
 
 ## 11. Manual Update from Local Package
 

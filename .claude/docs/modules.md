@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-08-09 -->
+<!-- Last updated: 2026-08-10 -->
 
 ## Directory Overview
 
@@ -115,7 +115,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `clr_bootstrap.py` | pythonnet/clr_loader 引导 | `ensure_clr()` 强制 netfx 并导入 clr:预检 `Python.Runtime.dll` 存在性、clr_loader 版本(<0.2.8 警告)、.NET Framework >=4.7.2;失败时用 PowerShell 反射探针暴露 clr_loader 吞掉的真实异常并给出修复指引,不再自动回退 coreclr/mono。被 `start_webui.py`、`launcher/gui_progress.py`、`launcher/speed_hotkey.py` 共用 |
 | `utils/` | Shared utility package | `io.py` zip/unzip, hashing, 7z integration（环境无 7z 时自动从官网下载 7zr.exe 到 `tools/7z/`）; `net.py` downloads; `shell.py` Windows Shell API; `font.py` font caching（`get_cache_font` 缓存优先回退链 + `save_cache_font` 上传/拖入本地字体替换 `cache_path/ChineseFont.ttf`）; `misc.py` steam command/icon; facade re-exported via `utils/__init__.py` |
 | `load.py` | Config & game detection | Config loading/validation, Steam registry game path detection |
-| `update.py` | Self-updater | GitHub Releases-based auto-update |
+| `update.py` | Self-updater | GitHub Releases-based auto-update. `install_requirements` 按**包名**比对 requirements（去行内注释/空行/选项行，PEP 503 归一化）：涉及依赖移除或版本变动时，将整个依赖修改写入 pending 文件（`%LOCALAPPDATA%/LCTA/pending_pip_ops.json`），延迟到下次启动、加载任何扩展包 DLL 之前由 `apply_pending_pip_ops()` 统一执行（先卸载后安装）——规避 pythonnet/clr_loader 等已加载 DLL 包在更新会话中无法卸载/替换的问题；仅全新依赖立即安装，失败跳过继续。`check_and_update` 缓存下载/解压置于 `tempfile.mkdtemp` 临时目录（不再用应用目录内 `updateCache`，否则 update_files 清空应用目录时销毁解压源导致复制必然失败），finally 清理 |
 | `translator_constants.py` | API provider configs | TranslateKit provider definitions (Baidu, Google, DeepL, etc.) |
 | `function_llc.py` | LLC/零协会 install | Download & install Zero Association translation packs |
 | `function_ourplay_pc.py` | OurPlay PC install | Download OurPlay PC translation packs |

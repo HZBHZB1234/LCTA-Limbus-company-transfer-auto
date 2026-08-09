@@ -223,6 +223,115 @@ function copySteamPath() {
     navigator.clipboard.writeText(cmdElement.value);
 }
 
+function steamLauncherStateText(status) {
+    if (!status || !status.localconfig_path) return '未定位到 Steam 配置，请确认已安装 Steam 并登录过账号。';
+    switch (status.state) {
+        case 'lcta_current': return '已配置当前 LCTA 启动项';
+        case 'lcta_stale': return '已配置 LCTA 启动项（非当前）';
+        case 'lcta': return '已配置 LCTA 启动项';
+        case 'other': return '已配置启动项（非 LCTA）';
+        case 'unconfigured': return '当前未配置启动项';
+        default: return '未定位到 Steam 配置';
+    }
+}
+
+async function refreshSteamLauncherStatus() {
+    const statusEl = document.getElementById('steam-launcher-status');
+    if (!statusEl) return;
+    try {
+        const status = await pywebview.api.run_func('get_steam_launcher_status');
+        statusEl.textContent = steamLauncherStateText(status);
+    } catch (error) {
+        statusEl.textContent = '获取Steam启动器状态失败';
+    }
+}
+
+async function applySteamLaunchOptions() {
+    let status;
+    try {
+        status = await pywebview.api.run_func('get_steam_launcher_status');
+    } catch (error) {
+        showMessage('错误', '获取Steam启动器状态失败: ' + error);
+        return;
+    }
+    if (!status || !status.localconfig_path) {
+        showMessage('提示', '无法定位 Steam localconfig.vdf，请确认已安装 Steam 并登录过账号。');
+        return;
+    }
+    if (status.steam_running) {
+        showConfirm('Steam 正在运行',
+            'Steam 正在运行，其退出时可能覆盖 localconfig.vdf 的修改。建议先关闭 Steam 再写入。\n\n是否仍要继续？',
+            function() { doApplySteamLaunchOptions(status); });
+        return;
+    }
+    doApplySteamLaunchOptions(status);
+}
+
+function doApplySteamLaunchOptions(status) {
+    pywebview.api.run_func('get_steam_command').then(function(command) {
+        showConfirm('写入Steam启动选项',
+            '当前状态：' + steamLauncherStateText(status) +
+            '\n\n将写入 LCTA 启动命令。\n\n写入前会自动备份原文件（localconfig.vdf.lcta.bak），确认继续？',
+            function() {
+                pywebview.api.run_func('set_steam_launch_options', command).then(function(result) {
+                    if (result && result.success) {
+                        showMessage('成功', result.message);
+                    } else {
+                        showMessage('失败', '写入失败: ' + (result ? result.message : '未知错误'));
+                    }
+                    refreshSteamLauncherStatus();
+                }).catch(function(error) {
+                    showMessage('失败', '写入失败: ' + error);
+                });
+            });
+    }).catch(function(error) {
+        showMessage('失败', '获取Steam命令失败: ' + error);
+    });
+}
+
+async function clearSteamLaunchOptions() {
+    let status;
+    try {
+        status = await pywebview.api.run_func('get_steam_launcher_status');
+    } catch (error) {
+        showMessage('错误', '获取Steam启动器状态失败: ' + error);
+        return;
+    }
+    if (!status || !status.localconfig_path) {
+        showMessage('提示', '无法定位 Steam localconfig.vdf，请确认已安装 Steam 并登录过账号。');
+        return;
+    }
+    if (!status.current_launch_options) {
+        showMessage('提示', '当前未配置 Steam 启动选项，无需清除。');
+        return;
+    }
+    if (status.steam_running) {
+        showConfirm('Steam 正在运行',
+            'Steam 正在运行，其退出时可能覆盖 localconfig.vdf 的修改。建议先关闭 Steam 再清除。\n\n是否仍要继续？',
+            function() { doClearSteamLaunchOptions(status); });
+        return;
+    }
+    doClearSteamLaunchOptions(status);
+}
+
+function doClearSteamLaunchOptions(status) {
+    showConfirm('清除Steam启动选项',
+        '当前状态：' + steamLauncherStateText(status) +
+        '\n\n将清除 Steam 启动选项，恢复为默认直接启动游戏。\n\n清除前会自动备份原文件（localconfig.vdf.lcta.bak），确认继续？',
+        function() {
+            pywebview.api.run_func('clear_steam_launch_options').then(function(result) {
+                if (result && result.success) {
+                    showMessage('成功', result.message);
+                } else {
+                    showMessage('失败', '清除失败: ' + (result ? result.message : '未知错误'));
+                }
+                refreshSteamLauncherStatus();
+            }).catch(function(error) {
+                showMessage('失败', '清除失败: ' + error);
+            });
+        });
+}
+
 // 浏览安装界面的汉化包目录
 async function browseInstallPackageDirectory() {
     const result = await pywebview.api.browse_folder('install-package-directory');

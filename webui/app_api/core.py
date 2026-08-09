@@ -17,6 +17,7 @@ import webutils.load as load_util
 import webutils.function_llc as function_llc
 from webutils import open_explorer, evaluate_path, create_symlink_for, remove_symlink_for
 from webutils.utils import get_cache_font, get_steam_command, change_icon
+from webutils import get_steam_launcher_status, set_steam_launch_options, clear_steam_launch_options
 from webutils.translator_constants import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
 )
@@ -62,6 +63,9 @@ class CoreMixin:
         self.load_config_default = load_util.load_config_default
         self.fix_config = load_util.fix_config
         self.get_steam_command = get_steam_command
+        self.get_steam_launcher_status = get_steam_launcher_status
+        self.set_steam_launch_options = set_steam_launch_options
+        self.clear_steam_launch_options = clear_steam_launch_options
         self.change_icon = change_icon
         self.open_explorer = open_explorer
         self.evaluate_path = evaluate_path

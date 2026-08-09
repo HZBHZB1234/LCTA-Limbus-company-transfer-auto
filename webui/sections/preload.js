@@ -50,6 +50,7 @@ function onSectionLoaded(name) {
         case 'launcher-config':
             console.log('[LCTA] Init section: launcher-config');
             toggleSteamCommand();
+            refreshSteamLauncherStatus();
             if (typeof RiskGate !== 'undefined' && RiskGate.gateLauncherSection) {
                 RiskGate.gateLauncherSection();
             }

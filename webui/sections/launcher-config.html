@@ -62,6 +62,15 @@
                     <i class="fas fa-folder-open"></i> 复制
                 </button>
             </div>
+            <div style="margin-top: 0.5rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="primary-btn" onclick="applySteamLaunchOptions()">
+                    <i class="fas fa-magic"></i> 写入Steam启动选项
+                </button>
+                <button type="button" class="action-btn secondary" onclick="clearSteamLaunchOptions()">
+                    <i class="fas fa-eraser"></i> 清除启动项
+                </button>
+                <small class="form-hint" id="steam-launcher-status">正在获取Steam启动器状态...</small>
+            </div>
         </div>
     </div>
 

@@ -42,6 +42,14 @@ from .cdn import (
 from .function_speed import SpeedManager
 from .function_input_bypass import InputBypassManager
 from .cheat_plugins import CheatPluginHost
+from .function_steam_launcher import (
+    get_steam_path,
+    resolve_localconfig_path,
+    get_steam_launcher_status,
+    set_steam_launch_options,
+    clear_steam_launch_options,
+    read_current_launch_options,
+)
 
 __all__ = [
     'function_llc_main',
@@ -97,4 +105,10 @@ __all__ = [
     'SpeedManager',
     'InputBypassManager',
     'CheatPluginHost',
+    'get_steam_path',
+    'resolve_localconfig_path',
+    'get_steam_launcher_status',
+    'set_steam_launch_options',
+    'clear_steam_launch_options',
+    'read_current_launch_options',
 ]

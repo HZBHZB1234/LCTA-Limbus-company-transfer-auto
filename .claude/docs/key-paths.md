@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-08 -->
+<!-- Last updated: 2026-08-09 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -373,6 +373,37 @@ Status query (WebUI):
 - 复制到三个目录 `code/cheat_core/cheat_core.bin`
 
 Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, `scripts/cheat_encrypt.py`, `webui/app_api/cheat_core.py`（含 cheat_plugins_list/invoke）, `webui/sections/cheat.html`（密钥门）, `webui/sections/launcher-config.html`（#cheat-plugin-launcher 占位）, `webui/js/cheat-shell.js`, `webui/js/risk-gate.js`（cheat 无 launcherCheckboxId）, `launcher/game_launch.py`, `tests/test_cheat_core.py`；私有仓库：`cheatcore/registry.py`（插件契约）, `cheatcore/cheat_damage_hook.py`（含 start/stop_launcher）, `hooks/cheat_damage.c`, `vendor/minhook/`, `webui/*`, `tools/gen_cheat_damage_json.py`（自动生成偏移 JSON）, `keys/current.txt`, `manifest.json`, `docs/CHEAT_TOOLBOX.md`, `tests/test_cheat_damage_hook.py`, `tests/test_registry.py`
+
+## 6.7 Steam 启动器设置（写入/清除 LaunchOptions 到 localconfig.vdf）
+
+```
+WebUI Launcher配置页 steam命令旁「写入Steam启动选项」/「清除启动项」按钮
+  → webui/js/modals.js applySteamLaunchOptions() / clearSteamLaunchOptions()
+      → pywebview.api.run_func('get_steam_launcher_status')
+      → webui/app_api/core.py CoreMixin.get_steam_launcher_status（set_function 注册）
+      → webutils/function_steam_launcher.py get_steam_launcher_status()
+          → get_steam_path()              注册表 HKCU\SOFTWARE\Valve\Steam\SteamPath（分隔符归一化）
+          → resolve_localconfig_path()    主: config/loginusers.vdf MostRecent==1 账号
+                                          回退: 扫描 userdata\*（含 1973530 条目优先）
+          → is_lcta_launch_options()      ' -launcher %command%' 判定 LCTA 型
+          → get_current_launch_command()  当前 LCTA 命令（get_steam_command，异常→None）
+          → state: missing/unconfigured/lcta_current/lcta_stale/lcta/other + is_current_lcta
+          → is_steam_running()            tasklist 检测 steam.exe
+  → 弹窗确认（只显示状态文本；Steam 运行中先警告）
+  → 写入: run_func('set_steam_launch_options', command)
+    webutils/function_steam_launcher.py set_steam_launch_options()
+      → 备份 localconfig.vdf → localconfig.vdf.lcta.bak
+      → vdf.load → apps["1973530"].LaunchOptions = get_steam_command()（utils/misc.py）
+      → vdf.dump 按原 BOM 状态写回
+  → 清除: run_func('clear_steam_launch_options')
+    webutils/function_steam_launcher.py clear_steam_launch_options()
+      → 备份 → apps[GAME_ID].pop('LaunchOptions')（保留 LastPlayed 等字段）→ vdf.dump 写回；未配置时幂等
+  → 结果 showMessage + refreshSteamLauncherStatus() 刷新状态文本
+
+页面加载: webui/sections/preload.js 'launcher-config' 分支调 refreshSteamLauncherStatus()
+```
+
+Files: `webutils/function_steam_launcher.py`, `webutils/__init__.py`, `webui/app_api/core.py`（set_function 注册）, `webui/sections/launcher-config.html`, `webui/js/modals.js`, `webui/sections/preload.js`, `tests/test_steam_launcher.py`
 
 ## 7. Rule Editor — File Edit → Smart Ruleset Generation
 

@@ -60,7 +60,7 @@ def _LCTA_auto_api(modal_id) -> str:
 
 def function_LCTA_auto_main(modal_id):
     _log_manager.log_modal_status("正在初始化", modal_id)
-    config = ConfigManager().get('machine', {})
+    config = ConfigManager().get('ui_default.machine', {})
     use_proxy = config.get('use_proxy', True)
     download_source = config.get('download_source', 'github')
     

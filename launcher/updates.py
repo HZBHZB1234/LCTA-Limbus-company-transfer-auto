@@ -9,7 +9,7 @@ from typing import Optional
 from webFunc import Note, GithubDownload
 from webutils import (
     find_translation_packages, install_translation_package,
-    function_llc_main, check_ver_github,
+    function_llc_main, function_LCTA_auto_main, check_ver_github,
     function_ourplay_main, function_ourplay_api, check_ver_ourplay,
     function_ourplay_new_main, check_ver_ourplay_new,
     check_ver_github_M,
@@ -181,11 +181,7 @@ class MachineUpdate(UpdateBase):
 
     def perform_update(self) -> Optional[str]:
         """执行LCTA-AU更新"""
-        return function_llc_main(
-            "LCTA-AU_update",
-            download_source=self.config.get("download_source", "github"),
-            from_proxy=self.config.get("use_proxy", True)
-        )
+        return function_LCTA_auto_main("LCTA-AU_update")
 
     def update_config(self) -> bool:
         update_config_last('machine', self.latest_version)

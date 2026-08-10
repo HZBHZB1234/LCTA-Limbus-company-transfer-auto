@@ -117,6 +117,17 @@ _kernel32.CloseHandle.argtypes = [_HANDLE]
 _kernel32.VirtualFreeEx.argtypes = [_HANDLE, _LPVOID, ctypes.c_size_t, wt.DWORD]
 _kernel32.GetExitCodeThread.argtypes = [_HANDLE, ctypes.POINTER(wt.DWORD)]
 
+_psapi = ctypes.windll.psapi
+
+_psapi.EnumProcessModules.restype = wt.BOOL
+_psapi.EnumProcessModules.argtypes = [
+    _HANDLE, ctypes.POINTER(_HANDLE), wt.DWORD, ctypes.POINTER(wt.DWORD),
+]
+_psapi.GetModuleBaseNameW.restype = wt.DWORD
+_psapi.GetModuleBaseNameW.argtypes = [
+    _HANDLE, _HANDLE, ctypes.POINTER(ctypes.c_wchar), wt.DWORD,
+]
+
 # ---------------------------------------------------------------------------
 # 纯解析/钳制函数（可单测）
 # ---------------------------------------------------------------------------
@@ -337,6 +348,30 @@ class InputBypassManager:
         return cls._injected_pid is not None
 
     @classmethod
+    def _find_remote_module(cls, proc: int, dll_path: str, fallback: int) -> int:
+        """在目标进程内按 DLL 文件名枚举真实 HMODULE（64 位），失败时回退退出码。"""
+        want = os.path.basename(dll_path).lower()
+        needed = wt.DWORD()
+        if not _psapi.EnumProcessModules(proc, None, 0, ctypes.byref(needed)):
+            _log_manager.log("输入反检测: EnumProcessModules 失败，回退使用远程线程退出码")
+            return fallback
+        count = needed.value // ctypes.sizeof(_HANDLE)
+        if count <= 0:
+            return fallback
+        mods = (_HANDLE * count)()
+        if not _psapi.EnumProcessModules(proc, mods, ctypes.sizeof(mods), ctypes.byref(needed)):
+            _log_manager.log("输入反检测: EnumProcessModules 枚举失败，回退使用远程线程退出码")
+            return fallback
+        name = ctypes.create_unicode_buffer(MAX_PATH_W)
+        for i in range(count):
+            if not _psapi.GetModuleBaseNameW(proc, mods[i], name, MAX_PATH_W):
+                continue
+            if name.value.lower() == want:
+                return int(mods[i])
+        _log_manager.log(f"输入反检测: 未找到模块 {want}，回退使用远程线程退出码")
+        return fallback
+
+    @classmethod
     def inject(cls, pid: Optional[int] = None) -> bool:
         """注入 rawinput_hook.dll 到 LimbusCompany.exe。
 
@@ -381,7 +416,7 @@ class InputBypassManager:
             if not exit_code.value:
                 raise RuntimeError("DLL 加载失败（远程线程退出码为 0）")
             cls._injected_pid = pid
-            cls._remote_module = int(exit_code.value)
+            cls._remote_module = cls._find_remote_module(proc, dll_path, int(exit_code.value))
             logger.info("已注入 rawinput_hook 到 %s (PID %d)", TARGET_PROCESS, pid)
             return True
         finally:

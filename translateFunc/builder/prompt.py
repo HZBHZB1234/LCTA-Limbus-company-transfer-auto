@@ -668,6 +668,18 @@ class PromptFactory:
                     f"原始文本 (截断500字符): {text[:500]}"
                 )
                 return []
+            if not isinstance(data, dict):
+                self._last_parse_errors.append({
+                    "type": "TopLevelNotObject",
+                    "message": f"响应顶层不是 JSON 对象，实际类型: {type(data).__name__}",
+                })
+                import logging
+                _logger.warning(
+                    f"parse_response 顶层非对象 "
+                    f"(stage={stage}, format={prompt_format}), "
+                    f"原始文本 (截断500字符): {text[:500]}"
+                )
+                return []
             expected_keys = {
                 0: "disambiguations",
                 1: "translations",

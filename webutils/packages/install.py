@@ -12,6 +12,7 @@ import winreg
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 from ..utils.io import extract_zip_smartly, zip_folder
+from .clean import _sanitize_zip_member_name
 from .manage import safe_join_path
 
 
@@ -222,11 +223,20 @@ def install_translation_package(package_path, game_path, modal_id: str = None):
         _log_manager.log_modal_process("检测到为压缩包，获取解压后文件夹名...", modal_id)
         # 获取解压后的文件夹名称
         with zipfile.ZipFile(package_path, "r") as zipf:
+            namelist = zipf.namelist()
+            # 校验所有成员名安全，拒绝路径穿越类成员
+            for name in namelist:
+                _sanitize_zip_member_name(name)
+            if not namelist:
+                raise ValueError("压缩包为空，无法安装汉化包")
             # 获取压缩包内的第一个文件夹名称（假设汉化包结构为文件夹/...）
-            first_item = zipf.namelist()[0] if zipf.namelist() else ""
-            # 提取文件夹名称（假设压缩包根目录只有一个文件夹）
-            package_name = first_item.split('/')[0] if '/' in first_item else first_item
-            package_name = package_name.split('\\')[0] if '\\' in first_item else package_name
+            first_item = namelist[0]
+            package_name = first_item.replace('\\', '/').split('/')[0]
+            # 只接受单个目录名形态，拒绝空名、'.'/'..' 与含分隔符/盘符的名称
+            if (not package_name or package_name in ('.', '..')
+                    or '/' in package_name or '\\' in package_name
+                    or ':' in package_name or os.path.isabs(package_name)):
+                raise ValueError(f"压缩包内不存在有效的汉化包目录: {first_item}")
     else:
         _log_manager.log_modal_process("检测到为文件夹，获取文件夹名...", modal_id)
         package_name = os.path.basename(package_path)

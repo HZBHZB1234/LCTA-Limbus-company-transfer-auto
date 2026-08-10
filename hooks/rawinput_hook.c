@@ -466,6 +466,10 @@ static void detach_hook(void)
         CloseHandle(g_stop_event);
         g_stop_event = NULL;
     }
+    /* watcher 已退出，恢复残留 detour，避免 DLL 卸载后跳转指向已卸载代码 */
+    /* hop_unpatch 幂等（active 检查），无条件调用可覆盖部分 patch 失败场景 */
+    restore_core_hook();
+    restore_real_hook();
     if (g_cfg) {
         UnmapViewOfFile(g_cfg);
         g_cfg = NULL;

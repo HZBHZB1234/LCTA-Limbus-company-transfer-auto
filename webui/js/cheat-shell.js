@@ -246,14 +246,20 @@ let cheatPage = {
                             RiskGate.showConsentModal(consent, async () => {
                                 checkbox.checked = true;
                                 try {
-                                    await configManager.updateConfigValues({ [lc.enabled_key]: true });
+                                    await pywebview.api.update_config_value(lc.enabled_key, true);
+                                    if (typeof configManager !== 'undefined') {
+                                        configManager.setCachedValue(lc.enabled_key, true);
+                                    }
                                 } catch (e) { console.error('launcher plugin toggle error:', e); }
                             });
                             return;
                         }
                     }
                     try {
-                        await configManager.updateConfigValues({ [lc.enabled_key]: want });
+                        await pywebview.api.update_config_value(lc.enabled_key, want);
+                        if (typeof configManager !== 'undefined') {
+                            configManager.setCachedValue(lc.enabled_key, want);
+                        }
                     } catch (e) {
                         console.error('launcher plugin toggle error:', e);
                     }

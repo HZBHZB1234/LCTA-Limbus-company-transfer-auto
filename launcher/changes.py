@@ -31,13 +31,14 @@ def apply_patch(mod_path, _path):
         for _lang_file in patch_data.get('patchs', {}):
             lang_file = lang_path / _lang_file
             _log_manager.log("Patching %s", lang_file)
+            if not lang_file.exists():
+                continue
             shutil.copyfile(lang_file, lang_file.with_suffix(".bak"))
-            if lang_file.exists():
-                with open(lang_file, "r") as f:
-                    lang_data = json.load(f)
-                patched_data = jsonpatch.apply_patch(lang_data, patch_data['patchs'][_lang_file])
-                with open(lang_file, "w") as f:
-                    json.dump(patched_data, f)
+            with open(lang_file, "r") as f:
+                lang_data = json.load(f)
+            patched_data = jsonpatch.apply_patch(lang_data, patch_data['patchs'][_lang_file])
+            with open(lang_file, "w") as f:
+                json.dump(patched_data, f)
 
 def cleanup_patch(_path):
     game_path = extract_exe_path(_path)

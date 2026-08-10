@@ -731,8 +731,8 @@ class FileProcessor:
                         for idx, block in enumerate(text_blocks):
                             expected_id = idx + 1
                             t = parsed_by_id.get(expected_id)
-                            if t is None and idx < len(parsed):
-                                # id 未匹配，尝试按顺序回退（LLM 可能未输出 id）
+                            if t is None and not parsed_by_id and idx < len(parsed):
+                                # 响应整体无任何 id 时才按顺序回退（LLM 可能未输出 id）
                                 fallback_t = parsed[idx]
                                 if isinstance(fallback_t, dict):
                                     t = fallback_t
@@ -1438,9 +1438,10 @@ class FileProcessor:
             self.jp_index = {i: d for i, d in enumerate(self.jp_data)}
             self.llc_index = {i: d for i, d in enumerate(self.llc_data)}
         else:
-            # 防御：部分 JSON 的 dataList 元素缺少 "id" 键，回退为 enumerate 索引
+            # 防御：dataList 元素存在缺 "id" 键时回退为 enumerate 索引，
+            # 保证 KR/LLC 两侧索引键策略一致（必须所有元素都含 id 才按 id 键控）
             def _make_non_story_index(data: list) -> dict:
-                if data and isinstance(data[0], dict) and "id" in data[0]:
+                if data and all(isinstance(i, dict) and "id" in i for i in data):
                     return {i["id"]: i for i in data}
                 return {idx: item for idx, item in enumerate(data)}
 

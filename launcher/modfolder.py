@@ -8,3 +8,4 @@ def get_mod_folder():
         mod_path = Path.home() / 'AppData' /  'Roaming' / 'LimbusCompanyMods'
     mod_path = str(mod_path)
     os.environ['mod_path'] = mod_path
+    return mod_path

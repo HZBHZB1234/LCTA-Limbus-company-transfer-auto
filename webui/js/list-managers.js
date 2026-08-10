@@ -556,7 +556,7 @@ function deleteInstalledPackage() {
                 .then(function(result) {
                     if (result.success) {
                         // 从管理器中移除该项，自动更新列表并清空选中状态
-                        packageItemManager.removeItem(packageName);
+                        installedPackageItemManager.removeItem(packageName);
                         showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
                     } else {
                         showMessage('删除失败', `删除汉化包失败: ${result.message}`);
@@ -779,10 +779,10 @@ async function deleteSelectedMod() {
     showConfirm('确认删除', `确定要删除模组 "${packageName}" 吗？此操作不可撤销。`,
         async function() {
             const result = await pywebview.api.delete_mod(packageName, 
-                modItemManager.getEnabledMap[selectedItem]);
+                modItemManager.getEnabledMap()[packageName]);
                     if (result.success) {
                         // 从管理器中移除该项，自动更新列表并清空选中状态
-                        packageItemManager.removeItem(packageName);
+                        modItemManager.removeItem(packageName);
                     } else {
                         showMessage('删除失败', `删除模组失败: ${result.message}`);
                     }

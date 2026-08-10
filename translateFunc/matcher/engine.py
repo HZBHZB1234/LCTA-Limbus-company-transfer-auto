@@ -38,6 +38,7 @@ class MatcherEngine:
 
         # 确保所有 AC 自动机在翻译优先文件前已处于已构建状态，
         # 后续通过 _update_roles / _update_affects 用实际数据重建。
+        self._proper_ac.build()
         self._role_ac.build()
         self._affect_id_ac.build()
         self._affect_name_ac.build()

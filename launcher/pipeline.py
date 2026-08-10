@@ -1,6 +1,10 @@
 import threading
 from typing import Any, Callable, Dict, List, Optional
 
+from globalManagers.LogManager import LogManager
+
+_log_manager = LogManager()
+
 PHASE_INIT             = "init"
 PHASE_CHECK_UPDATE     = "check_update"
 PHASE_RESOURCE_UPDATE  = "resource_update"
@@ -57,8 +61,9 @@ class LaunchPipeline:
         for cb in self._handlers.get(phase, []):
             try:
                 cb(**kwargs)
-            except Exception:
-                pass
+            except Exception as e:
+                _log_manager.log(f"启动阶段 {phase} 回调异常已被忽略: {type(e).__name__}: {e}")
+                _log_manager.log_error(e)
         return True
 
     def cancel(self) -> None:

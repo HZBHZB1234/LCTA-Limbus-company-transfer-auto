@@ -2834,6 +2834,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
                 html += '</div>';
             }
             html += intersectionHtml;
+            html += renderSimplifiedTierControls(g, i);
             html += '<div class="re-bias-actions">' +
                 '<button class="re-btn re-btn-sm re-bias-preview-btn" data-idx="' + i + '">📋 预览JSON</button>' +
                 '<button class="re-btn re-btn-sm re-btn-success re-bias-apply-btn" data-idx="' + i + '">✅ 生成此规则</button>' +
@@ -3172,6 +3173,8 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         var autoMergeResult = _autoMergeCandidates(groups, mergeCandidates);
         groups = autoMergeResult.groups;
         mergeCandidates = autoMergeResult.remaining;
+        // 回写状态，保证 preview/apply/split 按渲染后的组索引查找
+        state.smartGenGroups = groups;
         var autoMergedCount = 0;
         for (var ai = 0; ai < groups.length; ai++) {
             if (groups[ai]._auto_merged) autoMergedCount++;
@@ -3869,6 +3872,27 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         }
         var g1 = groups[g1Idx], g2 = groups[g2Idx];
         var mergedGroup = _mergeTwoGroups(g1, g2);
+        mergedGroup._auto_merged = true;
+        mergedGroup._split_origin = [g1Idx, g2Idx];
+
+        // 将合并组加入 state.smartGenGroups 并重新渲染，使 applyV3Group 能按索引定位到合并组卡片
+        var newGroups = groups.slice();
+        newGroups.push(mergedGroup);
+        state.smartGenGroups = newGroups;
+
+        // 移除已应用的合并候选，其余候选索引在 append 后保持不变
+        var remaining = [];
+        var candidates = state._lastMergeCandidates || [];
+        for (var c = 0; c < candidates.length; c++) {
+            var cd = candidates[c];
+            if (cd.idx1 === g1Idx && cd.idx2 === g2Idx) continue;
+            remaining.push(cd);
+        }
+
+        var overlay = state.smartGenOverlay;
+        if (overlay) {
+            renderV3Results({ groups: newGroups, merge_candidates: remaining, stats: { group_count: newGroups.length } }, {});
+        }
         await applyV3Group(mergedGroup);
     }
 

@@ -92,6 +92,7 @@ class LLMFancyAPI:
                     'custom_prompt_enabled': saved.custom_prompt_enabled,
                     'max_length': saved.max_length,
                     'max_workers': saved.max_workers,
+                    'dedup_enabled': saved.dedup_enabled,
                 },
             }
         except Exception as exc:

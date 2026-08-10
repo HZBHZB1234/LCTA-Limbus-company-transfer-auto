@@ -53,7 +53,11 @@ def _prepare_mod_handler(**kw):
         return
     if ConfigManager().get("launcher.work.mod", False):
         from launcher.game_launch import prepare_mod
-        prepare_mod(steam_argv, progress_callback=kw.get('progress_callback'))
+        prepare_mod(
+            steam_argv,
+            progress_callback=kw.get('progress_callback'),
+            cancel_event=kw.get('cancel_event'),
+        )
 
 
 def _resource_update_handler(**kw):
@@ -167,6 +171,10 @@ def _wait_for_game(process, cancel_event):
                 process.wait(5)
             except subprocess.TimeoutExpired:
                 process.kill()
+                try:
+                    process.wait(5)
+                except subprocess.TimeoutExpired:
+                    pass
             return
         time.sleep(0.5)
     _log_manager.log(f"游戏进程已退出，退出码: {process.returncode}")
@@ -188,7 +196,11 @@ def _close_progress_window(progress, game_process, exit_code, cancel_event):
         if game_process is None or exit_code != -1 or cancel_event.is_set():
             progress.close()
         else:
-            time.sleep(float(ConfigManager().get("launcher.work.exit_delay", 3.0)))
+            try:
+                exit_delay = float(ConfigManager().get("launcher.work.exit_delay", 3.0))
+            except (TypeError, ValueError):
+                exit_delay = 3.0
+            time.sleep(exit_delay)
             progress.close()
     except Exception:
         pass
@@ -304,6 +316,7 @@ def main():
             pipeline.emit(
                 PHASE_PREPARE_MOD,
                 steam_argv=steam_argv,
+                cancel_event=pipeline.cancel_event,
                 progress_callback=(
                     progress.update_phase_progress
                     if progress and progress.is_alive()

@@ -65,6 +65,7 @@
         _lastViewedFile: null,      // 用于标签页切换时判断文件是否变化
         _editingRuleIndex: null, // 正在编辑的规则索引（非 null 时 generateRule 执行更新而非新增）
         _rulesetDirty: false,    // 规则集是否有未保存的修改
+        _v3SkipAutoMerge: false, // 拆分后跳过 V3 自动合并（直到下一次重新分析）
     };
 
     // 跨标签搜索状态桥接
@@ -270,6 +271,11 @@
             }
         }
 
+        if (state.openFiles.has(path)) {
+            activateFileTab(path);
+            return;
+        }
+
         var raw = res.raw || '';
         var parsed = res.parsed || null;
         var category = res.category || classifyPath(path).category;
@@ -374,21 +380,24 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             ts.container.parentNode.removeChild(ts.container);
         }
 
+        var wasActive = (path === state.activeFileTab);
         state.openFiles.delete(path);
         var idx = state.fileTabOrder.indexOf(path);
         if (idx !== -1) state.fileTabOrder.splice(idx, 1);
 
-        if (state.fileTabOrder.length > 0) {
-            var nextPath = state.fileTabOrder[Math.min(idx, state.fileTabOrder.length - 1)];
-            activateFileTab(nextPath);
-        } else {
-            state.activeFileTab = null;
-            state._lastViewedFile = null;
-            syncLegacyState();
-            var empty = document.getElementById('re-fe-empty');
-            if (empty) empty.style.display = '';
-            updateFileEditTabLabel();
-            updateStatusBar();
+        if (wasActive) {
+            if (state.fileTabOrder.length > 0) {
+                var nextPath = state.fileTabOrder[Math.min(idx, state.fileTabOrder.length - 1)];
+                activateFileTab(nextPath);
+            } else {
+                state.activeFileTab = null;
+                state._lastViewedFile = null;
+                syncLegacyState();
+                var empty = document.getElementById('re-fe-empty');
+                if (empty) empty.style.display = '';
+                updateFileEditTabLabel();
+                updateStatusBar();
+            }
         }
 
         renderFileTabBar();
@@ -609,6 +618,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             console.error('[rule-editor] loadRulesetByName failed:', e);
             state.currentRuleset = null;
         }
+        resetEditingRule();
         renderRulesPreview();
         syncAdvancedFromRuleset();
     }
@@ -1555,6 +1565,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         const name = sel.value;
         if (!name) {
             state.currentRuleset = null;
+            resetEditingRule();
             renderRulesPreview();
             return;
         }
@@ -1630,6 +1641,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             }
             showToast('规则集已删除', 'success');
             state.currentRuleset = null;
+            resetEditingRule();
             await loadRulesets();
             refreshRulesetUI();
         } catch (e) {
@@ -1986,6 +1998,12 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         }
     }
 
+    function resetEditingRule() {
+        state._editingRuleIndex = null;
+        var genBtn = $i('re-generate-rule-btn');
+        if (genBtn) genBtn.textContent = '📋 生成规则JSON';
+    }
+
     async function persistCurrentRuleset() {
         if (!state.currentRuleset || !state.currentRuleset.name) return;
         state.currentRuleset.version = 2;
@@ -2019,6 +2037,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         if (index < 0 || index >= state.currentRuleset.rules.length) return;
         state.currentRuleset.rules.splice(index, 1);
         state._rulesetDirty = true;
+        resetEditingRule();
         refreshRulesetUI();
         persistCurrentRuleset();
     }
@@ -2525,8 +2544,12 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         for (let i = 0; i < rules.length; i++) state.currentRuleset.rules.push(rules[i]);
         state._rulesetDirty = true;
         refreshRulesetUI();
-        await persistCurrentRuleset();
-        showToast('已添加 ' + rules.length + ' 条规则', 'success');
+        try {
+            await persistCurrentRuleset();
+            showToast('已添加 ' + rules.length + ' 条规则', 'success');
+        } catch (e) {
+            showToast('保存失败: ' + (e && e.message ? e.message : e), 'error');
+        }
     }
 
     function readSmartSelections(card, idx) {
@@ -2897,8 +2920,12 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         for (var i = 0; i < rules.length; i++) state.currentRuleset.rules.push(rules[i]);
         state._rulesetDirty = true;
         refreshRulesetUI();
-        await persistCurrentRuleset();
-        showToast('已添加 ' + rules.length + ' 条规则', 'success');
+        try {
+            await persistCurrentRuleset();
+            showToast('已添加 ' + rules.length + ' 条规则', 'success');
+        } catch (e) {
+            showToast('保存失败: ' + (e && e.message ? e.message : e), 'error');
+        }
     }
 
     function analyzeChangesLocallyV2(changes, bias) {
@@ -3107,7 +3134,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
 
     async function openSmartGenerationV3() {
         // Feature 3: 打开智能生成前自动保存规则集
-        _autoPersistRuleset();
+        await _autoPersistRuleset();
         var changes = collectChangesForSmartGen();
         var counts = getChangeCounts();
         closeSmartGenDialogV3();
@@ -3117,6 +3144,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         overlay.className = 're-overlay';
         state.smartGenOverlay = overlay;
         state.smartGenGroups = null;
+        state._v3SkipAutoMerge = false;
 
         // 渲染加载状态
         overlay.innerHTML =
@@ -3170,7 +3198,9 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         }
 
         // 自动合并高置信度候选
-        var autoMergeResult = _autoMergeCandidates(groups, mergeCandidates);
+        var autoMergeResult = state._v3SkipAutoMerge
+            ? { groups: groups, remaining: mergeCandidates }
+            : _autoMergeCandidates(groups, mergeCandidates);
         groups = autoMergeResult.groups;
         mergeCandidates = autoMergeResult.remaining;
         // 回写状态，保证 preview/apply/split 按渲染后的组索引查找
@@ -3700,6 +3730,13 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         return candidates;
     }
 
+    function _collectOriginalGroups(g) {
+        if (g && Array.isArray(g._original_groups) && g._original_groups.length) {
+            return g._original_groups;
+        }
+        return [g];
+    }
+
     function _mergeTwoGroups(g1, g2) {
         var items1 = g1._raw_changes || [];
         var items2 = g2._raw_changes || [];
@@ -3777,6 +3814,8 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             }
         }
 
+        var originGroups = _collectOriginalGroups(g1).concat(_collectOriginalGroups(g2));
+
         return {
             change_type: g1.change_type,
             summary: mergedSummary,
@@ -3794,7 +3833,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             is_merged: true,
             merge_candidates: [],
             _raw_changes: mergedRaw,
-            _original_groups: [JSON.parse(JSON.stringify(g1)), JSON.parse(JSON.stringify(g2))]
+            _original_groups: originGroups.map(function (g) { return JSON.parse(JSON.stringify(g)); })
         };
     }
 
@@ -3824,7 +3863,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
 
             var mergedGroup = _mergeTwoGroups(g1, g2);
             mergedGroup._auto_merged = true;
-            mergedGroup._split_origin = [idx1, idx2];
+            mergedGroup._split_origin = mergedGroup._original_groups.map(function (g) { return g; });
 
             merged[idx1] = mergedGroup;
             consumed[idx2] = true;
@@ -3849,8 +3888,10 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         var seenPairs = {};
         for (var k = 0; k < mergeCandidates.length; k++) {
             var rmc = mergeCandidates[k];
-            var ni1 = oldToNew.hasOwnProperty(rmc.idx1) ? oldToNew[rmc.idx1] : rmc.idx1;
-            var ni2 = oldToNew.hasOwnProperty(rmc.idx2) ? oldToNew[rmc.idx2] : rmc.idx2;
+            // 已被合并进其他组（新数组中不再独立存在）的旧索引无法安全映射，直接丢弃
+            var ni1 = oldToNew.hasOwnProperty(rmc.idx1) ? oldToNew[rmc.idx1] : -1;
+            var ni2 = oldToNew.hasOwnProperty(rmc.idx2) ? oldToNew[rmc.idx2] : -1;
+            if (ni1 < 0 || ni2 < 0) continue;
             // 跳过已自动合并的（两者映射到相同 idx）
             if (ni1 === ni2) continue;
             var pairKey = Math.min(ni1, ni2) + '_' + Math.max(ni1, ni2);
@@ -3873,7 +3914,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         var g1 = groups[g1Idx], g2 = groups[g2Idx];
         var mergedGroup = _mergeTwoGroups(g1, g2);
         mergedGroup._auto_merged = true;
-        mergedGroup._split_origin = [g1Idx, g2Idx];
+        mergedGroup._split_origin = mergedGroup._original_groups.map(function (g) { return g; });
 
         // 将合并组加入 state.smartGenGroups 并重新渲染，使 applyV3Group 能按索引定位到合并组卡片
         var newGroups = groups.slice();
@@ -3937,6 +3978,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             // 使用本地语义检测重新计算 merge_candidates
             result.merge_candidates = detectMergeCandidatesLocally(newGroups);
         }
+        state._v3SkipAutoMerge = true;
         renderV3Results(result, {});
         showToast('已拆分为 ' + originGroups.length + ' 个独立组', 'success');
     }
@@ -4105,7 +4147,12 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         state._rulesetDirty = true;
 
         refreshRulesetUI();
-        await persistCurrentRuleset();
+        try {
+            await persistCurrentRuleset();
+        } catch (e) {
+            showToast('保存失败: ' + (e && e.message ? e.message : e), 'error');
+            return;
+        }
         closeSmartGenDialogV3();
         switchMainTab('ruleset-edit');
         showToast('已应用 ' + appliedCount + ' 条规则' +

@@ -266,6 +266,7 @@ class ConfigManager {
             'clean-progress': 'ui_default.clean.clean_progress',
             'clean-notice': 'ui_default.clean.clean_notice',
             'clean-mods': 'ui_default.clean.clean_mods',
+            'custom-files': 'ui_default.clean.custom_files',
 
             // api配置设置
             'api-configs': 'api_config',
@@ -455,6 +456,27 @@ class ConfigManager {
         for (const [id, keyPath] of Object.entries(this.configKeyMap)) {
             if (id.startsWith('--')) continue; // 跳过以 "--" 开头的 id，不应用到 UI
             if (keyPath in configValues) {
+                this.applyValueToUI(id, configValues[keyPath]);
+            }
+        }
+    }
+    
+    // 应用配置到UI（限定容器：仅回填容器内已渲染的表单，
+    // 跳过待保存的键，避免覆盖其他 section 未保存的编辑）
+    async applyConfigToSection(sectionEl) {
+        if (!sectionEl) return;
+        const allIds = Object.keys(this.configKeyMap).filter(id => !id.startsWith('--'));
+        const scopedIds = allIds.filter(id => {
+            if (id in this.pendingUpdates) return false;
+            const element = document.getElementById(id);
+            return element && sectionEl.contains(element);
+        });
+        const configValues = await this.getConfigValues(scopedIds);
+        
+        for (const [id, keyPath] of Object.entries(this.configKeyMap)) {
+            if (id.startsWith('--')) continue;
+            if (id in this.pendingUpdates) continue;
+            if (scopedIds.indexOf(id) >= 0 && keyPath in configValues) {
                 this.applyValueToUI(id, configValues[keyPath]);
             }
         }

@@ -35,6 +35,7 @@
 #define RH_POLL_MS      300
 #define RH_JITTER_MS    1000                 /* 抖动快照窗口（毫秒） */
 #define RH_RATIO_MAX    0.9                  /* 比例上限，与 Python 端 RATIO_MAX 一致 */
+#define RH_RATIO_CLAMP  (RH_RATIO_MAX - 0.01) /* 钳制目标：严格小于 RH_RATIO_MAX，与 Python 端 RATIO_CLAMP 一致 */
 #define HOP_SIZE        14                   /* mov rax,imm64; jmp rax; nop; nop */
 
 /* 与 webutils/function_input_bypass.py 中 RHConfig（ctypes）保持字段一一对应，
@@ -163,7 +164,7 @@ __declspec(noinline) static double hk_mouse_ratio(void)
         }
         if (real + synth <= 0) return 0.0;
         ratio = (double)synth / (double)(real + synth);
-        if (ratio >= RH_RATIO_MAX) ratio = (double)RH_RATIO_MAX;
+        if (ratio >= RH_RATIO_MAX) ratio = RH_RATIO_CLAMP;
         return ratio;
     }
     return 0.0;
@@ -185,7 +186,7 @@ __declspec(noinline) static double hk_key_ratio(void)
         }
         if (real + synth <= 0) return 0.0;
         ratio = (double)synth / (double)(real + synth);
-        if (ratio >= RH_RATIO_MAX) ratio = (double)RH_RATIO_MAX;
+        if (ratio >= RH_RATIO_MAX) ratio = RH_RATIO_CLAMP;
         return ratio;
     }
     return 0.0;
@@ -397,9 +398,11 @@ static DWORD WINAPI watcher_thread(LPVOID unused)
             continue;
 
         if (!g_cfg->armed) {
-            /* 未启用：回滚一切 detour，保持原样。 */
-            if (g_real_ready) restore_real_hook();
-            if (g_core_ready) restore_core_hook();
+            /* 未启用：回滚一切 detour，保持原样。hop_unpatch 幂等
+             * （active 检查），可覆盖部分 patch 失败后 ready 标志未置位
+             * 导致已装槽位无法回滚的场景。 */
+            restore_real_hook();
+            restore_core_hook();
             continue;
         }
 

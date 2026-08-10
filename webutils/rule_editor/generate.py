@@ -12,7 +12,12 @@ _KNOWN_COMPARISON_REPLACEMENTS = {
 
 def _analyze_value_change(old_val, new_val) -> dict:
     if not isinstance(old_val, str) or not isinstance(new_val, str):
-        return {"change_type": "UNKNOWN"}
+        return {
+            "change_type": "UNKNOWN",
+            "prefix_added": "", "suffix_added": "",
+            "core_old": str(old_val), "core_new": str(new_val),
+            "old_val": old_val, "new_val": new_val,
+        }
     if old_val and old_val in new_val:
         idx = new_val.index(old_val)
         prefix_added = new_val[:idx]
@@ -122,7 +127,7 @@ def _score_group(group: list) -> dict:
         s5 = 30
     if change_type == "PURE_REPLACE" and not group[0].get("prefix_added"):
         s5 = min(100, s5 + 15)
-    if any("<color=" in item.get("new_val", "") for item in group):
+    if any(isinstance(item.get("new_val"), str) and "<color=" in item.get("new_val") for item in group):
         s5 = min(100, s5 + 10)
     priority = 0.25 * s1 + 0.20 * s2 + 0.20 * s3 + 0.20 * s4 + 0.15 * s5
     return {"s1_coverage": s1, "s2_purity": s2, "s3_generalizability": s3,
@@ -239,7 +244,7 @@ def analyze_changes_v2(changes: list, bias: str = 'conservative') -> dict:
             continue
 
         if first["change_type"] == "PURE_REPLACE" and len(group) >= 3:
-            if all(c["new_val"] in "><≥≤" for c in group):
+            if all(isinstance(c.get("new_val"), str) and c["new_val"] in "><≥≤" for c in group):
                 summary = "你似乎在对数学比较符号做统一替换"
             else:
                 summary = f"检测到 {len(group)} 处相同的文本替换"
@@ -446,7 +451,7 @@ def analyze_changes_v3(changes: list) -> dict:
 
         # 生成摘要
         if change_type == "PURE_REPLACE" and len(items) >= 3:
-            if all(c.get("new_val", "") in "><≥≤" for c in items):
+            if all(isinstance(c.get("new_val"), str) and c["new_val"] in "><≥≤" for c in items):
                 summary = "你似乎在对数学比较符号做统一替换"
             else:
                 old_sample = first.get("old_val", "")

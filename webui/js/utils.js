@@ -40,6 +40,8 @@ function ensureMinimizedContainer() {
 
 // 切换侧边栏按钮激活状态
 function initNavigation() {
+    // 导航序列令牌：仅最新一次导航可执行激活与生命周期调用
+    let navSequence = 0;
     document.querySelectorAll('.nav-btn').forEach(button => {
         button.addEventListener('click', () => {
             if (button.classList.contains('active')) {
@@ -64,9 +66,13 @@ function initNavigation() {
             const sectionId = button.id.replace('-btn', '-section');
             const section = document.getElementById(sectionId);
             if (section) {
+                const navId = ++navSequence;
                 setTimeout(async () => {
+                    if (navId !== navSequence) return;
                     const sectionName = button.id.replace('-btn', '');
                     await loadSection(sectionName);
+
+                    if (navId !== navSequence) return;
 
                     if (sectionId === 'elder-section' && typeof quickStartManager !== 'undefined') {
                         quickStartManager.initPage();

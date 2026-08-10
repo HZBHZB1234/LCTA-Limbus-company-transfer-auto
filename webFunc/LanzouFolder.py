@@ -281,7 +281,7 @@ def GetAllFileListByUrl(url,pwd=''):
             retry=0
             pg+=1
     print("获取文件列表失败：已重试 3 次")
-    return []
+    return lists
 if __name__ == "__main__":
     print('\n\n')
 

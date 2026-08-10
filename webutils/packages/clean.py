@@ -51,13 +51,13 @@ def clean_config_main(modal_id: str, clean_progress: bool = False, clean_notice:
             # 获取所有文件，找到包含'save'的文件
             save_files = [f for f in limbus_dir.iterdir() if f.is_file() and 'save' in f.name.lower()]
             if save_files:
-                save_file = save_files[0]
-                try:
-                    save_file.unlink()
-                    _log_manager.log_modal_process(f"本地进程文件已清除: {save_file.name}", modal_id)
-                except Exception as e:
-                    _log_manager.log_modal_process(f"删除进度文件失败: {str(e)}", modal_id)
-                    _log_manager.log_error(e)
+                for save_file in save_files:
+                    try:
+                        save_file.unlink()
+                        _log_manager.log_modal_process(f"本地进程文件已清除: {save_file.name}", modal_id)
+                    except Exception as e:
+                        _log_manager.log_modal_process(f"删除进度文件失败: {str(e)}", modal_id)
+                        _log_manager.log_error(e)
             else:
                 _log_manager.log_modal_process("未找到本地进程文件", modal_id)
         else:
@@ -141,6 +141,9 @@ def clear_by_mod(mod_path: str, modal_id: str) -> int:
             # 如果路径包含Installation，取其后的目录名
             if 'Installation/' in dir_path:
                 path_del = Path(dir_path).name
+            elif dir_path.endswith('/'):
+                # 目录条目删除完整第二层路径
+                path_del = dir_path.rstrip('/')
             else:
                 path_del = Path(dir_path).parts[0] if Path(dir_path).parts else None
             
@@ -205,8 +208,8 @@ def check_by_mod(mod_path: str) -> List[str]:
                 parts = file_path.split('/')
                 # 检查是否为第二层目录的文件或文件夹
                 if len(parts) >= 2 and parts[0] in first_level_dirs:
-                    # 只取第二层的项目（文件或文件夹）
-                    second_level_item = '/'.join(parts[:2]) + ('/' if not file_path.endswith('/') and len(parts) > 2 else '')
+                    # 只取第二层的项目（文件或文件夹），目录条目统一以斜杠结尾
+                    second_level_item = '/'.join(parts[:2]) + ('/' if len(parts) > 2 else '')
                     second_level_items.add(second_level_item)
                     # 检查是否存在Assets文件夹
                     if parts[1] == 'Assets':

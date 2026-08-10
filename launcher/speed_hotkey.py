@@ -14,6 +14,7 @@ _user32 = ctypes.windll.user32
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 _game_pid = None
+_slider_lock = threading.Lock()
 
 
 def _pid_alive(pid: int) -> bool:
@@ -106,7 +107,7 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
             if not SpeedManager.is_injected():
                 _log_manager.log("正在注入加速 DLL...")
                 SpeedManager.inject()
-            _show_speed_slider_window()
+            _show_speed_slider_window(speed_enabled)
         except Exception as e:
             _log_manager.log_error(e)
 
@@ -126,100 +127,114 @@ def _start_speed_hotkeys(speed_factor: float, exit_event: threading.Event):
     _log_manager.log("游戏加速热键已注销")
 
 
-def _show_speed_slider_window():
+def _show_speed_slider_window(speed_enabled=None):
     """弹出 WinForms 倍率选择窗口（置顶、不抢夺焦点）。"""
     from webutils.function_speed import SpeedManager
 
-    # 初始化 clr(固定使用 netfx,失败会给出明确指引,不再回退 coreclr)
-    from webutils.clr_bootstrap import ensure_clr
-    clr = ensure_clr()
+    if not _slider_lock.acquire(blocking=False):
+        _log_manager.log("倍率选择窗口已打开，忽略重复请求")
+        return
 
-    clr.AddReference('System.Windows.Forms')
-    clr.AddReference('System.Drawing')
-    import System.Windows.Forms as WinForms
-    from System.Drawing import Point, Size
+    try:
+        # 初始化 clr(固定使用 netfx,失败会给出明确指引,不再回退 coreclr)
+        from webutils.clr_bootstrap import ensure_clr
+        clr = ensure_clr()
 
-    current = SpeedManager.get_speed() or 1.0
-    slider_val = [int(max(1, min(100, current * 10)))]  # 0.1x-10.0x -> 1-100
+        clr.AddReference('System.Windows.Forms')
+        clr.AddReference('System.Drawing')
+        import System.Windows.Forms as WinForms
+        from System.Drawing import Point, Size
 
-    def run_form():
-        WinForms.Application.EnableVisualStyles()
+        current = SpeedManager.get_speed() or 1.0
+        slider_val = [int(max(1, min(100, current * 10)))]  # 0.1x-10.0x -> 1-100
 
-        form = WinForms.Form()
-        form.Text = "游戏加速"
-        form.FormBorderStyle = WinForms.FormBorderStyle.FixedDialog
-        form.StartPosition = WinForms.FormStartPosition.CenterScreen
-        form.Size = Size(320, 170)
-        form.TopMost = True
-        form.MaximizeBox = False
-        form.MinimizeBox = False
-        form.Activate()
-
-        # 标题标签
-        title = WinForms.Label()
-        title.Text = "选择游戏速度倍率"
-        title.Location = Point(16, 12)
-        title.AutoSize = True
-        form.Controls.Add(title)
-
-        # 滑块
-        trackbar = WinForms.TrackBar()
-        trackbar.Minimum = 1
-        trackbar.Maximum = 100
-        trackbar.Value = slider_val[0]
-        trackbar.TickFrequency = 10
-        trackbar.Size = Size(270, 45)
-        trackbar.Location = Point(16, 35)
-        form.Controls.Add(trackbar)
-
-        # 当前值标签
-        val_label = WinForms.Label()
-        val_label.Text = f"当前: {trackbar.Value / 10.0:.1f}x"
-        val_label.Location = Point(16, 80)
-        val_label.AutoSize = True
-        form.Controls.Add(val_label)
-
-        def on_scroll(sender, args):
-            val_label.Text = f"当前: {trackbar.Value / 10.0:.1f}x"
-
-        trackbar.Scroll += on_scroll
-
-        # 应用按钮
-        apply_btn = WinForms.Button()
-        apply_btn.Text = "应用"
-        apply_btn.Size = Size(75, 28)
-        apply_btn.Location = Point(210, 95)
-
-        def on_apply(sender, args):
+        def run_form():
             try:
-                _log_manager.log(f"设置游戏速度为 {trackbar.Value / 10.0:.1f}x")
-                SpeedManager.set_speed(trackbar.Value / 10.0)
-            except Exception as e:
-                _log_manager.log_error(e)
-            form.Close()
+                WinForms.Application.EnableVisualStyles()
 
-        apply_btn.Click += on_apply
-        form.Controls.Add(apply_btn)
+                form = WinForms.Form()
+                form.Text = "游戏加速"
+                form.FormBorderStyle = WinForms.FormBorderStyle.FixedDialog
+                form.StartPosition = WinForms.FormStartPosition.CenterScreen
+                form.Size = Size(320, 170)
+                form.TopMost = True
+                form.MaximizeBox = False
+                form.MinimizeBox = False
+                form.Activate()
 
-        # 取消按钮
-        cancel_btn = WinForms.Button()
-        cancel_btn.Text = "取消"
-        cancel_btn.Size = Size(75, 28)
-        cancel_btn.Location = Point(125, 95)
+                # 标题标签
+                title = WinForms.Label()
+                title.Text = "选择游戏速度倍率"
+                title.Location = Point(16, 12)
+                title.AutoSize = True
+                form.Controls.Add(title)
 
-        def on_cancel(sender, args):
-            form.Close()
+                # 滑块
+                trackbar = WinForms.TrackBar()
+                trackbar.Minimum = 1
+                trackbar.Maximum = 100
+                trackbar.Value = slider_val[0]
+                trackbar.TickFrequency = 10
+                trackbar.Size = Size(270, 45)
+                trackbar.Location = Point(16, 35)
+                form.Controls.Add(trackbar)
 
-        cancel_btn.Click += on_cancel
-        form.Controls.Add(cancel_btn)
+                # 当前值标签
+                val_label = WinForms.Label()
+                val_label.Text = f"当前: {trackbar.Value / 10.0:.1f}x"
+                val_label.Location = Point(16, 80)
+                val_label.AutoSize = True
+                form.Controls.Add(val_label)
 
-        form.ShowDialog()
+                def on_scroll(sender, args):
+                    val_label.Text = f"当前: {trackbar.Value / 10.0:.1f}x"
 
-    import System.Threading as NetThreading
-    t = NetThreading.Thread(NetThreading.ThreadStart(run_form))
-    t.SetApartmentState(NetThreading.ApartmentState.STA)
-    t.Start()
-    t.Join()
+                trackbar.Scroll += on_scroll
+
+                # 应用按钮
+                apply_btn = WinForms.Button()
+                apply_btn.Text = "应用"
+                apply_btn.Size = Size(75, 28)
+                apply_btn.Location = Point(210, 95)
+
+                def on_apply(sender, args):
+                    try:
+                        speed = trackbar.Value / 10.0
+                        _log_manager.log(f"设置游戏速度为 {speed:.1f}x")
+                        SpeedManager.set_speed(speed)
+                        if speed_enabled is not None:
+                            speed_enabled[0] = True
+                    except Exception as e:
+                        _log_manager.log_error(e)
+                    form.Close()
+
+                apply_btn.Click += on_apply
+                form.Controls.Add(apply_btn)
+
+                # 取消按钮
+                cancel_btn = WinForms.Button()
+                cancel_btn.Text = "取消"
+                cancel_btn.Size = Size(75, 28)
+                cancel_btn.Location = Point(125, 95)
+
+                def on_cancel(sender, args):
+                    form.Close()
+
+                cancel_btn.Click += on_cancel
+                form.Controls.Add(cancel_btn)
+
+                form.ShowDialog()
+            finally:
+                _slider_lock.release()
+
+        import System.Threading as NetThreading
+        t = NetThreading.Thread(NetThreading.ThreadStart(run_form))
+        t.SetApartmentState(NetThreading.ApartmentState.STA)
+        t.IsBackground = True
+        t.Start()
+    except Exception:
+        _slider_lock.release()
+        raise
 
 
 def run_speed_hotkey_if_enabled():

@@ -418,6 +418,10 @@ class Updater:
             _log_manager.log("正在检查依赖更新...")
             _log_manager.log_modal_process("正在检查依赖更新...", self.modal_id)
             _log_manager.log_modal_status("正在准备依赖...", self.modal_id)
+            # 记录 pending 的原始状态：install_requirements 会先写入新依赖操作，
+            # 若 update_files 失败需还原，避免下次启动按新版本依赖卸载旧代码
+            pending_path = _pending_ops_default_path()
+            pending_before = load_pending_ops(pending_path)
             if not self.install_requirements(extract_to):
                 _log_manager.log("准备新依赖失败")
                 _log_manager.log_modal_process("准备新依赖失败", self.modal_id)
@@ -430,6 +434,9 @@ class Updater:
             if not self.update_files(extract_to):
                 _log_manager.log("更新文件失败")
                 _log_manager.log_modal_process("更新文件失败", self.modal_id)
+                if load_pending_ops(pending_path) != pending_before:
+                    save_pending_ops(pending_before, pending_path)
+                    _log_manager.log("更新失败，已还原待执行依赖操作记录")
                 return False
             
             _log_manager.log("更新完成！")

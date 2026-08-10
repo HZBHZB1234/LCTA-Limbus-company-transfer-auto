@@ -69,7 +69,7 @@ def main():
     )
 
     api.set_window(window)
-    window.events.closed += api.save_setting_from
+    window.events.closing += api.save_setting_from
     atexit.register(api.save_config_to_file)
     atexit.register(lambda: SpeedManager.close())
     atexit.register(lambda: InputBypassManager.close())

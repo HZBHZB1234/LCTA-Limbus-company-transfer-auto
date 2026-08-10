@@ -11,6 +11,7 @@ UnityPy.config.FALLBACK_UNITY_VERSION = "6000.3.12f1"
 
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
+from globalManagers.exceptions import CancelRunning
 
 _log_manager = LogManager()
 
@@ -35,6 +36,7 @@ def _do_cleanup_assets():
 def prepare_mod(
     steam_argv: str,
     progress_callback: Optional[Callable[[int, str], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> None:
     global _mod_initialized, _steam_argv
     _steam_argv = steam_argv
@@ -46,6 +48,10 @@ def prepare_mod(
             except Exception:
                 pass
 
+    def check_cancel() -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise CancelRunning("cancelled")
+
     from launcher.modfolder import get_mod_folder
     import launcher.patch as patch
     import launcher.sound as sound
@@ -54,6 +60,7 @@ def prepare_mod(
     _log_manager.log("Limbus Mod Loader version: v1.8")
 
     report(5, "正在定位模组目录...")
+    check_cancel()
     get_mod_folder()
     mod_zips_root_path = os.environ['mod_path']
     os.makedirs(mod_zips_root_path, exist_ok=True)
@@ -63,25 +70,31 @@ def prepare_mod(
 
     _log_manager.log("Limbus args: %s", sys.argv)
     report(15, "正在清理上次启动残留资源...")
+    check_cancel()
     _do_cleanup_assets()
     atexit.register(_do_cleanup_assets)
     signal.signal(signal.SIGINT, kill_handler)
     signal.signal(signal.SIGTERM, kill_handler)
     _log_manager.log("Detecting lunartique mods")
     report(28, "正在检测 Lunartique 模组...")
+    check_cancel()
     patch.detect_lunartique_mods(mod_zips_root_path)
     _log_manager.log("Patching text data")
     report(42, "正在应用模组文本补丁...")
+    check_cancel()
     changes.apply_patch(mod_zips_root_path, steam_argv)
     tmp_asset_root = tempfile.mkdtemp()
     _log_manager.log("Extracting mod assets to %s", tmp_asset_root)
     report(58, "正在解压模组资源...")
+    check_cancel()
     patch.extract_assets(tmp_asset_root, mod_zips_root_path)
     _log_manager.log("Backing up data and patching assets....")
     report(74, "正在备份并写入游戏资源...")
+    check_cancel()
     patch.patch_assets(tmp_asset_root)
     patch.shutil.rmtree(tmp_asset_root)
     report(90, "正在处理模组音频...")
+    check_cancel()
     sound.replace_sound(mod_zips_root_path, steam_argv)
     _log_manager.log("Mod preparation complete")
     report(100, "模组准备完成")

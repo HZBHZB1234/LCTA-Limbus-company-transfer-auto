@@ -33,7 +33,8 @@ def apply_patch(mod_path, _path):
             _log_manager.log("Patching %s", lang_file)
             if not lang_file.exists():
                 continue
-            shutil.copyfile(lang_file, lang_file.with_suffix(".bak"))
+            if not lang_file.with_suffix(".bak").exists():
+                shutil.copyfile(lang_file, lang_file.with_suffix(".bak"))
             with open(lang_file, "r") as f:
                 lang_data = json.load(f)
             patched_data = jsonpatch.apply_patch(lang_data, patch_data['patchs'][_lang_file])

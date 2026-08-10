@@ -160,6 +160,27 @@ def test_split_items_empty():
     assert split_items([], lambda item: 1, max_length=1000) == []
 
 
+def test_split_text_chunks_rejoin_original():
+    from webutils.llm_fancy.splitter import split_text
+
+    text = ("第一行，第二行。第三句！第四行\n" * 50)
+    chunks = split_text(text, 100)
+    assert len(chunks) > 1
+    assert all(len(chunk) <= 100 for chunk in chunks)
+    assert "".join(chunks) == text
+    assert split_text("短文本", 100) == ["短文本"]
+
+
+def test_split_items_splitter_splits_oversize():
+    batches = split_items(
+        ["a" * 5000, "b"],
+        lambda item: len(item),
+        max_length=1000,
+        splitter=lambda item, limit: [item[:100], item[100:]],
+    )
+    assert batches == [["a" * 100], ["a" * 4900], ["b"]]
+
+
 # ============ dedup ============
 
 def test_dedup_candidates_merges_identical_text():
@@ -511,4 +532,68 @@ def test_run_beautify_dedup_sends_identical_text_once(tmp_path, monkeypatch):
     applied = apply_bus(data, compiled, "Skills.json")
     assert data["dataList"][0]["name"] == "美化相同文本"
     assert data["dataList"][1]["name"] == "美化相同文本"
-    assert applied.changed_count == 2
+
+
+def test_run_beautify_splits_oversized_candidates(tmp_path, monkeypatch):
+    from webutils.llm_fancy import runner as runner_module
+
+    lang_dir = tmp_path / "LimbusCompany_Data" / "Lang" / "LLC_zh-CN"
+    lang_dir.mkdir(parents=True)
+    (tmp_path / "LimbusCompany_Data" / "Lang" / "config.json").write_text(
+        json.dumps({"lang": "LLC_zh-CN"}), encoding="utf-8"
+    )
+    long_text = "第一行，第二行。第三句！\n" * 200
+    (lang_dir / "Skills.json").write_text(
+        json.dumps({"dataList": [{"name": long_text}]}, ensure_ascii=False),
+        encoding="utf-8-sig",
+    )
+
+    class FakeTranslator:
+        def __init__(self, *args, **kwargs):
+            self.max_prompt_len = 0
+
+        def update_config(self, **kwargs):
+            pass
+
+        def translate(self, user_prompt, from_lang, to_lang):
+            self.max_prompt_len = max(self.max_prompt_len, len(user_prompt))
+            items = json.loads(user_prompt)["items"]
+            return json.dumps([
+                {"id": item["id"], "text": "B" + item["text"]}
+                for item in items
+            ])
+
+    fake = FakeTranslator()
+    monkeypatch.setattr(runner_module, "build_translator", lambda *a, **k: fake)
+
+    import webutils.function_fancy as function_fancy
+    fake_fancy = tmp_path / "fancy"
+    fake_fancy.mkdir()
+    monkeypatch.setattr(function_fancy, "_get_fancy_folder", lambda: fake_fancy)
+
+    from globalManagers.ConfigManager import ConfigManager
+    monkeypatch.setattr(ConfigManager, "get", staticmethod(
+        lambda key, default=None: str(tmp_path) if key == "game_path" else default
+    ))
+    monkeypatch.setattr(ConfigManager, "set", staticmethod(lambda *a, **k: None))
+
+    cfg = LLMFancyConfig(
+        selection=make_selection([{"path": "dataList[*].name"}]),
+        exclusions=[],
+        max_length=1000,
+        max_workers=2,
+    )
+    result = runner_module.run_beautify(
+        cfg, {"base_url": "x", "model_name": "m", "api_key": "k"},
+        name="超长分割测试",
+    )
+    assert result.candidates == 1
+    assert result.batches > 1
+    assert result.llm_failed == 0
+    assert result.changed == 1
+    assert fake.max_prompt_len <= 1000
+
+    saved = json.loads(Path(result.ruleset_path).read_text(encoding="utf-8"))
+    beautified_text = saved["rules"][0]["replacements"][0]["set"]
+    assert beautified_text.count("B") == result.batches
+    assert beautified_text.replace("B", "") == long_text

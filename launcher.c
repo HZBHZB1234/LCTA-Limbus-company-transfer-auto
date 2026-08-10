@@ -153,6 +153,11 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+// 参数含空格且未被引号包裹时需要加引号（与 Python 端 resolve_steam_argv 规则一致）
+static int arg_needs_quote(const char *s) {
+    return strchr(s, ' ') != NULL && strchr(s, '"') == NULL;
+}
+
 // 设置steam_argv环境变量，存储-launcher之后的所有参数
 void set_steam_argv(int argc, char* argv[], int launcher_index) {
     if (launcher_index + 1 >= argc) {
@@ -166,6 +171,9 @@ void set_steam_argv(int argc, char* argv[], int launcher_index) {
     int total_len = 0;
     for (int i = launcher_index + 1; i < argc; i++) {
         total_len += strlen(argv[i]);
+        if (arg_needs_quote(argv[i])) {
+            total_len += 2; // 为双引号预留空间
+        }
         if (i < argc - 1) {
             total_len += 1; // 为分隔符空格预留空间
         }
@@ -181,7 +189,13 @@ void set_steam_argv(int argc, char* argv[], int launcher_index) {
     // 组合参数
     steam_argv[0] = '\0'; // 初始化为空字符串
     for (int i = launcher_index + 1; i < argc; i++) {
-        strcat(steam_argv, argv[i]);
+        if (arg_needs_quote(argv[i])) {
+            strcat(steam_argv, "\"");
+            strcat(steam_argv, argv[i]);
+            strcat(steam_argv, "\"");
+        } else {
+            strcat(steam_argv, argv[i]);
+        }
         if (i < argc - 1) {
             strcat(steam_argv, " "); // 添加分隔符
         }

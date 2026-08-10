@@ -133,6 +133,7 @@ _psapi.GetModuleBaseNameW.argtypes = [
 # ---------------------------------------------------------------------------
 
 RATIO_MAX = 0.9  # 合成比例 ≥0.9 会触发游戏的"重置判窗"逻辑，一律钳到其下
+RATIO_CLAMP = RATIO_MAX - 0.01  # 钳制目标值：严格小于 RATIO_MAX，与 C 端 RH_RATIO_CLAMP 一致
 VOLATILITY_MAX = 50  # 波动值上限（百分比）
 
 
@@ -179,10 +180,10 @@ def parse_ratio(value: object, label: str, default: float = 0.0) -> float:
         return 0.0
     if f >= RATIO_MAX:
         _log_manager.log(
-            f"输入反检测: {label} 为 {f}，已钳制为 {RATIO_MAX} "
+            f"输入反检测: {label} 为 {f}，已钳制为 {RATIO_CLAMP} "
             f"（≥{RATIO_MAX} 会触发游戏重置判窗）"
         )
-        return RATIO_MAX
+        return RATIO_CLAMP
     return f
 
 

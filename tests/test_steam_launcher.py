@@ -33,8 +33,18 @@ from webutils.function_steam_launcher import (
 def _dump_vdf(data, path, bom=False):
     import vdf
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _escape(node):
+        for k, v in list(node.items()):
+            if isinstance(v, dict):
+                _escape(v)
+            elif isinstance(v, str):
+                node[k] = v.replace('"', '\\"')
+
+    # Steam 约定：反斜杠路径原样、仅引号转义为 \"，故预转义引号后以 escaped=False 写出
+    _escape(data)
     with open(path, 'w', encoding='utf-8-sig' if bom else 'utf-8') as f:
-        vdf.dump(data, f)
+        vdf.dump(data, f, escaped=False)
 
 
 def _make_steam_root(tmp_path, most_recent='1536544116', app_launch_options=None):
@@ -146,6 +156,25 @@ class TestSetLaunchOptions:
         assert read_current_launch_options(str(lc_path)) == cmd
         backup = Path(str(lc_path) + '.lcta.bak')
         assert backup.exists()
+
+    def test_backslash_path_roundtrip(self, tmp_path, steam_root_path):
+        # Steam 写出 \\temp 类路径时反斜杠原样保留；读写往返不得把 \\t 误解码为 TAB
+        steam_root, expected_id, lc_path = _make_steam_root(
+            tmp_path,
+            app_launch_options=r'"D:\LCTA\temp\new dir\launcher.exe" -launcher %command%',
+        )
+        steam_root_path(steam_root)
+        assert read_current_launch_options(str(lc_path)) == (
+            r'"D:\LCTA\temp\new dir\launcher.exe" -launcher %command%')
+        raw = lc_path.read_text(encoding='utf-8')
+        assert '\\t' in raw and '\t' not in raw
+        # set/clear 重写整个文件后路径仍保持原样
+        result = set_steam_launch_options(r'"D:\LCTA\other\launcher.exe" -launcher %command%')
+        assert result['success'] is True
+        assert read_current_launch_options(str(lc_path)) == (
+            r'"D:\LCTA\other\launcher.exe" -launcher %command%')
+        assert read_current_launch_options(str(lc_path) + '.lcta.bak') == (
+            r'"D:\LCTA\temp\new dir\launcher.exe" -launcher %command%')
 
     def test_overwrites_existing_custom_value(self, tmp_path, steam_root_path):
         steam_root, expected_id, lc_path = _make_steam_root(tmp_path, app_launch_options='-novid')

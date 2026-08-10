@@ -13,7 +13,7 @@ from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 from ..utils.io import extract_zip_smartly, zip_folder
 from .clean import _sanitize_zip_member_name
-from .manage import safe_join_path
+from .manage import safe_join_path, get_active_lang_path
 
 
 def find_translation_packages(target_dir):
@@ -213,10 +213,10 @@ def change_font_for_package(path, path_font, modal_id = None):
 def install_translation_package(package_path, game_path, modal_id: str = None):    
     _log_manager.log_modal_process(f"准备安装汉化包: {package_path}", modal_id)
     _log_manager.check_running(modal_id)
-    game_path = os.path.join(game_path, 'LimbusCompany_Data', 'Lang')
-    
-    # 确保目标目录存在
-    os.makedirs(game_path, exist_ok=True)
+    # 安装目标为当前启用的汉化目录（禁用态为 _lang），不重建 lang 造成双目录
+    base_dir = Path(game_path) / 'LimbusCompany_Data'
+    base_dir.mkdir(parents=True, exist_ok=True)
+    game_path = str(get_active_lang_path(game_path))
     
     # 先确定要安装的汉化包名称
     if os.path.isfile(package_path):

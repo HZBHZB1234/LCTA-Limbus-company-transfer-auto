@@ -853,9 +853,9 @@ class TestFormatAwareEscapeRules:
         assert "&amp;quot;" not in sp
 
     def test_xml_xml_contains_quot(self):
-        """xml_xml 模式应包含 &quot; 作为 XML 转义示例。"""
+        """xml_xml 模式应包含 &amp;quot; 作为 XML 转义示例（规则文本已 XML 转义）。"""
         sp = self.pf.build_system_prompt(FileType.STORY, 1, "xml_xml")
-        assert "&quot;" in sp
+        assert "&amp;quot;" in sp
 
     def test_no_output_schema_block(self):
         """系统提示词不应包含 <output_schema> 区块。"""

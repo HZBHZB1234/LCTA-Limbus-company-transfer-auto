@@ -181,7 +181,7 @@ class PromptFactory:
         '        {"term": "术语KR", "applies": true, "actual_meaning": "在此上下文中的实际含义", "reason": "判断理由"}\n'
         '      ]\n'
         '    },\n'
-        '    "escaping": "字符串值中的换行符必须写为 \\\\n，双引号必须写为 \\\\"，反斜杠必须写为 \\\\\\\\；确保输出是合法JSON"\n'
+        '    "escaping": "字符串值中的换行符必须写为 \\n，双引号必须写为 \\"，反斜杠必须写为 \\\\；确保输出是合法JSON"\n'
         '  }\n'
         '}\n'
     )
@@ -198,7 +198,7 @@ class PromptFactory:
         '    },\n'
         '    "count_constraint": "translations数组长度必须等于输入text_blocks数量；每条id必须与对应text_block的id一致",\n'
         '    "note": "confidence为low的条目说明翻译不确定，需要回退到原文",\n'
-        '    "escaping": "字符串值中的换行符必须写为 \\\\n，双引号必须写为 \\\\"，反斜杠必须写为 \\\\\\\\；确保输出是合法JSON"\n'
+        '    "escaping": "字符串值中的换行符必须写为 \\n，双引号必须写为 \\"，反斜杠必须写为 \\\\；确保输出是合法JSON"\n'
         '  }\n'
         '}\n'
     )
@@ -215,7 +215,7 @@ class PromptFactory:
         '      ]\n'
         '    },\n'
         '    "count_constraint": "checked_translations数组长度必须等于输入翻译数量；每条id必须与对应翻译的id一致",\n'
-        '    "escaping": "字符串值中的换行符必须写为 \\\\n，双引号必须写为 \\\\"，反斜杠必须写为 \\\\\\\\；确保输出是合法JSON"\n'
+        '    "escaping": "字符串值中的换行符必须写为 \\n，双引号必须写为 \\"，反斜杠必须写为 \\\\；确保输出是合法JSON"\n'
         '  }\n'
         '}\n'
     )
@@ -488,7 +488,7 @@ class PromptFactory:
         else:
             lines = ["<translation_rules>"]
             for r in rules:
-                lines.append(f'  <rule priority="{r["priority"]}">{r["text"]}</rule>')
+                lines.append(f'  <rule priority="{r["priority"]}">{PromptFactory._xml_escape(r["text"])}</rule>')
             lines.append("</translation_rules>")
             return "\n".join(lines) + "\n"
 
@@ -501,7 +501,7 @@ class PromptFactory:
         else:
             lines = ["<format_rules>"]
             for r in rules:
-                lines.append(f'  <rule priority="{r["priority"]}">{r["text"]}</rule>')
+                lines.append(f'  <rule priority="{r["priority"]}">{PromptFactory._xml_escape(r["text"])}</rule>')
             lines.append("</format_rules>")
             return "\n".join(lines) + "\n"
 
@@ -687,6 +687,10 @@ class PromptFactory:
             }
             expected_key = expected_keys.get(stage)
             result = data.get(expected_key, []) if expected_key else []
+            if stage == 0:
+                for item in result:
+                    if isinstance(item, dict) and isinstance(item.get("applies"), str):
+                        item["applies"] = item["applies"].lower() in ("true", "1")
             if expected_key and not result:
                 self._last_parse_errors.append({
                     "type": "MissingOrEmptyField",

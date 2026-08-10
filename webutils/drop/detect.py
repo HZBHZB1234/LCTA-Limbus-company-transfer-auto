@@ -14,13 +14,17 @@ _log_manager = LogManager()
 
 
 def evalZip(zip_path: str | os.PathLike[str]) -> str:
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        namelist = zip_ref.namelist()
-    inspection = ZipFormatInspection(
-        names=tuple(namelist),
-        non_json_names=tuple(name for name in namelist if '.json' not in name),
-    )
-    return REGISTRY.detect('zip', inspection)
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            namelist = zip_ref.namelist()
+        inspection = ZipFormatInspection(
+            names=tuple(namelist),
+            non_json_names=tuple(name for name in namelist if '.json' not in name),
+        )
+        return REGISTRY.detect('zip', inspection)
+    except Exception as e:
+        _log_manager.log_error(e)
+        return 'invalid'
 
 
 def evalFolder(folder_path: str | os.PathLike[str]) -> str:

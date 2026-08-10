@@ -125,13 +125,16 @@ class UpdateBase(ABC):
 
         run_fancy = self.launcher_config.get('work', {}).get('fancy', False)
         if run_fancy:
-            gamePath = ConfigManager().get('game_path')
-            lang_path = Path(gamePath) / 'LimbusCompany_Data' / 'lang'
-            config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
-            from webutils.function_fancy import load_fancy_folder_rules
-            config_list = [*builtinFancyConfig, *load_fancy_folder_rules()]
-            enableMap = json.loads(ConfigManager().get('fancy_allow', '{}'))
-            fancy_main(gamePath, config_lang, config_list, enableMap)
+            try:
+                gamePath = ConfigManager().get('game_path')
+                lang_path = Path(gamePath) / 'LimbusCompany_Data' / 'lang'
+                config_lang = json.loads((lang_path / 'config.json').read_text(encoding='utf-8')).get('lang', '')
+                from webutils.function_fancy import load_fancy_folder_rules
+                config_list = [*builtinFancyConfig, *load_fancy_folder_rules()]
+                enableMap = json.loads(ConfigManager().get('fancy_allow', '{}'))
+                fancy_main(gamePath, config_lang, config_list, enableMap)
+            except Exception as e:
+                _log_manager.log_error(e)
         return True
 
     def special_run(self) -> bool:

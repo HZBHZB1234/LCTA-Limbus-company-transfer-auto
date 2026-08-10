@@ -205,7 +205,7 @@ def _copy_assets(target_dir: Path, game_path: Path, version: str) -> None:
         version_target = info_dir / "version.json"
         version_target.write_text(json.dumps(
             {"version": version, "notice": "本次文本更新没有提示。"},
-            ensure_ascii=False, indent=4))
+            ensure_ascii=False, indent=4, encoding="utf-8"))
     except Exception:
         pass
     try:

@@ -24,17 +24,13 @@ function isSectionLoaded(name) {
     return loadedSections.has(name);
 }
 
-function onSectionLoaded(name) {
+async function onSectionLoaded(name) {
     switch (name) {
         case 'settings':
             console.log('[LCTA] Init section: settings');
-            toggleCachePathInput();
-            toggleStoragePathInput();
             break;
         case 'translate':
             console.log('[LCTA] Init section: translate');
-            toggleDevelopSettings();
-            toggleAutoProper();
             if (typeof apiConfigManager !== 'undefined' && apiConfigManager.initialized) {
                 apiConfigManager.loadAPIServicesTranslator();
                 var tKey = null;
@@ -49,7 +45,6 @@ function onSectionLoaded(name) {
             break;
         case 'launcher-config':
             console.log('[LCTA] Init section: launcher-config');
-            toggleSteamCommand();
             refreshSteamLauncherStatus();
             if (typeof RiskGate !== 'undefined' && RiskGate.gateLauncherSection) {
                 RiskGate.gateLauncherSection();
@@ -63,8 +58,6 @@ function onSectionLoaded(name) {
             break;
         case 'download':
             console.log('[LCTA] Init section: download');
-            if (typeof onOurplaySourceChange === 'function')
-                onOurplaySourceChange();
             break;
         case 'fancy':
             console.log('[LCTA] Init section: fancy');
@@ -87,7 +80,6 @@ function onSectionLoaded(name) {
             if (typeof modItemManager !== 'undefined') {
                 modItemManager.containerElement = document.getElementById('install-mod-list');
             }
-            toggleCustomLangGui();
             break;
         case 'about':
             console.log('[LCTA] Init section: about');
@@ -152,7 +144,37 @@ function onSectionLoaded(name) {
             break;
     }
 
-    if (configManager) configManager.applyConfigToUI();
+    // 先回填当前 section 内已保存的配置，再执行依赖回填值的显隐联动
+    // （程序赋值不触发 onchange，toggle 须在回填后运行）
+    const container = document.getElementById(name + '-section');
+    if (configManager && container) await configManager.applyConfigToSection(container);
+
+    switch (name) {
+        case 'settings':
+            toggleCachePathInput();
+            toggleStoragePathInput();
+            break;
+        case 'translate':
+            toggleDevelopSettings();
+            toggleAutoProper();
+            toggleProper();
+            break;
+        case 'launcher-config':
+            toggleSteamCommand();
+            break;
+        case 'manage':
+            toggleCustomLangGui();
+            break;
+        case 'clean':
+            if (typeof restoreCustomFilesList === 'function')
+                restoreCustomFilesList();
+            break;
+        case 'download':
+            if (typeof onOurplaySourceChange === 'function')
+                onOurplaySourceChange();
+            break;
+    }
+
     initTooltips();
     initPasswordToggles();
 }

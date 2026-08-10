@@ -653,8 +653,10 @@ class LauncherProgressWindow:
             if self._form is not None and not self._form.IsDisposed:
                 self._form.Text = "LCTA 启动器 \u2014 游戏运行中"
 
-            self._status_label.Text = "游戏运行中"
-            self._progress_bar.Visible = False
+            if self._status_label is not None and not self._status_label.IsDisposed:
+                self._status_label.Text = "游戏运行中"
+            if self._progress_bar is not None and not self._progress_bar.IsDisposed:
+                self._progress_bar.Visible = False
             self._set_overall_progress_ui(100)
 
             if self._activity_label is not None and not self._activity_label.IsDisposed:
@@ -668,13 +670,14 @@ class LauncherProgressWindow:
                 self._action_btn.Text = "退出选项"
 
             pid = self._pipeline.context.get('game_pid', '?') if self._pipeline else '?'
-            self._info_label.Text = (
-                f"游戏已成功启动\n\n"
-                f"进程 PID：{pid}\n"
-                f"快捷操作：Ctrl+S 切换加速  |  Ctrl+Shift+S 选择倍率"
-            )
-            self._info_label.Visible = True
-            self._info_label.BringToFront()
+            if self._info_label is not None and not self._info_label.IsDisposed:
+                self._info_label.Text = (
+                    f"游戏已成功启动\n\n"
+                    f"进程 PID：{pid}\n"
+                    f"快捷操作：Ctrl+S 切换加速  |  Ctrl+Shift+S 选择倍率"
+                )
+                self._info_label.Visible = True
+                self._info_label.BringToFront()
 
             self._game_start_time = time.time()
             self._start_uptime_timer()
@@ -691,7 +694,8 @@ class LauncherProgressWindow:
             if self._form is not None and not self._form.IsDisposed:
                 self._form.Text = "LCTA 启动器 \u2014 游戏已退出"
 
-            self._progress_bar.Visible = False
+            if self._progress_bar is not None and not self._progress_bar.IsDisposed:
+                self._progress_bar.Visible = False
             self._set_overall_progress_ui(100)
 
             runtime_str = ""
@@ -701,10 +705,12 @@ class LauncherProgressWindow:
                 m, s = divmod(m, 60)
                 runtime_str = f"\n运行时长: {h}时{m}分{s}秒"
 
-            self._status_label.Text = f"游戏已退出 (退出码: {exit_code})"
-            self._info_label.Text = f"游戏进程已结束{runtime_str}"
-            self._info_label.Visible = True
-            self._info_label.BringToFront()
+            if self._status_label is not None and not self._status_label.IsDisposed:
+                self._status_label.Text = f"游戏已退出 (退出码: {exit_code})"
+            if self._info_label is not None and not self._info_label.IsDisposed:
+                self._info_label.Text = f"游戏进程已结束{runtime_str}"
+                self._info_label.Visible = True
+                self._info_label.BringToFront()
 
             success = exit_code == 0
             if self._activity_label is not None and not self._activity_label.IsDisposed:

@@ -527,11 +527,11 @@ def main() -> int:
     section_map_path = args.out_dir / f"{args.name}-section-map.json"
     section_map_path.write_text(json.dumps({
         "profile_id": profile.get("profile_id", ""),
-        "layout": solution.get("layout"),
+        "layout": rep.sections.get("layout"),
         "protected": {
             name: {"entry_index": v["entry_index"], "adj": v["adj"], "seed": v["seed"]}
             for name, v in solution.get("protected", {}).items()},
-        "sections": solution["sections"],
+        "sections": solution.get("sections", {}),
         "evidence": solution.get("evidence", {}),
     }, indent=2, ensure_ascii=False), encoding="utf-8")
     rep.set_section("section_map", {"output": str(section_map_path)})

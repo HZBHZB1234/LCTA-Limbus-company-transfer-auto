@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import tempfile
 import logging
 from pathlib import Path
 from typing import Optional
@@ -136,7 +137,23 @@ def save_file_content(relative_path: str, content: str) -> dict:
     except Exception as e:
         logger.warning("备份文件失败: %s", e)
     try:
-        full_path.write_text(content, encoding='utf-8-sig')
-        return {"success": True, "path": str(full_path)}
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                encoding='utf-8-sig',
+                newline='',
+                dir=full_path.parent,
+                prefix=f'.{full_path.name}.',
+                suffix='.tmp',
+                delete=False,
+            ) as temp_file:
+                temp_file.write(content)
+                temp_path = Path(temp_file.name)
+            os.replace(temp_path, full_path)
+            return {"success": True, "path": str(full_path)}
+        finally:
+            if temp_path is not None and temp_path.exists():
+                temp_path.unlink()
     except Exception as e:
         return {"success": False, "error": str(e)}

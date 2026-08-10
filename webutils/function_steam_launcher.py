@@ -113,20 +113,44 @@ def resolve_localconfig_path(steam_path: Optional[str] = None) -> Optional[Tuple
 # 读取 / 写入
 # ============================================================
 
+def _restore_vdf_quotes(node):
+    """把值中的 \\" 还原为 "。
+
+    Steam 写出的 VDF 只把引号转义为 \\"，反斜杠路径原样保留；vdf 库默认的
+    escaped=True 会把 \\temp 类路径误解码为 TAB/换行，故解析需用 escaped=False。
+    """
+    for key, value in list(node.items()):
+        if isinstance(value, dict):
+            _restore_vdf_quotes(value)
+        elif isinstance(value, str):
+            node[key] = value.replace('\\"', '"')
+
+
+def _escape_vdf_quotes(node):
+    """按 Steam 约定把值中的 " 转义为 \\"（反斜杠路径保持原样）。"""
+    for key, value in list(node.items()):
+        if isinstance(value, dict):
+            _escape_vdf_quotes(value)
+        elif isinstance(value, str):
+            node[key] = value.replace('"', '\\"')
+
+
 def _load_vdf(path: str):
     """读取 VDF 文本，返回 (data, has_bom)。"""
     import vdf
     with open(path, 'rb') as f:
         raw = f.read()
-    data = vdf.loads(raw.decode('utf-8-sig'))
+    data = vdf.loads(raw.decode('utf-8-sig'), escaped=False)
+    _restore_vdf_quotes(data)
     return data, raw.startswith(b'\xef\xbb\xbf')
 
 
 def _save_vdf(path: str, data, has_bom: bool) -> None:
     """按原 BOM 状态写回 VDF。"""
     import vdf
+    _escape_vdf_quotes(data)
     buf = io.StringIO()
-    vdf.dump(data, buf)
+    vdf.dump(data, buf, escaped=False)
     with open(path, 'w', encoding='utf-8-sig' if has_bom else 'utf-8') as f:
         f.write(buf.getvalue())
 

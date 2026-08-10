@@ -750,14 +750,23 @@ function initModItemManager() {
 async function refreshInstalledModList() {
     if (!modItemManager.containerElement) return;
     modItemManager.waitList();
-    const result = await pywebview.api.find_installed_mod();
-    if (result.success) {
-        const merge = result.able.concat(result.disable);
-        modItemManager.setItems(merge);
-        result.able.forEach(item =>{
-            modItemManager.enabledMap[item]=true;
-        })
-        modItemManager.updateList();
+    try {
+        const result = await pywebview.api.find_installed_mod();
+        if (result.success) {
+            const merge = result.able.concat(result.disable);
+            modItemManager.setItems(merge);
+            result.able.forEach(item =>{
+                modItemManager.enabledMap[item]=true;
+            })
+            modItemManager.updateList();
+        } else {
+            // 加载失败：清除加载占位并提示
+            modItemManager.showErrorList({ message: result.message || '获取模组列表失败' });
+        }
+    } catch (error) {
+        console.log(error);
+        addLogMessage(error);
+        modItemManager.showErrorList(error);
     }
 }
 
@@ -922,7 +931,7 @@ async function refreshSymlink() {
 
     symlinkManager = new ActionButtonItemListManager('symlink-list', {
         actionButtonText: (item) => {
-            let symlink = symlinkStatus[item];
+            let symlink = symlinkStatus[item] || {};
             switch (symlink.status) {
                 case 'not_exist':
                     return '不存在'
@@ -936,7 +945,7 @@ async function refreshSymlink() {
         },
         actionButtonCallback: (item) => {
             console.log('交互:', item);
-            let symlink = symlinkStatus[item];
+            let symlink = symlinkStatus[item] || {};
             switch (symlink.status) {
                 case 'not_exist':
                     break;

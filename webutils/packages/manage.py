@@ -43,6 +43,12 @@ def check_lang_enabled(game_path:str) -> bool:
         lang_path.mkdir()
     return False
 
+def get_active_lang_path(game_path: str) -> Path:
+    """当前启用的汉化目录路径（禁用态为 _lang）"""
+    if check_lang_enabled(game_path):
+        return Path(game_path) / 'LimbusCompany_Data' / 'lang'
+    return Path(game_path) / 'LimbusCompany_Data' / '_lang'
+
 def find_installed_packages() -> Tuple[list, str]:
     game_path = ConfigManager().get('game_path', '')
     if not game_path:
@@ -112,8 +118,13 @@ def toggle_install_package(enable):
         return False
     else:
         if enable:
+            # 目标已存在（双目录状态）时先移除旧目标，避免嵌套移动
+            if lang_path.exists():
+                shutil.rmtree(lang_path)
             shutil.move(disable_path, lang_path)
         else:
+            if disable_path.exists():
+                shutil.rmtree(disable_path)
             shutil.move(lang_path, disable_path)
         return True
 

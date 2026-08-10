@@ -128,6 +128,10 @@ def _read_hosts_lines(hosts_path: str) -> Tuple[List[Tuple[str, str]], str, byte
     with open(hosts_path, "r", encoding=encoding_name, errors="replace") as f:
         text = f.read()
 
+    # utf-16/utf-32 系列 codec 不消费 BOM，读取后首行残留 \ufeff；
+    # 不去除会导致写回时与手动写入的 BOM 叠加成双 BOM，且受管块首行标记无法被 strip 匹配
+    text = text.lstrip("\ufeff")
+
     # 去掉 BOM 头的文本（已由 codec 处理，但 utf-8-sig 会去掉）
     lines = []
     idx = 0

@@ -87,7 +87,7 @@ fancy = [
                 "files": ["Skills_Ego_Personality-*.json"],
                 "scope": "dataList[*].levelList[*]",
                 "targets": ["name", "abName"],
-                "where": [{"path": "desc", "operator": "regex", "value": "^(?!.*指定).*$"}],
+                "where": [{"path": "desc", "operator": "regex", "value": "^(?s)(?!.*指定).*$"}],
                 "actions": EGO_NORMAL_ACTIONS,
             },
         ],

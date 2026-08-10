@@ -92,6 +92,7 @@ window.addEventListener('pywebviewready', function() {
                     toggleDevelopSettings();
                     toggleCustomLangGui();
                     toggleAutoProper();
+                    toggleProper();
                     toggleSteamCommand();
                     if (typeof onOurplaySourceChange === 'function') onOurplaySourceChange();
                 });
@@ -110,9 +111,9 @@ window.addEventListener('pywebviewready', function() {
                 quickStartManager.init();
 
             }
-            checkGamePath();
+            if (configManager) checkGamePath();
             
-            const autoCheckUpdate = configManager.getCachedValue('auto_check_update');
+            const autoCheckUpdate = configManager ? configManager.getCachedValue('auto_check_update') : false;
             pywebview.api.init_github()
                 .then(function() {
                 if (autoCheckUpdate && !first_use) {
@@ -123,8 +124,10 @@ window.addEventListener('pywebviewready', function() {
 
             pywebview.api.init_log();
 
-            const current_theme = configManager.getCachedValue('theme') || 'light';
-            themeManager.setTheme(current_theme, true);
+            if (configManager) {
+                const current_theme = configManager.getCachedValue('theme') || 'light';
+                themeManager.setTheme(current_theme, true);
+            }
 
             apiConfigManager = new APIConfigManager();
             apiConfigManager.init().then(success => {

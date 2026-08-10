@@ -32,6 +32,7 @@ def setup_logging():
         logger.handlers.clear()
 
     # 文件处理器：记录所有级别，带时间、级别、消息
+    os.makedirs('logs', exist_ok=True)
     file_handler = logging.FileHandler('logs/pythonnet_diagnostic.log', encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')

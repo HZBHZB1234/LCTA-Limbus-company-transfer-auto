@@ -9,6 +9,7 @@ class SpeedPage {
         this._injected = false;   // 缓存注入状态，供 toggle 按钮判断
         this._running = false;    // 缓存游戏运行状态
         this._eventsBound = false; // 事件是否已绑定，防止重复 init 时叠加监听
+        this._stopped = false;    // 导航离开后置位，阻止门控同意回调在隐藏页启动轮询
         this._initDomRefs();
     }
 
@@ -36,10 +37,14 @@ class SpeedPage {
 
         // 初始化事件
         this._bindEvents();
+        this._stopped = false;
 
         // 风险服务门控：未同意风险须知时显示覆盖层，同意后解锁并启动轮询
         RiskGate.gatePage('speed', {
-            onAccepted: () => this._showMain(),
+            onAccepted: () => {
+                if (this._stopped) return;
+                this._showMain();
+            },
             onRejected: () => this._hideMain()
         });
     }
@@ -270,6 +275,7 @@ class SpeedPage {
     }
 
     stop() {
+        this._stopped = true;
         this._stopPolling();
     }
 }

@@ -13,21 +13,27 @@ class APIConfigManager {
     
     // 初始化API服务
     async init() {
-        if (this.initialized) return;
+        if (this.initialized) return true;
         
         try {
             // 从后端获取API服务数据
             const tkitMachine = await pywebview.api.get_attr('TKIT_MACHINE_OBJECT');
             const LLM_TRANSLATOR = await pywebview.api.get_attr('LLM_TRANSLATOR');
-            if (tkitMachine && LLM_TRANSLATOR) {
-                this.apiServices = tkitMachine;
-                this.llmTranslator = LLM_TRANSLATOR;
-                this.initialized = true;
-                console.log('API服务数据加载成功');
-            };
+            if (!tkitMachine || !LLM_TRANSLATOR) {
+                // 服务数据缺失时兜底为空对象，避免调用方 Object.keys(null) 崩溃
+                this.apiServices = {};
+                this.llmTranslator = {};
+                console.error('API服务数据加载失败: TKIT_MACHINE_OBJECT/LLM_TRANSLATOR 为空');
+                return false;
+            }
+            this.apiServices = tkitMachine;
+            this.llmTranslator = LLM_TRANSLATOR;
+            this.initialized = true;
+            console.log('API服务数据加载成功');
             await this.loadSettings();
             return true;
         } catch (error) {
+            this.apiServices = this.apiServices || {};
             console.error('加载API服务数据失败:', error);
             return false;
         }
@@ -535,12 +541,15 @@ class APIConfigManager {
     // 发送设置到后端
     async updateSettings() {
         try {
+            // 与后端已存配置合并后再写入：加载/解密失败时 currentSettings 可能不完整，
+            // 直接整体覆盖会把其它服务的已存配置静默清掉
+            const merged = await this.mergeStoredSettings();
             let api_settings
             if (configManager.getCachedValue('api_crypto')) {
-                api_settings = await encryptText("AutoTranslate", JSON.stringify(this.currentSettings));
+                api_settings = await encryptText("AutoTranslate", JSON.stringify(merged));
             }
             else {
-                api_settings = JSON.stringify(this.currentSettings);
+                api_settings = JSON.stringify(merged);
             };
             configManager.updateConfigValue('api-configs', api_settings);
             configManager.flushPendingUpdates();
@@ -550,6 +559,34 @@ class APIConfigManager {
             showMessage('错误', '保存到后端时发生错误');
             return false;
         }
+    }
+
+    // 合并后端已存配置与当前内存配置（解析/解密失败时退化为仅当前配置）
+    async mergeStoredSettings() {
+        const savedSettings = configManager.getCachedValue('api_config');
+        if (!savedSettings || typeof savedSettings !== 'string') {
+            return this.currentSettings;
+        }
+        let stored = {};
+        try {
+            if (configManager.getCachedValue('api_crypto')) {
+                // 兼容"先明文保存、后勾选加密但未重新保存"的迁移场景，
+                // 与 loadSettings 的解析逻辑保持一致
+                try {
+                    stored = JSON.parse(savedSettings);
+                }
+                catch (parseError) {
+                    stored = JSON.parse(await decryptText("AutoTranslate", savedSettings));
+                }
+            }
+            else {
+                stored = JSON.parse(savedSettings);
+            }
+        } catch (error) {
+            console.error('合并已存API配置失败，仅写入当前配置:', error);
+            stored = {};
+        }
+        return Object.assign({}, stored, this.currentSettings);
     }
     
     // 更新服务状态网格

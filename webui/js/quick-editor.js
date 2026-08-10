@@ -68,10 +68,17 @@
         return s.length > maxLen ? s.substring(0, maxLen) + '...' : s;
     }
 
+    // 后端返回 Windows 反斜杠分隔的相对路径，统一规范化为正斜杠
+    function normalizePath(p) {
+        return String(p || '').replace(/\\/g, '/');
+    }
+
     function getCategory(relPath) {
+        relPath = normalizePath(relPath);
         for (var i = 0; i < FILE_PREFIX_RULES.length; i++) {
             var prefix = FILE_PREFIX_RULES[i][0];
-            if (relPath.indexOf(prefix) === 0 || relPath.indexOf('/' + prefix) !== -1) {
+            // 与后端 browser.py get_category 语义一致：任意位置子串匹配
+            if (relPath.indexOf(prefix) !== -1) {
                 return FILE_PREFIX_RULES[i][1];
             }
         }
@@ -247,7 +254,7 @@
             html += '</div>';
             html += '<div class="qe-category-files">';
             for (var f = 0; f < files.length; f++) {
-                var fileName = files[f].split('/').pop();
+                var fileName = normalizePath(files[f]).split('/').pop();
                 var isActive = state.currentFile === files[f];
                 html += '<div class="qe-file-item' + (isActive ? ' active' : '') + '" data-file="' + escapeHtml(files[f]) + '">';
                 html += '<span class="qe-file-icon"><i class="fas fa-file-code"></i></span>';
@@ -274,7 +281,7 @@
                 html += '</div>';
                 html += '<div class="qe-category-files">';
                 for (var o = 0; o < otherFiles.length; o++) {
-                    var fName = otherFiles[o].split('/').pop();
+                    var fName = normalizePath(otherFiles[o]).split('/').pop();
                     var isAct = state.currentFile === otherFiles[o];
                     html += '<div class="qe-file-item' + (isAct ? ' active' : '') + '" data-file="' + escapeHtml(otherFiles[o]) + '">';
                     html += '<span class="qe-file-icon"><i class="fas fa-file-code"></i></span>';
@@ -363,6 +370,7 @@
             alert('请先打开一个文件');
             return;
         }
+        var file = state.currentFile;   // 发起时的文件，await 期间可能被切换
         var currentContent = getEditorContent();
         if (!currentContent.trim()) return;
 
@@ -385,6 +393,8 @@
 
         try {
             var changes = await api.diff_json(origParsed, newParsed);
+            // await 期间用户可能已切换文件：丢弃本次记录，保留原文件状态
+            if (state.currentFile !== file) return;
             if (!changes || !changes.length) {
                 updateStatus('没有检测到修改');
                 return;
@@ -393,7 +403,7 @@
             for (var i = 0; i < changes.length; i++) {
                 var ch = changes[i];
                 state.pendingEdits.push({
-                    file: state.currentFile,
+                    file: file,
                     path: ch.path,
                     old: ch.old,
                     new: ch.new,
@@ -401,9 +411,11 @@
             }
             // 持久化
             await saveQuickEdits();
-            // 更新原始内容为当前内容，清除脏标记
-            state.currentFileContent = currentContent;
-            state.isDirty = false;
+            // 更新原始内容为当前内容，清除脏标记（确认未切换文件，避免误清新文件状态）
+            if (state.currentFile === file) {
+                state.currentFileContent = currentContent;
+                state.isDirty = false;
+            }
             renderEditList();
             updateStatus('已记录 ' + changes.length + ' 条修改');
         } catch (e) {
@@ -850,6 +862,20 @@
     }
 
     // ──── 事件绑定 ────
+    function restoreSearchPanelPosition() {
+        if (!qeSearchBridge.panelLeft || !state.fileEditor || !window.EditorSearchPanel) return;
+        setTimeout(function () {
+            if (!qeSearchBridge.isOpen || !state.fileEditor) return; // 用户可能已关闭面板
+            var panels = state.fileEditor.dom.querySelector('.cm-panels');
+            if (!panels) return;
+            EditorSearchPanel.setSearchPanelPosition(
+                panels,
+                parseFloat(qeSearchBridge.panelLeft) || 8,
+                parseFloat(qeSearchBridge.panelTop) || 8
+            );
+        }, 80);
+    }
+
     function bindEvents() {
         $i('qe-search-btn').addEventListener('click', performSearch);
         $i('qe-search-clear-btn').addEventListener('click', clearSearch);
@@ -894,6 +920,7 @@
                     if (CM && CM.openSearchPanel) {
                         CM.openSearchPanel(state.fileEditor);
                         qeSearchBridge.isOpen = true;
+                        restoreSearchPanelPosition();
                     }
                 }
             }

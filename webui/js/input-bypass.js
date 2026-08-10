@@ -7,6 +7,7 @@ class InputBypassPage {
         this.pollTimer = null;
         this.pollInterval = 2000;
         this._eventsBound = false;
+        this._stopped = false;    // 导航离开后置位，阻止门控同意回调在隐藏页启动轮询
         this._initDomRefs();
     }
 
@@ -31,9 +32,13 @@ class InputBypassPage {
         // 下拉框由配置驱动（applyConfigToUI 仅在 section 首次加载时执行，
         // 重新导航时需主动从配置缓存恢复，避免显示失效/被轮询覆盖）
         this._loadModeFromConfig();
+        this._stopped = false;
         // 风险服务门控：未同意风险须知时显示覆盖层，同意后解锁并启动轮询
         RiskGate.gatePage('input_bypass', {
-            onAccepted: () => this._showMain(),
+            onAccepted: () => {
+                if (this._stopped) return;
+                this._showMain();
+            },
             onRejected: () => this._hideMain()
         });
     }
@@ -221,6 +226,7 @@ class InputBypassPage {
     }
 
     stop() {
+        this._stopped = true;
         this._stopPolling();
     }
 }

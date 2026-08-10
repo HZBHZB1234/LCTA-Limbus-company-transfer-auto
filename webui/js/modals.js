@@ -158,6 +158,7 @@ function toggleCustomLangGui() {
 function toggleProper() {
     const group = document.getElementById('proper-settings');
     const enable = document.getElementById('enable-proper');
+    if (!group || !enable) return;
     if (enable.checked) {
         group.style.display = 'block';
     } 

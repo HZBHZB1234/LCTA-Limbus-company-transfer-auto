@@ -23,7 +23,11 @@ from webutils.llm_fancy.llm import (
     translate_batch,
 )
 from webutils.llm_fancy.scanner import Candidate, compile_selection, dedup_candidates, scan_data
-from webutils.llm_fancy.splitter import estimate_item_size, split_items
+from webutils.llm_fancy.splitter import (
+    _BATCH_WRAPPER_OVERHEAD,
+    _NATURAL_BOUNDARIES,
+    split_items,
+)
 
 logger = logging.getLogger("llm_fancy")
 
@@ -175,7 +179,7 @@ def _process_batch(
     cancel_event: Optional[Any],
 ) -> Optional[list]:
     if cancel_event is not None and cancel_event.is_set():
-        return None
+        raise LLMFancyCancelled()
     items = [{"id": index + 1, "text": candidate.value} for index, candidate in enumerate(batch)]
     translator = build_translator(api_settings, system_prompt, max_length=max_length)
     response = translate_batch(translator, items)
@@ -228,10 +232,59 @@ def run_beautify(
         )
 
     max_length = max(int(config.max_length), 1000)
+
+    # 超长回退分割的元信息：id(子候选) -> (父候选, 全部子候选)
+    split_meta: dict[int, tuple[Candidate, tuple[Candidate, ...]]] = {}
+
+    def _item_request_size(candidate: Candidate) -> int:
+        """单条目在请求 JSON 中的精确渲染长度（含转义与 id 位数余量）。"""
+        return len(json.dumps({"id": 999, "text": candidate.value}, ensure_ascii=False))
+
+    def _split_oversized(candidate: Candidate, limit: int) -> list[Candidate]:
+        """超长回退分割：按 JSON 渲染长度切分，保证每个子候选单独成批也不超限。
+
+        对每个片段做二分搜索找到 JSON 预算内可容纳的最长前缀，再回退到最近
+        的自然边界断开（边界符保留在片段尾），按序拼接可还原原文。
+        """
+        max_json = limit - _BATCH_WRAPPER_OVERHEAD
+        text = candidate.value
+        parts: list[str] = []
+        pos = 0
+        total = len(text)
+        while pos < total:
+            lo, hi = 1, total - pos
+            while lo < hi:
+                mid = (lo + hi + 1) // 2
+                rendered = json.dumps(
+                    {"id": 999, "text": text[pos:pos + mid]}, ensure_ascii=False
+                )
+                if len(rendered) <= max_json:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            cut = pos + lo
+            best = -1
+            for boundary in _NATURAL_BOUNDARIES:
+                idx = text.rfind(boundary, pos, cut - 1)
+                if idx > best:
+                    best = idx
+            if best >= pos:
+                cut = best + 1
+            parts.append(text[pos:cut])
+            pos = cut
+        sub_candidates = [
+            Candidate(candidate.file, candidate.path, candidate.bus_path, chunk)
+            for chunk in parts
+        ]
+        split_meta[id(candidate)] = (candidate, tuple(sub_candidates))
+        return sub_candidates
+
     batches = split_items(
         representatives,
-        lambda candidate: estimate_item_size(candidate.value),
+        _item_request_size,
         max_length,
+        splitter=_split_oversized,
+        batch_overhead=_BATCH_WRAPPER_OVERHEAD,
     )
     result.batches = len(batches)
     log(f"打包完成：{len(batches)} 批（每批上限 {max_length} 字符）")
@@ -260,6 +313,8 @@ def run_beautify(
             index = futures[future]
             try:
                 texts = future.result()
+            except LLMFancyCancelled:
+                raise
             except Exception as exc:
                 batch_results[index] = None
                 logger.exception("LLM 批次 %d 失败", index + 1)
@@ -270,24 +325,38 @@ def run_beautify(
             log(f"LLM 批次完成 {completed}/{len(batches)}")
             progress(int(completed / len(batches) * 100), f"LLM 处理 {completed}/{len(batches)}")
 
-    llm_failed = 0
-    unchanged = 0
-    beautified: list = []
+    results_by_item: dict[int, Optional[str]] = {}
     for index, batch in enumerate(batches):
         texts = batch_results.get(index)
         if texts is None:
-            for representative in batch:
-                llm_failed += len(groups[id(representative)])
+            for item in batch:
+                results_by_item[id(item)] = None
             continue
-        for representative, text in zip(batch, texts):
+        for item, text in zip(batch, texts):
+            results_by_item[id(item)] = text
+
+    llm_failed = 0
+    unchanged = 0
+    beautified: list = []
+    for representative in representatives:
+        meta = split_meta.get(id(representative))
+        if meta is not None:
+            _, parts = meta
+            texts = [results_by_item.get(id(part)) for part in parts]
+            if any(text is None for text in texts):
+                llm_failed += len(groups[id(representative)])
+                continue
+            text = "".join(texts)
+        else:
+            text = results_by_item.get(id(representative))
             if text is None:
                 llm_failed += len(groups[id(representative)])
                 continue
-            for candidate in groups[id(representative)]:
-                if text == candidate.value:
-                    unchanged += 1
-                else:
-                    beautified.append((candidate, text))
+        for candidate in groups[id(representative)]:
+            if text == candidate.value:
+                unchanged += 1
+            else:
+                beautified.append((candidate, text))
 
     result.llm_failed = llm_failed
     result.unchanged = unchanged

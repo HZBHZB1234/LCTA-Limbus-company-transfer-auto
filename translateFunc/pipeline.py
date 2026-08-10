@@ -168,16 +168,17 @@ class TranslationPipeline:
         keyword_name = "KR_BattleKeywords.json" if has_prefix else "BattleKeywords.json"
         model_file = kr_path / model_name
         keyword_file = kr_path / keyword_name
-        if model_file.exists() and keyword_file.exists():
-            target_files.remove(model_file)
+        priority_files = []
+        if keyword_file.exists():
             target_files.remove(keyword_file)
-            priority_files = [keyword_file, model_file]
+            priority_files.append(keyword_file)
         else:
-            if not model_file.exists():
-                self._log_bridge.warning(f"未找到模型文件 {model_name}，跳过优先处理")
-            if not keyword_file.exists():
-                self._log_bridge.warning(f"未找到关键字文件 {keyword_name}，跳过优先处理")
-            priority_files = []
+            self._log_bridge.warning(f"未找到关键字文件 {keyword_name}，跳过优先处理")
+        if model_file.exists():
+            target_files.remove(model_file)
+            priority_files.append(model_file)
+        else:
+            self._log_bridge.warning(f"未找到模型文件 {model_name}，跳过优先处理")
 
         # 6. 串行处理优先文件
         _logger.info("=== 阶段 4/5: 处理优先文件 ===")
@@ -188,11 +189,11 @@ class TranslationPipeline:
                 outcome = self._process_one(pf, base_path_config, has_prefix, translator)
                 self._record_outcome(outcome, summary)
 
-                # 处理完优先文件后更新引擎
-                if pf == priority_files[1] and self._config.enable_role:  # model 文件（第2个）
-                    self._update_roles(pf, base_path_config, has_prefix)
-                elif pf == priority_files[0] and self._config.enable_skill:  # keyword 文件（第1个）
+                # 处理完优先文件后更新引擎（按文件身份判断，两文件互不依赖）
+                if pf == keyword_file and self._config.enable_skill:
                     self._update_affects(pf, base_path_config, has_prefix)
+                elif pf == model_file and self._config.enable_role:
+                    self._update_roles(pf, base_path_config, has_prefix)
 
         # 7. 并发处理剩余文件
         _logger.info(f"=== 阶段 5/5: 并发翻译 ({len(target_files)} 个文件) ===")

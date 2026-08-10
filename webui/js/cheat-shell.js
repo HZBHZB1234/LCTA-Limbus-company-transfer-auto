@@ -14,9 +14,11 @@ let cheatPage = {
     _loading: null,
     _gateHtml: null,
     _gateBound: false,
+    _stopped: false, // 导航离开后置位，阻止门控/注入回调在隐藏页继续执行
 
     init() {
-        if (this._real) {
+        this._stopped = false;
+        if (this._real && typeof this._real.init === 'function') {
             this._real.init();
             return;
         }
@@ -26,6 +28,7 @@ let cheatPage = {
     },
 
     stop() {
+        this._stopped = true;
         if (this._real && typeof this._real.stop === 'function') {
             this._real.stop();
         }
@@ -43,14 +46,19 @@ let cheatPage = {
         if (typeof RiskGate !== 'undefined' && RiskGate.gatePage
                 && document.querySelector('[data-risk-overlay="cheat"]')) {
             await RiskGate.gatePage('cheat', {
-                onAccepted: () => this._showMainContent(),
+                onAccepted: () => {
+                    if (this._stopped) return;
+                    this._showMainContent();
+                },
                 onRejected: () => this._hideMainContent(),
             });
         } else {
             this._showMainContent();
         }
+        if (this._stopped) return;
         try {
             const st = await pywebview.api.cheat_core_status();
+            if (this._stopped) return;
             if (st && st.success && st.data && st.data.unlocked) {
                 await this._loadFullUI();
             } else {
@@ -66,6 +74,7 @@ let cheatPage = {
     async _loadFullUI() {
         try {
             const pluginsRes = await pywebview.api.cheat_plugins_list();
+            if (this._stopped) return;
             const plugins = (pluginsRes && pluginsRes.success && pluginsRes.data) ? pluginsRes.data : [];
             if (!plugins.length) throw new Error('no registered plugins');
 
@@ -77,12 +86,14 @@ let cheatPage = {
             for (const p of plugins) {
                 if (!p.webui || !p.webui.section) continue;
                 const sectionHtml = await pywebview.api.cheat_core_get_section_html(p.webui.section);
+                if (this._stopped) return;
                 if (typeof sectionHtml === 'string' && sectionHtml.trim()) html += sectionHtml;
             }
             sectionEl.innerHTML = html;
 
             // 完整功能 UI 是动态注入的，onSectionLoaded 的配置回填/工具提示绑定
             // 不会自动执行，需在此补做（否则输入框显示默认值而非已保存配置）
+            if (this._stopped) return;
             if (typeof configManager !== 'undefined' && configManager.applyConfigToUI) {
                 configManager.applyConfigToUI();
             }
@@ -90,18 +101,22 @@ let cheatPage = {
                 initTooltips();
             }
 
-            // 注入各插件 JS 并调用其入口（插件 js 约定挂载 window.initCheatPage）
+            // 注入各插件 JS 并调用其入口（插件 js 约定挂载 window.initCheatPage，
+            // 若其调用返回页面 API 对象则直接采用，兼容旧契约 window.cheatPage）
+            let pluginApi = null;
             for (const p of plugins) {
                 if (!p.webui || !p.webui.js) continue;
                 const scriptJs = await pywebview.api.cheat_core_get_script_js(p.webui.js);
+                if (this._stopped) return;
                 if (typeof scriptJs !== 'string' || !scriptJs.trim()) continue;
                 // 解密 JS 来自自有加密包，与打包源码同信任级，可用 new Function 执行
                 (new Function(scriptJs))(); // eslint-disable-line no-new-func
                 if (typeof window.initCheatPage === 'function') {
-                    window.initCheatPage();
+                    const api = window.initCheatPage();
+                    if (api && typeof api === 'object') pluginApi = api;
                 }
             }
-            this._real = window.cheatPage || null;
+            this._real = window.cheatPage || pluginApi || window.initCheatPage || null;
             if (this._real && typeof this._real.init === 'function') {
                 this._real.init();
             }
@@ -109,6 +124,14 @@ let cheatPage = {
             console.error('cheat UI load error:', e);
             this._real = null;
             window.cheatPage = null;
+            // 恢复密钥门 DOM（innerHTML 已被替换为插件内容），保证可重试解锁
+            const sectionEl = document.getElementById('cheat-section');
+            if (sectionEl && this._gateHtml) {
+                sectionEl.innerHTML = this._gateHtml;
+                this._gateBound = false;
+            } else if (sectionEl) {
+                location.reload();
+            }
             this._showGate('error');
         }
     },
@@ -283,6 +306,10 @@ window.cheatCoreLockAndReload = async function () {
         await pywebview.api.cheat_core_lock();
     } catch (e) {
         console.error('cheat lock error:', e);
+    }
+    // 先停止插件轮询再丢弃引用，避免后台轮询持续运行
+    if (cheatPage && cheatPage._real && typeof cheatPage._real.stop === 'function') {
+        cheatPage._real.stop();
     }
     const sectionEl = document.getElementById('cheat-section');
     if (sectionEl && cheatPage && cheatPage._gateHtml) {

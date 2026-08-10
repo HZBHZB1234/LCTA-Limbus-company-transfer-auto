@@ -30,6 +30,7 @@ class UpdateMixin:
             )
         
             update_info = updater.check_for_updates(self.current_version)
+            update_info["html_url"] = update_info.get("release_url", "")
             return update_info
         except Exception as e:
             self.log(f"检查更新时出错: {e}")
@@ -52,6 +53,7 @@ class UpdateMixin:
             )
         
             update_info = updater.check_for_updates(self.current_version)
+            update_info["html_url"] = update_info.get("release_url", "")
             return update_info
         except Exception as e:
             self.log(f"检查更新时出错: {e}")

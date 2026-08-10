@@ -150,6 +150,7 @@ def fine_features(func_ea: int, text: str, string_score: int) -> dict:
         "oword": len(re.findall(r"_OWORD", text)),
         "table_ref": len(RE_TABLE.findall(text)),
         "string_ref": string_score,
+        "fanout_stats": global_fanout(text),
     }
     f["score"] = (
         f["xorshift_loops"] * 2.5
@@ -157,6 +158,7 @@ def fine_features(func_ea: int, text: str, string_score: int) -> dict:
         + f["malloc"] * 1.5
         + min(f["imm64"], 20) * 0.5
         + f["oword"] * 1.5
+        + min(f["fanout_stats"]["fanout"], 100) * 0.15
         + f["string_ref"] * 3.0
     )
     return f
@@ -227,11 +229,10 @@ def analyze(top_k: int = 20, max_decompile: int = 400,
     results.sort(key=lambda r: r["score"], reverse=True)
     top = results[:top_k]
 
-    # 扇出（F2）只对 top-K 计算：反编译文本提取全局名 + XrefsTo
+    # 扇出（F2）已在 fine_features 中并入评分（全局名 + XrefsTo）
     for i, r in enumerate(top):
         r["rank"] = i + 1
         text = texts.get(r["ea"], "")
-        r["fanout_stats"] = global_fanout(text)
         r["evidence"] = evidence_lines(text) if text else []
         r["table_hex"] = dump_table_hex(text) if text else None
 

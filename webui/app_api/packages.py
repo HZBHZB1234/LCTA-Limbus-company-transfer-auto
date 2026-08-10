@@ -243,8 +243,15 @@ class PackagesMixin:
     def change_font_for_package(self, package_name, font_path, modal_id="false"):
         '''为指定翻译包更换字体'''
         try:
+            # 从配置中获取汉化包目录，如果没有设置则使用当前工作目录
+            package_dir = ConfigManager().get("ui_default.install.package_directory", "")
+            if not package_dir:
+                package_dir = os.getcwd()
+
+            package_path = os.path.join(package_dir, package_name)
+
             self.log(f"开始为翻译包 {package_name} 更换字体")
-            result = change_font_for_package(package_name, font_path, modal_id)
+            result = change_font_for_package(package_path, font_path, modal_id)
             if result[0]:  # 成功
                 self.log(f"为翻译包 {package_name} 更换字体成功")
                 return {"success": True, "message": result[1]}

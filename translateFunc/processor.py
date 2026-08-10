@@ -1384,7 +1384,10 @@ class FileProcessor:
 
     def _check_empty(self) -> ProcessOutcome | None:
         """检查 KR 数据是否为空。为空时返回 ProcessOutcome。"""
-        if self.kr_json in EMPTY_DATA or self.kr_json.get("dataList", []) in EMPTY_DATA_LIST:
+        if self.kr_json in EMPTY_DATA or (
+            isinstance(self.kr_json, dict)
+            and self.kr_json.get("dataList", []) in EMPTY_DATA_LIST
+        ):
             if self.path_config.LLC_path.exists():
                 self._save_llc()
                 return ProcessOutcome(ProcessResult.EMPTY_WITH_LLC, self.file_name)
@@ -1402,7 +1405,7 @@ class FileProcessor:
         新增条目被误判已翻译而静默丢失。_align 仅用于对齐显示
         用索引（jp/en），不用于已翻译判定。
         """
-        if not len(self.jp_index) == len(self.kr_index) == len(self.en_index):
+        if set(self.jp_index) != set(self.kr_index) or set(self.en_index) != set(self.kr_index):
             def _align(d: dict, ref: dict) -> dict:
                 return {k: d.get(k, ref[k]) for k in ref}
             self.en_index = _align(self.en_index, self.kr_index)

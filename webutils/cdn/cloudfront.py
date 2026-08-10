@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import queue
 import re
 import socket
 import ssl
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
 from .classify import classify_probe_exception
@@ -73,23 +75,28 @@ def resolve_cloudfront_dns(
         return (source_name, ips)
 
     # 并行查询所有来源
-    # 系统 DNS 用单独 executor + timeout 包装（getaddrinfo 无超时参数，Windows 可能阻塞 30-120s）
-    # 注意：使用显式 shutdown(wait=False) 避免 context manager 退出时阻塞等待 DNS 线程完成
+    # 系统 DNS 放在 daemon 线程中限时等待（getaddrinfo 无超时参数，Windows 可能阻塞 30-120s），
+    # 超时后跳过该来源；daemon 线程不会阻止进程退出
     if progress_cb:
         progress_cb(2, f"[{domain}] 系统 DNS 解析中...")
-    sys_executor = ThreadPoolExecutor(max_workers=1)
-    try:
-        sys_future = sys_executor.submit(query_system_dns)
+    result_queue = queue.Queue(maxsize=1)
+
+    def run_system_dns():
         try:
-            source_name, ips = sys_future.result(timeout=SOURCE_TIMEOUT + 2)
-            if log_cb:
-                log_cb(f"{source_name} 返回 {len(ips)} 个 IPv4 候选")
-            all_results.append((source_name, ips))
-        except (FuturesTimeoutError, Exception):
-            if log_cb:
-                log_cb("系统 DNS 查询超时或失败，跳过")
-    finally:
-        sys_executor.shutdown(wait=False)  # 不等待未完成的 DNS 线程
+            result_queue.put(query_system_dns())
+        except Exception:
+            result_queue.put(("系统 DNS", []))
+
+    dns_thread = threading.Thread(target=run_system_dns, name=f"sys-dns-{domain}", daemon=True)
+    dns_thread.start()
+    try:
+        source_name, ips = result_queue.get(timeout=SOURCE_TIMEOUT + 2)
+        if log_cb:
+            log_cb(f"{source_name} 返回 {len(ips)} 个 IPv4 候选")
+        all_results.append((source_name, ips))
+    except queue.Empty:
+        if log_cb:
+            log_cb("系统 DNS 查询超时或失败，跳过")
 
     if progress_cb:
         progress_cb(5, f"[{domain}] DoH 解析中...")

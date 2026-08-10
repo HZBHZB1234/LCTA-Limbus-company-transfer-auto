@@ -8,6 +8,7 @@ webutils.update 修复回归测试。
   （写入 pending，本次不执行任何 pip 操作）；仅全新依赖 → 立即安装，失败跳过继续
 - pending 持久化与 apply_pending_pip_ops 启动钩子（先卸载后安装、成功清空、失败保留）
 - check_and_update 缓存迁移到应用目录外的临时目录并在 finally 中清理
+- check_and_update 事务性：update_files 失败时还原 install_requirements 写入的 pending
 """
 import json
 import subprocess
@@ -413,4 +414,75 @@ def test_check_and_update_cleans_cache_on_failure(monkeypatch, tmp_path, updater
 
     assert result is False
     assert not cache_dir.exists(), "失败路径也应清理缓存目录"
+
+
+def test_check_and_update_restores_pending_when_update_files_fails(
+        monkeypatch, tmp_path, updater, pending_path):
+    # F-9.2：install_requirements 先写入 pending，update_files 失败后必须还原，
+    # 否则下次启动会按新版本依赖卸载旧代码依赖
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    _write_req(app_dir / "requirements.txt", "olddep==1.0\n")
+
+    src_dir = tmp_path / "pkg"
+    src_dir.mkdir()
+    _write_req(src_dir / "requirements.txt", "newdep==1.0\n")
+
+    zip_path = tmp_path / "LCTA-update.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in src_dir.iterdir():
+            zf.write(f, f.name)
+
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(update_mod.tempfile, "mkdtemp", lambda **kw: str(cache_dir))
+    monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
+    monkeypatch.setattr(update_mod, "_pending_ops_default_path",
+                        lambda: pending_path)
+    monkeypatch.setattr(
+        update_mod.GithubDownload, "GithubRequester", _StubRequester)
+    monkeypatch.setattr(updater, "download_latest_release",
+                        lambda cache_dir_, release_info: str(zip_path))
+    monkeypatch.setattr(updater, "update_files", lambda source_dir: False)
+
+    result = updater.check_and_update("1.0.0")
+
+    assert result is False
+    assert not pending_path.exists(), "更新失败后 pending 不得保留"
+    assert not cache_dir.exists()
+
+
+def test_check_and_update_keeps_pending_when_update_succeeds(
+        monkeypatch, tmp_path, updater, pending_path):
+    # 对照：更新成功后 pending 保留，供下次启动执行
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    _write_req(app_dir / "requirements.txt", "olddep==1.0\n")
+
+    src_dir = tmp_path / "pkg"
+    src_dir.mkdir()
+    _write_req(src_dir / "requirements.txt", "newdep==1.0\n")
+    (src_dir / "newfile.txt").write_text("new", encoding="utf-8")
+
+    zip_path = tmp_path / "LCTA-update.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in src_dir.iterdir():
+            zf.write(f, f.name)
+
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(update_mod.tempfile, "mkdtemp", lambda **kw: str(cache_dir))
+    monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
+    monkeypatch.setattr(update_mod, "_pending_ops_default_path",
+                        lambda: pending_path)
+    monkeypatch.setattr(
+        update_mod.GithubDownload, "GithubRequester", _StubRequester)
+    monkeypatch.setattr(updater, "download_latest_release",
+                        lambda cache_dir_, release_info: str(zip_path))
+
+    result = updater.check_and_update("1.0.0")
+
+    assert result is True
+    ops = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert ops["uninstall"] == ["olddep"]
+    assert ops["install"] == ["newdep==1.0"]
+    assert not cache_dir.exists()
 

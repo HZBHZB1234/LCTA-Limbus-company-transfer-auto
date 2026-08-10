@@ -22,6 +22,7 @@ from globalManagers.ConfigManager import ConfigManager
 from webutils.function_input_bypass import (
     RHConfig,
     RATIO_MAX,
+    RATIO_CLAMP,
     VOLATILITY_MAX,
     RH_MAGIC,
     parse_count,
@@ -95,14 +96,15 @@ class TestParsePercent:
 
 
 class TestParseRatio:
-    """parse_ratio：[0, RATIO_MAX) 浮点，高于/等于阈值按 RATIO_MAX 钳制。"""
+    """parse_ratio：[0, RATIO_MAX) 浮点，高于/等于阈值钳制到 RATIO_CLAMP（严格其下）。"""
 
     def test_normal(self):
         assert parse_ratio("0.3", "x") == pytest.approx(0.3)
 
     def test_greater_equal_max_clamped(self):
-        assert parse_ratio("0.9", "x") == pytest.approx(RATIO_MAX)
-        assert parse_ratio("1", "x") == pytest.approx(RATIO_MAX)
+        assert parse_ratio("0.9", "x") == pytest.approx(RATIO_CLAMP)
+        assert parse_ratio("1", "x") == pytest.approx(RATIO_CLAMP)
+        assert RATIO_CLAMP < RATIO_MAX
 
     def test_negative_clamped(self):
         assert parse_ratio("-0.2", "x") == 0.0
@@ -119,7 +121,7 @@ class TestAutoRatio:
         assert auto_ratio(8, 2) == pytest.approx(2 / 10)
 
     def test_synth_only(self):
-        assert auto_ratio(0, 5) == pytest.approx(RATIO_MAX)
+        assert auto_ratio(0, 5) == pytest.approx(RATIO_CLAMP)
 
     def test_zero_denominator(self):
         assert auto_ratio(0, 0) == 0.0
@@ -128,7 +130,7 @@ class TestAutoRatio:
         assert auto_ratio(-3, 2) == pytest.approx(0.0)
 
     def test_over_max_clamped(self):
-        assert auto_ratio(1, 100) == pytest.approx(RATIO_MAX)
+        assert auto_ratio(1, 100) == pytest.approx(RATIO_CLAMP)
 
 
 class TestBuildConfig:

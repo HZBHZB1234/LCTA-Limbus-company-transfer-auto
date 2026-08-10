@@ -141,7 +141,7 @@ def replace_sound(mod_folder: str, game_path: str = None):
     if game_path is not None:
         global _game_path
         _game_path = extract_exe_path(game_path)
-    if any(file_name.endswith(".bank") for file_name in os.listdir(mod_zips_root_path)):
+    if any(p.is_file() for p in Path(mod_zips_root_path).rglob("*.bank")):
         Thread(target=sound_replace_thread, args=(mod_folder,), daemon=True).start()
     else:
         _log_manager.log("No .bank found, skip sound replacing process.")

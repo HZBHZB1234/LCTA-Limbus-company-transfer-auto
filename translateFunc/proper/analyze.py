@@ -109,6 +109,8 @@ def extract_contexts_batch(
     results: dict[str, list[dict]] = {term: [] for term in terms if term}
     # term_counts 跟踪每个术语已找到的上下文数
     term_counts: dict[str, int] = {term: 0 for term in terms if term}
+    # seen_texts 记录每个术语已收录的文本值，同一文本值只收录一次
+    seen_texts: dict[str, set[str]] = {term: set() for term in terms if term}
 
     kr_files = list(kr_path.rglob("*.json"))
     _logger.info(f"开始专有名词上下文分析，共 {len(terms)} 个术语，{len(kr_files)} 个文件")
@@ -149,6 +151,10 @@ def extract_contexts_batch(
                         continue
                     if term_counts.get(term, 0) >= max_examples:
                         continue
+                    # 同一文本值命中多次时只收录一次（与单术语版行为一致）
+                    if kr_text in seen_texts[term]:
+                        continue
+                    seen_texts[term].add(kr_text)
 
                     results[term].append({
                         "kr_sentence": kr_text,

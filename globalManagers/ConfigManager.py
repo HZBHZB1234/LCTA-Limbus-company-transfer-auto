@@ -2,6 +2,7 @@
 globalManagers/ConfigManager.py
 Singleton config manager with dotted-path access, validation, auto-save, and thread safety.
 """
+import copy
 import json
 import os
 import threading
@@ -121,7 +122,8 @@ class ConfigManager:
 
     # ---------- 公共 API ----------
     def get(self, key_path: str, default: Any = None) -> Any:
-        """按点号路径获取配置值，如 'ui_default.translator.is_text'"""
+        """按点号路径获取配置值，如 'ui_default.translator.is_text'。
+        注意：dict/list 类型的返回值是 _data 的内部活引用（非拷贝），调用方不应在锁外修改或跨线程共享；需要快照请自行 copy。"""
         with self._lock:
             try:
                 parent, final_key = self._navigate(key_path)
@@ -239,8 +241,9 @@ class ConfigManager:
 
     @property
     def raw(self) -> Dict[str, Any]:
-        """访问原始配置字典（用于需要遍历或批量操作的场景）"""
-        return self._data
+        """访问原始配置字典（用于需要遍历或批量操作的场景）。返回深拷贝，避免绕锁的活引用。"""
+        with self._lock:
+            return copy.deepcopy(self._data)
 
     @property
     def from_disk(self) -> bool:

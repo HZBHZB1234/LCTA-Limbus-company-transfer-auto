@@ -3,6 +3,7 @@ class ResourceUpdaterPage {
         this.initialized = false;
         this.initializing = false;
         this.running = false;
+        this._bound = false;
     }
 
     element(id) {
@@ -39,6 +40,9 @@ class ResourceUpdaterPage {
     }
 
     bindEvents() {
+        // 幂等保护：init() 失败重进时只绑定一次，避免重复监听叠加
+        if (this._bound) return;
+        this._bound = true;
         this.element('ru-go-settings').addEventListener('click', () => goAndShow('settings'));
         this.element('ru-probe').addEventListener('click', () => this.probe());
         this.element('ru-start').addEventListener('click', () => this.start());
@@ -174,9 +178,12 @@ class ResourceUpdaterPage {
     async cancel() {
         try {
             const result = await pywebview.api.resource_updater_cancel_update();
-            if (result.success) this.setStatus('正在取消', 'running', '正在等待当前下载任务安全停止。');
+            // complete 事件先到时 running 已为 false（终态），不再用"正在取消"覆盖终态
+            if (result.success && this.running) {
+                this.setStatus('正在取消', 'running', '正在等待当前下载任务安全停止。');
+            }
         } catch (error) {
-            this.setStatus('取消失败', 'error', error.message || String(error));
+            if (this.running) this.setStatus('取消失败', 'error', error.message || String(error));
         }
     }
 

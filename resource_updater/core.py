@@ -854,21 +854,26 @@ class ResourceUpdater:
             catalog_path = token_dir / "catalog_S1.bin"
             try:
                 self.report("manifest", "正在获取远程 catalog", 0.35)
-                try:
-                    catalog_data = http_get(catalog_url, True, timeout=120)
-                except Exception:
-                    if self.retry_max > 0:
+                attempts = 1 + self.retry_max
+                for attempt in range(attempts):
+                    try:
+                        catalog_data = http_get(catalog_url, True, timeout=120)
+                        break
+                    except (DownloadCancelled, FileNotFoundError):
+                        raise
+                    except Exception:
+                        if attempt >= self.retry_max:
+                            raise
                         self.report(
                             "manifest",
-                            "远程 catalog 获取失败，{:.0f} 秒后自动重试".format(
-                                self.retry_delay
+                            "远程 catalog 获取失败，{delay:.0f} 秒后自动重试（第 {round}/{max} 轮）".format(
+                                delay=self.retry_delay,
+                                round=attempt + 1,
+                                max=self.retry_max,
                             ),
                             level=logging.WARNING,
                         )
                         self._sleep_cancel(self.retry_delay)
-                        catalog_data = http_get(catalog_url, True, timeout=120)
-                    else:
-                        raise
                 temp_path = catalog_path.with_name(catalog_path.name + ".part")
                 temp_path.write_bytes(catalog_data)
                 temp_path.replace(catalog_path)

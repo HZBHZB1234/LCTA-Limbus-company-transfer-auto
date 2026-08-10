@@ -226,7 +226,14 @@ class FancyManager {
         this.enabledMap[newName] = false;  // 默认禁用
 
         // 更新列表
-        this.listManager.setItems(this.rulesets.map(rs => rs.name));
+        const items = this.rulesets.map(rs => rs.name);
+        this.listManager.setItems(items);
+        // 回填启用状态（setItems 会重置 enabledMap）
+        items.forEach(name => {
+            if (this.enabledMap[name] !== undefined) {
+                this.listManager.enabledMap[name] = this.enabledMap[name];
+            }
+        });
         this.listManager.updateList();
         this.listManager.setSelectedItem(newName);
         this.onSelectRuleset(newName);
@@ -250,7 +257,14 @@ class FancyManager {
                     this.rulesets.splice(index, 1);
                     delete this.enabledMap[this.selectedRuleset.name];
                     // 更新列表
-                    this.listManager.setItems(this.rulesets.map(rs => rs.name));
+                    const items = this.rulesets.map(rs => rs.name);
+                    this.listManager.setItems(items);
+                    // 回填启用状态（setItems 会重置 enabledMap）
+                    items.forEach(name => {
+                        if (this.enabledMap[name] !== undefined) {
+                            this.listManager.enabledMap[name] = this.enabledMap[name];
+                        }
+                    });
                     this.listManager.updateList();
                     this.selectedRuleset = null;
                     this.updateEditorUI();
@@ -596,6 +610,30 @@ function updateCustomFilesConfig() {
     configManager.updateConfigValue('custom-files', customFilesList);
 }
 
+// 从配置恢复自定义清理列表（clean 页加载时调用）
+async function restoreCustomFilesList() {
+    const customFilesContainer = document.getElementById('custom-files-list');
+    if (!customFilesContainer) return;
+    const saved = await pywebview.api.get_config_value('ui_default.clean.custom_files', []);
+    if (!Array.isArray(saved) || saved.length === 0) return;
+    customFilesContainer.innerHTML = '';
+    saved.forEach(function(filePath) {
+        if (!filePath) return;
+        const fileItem = document.createElement('div');
+        fileItem.className = 'file-item';
+        fileItem.innerHTML = `
+            <div class="file-info">
+                <i class="fas fa-file"></i>
+                <span class="file-path">${filePath}</span>
+            </div>
+            <button class="action-btn small" onclick="removeCustomFile(this)">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        customFilesContainer.appendChild(fileItem);
+    });
+}
+
 // 添加浏览文件到自定义清理列表
 function browseCustomFile() {
     pywebview.api.browse_file('custom-file-path');
@@ -910,8 +948,13 @@ function sanitizeHtml(html) {
     return template.innerHTML;
 }
 
-function doUpdate() {
-            this.close();
+async function doUpdate() {
+            const isFrozen = await pywebview.api.get_attr('is_frozen');
+            const debugMode = await pywebview.api.get_attr('debug');
+            if (isFrozen && debugMode !== 'true') {
+                showMessage('当前版本不兼容自动下载');
+                return;
+            }
             const progressModal = new ProgressModal('更新程序');
             progressModal.addLog('开始下载并安装更新...');
             pywebview.api.perform_update_in_modal(progressModal.id)
@@ -982,22 +1025,10 @@ async function showUpdateInfo(update_info) {
         originalClose.call(this);
     };
     
-    setTimeout(async function() {
+    setTimeout(function() {
         const statusElement = document.getElementById(`modal-status-${modal.id}`);
         if (statusElement) {
             statusElement.innerHTML = htmlMessage;
-        };
-        let r = await pywebview.api.get_attr('is_frozen');
-        if (!r) {
-            r = r && (await pywebview.api.get_attr('debug') === 'true')
-        };
-        if (r) {
-            const confirmButton = document.getElementById(`confirm-btn-${modal.id}`)
-            confirmButton.removeEventListener('click', doUpdate)
-            confirmButton.addEventListener('click', ()=>{
-                showMessage('当前版本不兼容自动下载');
-                modal.close()
-            })
         }
     }, 100);
 }

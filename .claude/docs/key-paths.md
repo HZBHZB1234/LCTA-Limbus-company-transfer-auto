@@ -323,10 +323,15 @@ Unlock (解锁链路) + 插件注册:
 Launcher startup:
   → launcher/main.py                                PHASE_RUNNING → start_cheat_plugins()
   → launcher/game_launch.py start_cheat_plugins()   先 cheat_core.ensure_unlocked()（未解锁
-                                                      跳过），通过后
+                                                      log「作弊工具箱未解锁」后跳过），通过后
                                                       CheatPluginHost.run_launcher_phase('start')
   → CheatPluginHost → 私有仓库 cheat_damage_hook.py start_launcher()（注册表 on_start）
-      后台线程等 LimbusCompany.exe（180s）→ resolve_offsets() → apply() → inject(pid)
+      决策点日志（INFO，供 launcher 日志面板/日志页排查）：
+      未启用 enabled_key →「未启用（key），跳过注入」；未同意风险 →「未同意风险须知」
+      后台线程启动时预解析偏移（预热缓存/填充状态，缓存命中零成本；不可用则
+      log「偏移不可用（reason），跳过注入」提前返回）→
+      等 LimbusCompany.exe（180s，检测到进程 log PID）→ apply()（缓存快路径）
+      → inject(pid)（成功 log 偏移来源/版本/过期标记）
   → 私有仓库 cheatcore/cheat_damage_hook.py
       resolve_offsets()                             GameAssembly.dll SHA-256 版本锚定
         - 缓存命中（hash 一致）→ 直接用缓存
@@ -354,8 +359,9 @@ Launcher startup:
                                                       overflow → dropped warning; close()
                                                       stops thread + final flush (atexit
                                                       registered in webui/app.py)
-Runtime update recovery (game hot-updates):
+Runtime update recovery (game hot-updates, manual trigger):
   → DLL prologue check fails → verified=0, last_error=3
+  → user triggers via WebUI「立即刷新偏移」(refresh_offsets force) or relaunch
   → refresh_offsets() (force) → apply() with retry_requested=1
   → DLL MH_DisableHook → re-verify → re-install with new offsets (no restart)
 Status query (WebUI):

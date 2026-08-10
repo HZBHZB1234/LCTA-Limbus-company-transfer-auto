@@ -190,6 +190,7 @@ def start_cheat_plugins() -> None:
     """PHASE_RUNNING 回调：若已解锁且插件启用，分发给各插件 on_start。"""
     from webutils import cheat_core
     if not cheat_core.ensure_unlocked().get("success"):
+        _log_manager.log("作弊工具箱未解锁，跳过 Launcher 自动注入")
         return
     from webutils import CheatPluginHost
     CheatPluginHost.run_launcher_phase("start")

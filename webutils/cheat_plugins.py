@@ -131,6 +131,9 @@ class CheatPluginHost:
                 continue
             if phase == "start":
                 if not ConfigManager().get(launcher.get("enabled_key"), False):
+                    _log_manager.log(
+                        f"{plugin.get('name')}: 未启用（{launcher.get('enabled_key')}），跳过注入"
+                    )
                     continue
                 consent = launcher.get("consent")
                 if consent and not ConfigManager().get(f"{consent}.disclaimer_accepted", False):

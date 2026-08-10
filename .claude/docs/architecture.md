@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-08-09 -->
+<!-- Last updated: 2026-08-10 -->
 
 ## Project Purpose
 
@@ -87,7 +87,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Scan-Exclude-LLM** | `webutils/llm_fancy/` | Bus-syntax selection scan → user-chosen bus rulesets simulated on a data copy to exclude already-handled paths → size-batched LLM rewriting (default 20k chars) → validated `lcta-bus` ruleset built, saved to `fancy/`, and auto-enabled |
 | **Factory** | `launcher/updates.py` | Update objects for LLC, OurPlay, Machine translation — each implements a common interface |
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |
-| **Cache + Auto-Invalidation** | 私有仓库 `cheatcore/cheat_damage_hook.py` | Damage-hook offsets fetched from a JSON API are cached locally keyed by the local `GameAssembly.dll` SHA-256; a game update (hash change) invalidates the cache and auto-refetches. The C DLL's runtime 16-byte prologue check is the backstop: `verified=0` triggers a force refresh + `retry_requested` hot reinstall without restarting the game |
+| **Cache + Auto-Invalidation** | 私有仓库 `cheatcore/cheat_damage_hook.py` | Damage-hook offsets fetched from a JSON API are cached locally keyed by the local `GameAssembly.dll` SHA-256; a game update (hash change) invalidates the cache and auto-refetches at start/apply time. The C DLL's runtime 16-byte prologue check is the backstop: on `verified=0` the recovery is **manually** triggered (WebUI「立即刷新偏移」/ relaunch) → force refresh + `retry_requested` hot reinstall without restarting the game (auto-detection loop not implemented) |
 | **Key Gate + Plugin Auto-Register** | `webutils/cheat_core.py` + `webutils/cheat_plugins.py` + `webui/js/cheat-shell.js` | 作弊工具箱实现全部位于私有仓库，构建期加密为 `cheat_core.bin` 分发。运行期用户输入密钥 → 校验解密 → 释放到 `%LOCALAPPDATA%/LCTA/cheat-core/` → 动态导入 `cheatcore` 包；解锁后 `CheatPluginHost.reload()` 读私有仓库 `cheatcore/registry.py` 的插件描述符自动注册（api 白名单 / 配置 schema 播种 / Launcher 生命周期 / 前端文件），主仓库不感知具体工具。密钥可经已知明文碰撞恢复（门槛而非加密，见私有仓库 README）。未解锁时宿主无插件注册，invoke/生命周期安全短路。开发模式：仓库根 `LCTA_CheatingCore/` 克隆或 `LCTA_CHEAT_DEV_SRC` 环境变量免密钥直连 |
 | **Pipeline** | `launcher/pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline (init→check_update→resource_update→cdn→prepare_mod→launch→running→exit). Modules register callbacks per phase via `on(phase, callback)`; `cancel_event` supports GUI-initiated shutdown.
 | **Fingerprint Gate** | `resource_updater/service.py` | Local SHA-256 of `LimbusCompany.exe` gates Launcher pre-download without an online version check; successful resource scopes are persisted and merged so partial manual runs do not suppress missing work. `record_update_result()` marks only fully completed scopes — failed scopes stay unmarked and re-run on the next launch — and persists the last result (counts + failed item names/reasons) for the manual page |

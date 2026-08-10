@@ -1,3 +1,7 @@
+import logging
+
+_logger = logging.getLogger("LCTA")  # 与 LogManager 一致，确保日志正确路由
+
 def flatten_dict_enhanced(d, parent_key=(), ignore_types=None, max_depth=None):
     """
     扁平化嵌套字典，使用元组作为键
@@ -71,6 +75,9 @@ def update_dict_with_flattened(original_dict, flat_updates):
                 if isinstance(current, list):
                     # 确保索引有效，无效则扩展
                     if key >= len(current):
+                        _logger.warning(
+                            "扁平路径越界，静默扩展 None 占位: %s", path[:i+1]
+                        )
                         current.extend([None] * (key - len(current) + 1))
                     if current[key] is None:
                         current[key] = [] if isinstance(nxt, int) else {}
@@ -99,6 +106,9 @@ def update_dict_with_flattened(original_dict, flat_updates):
                 else:
                     # 如果索引超出范围，扩展列表
                     if last_key >= len(current):
+                        _logger.warning(
+                            "扁平路径末段越界，静默扩展 None 占位: %s", path
+                        )
                         current.extend([None] * (last_key - len(current) + 1))
                     current[last_key] = value
             else:

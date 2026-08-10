@@ -33,6 +33,7 @@ class CheatCoreMixin:
             text = {
                 "invalid_key": "密钥错误，请重试",
                 "blob_missing": "当前安装缺少工具箱数据（cheat_core.bin）",
+                "blob_corrupt": "工具箱数据损坏，请重新安装后重试",
                 "load_error": "工具箱加载失败",
             }.get(reason, "解锁失败")
             return {"success": False, "reason": reason, "message": text}

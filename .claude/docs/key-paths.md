@@ -146,7 +146,9 @@ Launcher mode: start_webui.py -launcher
                                         download official localize ZIPs + populate Unity Bundle cache
                                         → progress_callback(channel, message, fraction) updates GUI stage progress
     Phase prepare_mod (if enabled):
-      pipeline.emit(PHASE_PREPARE_MOD)  → launcher/game_launch.py prepare_mod()
+      pipeline.emit(PHASE_PREPARE_MOD)  → launcher/game_launch.py prepare_mod(
+                                         steam_argv, progress_callback, cancel_event)，
+                                         各步骤间 check_cancel()（cancel_event 触发即中止）
                                          reports stepped progress for cleanup/detection/text/assets/audio
                                         → launcher/patch.py (Unity asset patching)
                                         → launcher/sound.py (sound replacement)
@@ -235,13 +237,18 @@ Launcher startup:
     → build_config(mode, armed, values)              clamp counts (≥0); volatility [0,50];
                                                       ratio auto = synth/(real+synth) (<0.9)
     → _write_config()                                writes 80-byte RHConfig to shared map
-  → inject(pid)                                     remote-thread LoadLibraryW rawinput_hook.dll
+  → inject(pid)                                     remote-thread LoadLibraryW rawinput_hook.dll；
+                                                      注入后经 psapi EnumProcessModules 按 DLL
+                                                      文件名取真实 64 位 HMODULE（失败回退远程
+                                                      线程退出码，避免句柄截断）
     → hooks/rawinput_hook.dll                        detours CommonLib RawInput exports;
                                                       auto: zero synth counts/ratios,
                                                       manual: real/synth counts from config,
                                                         ratio auto-calculated; volatility(±%)
                                                         jitters counts each RH_JITTER_MS window
-                                                        so values aren't constant
+                                                        so values aren't constant;
+                                                      detach_hook 卸载前先恢复残留 detour
+                                                      （防止跳转指向已卸载代码）
 Status query (WebUI / status bar):
   → get_status()                                    running / pid / dll_exists / injected /
                                                     armed / mode / commonlib_found / installed
@@ -295,7 +302,8 @@ Launcher 集成（动态渲染，AGENTS 规则：开关仍只出现在 launcher-
                                                       checkbox（enabled_key/checkbox_id/
                                                       label/hint），change 时未同意就地
                                                       RiskGate.showConsentModal；值直写
-                                                      configManager.updateConfigValues
+                                                      pywebview.api.update_config_value +
+                                                      configManager.setCachedValue
   → 私有仓库 webui/sections/cheat.html         倍率(0.1-1000)、日志开关、偏移 API、
                                                       注入/弹出/立即刷新偏移、锁定按钮
                                                       （配置经 update_config_batch 落库）
@@ -306,17 +314,19 @@ Unlock (解锁链路) + 插件注册:
                                                       cheat_plugins_list/cheat_plugin_invoke
   → webutils/cheat_core.py
       ensure_unlocked()           dev 克隆存在 → 直接解锁（source=dev）；
-                                  否则 blob 缺失 → blob_missing；配置有持久化密钥
-                                  → 自动 unlock；否则 need_key
+                                  否则 blob 缺失 → blob_missing；数据损坏 → blob_corrupt
+                                  （保留密钥不清除）；配置有持久化密钥 → 自动 unlock；
+                                  否则 need_key
       unlock(key)                 解析 blob → 解密 → anchor + 逐文件 SHA-256 校验
-                                  → 释放到 %LOCALAPPDATA%/LCTA/cheat-core/
+                                  → dest 路径净化（拒绝 .. 段/盘符/绝对路径）后
+                                    释放到 %LOCALAPPDATA%/LCTA/cheat-core/
                                   → sys.path 插入 → import cheatcore（get_package）
                                   → _reload_plugins() 触发插件注册
       lock()                      清配置密钥 + 内存态 + 插件注册 + sys.path + 删除运行时目录
   → webutils/cheat_plugins.py CheatPluginHost（公共仓库，替代旧门面）
       reload()                    读 cheatcore.get_plugins() 描述符 + 播种配置默认值
       list()                      插件摘要（id/name/webui/config/launcher）
-      invoke(action, args)        按白名单分发到插件管理器方法（未解锁/非法抛错）
+      invoke(action, args)        按注册表 api 白名单分发到声明该 action 的插件管理器（未解锁/未知操作抛错）
       run_launcher_phase(phase)   查 enabled_key + consent 后调 on_start/on_stop
       close_all()                 atexit 兜底调各插件 close
 
@@ -578,7 +588,9 @@ JS: user clicks "check for updates" or auto-check on startup
         本次不执行任何 pip 操作，下次启动 start_webui.py init_env() 中
         apply_pending_pip_ops() 在加载扩展包 DLL 之前先卸载后安装
       - 仅全新依赖 → 立即 pip install，失败跳过继续
-  → webutils/update.py              Updater.update_files() 替换文件（失败 return False，缓存统一由 finally 清理）
+  → webutils/update.py              Updater.update_files() 替换文件（失败 return False 并还原
+                                       install_requirements 写入的 pending 依赖操作，避免下次启动
+                                       按新版本依赖卸载旧代码；缓存仅清理自建临时目录，传入的保留）
   → restart required                manual program restart needed（依赖变更同样在重启后生效）
 ```
 
@@ -640,10 +652,16 @@ start_webui.py main()
   → else: start_webui()                        (WebUI mode)
     → init_env()                               设置 path_/is_frozen 等环境变量
     → check_webview2_environment()             WebView2 预检（与 pywebview edgechromium 探测一致）：
-                                                64 位机器 HKLM 走 WOW6432Node\EdgeUpdate\Clients\{4个GUID}，
-                                                HKCU 走普通路径；PYWEBVIEW_GUI=qt 直接放行。
-                                                全部未安装 → MessageBox「缺少 WebView2 Runtime」+
-                                                webbrowser 打开官方下载页 + return（不启动窗口）
+                                                 .NET Framework >= 4.6.2（HKLM NDp\v4\Full
+                                                 Release >= 394802）检查（注册表读取失败/版本过低
+                                                 仅打印警告，不阻断启动）；
+                                                 64 位机器 HKLM 走 WOW6432Node\EdgeUpdate\Clients\{4个GUID}，
+                                                 HKCU 走普通路径，且版本需 >= 86.0.622.0
+                                                 （非数字版本号视为不可用，不因 int() 误阻断）；
+                                                 PYWEBVIEW_GUI=qt 直接放行。
+                                                 仅 WebView2 缺失/过旧 → MessageBox「缺少 WebView2 Runtime 或
+                                                 .NET Framework 4.6.2+」+ webbrowser 打开官方
+                                                 下载页 + return（不启动窗口）
     → from webutils.clr_bootstrap import ensure_clr  导入 pythonnet（netfx）
     → webui/app.py:main()                      (WebUI mode)
     → globalManagers/ConfigManager.py          init singleton, load config.json；

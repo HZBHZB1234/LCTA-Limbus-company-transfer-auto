@@ -47,6 +47,11 @@ def get_lang_files() -> list:
     return sorted(json_files)
 
 def get_category(relative_path: str) -> str:
+    # Skills_Ego_*（人格EGO技能）与 'Skill' 前缀冲突，优先归入 Egos（与前端 classifyPath 一致）
+    if 'Skills_Ego' in relative_path:
+        for prefix, category in FILE_PREFIX_RULES:
+            if prefix == 'Egos':
+                return category
     for prefix, category in FILE_PREFIX_RULES:
         if relative_path.startswith(prefix) or prefix in relative_path:
             return category

@@ -86,7 +86,7 @@
     "cache_path": "tmp",
     "enable_storage": false,
     "storage_path": "tmp",
-    "last_version": "v5.0.1",
+    "last_version": "v5.0.2",
     "launcher": {
         "work": {
             "update": "LM-G",

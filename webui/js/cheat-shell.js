@@ -160,6 +160,9 @@ let cheatPage = {
             if (reason === 'invalid_key') {
                 msg.textContent = '密钥错误，请重试';
                 msg.style.color = 'var(--danger-color, #e74c3c)';
+            } else if (reason === 'blob_corrupt') {
+                msg.textContent = '工具箱数据损坏，请重新安装后重试';
+                msg.style.color = 'var(--danger-color, #e74c3c)';
             } else {
                 msg.textContent = '';
                 msg.style.color = '';
@@ -199,6 +202,8 @@ let cheatPage = {
                 if (res && res.success) {
                     if (input) input.value = '';
                     await this._loadFullUI();
+                } else if (res && res.reason === 'blob_corrupt') {
+                    this._showGate('blob_corrupt');
                 } else {
                     this._showGate('invalid_key');
                 }

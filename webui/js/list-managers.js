@@ -1064,7 +1064,11 @@ async function removeSymlink() {
                 `您已经创建了一个可用的软链接，它的目录是 ${folder.target}，是否删除？
                 如果您确认继续，这将使文件夹重新回到c盘`,
                 async function() {
-                    await pywebview.api.run_func('remove_symlink', folder.path);
+                    const ok = await pywebview.api.run_func('remove_symlink', folder.path);
+                    if (!ok) {
+                        showMessage('错误', '删除软链接失败，已中止移动文件夹');
+                        return;
+                    }
                     await pywebview.api.run_func('evaluate_path', folder.path);
                     await pywebview.api.move_folders(folder.target, folder.path);
                     refreshSymlink();

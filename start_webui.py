@@ -1,4 +1,4 @@
-__version__ = "5.0.1"
+__version__ = "5.0.2"
 
 import sys
 import os
@@ -37,6 +37,7 @@ def check_webview2_environment():
         return False
 
     # 与 pywebview winforms._is_chromium 保持一致：.NET Framework >= 4.6.2（Release >= 394802）
+    # 注：注册表读取失败/版本过低仅记录警告，不阻断启动（旧版本这些环境只依赖 WebView2 GUID 即可启动）
     try:
         with winreg.OpenKey(
             winreg.HKEY_LOCAL_MACHINE,
@@ -44,9 +45,9 @@ def check_webview2_environment():
         ) as net_key:
             release, _ = winreg.QueryValueEx(net_key, 'Release')
         if release < 394802:  # .NET 4.6.2
-            return False
+            print("警告: .NET Framework 版本低于 4.6.2，pywebview 可能无法正常渲染界面")
     except Exception:
-        return False
+        print("警告: 无法读取 .NET Framework 4.6.2 注册表信息，跳过 .NET 版本预检")
 
     webview2_guids = (
         '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',   # WebView2 Runtime
@@ -64,7 +65,11 @@ def check_webview2_environment():
                 path = r'WOW6432Node\Microsoft\EdgeUpdate\Clients\%s' % guid
             with winreg.OpenKey(getattr(winreg, key_type), r'SOFTWARE\%s' % path) as key:
                 build, _ = winreg.QueryValueEx(key, 'pv')
-                return str(build)
+                # 版本号必须可解析（首个段为数字），否则视为不可用，避免 int() 抛错误阻断启动
+                build_str = str(build)
+                if not build_str.split('.')[0].isdigit():
+                    return '0'
+                return build_str
         except Exception:
             return '0'
 

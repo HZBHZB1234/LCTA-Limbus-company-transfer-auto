@@ -728,57 +728,6 @@ async function downloadMachine() {
 
 // === 配置与设置 ===
 
-// 保存设置
-function saveSettings() {
-    const modal = new ProgressModal('保存设置');
-    modal.addLog('正在保存设置...');
-    
-    if (!configManager) {
-        modal.complete(false, '配置管理器未初始化');
-        return;
-    }
-    
-    // 收集所有配置更新
-    const updates = configManager.collectConfigFromUI();
-    
-    if (Object.keys(updates).length === 0) {
-        modal.complete(true, '没有需要保存的更改');
-        configManager.flushPendingUpdates();
-        setTimeout(
-            () => {
-                modal.close();
-            }, 500
-        );
-        return;
-    }
-    
-    // 批量更新配置
-    configManager.updateConfigValues(updates)
-        .then(function(result) {
-            if (result.success) {
-                // 确保所有待更新都已刷新
-                configManager.flushPendingUpdates()
-                    .then(() => {
-                        modal.complete(true, '设置保存成功');
-                        pywebview.api.save_config_to_file();
-                        setTimeout(
-                            () => {
-                            modal.close();
-                        }, 500
-                        )
-                    })
-                    .catch(function(error) {
-                        modal.complete(false, '保存配置刷新失败: ' + error);
-                    });
-            } else {
-                modal.complete(false, '保存失败: ' + result.message);
-            }
-        })
-        .catch(function(error) {
-            modal.complete(false, '保存过程中发生错误: ' + error);
-        });
-}
-
 function useDefaultConfig() {
     const modal = new ProgressModal('使用默认配置');
     modal.addLog('正在重置为默认配置...');
@@ -986,7 +935,7 @@ async function showUpdateInfo(update_info) {
     updateModalShown = true;
     
     let htmlMessage = `<p><strong>发现新版本:</strong> ${update_info.latest_version}</p>`;
-    htmlMessage += `<p><strong>当前版本:</strong> v5.0.1</p>`;
+    htmlMessage += `<p><strong>当前版本:</strong> v5.0.2</p>`;
     
     if (update_info.title) {
         htmlMessage += `<p><strong>发布标题:</strong> ${escapeHtml(update_info.title)}</p>`;
@@ -1042,6 +991,9 @@ async function init() {
 
     // 初始化配置管理器
     configManager = new ConfigManager();
+    
+    // 配置控件 change 时经防抖懒同步自动保存
+    bindConfigAutoSave();
     
     // 初始化主题管理器
     themeManager = new ThemeManager();

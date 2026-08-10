@@ -391,14 +391,3 @@ class CoreMixin:
         except Exception as e:
             self.log(f"更新模态窗口进度失败: {e}")
             self.log_error(e)
-
-    def save_setting_from(self):
-        js_code = '''
-                const updates = configManager.collectConfigFromUI();
-    configManager.updateConfigValues(updates)
-        .then(function(result) {
-                configManager.flushPendingUpdates()
-            });
-
-            '''
-        self._window.run_js(js_code)

@@ -526,3 +526,30 @@ class ConfigManager {
     }
 }
 
+// 配置懒同步：任意配置表单控件 change 时，经 ConfigManager 防抖队列
+// （debounceDelay=500ms）批量推送到后端并落盘，无需手动保存。
+// 仅处理 configKeyMap 中登记且存在 DOM id 的控件；专属流程控件
+// （--theme / api-* / fancy-allow / custom-files / class 式下拉等）
+// 无匹配 id，天然跳过，不会与其专属保存逻辑冲突。
+function bindConfigAutoSave() {
+    document.addEventListener('change', function (e) {
+        if (!configManager) return;
+        const target = e.target;
+        if (!target || !target.id) return;
+        if (target.id.startsWith('--')) return;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'SELECT' && target.tagName !== 'TEXTAREA') return;
+        if (!(target.id in configManager.configKeyMap)) return;
+
+        let value;
+        if (target.type === 'checkbox') {
+            value = target.checked;
+        } else if (target.type === 'radio') {
+            if (!target.checked) return;
+            value = target.value;
+        } else {
+            value = target.value;
+        }
+        configManager.updateConfigValue(target.id, value);
+    });
+}
+

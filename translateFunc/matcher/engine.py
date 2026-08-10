@@ -73,11 +73,11 @@ class MatcherEngine:
         self._affect_name_ac = AcAutomaton()
         for item in affect_items:
             aff_id = f'[{item.get("id", "")}]'
-            aff_name = f'{item.get("kr", "")} '
+            aff_name = f'{item.get("kr", "")}'
             if item.get("id"):
                 self._affect_id_ac.add_pattern(aff_id, data=item)
             if item.get("kr"):
-                self._affect_name_ac.add_pattern(aff_name, data=item)
+                self._affect_name_ac.add_pattern(aff_name, data=item, require_boundary=True)
         self._affect_id_ac.build()
         self._affect_name_ac.build()
 

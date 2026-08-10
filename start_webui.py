@@ -27,6 +27,27 @@ def check_webview2_environment():
     except Exception:
         return True
 
+    def _is_new_version(current_version, new_version):
+        """与 pywebview winforms._is_new_version 相同的版本比较逻辑。"""
+        new_range = new_version.split('.')
+        cur_range = current_version.split('.')
+        for index, _ in enumerate(new_range):
+            if len(cur_range) > index:
+                return int(new_range[index]) >= int(cur_range[index])
+        return False
+
+    # 与 pywebview winforms._is_chromium 保持一致：.NET Framework >= 4.6.2（Release >= 394802）
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full'
+        ) as net_key:
+            release, _ = winreg.QueryValueEx(net_key, 'Release')
+        if release < 394802:  # .NET 4.6.2
+            return False
+    except Exception:
+        return False
+
     webview2_guids = (
         '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',   # WebView2 Runtime
         '{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}',   # WebView2 Beta
@@ -47,17 +68,20 @@ def check_webview2_environment():
         except Exception:
             return '0'
 
-    for guid in webview2_guids:
-        for key_type in ('HKEY_CURRENT_USER', 'HKEY_LOCAL_MACHINE'):
-            if edge_build(key_type, guid) != '0':
-                return True
+    try:
+        for guid in webview2_guids:
+            for key_type in ('HKEY_CURRENT_USER', 'HKEY_LOCAL_MACHINE'):
+                if _is_new_version('86.0.622.0', edge_build(key_type, guid)):  # WebView2 86.0.622.0
+                    return True
+    except Exception:
+        return False
 
     try:
         import ctypes
         import webbrowser
         ctypes.windll.user32.MessageBoxW(
             0,
-            '检测到系统缺少 Microsoft Edge WebView2 Runtime，LCTA 界面将无法正常显示。\n\n'
+            '检测到系统缺少 Microsoft Edge WebView2 Runtime 或 .NET Framework 4.6.2+，LCTA 界面将无法正常显示。\n\n'
             '即将打开下载页面，请安装 WebView2 Runtime 后重新启动 LCTA。',
             'LCTA - 缺少运行环境',
             0x10 | 0x1000

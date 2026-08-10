@@ -56,7 +56,7 @@ async function loadAndRenderMarkdown() {
 
     // 并发请求所有文件
     const promises = files.map(async ({ url, className }) => {
-        loadMarkdownContent(url, className);
+        return loadMarkdownContent(url, className);
     });
 
     // 等待所有文件加载完成

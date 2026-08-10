@@ -118,8 +118,9 @@ def inject_thinking_mode(api_settings: dict, enable_thinking: bool) -> dict:
     settings = dict(api_settings)  # 浅拷贝
     base_url = settings.get("base_url", "")
 
-    # 确保 extra_body 存在
-    extra_body = dict(settings.get("extra_body", {}))
+    # 确保 extra_body 存在（非 dict 配置回退为空 dict）
+    extra_body = settings.get("extra_body") or {}
+    extra_body = dict(extra_body) if isinstance(extra_body, dict) else {}
 
     if "api.deepseek.com" in base_url:
         # DeepSeek 思考模式：thinking.type = "enabled"/"disabled"

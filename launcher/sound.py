@@ -6,7 +6,7 @@ import os
 import shutil
 import time
 from pathlib import Path
-from threading import Thread
+from threading import Thread, Lock
 
 from launcher.modfolder import get_mod_folder
 from launcher.changes import extract_exe_path
@@ -17,6 +17,7 @@ _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 _game_pid = None
 
+_sound_restore_lock = Lock()
 
 def _pid_alive(pid: int) -> bool:
     """用 OpenProcess 快速检查 PID 是否仍然存在。"""
@@ -124,17 +125,18 @@ def sound_replace_thread(mod_folder: str):
         _log_manager.log_error(e)
 
 def restore_sound():
-    target_folder = sound_folder()
-    backup_files = list(Path(target_folder).rglob("*.bank.bak"))
-    if not backup_files:
-        return
+    with _sound_restore_lock:
+        target_folder = sound_folder()
+        backup_files = list(Path(target_folder).rglob("*.bank.bak"))
+        if not backup_files:
+            return
 
-    for sound_file in backup_files:
-        target = str(sound_file.with_suffix(""))  # remove .bak, keep .bank
-        if os.path.exists(target):
-            os.remove(target)
-        os.replace(str(sound_file), target)
-    _log_manager.log("Audio restoration complete.")
+        for sound_file in backup_files:
+            target = str(sound_file.with_suffix(""))  # remove .bak, keep .bank
+            if os.path.exists(target):
+                os.remove(target)
+            os.replace(str(sound_file), target)
+        _log_manager.log("Audio restoration complete.")
 
 def replace_sound(mod_folder: str, game_path: str = None):
     mod_zips_root_path = get_mod_folder()

@@ -5,6 +5,7 @@ const translationLogViewer = {
     totalPages: 1,
     selectedLine: null,
     currentRecord: null,
+    detailRequestSeq: 0,
     toastTimer: null,
 
     async init() {
@@ -53,8 +54,12 @@ const translationLogViewer = {
     async chooseDump() {
         const button = document.getElementById('tlv-choose-dump');
         button.disabled = true;
-        const result = await pywebview.api.choose_dump();
-        button.disabled = false;
+        let result;
+        try {
+            result = await pywebview.api.choose_dump();
+        } finally {
+            button.disabled = false;
+        }
         if (result.cancelled) return;
         if (!result.success) {
             this.showError(result.message);
@@ -77,10 +82,14 @@ const translationLogViewer = {
     async queryRecords(forceRefresh) {
         if (!this.selectedFileInfo) return;
         this.setBusy(true, '正在读取日志记录...');
-        const result = await pywebview.api.query_records(
-            this.getFilters(), this.page, this.pageSize, forceRefresh,
-        );
-        this.setBusy(false);
+        let result;
+        try {
+            result = await pywebview.api.query_records(
+                this.getFilters(), this.page, this.pageSize, forceRefresh,
+            );
+        } finally {
+            this.setBusy(false);
+        }
         if (!result.success) {
             this.showError(result.message);
             this.renderEmptyRecords(result.message || '日志读取失败');
@@ -134,6 +143,7 @@ const translationLogViewer = {
 
     async loadRecord(lineNumber) {
         if (!this.selectedFileInfo) return;
+        const requestId = ++this.detailRequestSeq;
         this.selectedLine = lineNumber;
         document.querySelectorAll('#tlv-record-list tr').forEach(row => {
             row.classList.toggle('active', Number(row.dataset.lineNumber) === lineNumber);
@@ -141,6 +151,7 @@ const translationLogViewer = {
         const detail = document.getElementById('tlv-detail');
         detail.replaceChildren(this.emptyNode('正在读取完整记录...', 'fas fa-spinner fa-spin'));
         const result = await pywebview.api.get_record(lineNumber);
+        if (requestId !== this.detailRequestSeq) return;
         if (!result.success) {
             this.showError(result.message);
             detail.replaceChildren(this.emptyNode(result.message || '记录读取失败'));
@@ -311,8 +322,12 @@ const translationLogViewer = {
         if (!this.selectedFileInfo) return;
         const button = document.getElementById('tlv-export');
         button.disabled = true;
-        const result = await pywebview.api.export_filtered(this.getFilters());
-        button.disabled = false;
+        let result;
+        try {
+            result = await pywebview.api.export_filtered(this.getFilters());
+        } finally {
+            button.disabled = false;
+        }
         if (result.cancelled) return;
         if (!result.success) {
             this.showError(result.message);
@@ -412,6 +427,7 @@ const translationLogViewer = {
     },
 
     formatElapsed(value) {
+        if (value == null || value === '') return '-';
         const number = Number(value);
         return Number.isFinite(number) ? `${number.toFixed(3)}s` : '-';
     },

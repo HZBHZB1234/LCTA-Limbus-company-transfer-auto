@@ -16,12 +16,7 @@ from .constants import FILE_PREFIX_RULES
 logger = logging.getLogger('rule_editor')
 
 
-_lang_dir_cache = None
-
 def _get_lang_dir() -> Optional[Path]:
-    global _lang_dir_cache
-    if _lang_dir_cache is not None:
-        return _lang_dir_cache
     config = ConfigManager()
     game_path = config.get('game_path', '')
     if not game_path:
@@ -34,8 +29,7 @@ def _get_lang_dir() -> Optional[Path]:
             lang_path = lang_path / lang_name
     except Exception:
         pass
-    _lang_dir_cache = lang_path if lang_path.exists() else None
-    return _lang_dir_cache
+    return lang_path if lang_path.exists() else None
 
 def get_lang_files() -> list:
     lang_dir = _get_lang_dir()

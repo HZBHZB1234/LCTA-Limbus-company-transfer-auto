@@ -40,6 +40,7 @@
         searchTotal: 0,
         searchRequestId: 0,
         fileCache: new Map(),
+        fileFilter: '',               // 侧边栏搜索关键字（渲染文件列表时保持过滤）
         advancedContentView: null,
         selectedFieldPath: null,
         selectedItemId: null,
@@ -91,7 +92,7 @@
     var CATEGORY_FILE_PATTERNS = {
         'Skill': 'Skill.*\\.json$', 'Bufs': 'Bufs.*\\.json$',
         'BattleSpeechBubbleDlg': 'BattleSpeechBubbleDlg.*\\.json$',
-        'Egos': '(Skills_Ego_Personality|Egos).*\\.json$',
+        'Egos': '(Skills_Ego|Egos).*\\.json$',
         'Passives': 'Passives.*\\.json$', 'Personalities': 'Personalities.*\\.json$',
         'Enemies': 'Enemies.*\\.json$', 'EGOgift': 'EGOgift.*\\.json$',
         'Railway': 'Railway.*\\.json$', 'MirrorDungeon': 'MirrorDungeon.*\\.json$',
@@ -114,6 +115,14 @@
     }
 
     function classifyPath(relativePath) {
+        // Skills_Ego_*（人格EGO技能）与 'Skill' 前缀冲突，强制归入 Egos 分类
+        if (relativePath.indexOf('Skills_Ego') !== -1) {
+            for (let i = 0; i < FILE_PREFIX_RULES.length; i++) {
+                if (FILE_PREFIX_RULES[i][0] === 'Egos') {
+                    return { prefix: 'Egos', category: FILE_PREFIX_RULES[i][1] };
+                }
+            }
+        }
         for (let i = 0; i < FILE_PREFIX_RULES.length; i++) {
             const prefix = FILE_PREFIX_RULES[i][0];
             const category = FILE_PREFIX_RULES[i][1];
@@ -675,6 +684,10 @@ if (ts && ts.editor && _searchBridge.isOpen) {
     function renderFileList(filtered) {
         const container = $i('re-file-list-container');
         if (!container) return;
+        if (!filtered && state.fileFilter && state.fileFilter.trim()) {
+            filterFilesByKeyword(state.fileFilter);
+            return;
+        }
         const files = filtered || state.langFiles;
         if (!files.length) {
             container.innerHTML = '<div class="re-empty-state">未找到匹配的文件</div>';
@@ -1296,6 +1309,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         if (searchBtn) searchBtn.disabled = false;
         const input = $i('re-file-search');
         if (input) input.value = '';
+        state.fileFilter = '';
         renderSearchCategories();
         renderFileList();
         switchTab('file-list');
@@ -1395,6 +1409,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         const searchInput = $i('re-file-search');
         if (searchInput) {
             searchInput.addEventListener('input', function () {
+                state.fileFilter = searchInput.value;
                 filterFilesByKeyword(searchInput.value);
             });
             searchInput.addEventListener('keydown', function (e) {
@@ -2376,6 +2391,22 @@ if (ts && ts.editor && _searchBridge.isOpen) {
                 return function () { applySmartGroup(state.smartGenGroups[idx]); };
             })(parseInt(applyBtns[i].dataset.idx, 10)));
         }
+        const editBtns = overlay.querySelectorAll('.re-smart-edit-btn');
+        for (let i = 0; i < editBtns.length; i++) {
+            editBtns[i].addEventListener('click', (function (idx) {
+                return function () { editSmartGroupScope(idx); };
+            })(parseInt(editBtns[i].dataset.idx, 10)));
+        }
+    }
+
+    function editSmartGroupScope(idx) {
+        var overlay = state.smartGenOverlay;
+        var card = overlay ? overlay.querySelector('.re-smart-gen-group[data-group-idx="' + idx + '"]') : null;
+        if (!card) return;
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        card.style.transition = 'outline-color 0.3s ease';
+        card.style.outline = '2px solid var(--color-accent, #4f8cff)';
+        setTimeout(function () { card.style.outline = ''; }, 2000);
     }
 
     function renderSmartGroupCard(group, idx) {
@@ -2410,7 +2441,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         html += renderL3(group.l3_options, idx);
         html += renderL4(group.l4_options, idx);
         html += '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">' +
-            '<button class="re-btn re-btn-sm re-smart-edit-btn">✏ 编辑范围</button>' +
+            '<button class="re-btn re-btn-sm re-smart-edit-btn" data-idx="' + idx + '">✏ 编辑范围</button>' +
             '<button class="re-btn re-btn-sm re-smart-preview-btn" data-idx="' + idx + '">📋 预览JSON</button>' +
             '<button class="re-btn re-btn-sm re-btn-success re-smart-apply-btn" data-idx="' + idx + '">✅ 生成此规则</button>' +
             '</div>';
@@ -4006,6 +4037,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
 
         // 更新推广按钮（隐藏当前按钮，显示下一级）
         updatePromoteButtons(card, idx);
+        checkPostPromotionMerge(idx);
     }
 
     function updatePromoteButtons(card, idx) {
@@ -4885,6 +4917,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             document.body.appendChild(overlay);
 
             function cleanup() {
+                document.removeEventListener('keydown', onKey);
                 if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
             }
 
@@ -4900,17 +4933,26 @@ if (ts && ts.editor && _searchBridge.isOpen) {
             overlay.addEventListener('click', function (e) {
                 if (e.target === overlay) { cleanup(); resolve('cancel'); }
             });
-            document.addEventListener('keydown', function onKey(e) {
+            function onKey(e) {
                 if (e.key === 'Escape') {
                     cleanup(); resolve('cancel');
-                    document.removeEventListener('keydown', onKey);
                 }
-            });
+            }
+            document.addEventListener('keydown', onKey);
         });
     }
 
     window.addEventListener('beforeunload', function () {
-        _autoPersistRuleset();
+        if (state._rulesetDirty) {
+            _autoPersistRuleset();
+        }
+    });
+
+    // 页面隐藏（最小化/切走）时提前触发保存，给异步保存留出完成时间
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden && state._rulesetDirty) {
+            _autoPersistRuleset();
+        }
     });
 
     document.addEventListener('DOMContentLoaded', init);

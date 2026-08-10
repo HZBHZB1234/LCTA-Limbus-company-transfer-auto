@@ -416,6 +416,39 @@ def test_check_and_update_cleans_cache_on_failure(monkeypatch, tmp_path, updater
     assert not cache_dir.exists(), "失败路径也应清理缓存目录"
 
 
+def test_check_and_update_keeps_custom_cache_dir(monkeypatch, tmp_path, updater):
+    # F-9.3：调用方传入的自定义缓存目录不得被 finally 删除，仅清理内部自建目录
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    _write_req(app_dir / "requirements.txt", "requests\n")
+
+    src_dir = tmp_path / "pkg"
+    src_dir.mkdir()
+    _write_req(src_dir / "requirements.txt", "requests\n")
+    (src_dir / "newfile.txt").write_text("new", encoding="utf-8")
+
+    zip_path = tmp_path / "LCTA-update.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in src_dir.iterdir():
+            zf.write(f, f.name)
+
+    custom_cache = tmp_path / "my-cache"
+    custom_cache.mkdir()
+    (custom_cache / "keep.txt").write_text("keep", encoding="utf-8")
+
+    monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
+    monkeypatch.setattr(
+        update_mod.GithubDownload, "GithubRequester", _StubRequester)
+    monkeypatch.setattr(updater, "download_latest_release",
+                        lambda cache_dir_, release_info: str(zip_path))
+    monkeypatch.setattr(updater, "install_requirements", lambda source_dir: True)
+
+    result = updater.check_and_update("1.0.0", str(custom_cache))
+
+    assert result is True
+    assert (custom_cache / "keep.txt").exists(), "自定义缓存目录不应被删除"
+
+
 def test_check_and_update_restores_pending_when_update_files_fails(
         monkeypatch, tmp_path, updater, pending_path):
     # F-9.2：install_requirements 先写入 pending，update_files 失败后必须还原，

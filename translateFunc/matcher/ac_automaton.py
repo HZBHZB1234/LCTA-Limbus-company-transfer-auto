@@ -19,6 +19,7 @@ class ACPattern:
     pattern: str
     node_id: int
     data: Any = None
+    require_boundary: bool = False
 
 
 class AcAutomaton:
@@ -28,9 +29,11 @@ class AcAutomaton:
         self._trie: list[dict[str, int]] = [{}]
         self._fail: list[int] = [0]
         self._output: list[list[ACPattern]] = [[]]
+        self._patterns: list[ACPattern] = []
         self._built: bool = False
 
-    def add_pattern(self, pattern: str, data: Any = None) -> None:
+    def add_pattern(self, pattern: str, data: Any = None,
+                    require_boundary: bool = False) -> None:
         """向自动机添加模式串。必须在调用 build() 之前完成。"""
         if self._built:
             raise RuntimeError("不能在 build() 之后添加模式")
@@ -44,7 +47,10 @@ class AcAutomaton:
                 self._fail.append(0)
                 self._output.append([])
             node = self._trie[node][ch]
-        self._output[node].append(ACPattern(pattern=pattern, node_id=node, data=data))
+        self._output[node].append(ACPattern(pattern=pattern, node_id=node,
+                                            data=data, require_boundary=require_boundary))
+        self._patterns.append(ACPattern(pattern=pattern, node_id=node,
+                                        data=data, require_boundary=require_boundary))
 
     def build(self) -> None:
         """构建失败链接（BFS）。必须在所有 add_pattern() 调用之后执行。"""
@@ -75,12 +81,16 @@ class AcAutomaton:
             return []
         result: list[ACPattern] = []
         node = 0
-        for ch in text:
+        for i, ch in enumerate(text):
             while node != 0 and ch not in self._trie[node]:
                 node = self._fail[node]
             node = self._trie[node].get(ch, 0)
             if self._output[node]:
-                result.extend(self._output[node])
+                for p in self._output[node]:
+                    if (p.require_boundary and i + 1 < len(text)
+                            and text[i + 1].isalnum()):
+                        continue
+                    result.append(p)
         return result
 
     def search_batch(self, texts: list[str]) -> list[list[ACPattern]]:
@@ -90,7 +100,7 @@ class AcAutomaton:
     @property
     def pattern_count(self) -> int:
         """已添加的模式总数。"""
-        return sum(len(out) for out in self._output)
+        return len(self._patterns)
 
     @property
     def is_built(self) -> bool:

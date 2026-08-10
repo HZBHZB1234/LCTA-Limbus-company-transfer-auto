@@ -168,19 +168,28 @@ def change_font_for_package(path, path_font, modal_id = None):
         _log_manager.log_modal_process(f"开始修改字体为: {path_font}", modal_id)
         if os.path.isdir(path):
             _log_manager.log('检测到为文件夹，尝试替换')
-            if os.path.exists(path+'_font'):
-                _log_manager.log('文件夹冲突')
-                return False, "文件夹冲突"
             _log_manager.log_modal_process('正在创建文件夹副本...', modal_id)
             _log_manager.check_running(modal_id)
-            shutil.copytree(path, path+'_font')
+            font_dir = os.path.join(temp_dir, os.path.basename(path))
+            shutil.copytree(path, font_dir)
             _log_manager.log_modal_process('正在替换字体文件...', modal_id)
             _log_manager.check_running(modal_id)
 
-            shutil.rmtree(f'{path}_font\\Font\\Context')
-            os.mkdir(f'{path}_font\\Font\\Context')
-            shutil.copyfile(path_font, f'{path}_font\\Font\\Context\\{os.path.basename(path_font)}')
+            font_context = os.path.join(font_dir, 'Font', 'Context')
+            if os.path.isdir(font_context):
+                shutil.rmtree(font_context)
+            os.makedirs(font_context, exist_ok=True)
+            shutil.copyfile(path_font, os.path.join(font_context, os.path.basename(path_font)))
             _log_manager.log_modal_process('已完成字体替换', modal_id)
+
+            directory = os.path.dirname(path)
+            name = os.path.splitext(os.path.basename(path))[0]
+            new_path = os.path.join(directory, f"{name}_fonted.zip")
+            if os.path.exists(new_path):
+                os.remove(new_path)
+            zip_folder(font_dir, new_path, modal_id=modal_id)
+
+            _log_manager.log_modal_process('字体替换完成', modal_id)
             return True, "正常完成"
         
         _log_manager.log_modal_process('检测到为压缩包，尝试替换', modal_id)
@@ -193,10 +202,16 @@ def change_font_for_package(path, path_font, modal_id = None):
         # 分离文件名和扩展名
         name, ext = os.path.splitext(filename)
 
-        dir_name = os.listdir(temp_dir)[0]
-        shutil.rmtree(f'{temp_dir}\\{dir_name}\\Font\\Context')
-        os.mkdir(f'{temp_dir}\\{dir_name}\\Font\\Context')
-        shutil.copyfile(path_font, f'{temp_dir}\\{dir_name}\\Font\\Context\\{os.path.basename(path_font)}')
+        entries = os.listdir(temp_dir)
+        if not entries:
+            _log_manager.log('压缩包内容为空，无法替换字体')
+            return False, "压缩包内容为空，无法替换字体"
+        dir_name = entries[0]
+        font_context = os.path.join(temp_dir, dir_name, 'Font', 'Context')
+        if os.path.isdir(font_context):
+            shutil.rmtree(font_context)
+        os.makedirs(font_context, exist_ok=True)
+        shutil.copyfile(path_font, os.path.join(font_context, os.path.basename(path_font)))
         
         _log_manager.log_modal_process("正在压缩文件...", modal_id)
         

@@ -142,7 +142,11 @@ def cmd_build(args) -> int:
 def cmd_info(args) -> int:
     data = Path(args.infile).read_bytes()
     manifest, _ = parse_blob(data)
-    print(f"magic: {MAGIC.decode()!r}  密文长度: {len(data) - len(MAGIC) - 4 - len(json.dumps(manifest, ensure_ascii=False).encode('utf-8'))} 字节")
+    manifest_bytes = json.dumps(
+        manifest, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    cipher_len = len(data) - len(MAGIC) - 4 - len(manifest_bytes)
+    print(f"magic: {MAGIC.decode()!r}  密文长度: {cipher_len} 字节")
     for f in manifest["files"]:
         print(f"  {f['dest']}: {f['size']} 字节 (sha256 {f['sha256'][:16]}...)")
 

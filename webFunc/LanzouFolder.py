@@ -227,9 +227,9 @@ def GetFileListByData(data,pg):
         print("GetFileListByData 响应解析失败：%s" % e)
         return None
     # print(response.text)
-    if j["zt"]==1:
+    if j.get("zt")==1:
         return j["text"]
-    elif j["zt"]==2:
+    elif j.get("zt")==2:
         return []
     else:
         return None

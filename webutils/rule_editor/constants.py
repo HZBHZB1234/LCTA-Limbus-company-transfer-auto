@@ -25,7 +25,7 @@ FILE_PREFIX_RULES = [
 CATEGORY_FILE_PATTERNS = {
     'Skill': 'Skill*.json', 'Bufs': 'Bufs*.json',
     'BattleSpeechBubbleDlg': 'BattleSpeechBubbleDlg*.json',
-    'Egos': 'Skills_Ego_Personality-*.json',
+    'Egos': 'Skills_Ego*.json',
     'Passives': 'Passives*.json', 'Personalities': 'Personalities*.json',
     'Enemies': 'Enemies*.json', 'EGOgift': 'EGOgift*.json',
     'Railway': 'Railway*.json', 'MirrorDungeon': 'MirrorDungeon*.json',

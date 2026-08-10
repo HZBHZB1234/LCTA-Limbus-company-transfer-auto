@@ -950,7 +950,7 @@ class PromptFactory:
                 })
         elif stage == 1:
             for item in root.findall("item"):
-                entry: dict = {"id": int(item.get("id", len(results) + 1))}
+                entry: dict = {"id": _safe_xml_item_id(item, len(results) + 1)}
                 trans_el = item.find("translation")
                 entry["translation"] = trans_el.text if trans_el is not None and trans_el.text else ""
                 reason_el = item.find("reasoning")
@@ -960,7 +960,7 @@ class PromptFactory:
                 results.append(entry)
         elif stage == 2:
             for item in root.findall("item"):
-                entry: dict = {"id": int(item.get("id", len(results) + 1))}
+                entry: dict = {"id": _safe_xml_item_id(item, len(results) + 1)}
                 trans_el = item.find("translation")
                 entry["translation"] = trans_el.text if trans_el is not None and trans_el.text else ""
                 changed_el = item.find("changed")
@@ -986,20 +986,21 @@ class PromptFactory:
         import re
 
         results: list[dict] = []
-        # 匹配 <item ...> ... </item> 块
+        # 匹配 <item ...> ... </item> 块（同时保留开标签属性，用于提取 id）
         item_pattern = re.compile(
-            r'<item[^>]*?>(.*?)</item>',
+            r'<item(?P<attrs>[^>]*?)>(?P<content>.*?)</item>',
             re.DOTALL | re.IGNORECASE,
         )
-        items = item_pattern.findall(text)
-        if not items:
+        item_matches = list(item_pattern.finditer(text))
+        if not item_matches:
             return None
 
-        for idx, item_text in enumerate(items):
+        for idx, item_match in enumerate(item_matches):
             entry: dict = {"id": idx + 1}
+            item_text = item_match.group("content")
 
-            # 提取 id 属性
-            id_match = re.search(r'<item[^>]*?\bid\s*=\s*["\']?(\d+)', item_text, re.IGNORECASE)
+            # 提取 id 属性（从开标签属性段中查找）
+            id_match = re.search(r'\bid\s*=\s*["\']?(\d+)', item_match.group("attrs"), re.IGNORECASE)
             if id_match:
                 entry["id"] = int(id_match.group(1))
 
@@ -1042,6 +1043,17 @@ class PromptFactory:
                 results.append(entry)
 
         return results if results else None
+
+
+def _safe_xml_item_id(item, default: int) -> int:
+    """安全读取 XML item 的 id 属性；缺失或非数字时回退默认值。"""
+    raw_id = item.get("id")
+    if raw_id is None:
+        return default
+    try:
+        return int(raw_id)
+    except (TypeError, ValueError):
+        return default
 
 
 def _extract_tag(text: str, tag: str, dest: dict, default: str = "") -> str:

@@ -179,6 +179,9 @@ class GitHubReleaseFetcher:
         proxy_changed = (use_proxy != self.use_proxy)
         self.use_proxy = use_proxy
         self.ignore_ssl = ignore_ssl
+        self.session.verify = not ignore_ssl
+        if ignore_ssl:
+            warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
         # use_proxy 状态变化时重建/初始化代理管理器
         if proxy_changed or (self.use_proxy and not self.proxy_manager):

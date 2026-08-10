@@ -76,7 +76,7 @@ class UpdateMixin:
             )
 
             # 执行更新
-            result = updater.check_and_update(self.current_version)
+            result = updater.check_and_update(getattr(self, 'current_version', ''))
             if result:
                 return {"success": True, "message": "更新完成"}
             return {"success": False, "message": "更新失败"}

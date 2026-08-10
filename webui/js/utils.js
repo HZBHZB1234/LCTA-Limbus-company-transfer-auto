@@ -70,9 +70,13 @@ function initNavigation() {
                 setTimeout(async () => {
                     if (navId !== navSequence) return;
                     const sectionName = button.id.replace('-btn', '');
-                    await loadSection(sectionName);
+                    const loaded = await loadSection(sectionName);
 
                     if (navId !== navSequence) return;
+                    if (!loaded) {
+                        button.classList.remove('active');
+                        return;
+                    }
 
                     if (sectionId === 'elder-section' && typeof quickStartManager !== 'undefined') {
                         quickStartManager.initPage();
@@ -638,7 +642,7 @@ function onSidebarSearch(query) {
     if (!lower) {
         // 显示全部（默认隐藏的调试入口按钮保持隐藏）
         navBtns.forEach(b => b.style.display = b.dataset.hiddenDefault === '1' ? 'none' : '');
-        groups.forEach(g => g.style.display = '');
+        groups.forEach(g => g.style.display = g.dataset.hiddenDefault === '1' ? 'none' : '');
         return;
     }
 

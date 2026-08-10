@@ -5,6 +5,7 @@ class MetadataRecoveryPage {
     constructor() {
         this._bound = false;
         this._running = false;
+        this._loadExportSeq = 0;
     }
 
     init() {
@@ -43,9 +44,15 @@ class MetadataRecoveryPage {
         }
         if (infoEl) infoEl.textContent = '正在载入导出...';
         const rank = rankSel && rankSel.value ? rankSel.value : 1;
+        // 快速切换 rank 时并发请求，慢响应后到会覆盖新结果：只采纳最新一次请求
+        const requestId = ++this._loadExportSeq;
         pywebview.api.metadata_recovery_load_export(path, rank)
-            .then((result) => this.renderExport(result))
+            .then((result) => {
+                if (requestId !== this._loadExportSeq) return;
+                this.renderExport(result);
+            })
             .catch((error) => {
+                if (requestId !== this._loadExportSeq) return;
                 if (infoEl) infoEl.innerHTML = `<i class="fas fa-times-circle" style="color:#e74c3c;"></i> 载入失败：${escapeHtml(String(error))}`;
             });
     }

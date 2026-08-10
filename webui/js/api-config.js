@@ -552,7 +552,14 @@ class APIConfigManager {
                 api_settings = JSON.stringify(merged);
             };
             configManager.updateConfigValue('api-configs', api_settings);
-            configManager.flushPendingUpdates();
+            // await 落盘并检查返回值：flushPendingUpdates 的后端失败只体现在
+            // 返回值上（不抛错），不 await 会吞掉失败、界面假成功
+            const result = await configManager.flushPendingUpdates();
+            if (result && result.success === false) {
+                console.error('发送到后端失败:', result.message || '未知错误');
+                showMessage('错误', '保存到后端时发生错误');
+                return false;
+            }
             return true;
         } catch (error) {
             console.error('发送到后端失败:', error);

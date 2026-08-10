@@ -309,7 +309,41 @@ class TestCheatCoreLoader:
 
         result = cheat_core.unlock(key)
         assert result["success"] is False
-        assert result["reason"] == "invalid_key"
+        assert result["reason"] == "blob_corrupt"
+
+    def test_ensure_unlocked_keeps_key_on_corrupt_blob(self, tmp_path, monkeypatch, blob_env):
+        # F-9.7：blob 损坏（非密钥错误）时不得清除已持久化的正确密钥
+        src, key = _make_src(tmp_path)
+        blob = bytearray(build_blob(src, key.encode("utf-8")))
+        blob[-1] ^= 0xFF
+        blob_env(bytes(blob))
+        store = _fake_config(monkeypatch)
+        store[KEY_CONFIG] = key
+
+        result = cheat_core.ensure_unlocked()
+        assert result["success"] is False
+        assert result["reason"] == "blob_corrupt"
+        assert store.get(KEY_CONFIG) == key
+
+    def test_unlock_rejects_path_traversal_dest(self, tmp_path, monkeypatch, blob_env):
+        # F-9.5：blob dest 含 .. 段时拒绝释放，不写穿运行时目录
+        src = tmp_path / "src"
+        (src / "cheatcore").mkdir(parents=True, exist_ok=True)
+        (src / "cheatcore" / "__init__.py").write_text("", encoding="utf-8")
+        (src / "evil.txt").write_bytes(b"x" * 16)
+        (src / "manifest.json").write_text(
+            json.dumps(
+                {"format": 1, "files": [{"src": "evil.txt", "dest": "../evil.txt"}]}
+            ),
+            encoding="utf-8",
+        )
+        blob_env(build_blob(src, TEST_KEY.encode("utf-8")))
+        _fake_config(monkeypatch)
+
+        result = cheat_core.unlock(TEST_KEY)
+        assert result["success"] is False
+        assert result["reason"] == "blob_corrupt"
+        assert not (tmp_path / "evil.txt").exists()
 
     def test_blob_missing(self, tmp_path, monkeypatch):
         monkeypatch.setenv("path_", str(tmp_path / "install"))
@@ -380,6 +414,42 @@ class TestCheatCoreLoader:
         assert CheatPluginHost.invoke("apply")["success"] is True
         with pytest.raises(RuntimeError):
             CheatPluginHost.invoke("not_in_whitelist")
+
+    def test_invoke_dispatches_to_owning_plugin(self, tmp_path, monkeypatch, blob_env):
+        # F-9.6：invoke 按 action 分发到声明该 action 的插件，而非固定首个插件
+        files = dict(FAKE_FILES)
+        files["cheatcore/hook_a.py"] = (
+            "# -*- coding: utf-8 -*-\n"
+            "class ManagerA:\n"
+            "    @staticmethod\n"
+            "    def alpha():\n"
+            "        return {'plugin': 'a'}\n"
+        )
+        files["cheatcore/hook_b.py"] = (
+            "# -*- coding: utf-8 -*-\n"
+            "class ManagerB:\n"
+            "    @staticmethod\n"
+            "    def beta():\n"
+            "        return {'plugin': 'b'}\n"
+        )
+        files["cheatcore/registry.py"] = (
+            "# -*- coding: utf-8 -*-\n"
+            "PLUGIN_A = {'id': 'a', 'name': 'A', 'entry': 'hook_a', 'manager': 'ManagerA', 'api': ['alpha'], 'webui': {}, 'config': {}, 'launcher': None}\n"
+            "PLUGIN_B = {'id': 'b', 'name': 'B', 'entry': 'hook_b', 'manager': 'ManagerB', 'api': ['beta'], 'webui': {}, 'config': {}, 'launcher': None}\n"
+            "def get_plugins():\n"
+            "    return [PLUGIN_A, PLUGIN_B]\n"
+        )
+        src, key = _make_src(tmp_path, files=files)
+        blob_env(build_blob(src, key.encode("utf-8")))
+        _fake_config(monkeypatch)
+
+        from webutils import CheatPluginHost
+        cheat_core.unlock(key)
+        assert [p["id"] for p in CheatPluginHost.list()] == ["a", "b"]
+        assert CheatPluginHost.invoke("alpha") == {"plugin": "a"}
+        assert CheatPluginHost.invoke("beta") == {"plugin": "b"}
+        with pytest.raises(RuntimeError):
+            CheatPluginHost.invoke("gamma")
 
     def test_config_seeded_on_unlock(self, tmp_path, monkeypatch, blob_env):
         src, key = _make_src(tmp_path)

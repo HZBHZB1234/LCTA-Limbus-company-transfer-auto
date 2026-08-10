@@ -24,7 +24,7 @@ class DropMixin:
 
     def on_drop(self, e):
         files = e['dataTransfer']['files']
-        file_paths = [file['pywebviewFullPath'] for file in files]
+        file_paths = [file['pywebviewFullPath'] for file in files if file.get('pywebviewFullPath')]
         file_paths_json = json.dumps(file_paths)
         self._window.evaluate_js(f"dragDropManager.hideMaskImmediate();dragDropManager.onFileDropCallback({file_paths_json})")
 

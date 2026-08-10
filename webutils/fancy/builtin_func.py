@@ -48,15 +48,15 @@ class SkillColorHandler:
     def _load_cache(self, cache_file: Path, fingerprint: str) -> bool:
         try:
             payload = json.loads(cache_file.read_text(encoding='utf-8'))
-        except (OSError, json.JSONDecodeError):
+            if payload.get('version') != self.CACHE_VERSION or payload.get('fingerprint') != fingerprint:
+                return False
+            colors = payload.get('colors')
+            if not isinstance(colors, dict):
+                return False
+            self.data = {str(skill_id): color for skill_id, color in colors.items() if isinstance(color, str)}
+            return bool(self.data)
+        except (OSError, ValueError, AttributeError):
             return False
-        if payload.get('version') != self.CACHE_VERSION or payload.get('fingerprint') != fingerprint:
-            return False
-        colors = payload.get('colors')
-        if not isinstance(colors, dict):
-            return False
-        self.data = {str(skill_id): color for skill_id, color in colors.items() if isinstance(color, str)}
-        return bool(self.data)
 
     def _save_cache(self, cache_file: Path, fingerprint: str) -> None:
         cache_file.parent.mkdir(parents=True, exist_ok=True)

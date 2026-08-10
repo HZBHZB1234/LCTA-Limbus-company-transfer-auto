@@ -21,6 +21,8 @@ class InputBypassMixin:
                 f"输入反检测配置已应用 ({result['mode']}模式, "
                 f"{'已启用' if result['armed'] else '未启用'})"
             )
+            if not result["success"]:
+                result["message"] = "无法创建共享内存，配置未能写入"
             return {"success": result["success"], "data": result}
         except Exception as e:
             self.log_error(e)

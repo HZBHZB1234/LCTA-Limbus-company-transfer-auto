@@ -76,10 +76,14 @@ class ProperAnalyzer:
             _logger.warning(f"本地 proper 文件不存在: {proper_path}")
             return []
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError) as e:
             _logger.warning(f"本地 proper 文件读取失败: {proper_path}: {e}")
             return []
+        if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+            _logger.warning(f"本地 proper 文件格式错误（应为术语字典列表）: {proper_path}")
+            return []
+        return data
 
     # ----- 分析 -----
 

@@ -101,13 +101,14 @@ class CheatPluginHost:
         """按白名单分发到插件管理器方法。未解锁/动作非法抛 RuntimeError。"""
         if not cls._plugins:
             raise RuntimeError(_LOCKED_MSG)
-        plugin = cls._plugins[0]
-        if action not in plugin.get("api", []):
-            raise RuntimeError(f"未知的作弊工具箱操作: {action}")
-        manager = cls._manager_class(plugin)
-        if not hasattr(manager, action):
-            raise RuntimeError(f"作弊工具箱缺少操作实现: {action}")
-        return getattr(manager, action)(*(list(args or [])))
+        for plugin in cls._plugins:
+            if action not in plugin.get("api", []):
+                continue
+            manager = cls._manager_class(plugin)
+            if not hasattr(manager, action):
+                raise RuntimeError(f"作弊工具箱缺少操作实现: {action}")
+            return getattr(manager, action)(*(list(args or [])))
+        raise RuntimeError(f"未知的作弊工具箱操作: {action}")
 
     # ------------------------------------------------------------------
     # Launcher 生命周期（由 launcher/game_launch.py 调用）

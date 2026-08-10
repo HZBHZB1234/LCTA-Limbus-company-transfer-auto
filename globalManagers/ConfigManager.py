@@ -14,6 +14,7 @@ class ConfigManager:
 
     _instance: Optional["ConfigManager"] = None
     _initialized: bool = False
+    _generation: int = 0
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -29,6 +30,7 @@ class ConfigManager:
         if ConfigManager._initialized:
             return
         ConfigManager._initialized = True
+        self._generation = ConfigManager._generation
 
         self._lock = threading.RLock()
         self._config_path = config_path
@@ -157,6 +159,8 @@ class ConfigManager:
     def save(self):
         """将当前配置写入文件"""
         with self._lock:
+            if self._generation != ConfigManager._generation:
+                return
             with open(self._config_path, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, ensure_ascii=False, indent=4)
 
@@ -207,6 +211,9 @@ class ConfigManager:
                 if isinstance(expected_type, dict):
                     if value is None:
                         current[key] = {}
+                    elif not isinstance(value, dict):
+                        current[key] = {}
+                        messages.append(f"Fixed '{current_path}' to default")
                     if isinstance(current[key], dict):
                         _recursive(
                             current[key],
@@ -233,9 +240,12 @@ class ConfigManager:
             self._from_disk = True
 
     def reset(self):
-        """删除配置文件并重置单例（下次访问重新初始化）"""
+        """删除配置文件并重置，等待下次调用重新初始化"""
+        if self._generation != ConfigManager._generation:
+            return
         if os.path.exists(self._config_path):
             os.remove(self._config_path)
+        self.__class__._generation += 1
         self.__class__._initialized = False
         self.__class__._instance = None
 

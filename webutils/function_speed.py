@@ -210,16 +210,17 @@ class SpeedManager:
         if SpeedManager._instance is None or SpeedManager._injected_pid is None:
             return True  # 已经弹出，算成功
 
+        pid = SpeedManager._injected_pid
         try:
-            SpeedManager._instance.eject(SpeedManager._injected_pid)
-            logger.info(f"已从 PID {SpeedManager._injected_pid} 弹出 DLL")
+            SpeedManager._instance.eject(pid)
+            logger.info(f"已从 PID {pid} 弹出 DLL")
         except Exception as e:
             _log_manager.log_error(e)
-            logger.warning(f"弹出 DLL 时出错（可能已自动弹出）: {e}")
-        finally:
-            SpeedManager._instance = None
-            SpeedManager._injected_pid = None
-            SpeedManager._cached_process = None
+            logger.warning(f"弹出 DLL 时出错: {e}")
+            return False
+        SpeedManager._instance = None
+        SpeedManager._injected_pid = None
+        SpeedManager._cached_process = None
         return True
 
     @staticmethod

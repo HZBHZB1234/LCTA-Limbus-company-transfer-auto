@@ -30,6 +30,10 @@ MAGIC = b"LCTACC01"
 ANCHOR = b"LCTA-CHEAT-KEY-OK!"
 KEY_MIN_LEN = 8
 
+
+class BlobCorruptError(ValueError):
+    """Blob 结构/校验失败（区别于密钥错误）。"""
+
 KEY_CONFIG = "cheat_core.unlock_key"
 BLOB_DIR_NAME = "cheat_core"
 BLOB_FILE_NAME = "cheat_core.bin"
@@ -101,35 +105,45 @@ def _xor(data: bytes, key: bytes) -> bytes:
 
 
 def _parse_blob(data: bytes) -> Tuple[Dict, bytes]:
-    """解析 blob → (manifest, 密文 payload)。格式非法抛 ValueError。"""
+    """解析 blob → (manifest, 密文 payload)。格式非法抛 BlobCorruptError。"""
     if len(data) < len(MAGIC) + 4 or data[: len(MAGIC)] != MAGIC:
-        raise ValueError("cheat_core.bin magic 不匹配")
+        raise BlobCorruptError("cheat_core.bin magic 不匹配")
     mlen = struct.unpack("<I", data[len(MAGIC): len(MAGIC) + 4])[0]
     end = len(MAGIC) + 4 + mlen
     if mlen <= 0 or end > len(data):
-        raise ValueError("cheat_core.bin manifest 长度非法")
+        raise BlobCorruptError("cheat_core.bin manifest 长度非法")
     try:
         manifest = json.loads(data[len(MAGIC) + 4: end].decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
-        raise ValueError(f"cheat_core.bin manifest 解析失败: {e}") from e
+        raise BlobCorruptError(f"cheat_core.bin manifest 解析失败: {e}") from e
+    if not isinstance(manifest, dict):
+        raise BlobCorruptError("cheat_core.bin manifest 结构非法")
     return manifest, data[end:]
 
 
 def _decrypt_files(data: bytes, key: bytes) -> List[Tuple[str, bytes]]:
-    """解密 blob → [(dest 相对路径, 明文字节)...]。密钥错误/数据损坏抛 ValueError。"""
+    """解密 blob → [(dest 相对路径, 明文字节)...]。密钥错误抛 ValueError，数据损坏抛 BlobCorruptError。"""
     manifest, cipher = _parse_blob(data)
     payload = _xor(cipher, key)
     if not payload.startswith(ANCHOR):
         raise ValueError("anchor 校验失败")
     files = []
     offset = len(ANCHOR)
-    for item in manifest.get("files", []):
-        size = int(item["size"])
+    files_list = manifest.get("files")
+    if not isinstance(files_list, list):
+        raise BlobCorruptError("cheat_core.bin manifest files 结构非法")
+    for item in files_list:
+        if not isinstance(item, dict):
+            raise BlobCorruptError("cheat_core.bin manifest 文件条目非法")
+        try:
+            size = int(item["size"])
+        except (KeyError, TypeError, ValueError):
+            raise BlobCorruptError(f"文件 {item.get('dest')} 条目非法") from None
         chunk = payload[offset: offset + size]
         if len(chunk) != size:
-            raise ValueError("blob 数据不完整")
+            raise BlobCorruptError("blob 数据不完整")
         if hashlib.sha256(chunk).hexdigest() != item.get("sha256"):
-            raise ValueError(f"文件 {item.get('dest')} 校验失败")
+            raise BlobCorruptError(f"文件 {item.get('dest')} 校验失败")
         files.append((item["dest"], chunk))
         offset += size
     return files
@@ -143,6 +157,15 @@ def _decrypt_files(data: bytes, key: bytes) -> List[Tuple[str, bytes]]:
 def _write_files(files: List[Tuple[str, bytes]]) -> None:
     """把解密文件写入运行时目录：先写 .tmp 再 os.replace，最后清理陈旧文件。"""
     root = runtime_dir()
+    # 先整体校验 dest：拒绝 .. 段、盘符与绝对路径，避免写穿运行时目录
+    for rel, _data in files:
+        rel = rel.replace("\\", "/")
+        if (
+            any(p == ".." for p in rel.split("/"))
+            or rel.startswith("/")
+            or (len(rel) >= 2 and rel[0].isalpha() and rel[1] == ":")
+        ):
+            raise BlobCorruptError(f"拒绝非法文件路径: {rel}")
     os.makedirs(root, exist_ok=True)
     dests = set()
     for rel, data in files:
@@ -225,12 +248,18 @@ def unlock(key: str) -> Dict:
             with open(blob, "rb") as f:
                 data = f.read()
             files = _decrypt_files(data, key_bytes)
+        except BlobCorruptError as e:
+            logger.info("CheatCore 解锁失败（数据损坏）: %s", e)
+            return {"success": False, "reason": "blob_corrupt"}
         except (ValueError, OSError) as e:
             logger.info("CheatCore 解锁失败: %s", e)
             return {"success": False, "reason": "invalid_key"}
         try:
             _write_files(files)
             _import_package()
+        except BlobCorruptError as e:
+            logger.warning("CheatCore 释放文件失败（数据损坏）: %s", e)
+            return {"success": False, "reason": "blob_corrupt"}
         except Exception as e:  # 导入/写盘失败：保留现场，报解锁失败
             logger.warning("CheatCore 解锁后加载失败: %s", e)
             _log_manager.log(f"作弊工具箱: 功能加载失败（{e}）")
@@ -252,6 +281,7 @@ def ensure_unlocked() -> Dict:
     - unlocked / dev    已解锁（dev 为开发模式）
     - need_key          需要用户输入密钥
     - blob_missing      安装不含 cheat_core.bin
+    - blob_corrupt      数据损坏（密钥保留，不清除）
     - invalid_key / load_error  自动解锁失败
     """
     with _state_lock:

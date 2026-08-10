@@ -214,10 +214,18 @@ def create_symlink_for(from_dir: str, target_dir: str):
 
 def remove_symlink_for(folder: str):
     _folder = Path(folder)
-    if _folder.is_symlink():
-        _folder.unlink()
-    else:
-        _folder.rmdir()
+    try:
+        if _folder.is_symlink():
+            _folder.unlink()
+        elif _folder.exists():
+            _folder.rmdir()
+        else:
+            return False
+        return True
+    except OSError as e:
+        _log_manager.log(f"删除软链接失败: {e}")
+        _log_manager.log_error(e)
+        return False
 
 def evaluate_path(path: str):
     _path = Path(path)

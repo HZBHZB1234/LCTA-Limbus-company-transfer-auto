@@ -45,7 +45,9 @@ class SpeedMixin:
     def speed_eject(self):
         """弹出 DLL"""
         try:
-            SpeedManager.eject()
+            if not SpeedManager.eject():
+                self.log_ui("DLL 弹出失败")
+                return {"success": False, "message": "弹出失败，DLL 可能已被游戏释放"}
             self.log_ui("DLL 已弹出")
             return {"success": True, "message": "弹出成功"}
         except Exception as e:

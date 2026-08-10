@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+from typing import Optional
 
-from .browser import get_category
+from .browser import get_category, get_lang_files
 from .constants import COMMON_REPLACEMENTS
 
 _KNOWN_COMPARISON_REPLACEMENTS = {
@@ -133,7 +134,7 @@ def _score_group(group: list) -> dict:
     return {"s1_coverage": s1, "s2_purity": s2, "s3_generalizability": s3,
             "s4_stability": s4, "s5_intent": s5, "priority": round(priority, 1)}
 
-def _infer_file_scope(files: list, all_files_count: int = 0) -> dict:
+def _infer_file_scope(files: list, all_lang_files: Optional[list] = None) -> dict:
     categories = {}
     for f in files:
         cat = get_category(f)
@@ -141,8 +142,15 @@ def _infer_file_scope(files: list, all_files_count: int = 0) -> dict:
     cat_names = sorted(categories.keys())
     cat_count = len(cat_names)
 
-    # 计算分类覆盖的总文件数（用于推广阶梯显示）
-    category_file_count = sum(categories.values())
+    if all_lang_files:
+        involved_cats = set(cat_names)
+        category_file_count = sum(
+            1 for f in all_lang_files if get_category(f) in involved_cats
+        )
+        all_files_count = len(all_lang_files)
+    else:
+        category_file_count = sum(categories.values())
+        all_files_count = 0
 
     available = [
         {"level": "exact", "label": "仅涉及文件", "count": len(files)},
@@ -167,6 +175,7 @@ def _infer_file_scope(files: list, all_files_count: int = 0) -> dict:
 def analyze_changes(changes: list) -> dict:
     if not changes:
         return {"groups": [], "merge_suggestions": []}
+    all_lang_files = get_lang_files()
     groups = _cluster_changes(changes)
     result_groups = []
     for group in groups:
@@ -177,7 +186,7 @@ def analyze_changes(changes: list) -> dict:
         score = _score_group(group)
 
         if first["change_type"] == "PURE_REPLACE" and len(group) >= 3:
-            if all(c["new_val"] in "><≥≤" for c in group):
+            if all(isinstance(c.get("new_val"), str) and c["new_val"] and c["new_val"] in {">", "<", "≥", "≤"} for c in group):
                 summary = "你似乎在对数学比较符号做统一替换"
             else:
                 summary = f"检测到 {len(group)} 处相同的文本替换"
@@ -215,7 +224,7 @@ def analyze_changes(changes: list) -> dict:
             "action_preview": action_preview[:5],
             "file_count": len(files), "item_count": len(item_ids),
             "occurrence_count": len(group),
-            "l1_options": _infer_file_scope(files),
+            "l1_options": _infer_file_scope(files, all_lang_files),
             "l2_options": {"suggested": "id" if item_ids else "full_text", "item_ids": item_ids},
             "l3_options": {"suggested": "restricted" if len(field_paths) == 1 else "all_text",
                            "fields": field_paths},
@@ -230,6 +239,7 @@ def analyze_changes(changes: list) -> dict:
 def analyze_changes_v2(changes: list, bias: str = 'conservative') -> dict:
     if not changes:
         return {"groups": [], "merge_suggestions": []}
+    all_lang_files = get_lang_files()
     groups = _cluster_changes(changes)
     result_groups = []
     merge_suggestions = []
@@ -244,7 +254,7 @@ def analyze_changes_v2(changes: list, bias: str = 'conservative') -> dict:
             continue
 
         if first["change_type"] == "PURE_REPLACE" and len(group) >= 3:
-            if all(isinstance(c.get("new_val"), str) and c["new_val"] in "><≥≤" for c in group):
+            if all(isinstance(c.get("new_val"), str) and c["new_val"] and c["new_val"] in {">", "<", "≥", "≤"} for c in group):
                 summary = "你似乎在对数学比较符号做统一替换"
             else:
                 summary = f"检测到 {len(group)} 处相同的文本替换"
@@ -289,7 +299,7 @@ def analyze_changes_v2(changes: list, bias: str = 'conservative') -> dict:
             "action_preview": action_preview[:5],
             "file_count": len(files), "item_count": len(item_ids),
             "occurrence_count": len(group),
-            "l1_options": _infer_file_scope(files),
+            "l1_options": _infer_file_scope(files, all_lang_files),
             "l2_options": {"suggested": "id" if item_ids else "full_text", "item_ids": item_ids},
             "l3_options": {"suggested": "restricted" if len(field_paths) == 1 else "all_text",
                            "fields": field_paths},
@@ -400,6 +410,8 @@ def analyze_changes_v3(changes: list) -> dict:
             "merge_candidates": []
         }
 
+    all_lang_files = get_lang_files()
+
     # 第一轮：按 (old_val, new_val, field_path) 合并 key 分桶
     merge_buckets = {}
     merge_order = []
@@ -451,7 +463,7 @@ def analyze_changes_v3(changes: list) -> dict:
 
         # 生成摘要
         if change_type == "PURE_REPLACE" and len(items) >= 3:
-            if all(isinstance(c.get("new_val"), str) and c["new_val"] in "><≥≤" for c in items):
+            if all(isinstance(c.get("new_val"), str) and c["new_val"] and c["new_val"] in {">", "<", "≥", "≤"} for c in items):
                 summary = "你似乎在对数学比较符号做统一替换"
             else:
                 old_sample = first.get("old_val", "")
@@ -479,7 +491,7 @@ def analyze_changes_v3(changes: list) -> dict:
             "file_count": len(files),
             "item_count": len(item_ids),
             "occurrence_count": len(items),
-            "l1_options": _infer_file_scope(files),
+            "l1_options": _infer_file_scope(files, all_lang_files),
             "l2_options": {
                 "suggested": "id" if item_ids else "full_text",
                 "item_ids": item_ids,

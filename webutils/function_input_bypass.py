@@ -141,7 +141,7 @@ def parse_count(value: object, label: str, default: int = 0) -> int:
     """把配置值解析为 ≥0 的整数计数，非法输入回退默认值。"""
     try:
         n = int(float(str(value).strip()))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         _log_manager.log(f"输入反检测: {label} 不是合法数字，使用默认值 {default}")
         return default
     if n < 0:

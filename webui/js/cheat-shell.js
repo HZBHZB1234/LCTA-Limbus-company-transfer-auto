@@ -109,10 +109,14 @@ let cheatPage = {
                 const scriptJs = await pywebview.api.cheat_core_get_script_js(p.webui.js);
                 if (this._stopped) return;
                 if (typeof scriptJs !== 'string' || !scriptJs.trim()) continue;
+                // 仅当本次脚本新定义了 initCheatPage 才调用，避免把前一个插件
+                // 残留的入口函数再调一遍（多插件场景重复 init）
+                const prevEntry = window.initCheatPage;
                 // 解密 JS 来自自有加密包，与打包源码同信任级，可用 new Function 执行
                 (new Function(scriptJs))(); // eslint-disable-line no-new-func
-                if (typeof window.initCheatPage === 'function') {
-                    const api = window.initCheatPage();
+                const entry = window.initCheatPage;
+                if (typeof entry === 'function' && entry !== prevEntry) {
+                    const api = entry();
                     if (api && typeof api === 'object') pluginApi = api;
                 }
             }

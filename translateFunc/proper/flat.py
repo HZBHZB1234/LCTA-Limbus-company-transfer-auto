@@ -64,28 +64,26 @@ def update_dict_with_flattened(original_dict, flat_updates):
         # 遍历到路径的倒数第二个元素
         current = original_dict
         for i, key in enumerate(path[:-1]):
+            nxt = path[i + 1]
             # 如果是列表/元组索引
             if isinstance(key, int):
                 # 确保当前位置是列表或元组
-                if isinstance(current, (list, tuple)):
-                    # 如果是元组，需要转换为列表才能修改
-                    if isinstance(current, tuple):
-                        # 这里假设我们不允许修改元组，跳过或抛异常
-                        # 但为了通用性，我们可以转换为列表
-                        raise TypeError(f"Cannot update tuple at path {path[:i+1]}")
-                    # 确保索引有效
-                    if key < len(current):
-                        current = current[key]
-                    else:
-                        raise IndexError(f"Index {key} out of range at path {path[:i+1]}")
+                if isinstance(current, list):
+                    # 确保索引有效，无效则扩展
+                    if key >= len(current):
+                        current.extend([None] * (key - len(current) + 1))
+                    if current[key] is None:
+                        current[key] = [] if isinstance(nxt, int) else {}
+                    current = current[key]
+                elif isinstance(current, tuple):
+                    raise TypeError(f"Cannot update tuple at path {path[:i+1]}")
                 else:
                     raise TypeError(f"Expected list/tuple at {path[:i+1]}, got {type(current)}")
             # 如果是字典键
             else:
                 if isinstance(current, dict):
-                    if key not in current:
-                        # 如果键不存在，创建新字典
-                        current[key] = {}
+                    if key not in current or current[key] is None:
+                        current[key] = [] if isinstance(nxt, int) else {}
                     current = current[key]
                 else:
                     raise TypeError(f"Expected dict at {path[:i+1]}, got {type(current)}")

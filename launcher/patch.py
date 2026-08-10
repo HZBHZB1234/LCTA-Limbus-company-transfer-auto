@@ -4,10 +4,13 @@ import xxhash
 import lzma
 import os.path
 import shutil
+from threading import Lock
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 from pathlib import Path
 from zipfile import ZipFile
+
+_cleanup_lock = Lock()
 
 from UnityPy.enums import ClassIDType
 from UnityPy.files import SerializedFile, BundleFile, ObjectReader
@@ -76,25 +79,26 @@ def extract_assets(mod_asset_root: str, mod_zips_root: str):
 
 
 def cleanup_assets(bundle_data=bundle_data_paths):
-    _log_manager.log("Restoring data")
-    for bundle_root in bundle_data():
-        bundle_path = os.path.join(bundle_root, "__data")
-        new_path = os.path.join(bundle_root, "__original")
-        if not os.path.isfile(new_path):
-            continue
-
-        try:
-            with open(bundle_path, "rb") as fp:
-                env = UnityPy.load(io.BytesIO(fp.read()))
-            bundle = get_bundle_file(env)
-            if bundle.version_player != "limbus_modded":
-                os.remove(new_path)
+    with _cleanup_lock:
+        _log_manager.log("Restoring data")
+        for bundle_root in bundle_data():
+            bundle_path = os.path.join(bundle_root, "__data")
+            new_path = os.path.join(bundle_root, "__original")
+            if not os.path.isfile(new_path):
                 continue
-        except Exception as e:
-            _log_manager.log("Corrupted file detected %s: %s", bundle_path, e)
 
-        _log_manager.log("Restoring %s", bundle_path)
-        os.replace(new_path, bundle_path)
+            try:
+                with open(bundle_path, "rb") as fp:
+                    env = UnityPy.load(io.BytesIO(fp.read()))
+                bundle = get_bundle_file(env)
+                if bundle.version_player != "limbus_modded":
+                    os.remove(new_path)
+                    continue
+            except Exception as e:
+                _log_manager.log("Corrupted file detected %s: %s", bundle_path, e)
+
+            _log_manager.log("Restoring %s", bundle_path)
+            os.replace(new_path, bundle_path)
 
 
 def patch_bundle_asset(env: UnityPy.Environment, mod_path: str):
@@ -123,7 +127,7 @@ def patch_bundle_asset(env: UnityPy.Environment, mod_path: str):
                     _log_manager.log_error("- Object is not ObjectReader, wtf?")
                     continue
                 _log_manager.log("- Loading %s", mod_part_path)
-                if type_id > 0 and type_id != obj.type_id:
+                if type_id >= 0 and type_id != obj.type_id:
                     _log_manager.log("- Mismatching asset type, vanilla: %d, modded: %d, skipped", obj.type_id, type_id)
                     continue
                 with open(mod_part_path, "rb") as mf:

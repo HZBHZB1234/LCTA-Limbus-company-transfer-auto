@@ -43,8 +43,8 @@ def excluded_paths(
 ) -> set[JsonPath]:
     """模拟执行全部排除规则集，返回其会修改的路径集合。
 
-    规则集在数据副本上依序执行（apply_bus 会就地修改嵌套容器），
-    因此仅需一份深拷贝即可并行累积多个规则集的变更路径。
+    每个规则集在独立深拷贝上执行；失败规则集的部分变更不残留
+    （副本直接丢弃），成功后将副本接回以保持依序累积语义。
     """
     if not compiled_exclusions:
         return set()
@@ -55,8 +55,10 @@ def excluded_paths(
         if not rules:
             continue
         try:
-            result = apply_bus(copy, compiled, relative_path, rules=rules)
+            working = deepcopy(copy)
+            result = apply_bus(working, compiled, relative_path, rules=rules)
             changed.update(result.changed_paths)
+            copy = working
         except Exception:
             continue
     return changed

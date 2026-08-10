@@ -15,7 +15,7 @@ _log_manager = LogManager()
 def remove_existing(path: str | os.PathLike[str]) -> None:
     """删除已存在的目标文件/文件夹（遵循项目惯例）"""
     if os.path.exists(path):
-        if os.path.isdir(path):
+        if os.path.isdir(path) and not os.path.islink(path):
             shutil.rmtree(path)
         else:
             os.remove(path)

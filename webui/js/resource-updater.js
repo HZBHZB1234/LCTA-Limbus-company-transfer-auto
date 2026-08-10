@@ -4,6 +4,7 @@ class ResourceUpdaterPage {
         this.initializing = false;
         this.running = false;
         this._bound = false;
+        this._starting = false;
     }
 
     element(id) {
@@ -158,20 +159,28 @@ class ResourceUpdaterPage {
     }
 
     async start() {
-        if (!(await this.probe())) return;
-        this.resetProgress();
-        this.setRunning(true);
-        this.setStatus('正在启动更新', 'running', '正在创建资源清单并准备下载任务。');
-
+        // 防连点/并发启动：运行中或探测中忽略重复点击（setRunning(true) 在
+        // probe 之后才执行，需额外标记探测窗口期）
+        if (this.running || this._starting) return;
+        this._starting = true;
         try {
-            const result = await pywebview.api.resource_updater_start_update(this.collectOptions());
-            if (!result.success) {
+            if (!(await this.probe())) return;
+            this.resetProgress();
+            this.setRunning(true);
+            this.setStatus('正在启动更新', 'running', '正在创建资源清单并准备下载任务。');
+
+            try {
+                const result = await pywebview.api.resource_updater_start_update(this.collectOptions());
+                if (!result.success) {
+                    this.setRunning(false);
+                    this.setStatus(result.message, 'error', '请检查更新范围、游戏目录和下载设置。');
+                }
+            } catch (error) {
                 this.setRunning(false);
-                this.setStatus(result.message, 'error', '请检查更新范围、游戏目录和下载设置。');
+                this.setStatus('启动失败', 'error', error.message || String(error));
             }
-        } catch (error) {
-            this.setRunning(false);
-            this.setStatus('启动失败', 'error', error.message || String(error));
+        } finally {
+            this._starting = false;
         }
     }
 

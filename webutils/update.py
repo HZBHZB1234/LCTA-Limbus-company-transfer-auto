@@ -360,6 +360,7 @@ class Updater:
 
         # 缓存置于应用目录外的临时目录：update_files 会清空应用目录，
         # 解压源若位于应用目录内会被先删除导致复制必然失败。
+        _created_cache = not _cache_dir
         cache_dir = Path(_cache_dir) if _cache_dir else Path(tempfile.mkdtemp(prefix="lcta_update_"))
         try:
             # 根据only_stable参数决定获取最新版本还是稳定版本
@@ -445,11 +446,12 @@ class Updater:
             
             return True
         finally:
-            # 清理缓存目录（成功与失败均清理）
-            try:
-                shutil.rmtree(cache_dir)
-            except:
-                pass
+            # 清理缓存目录（成功与失败均清理）；仅清理本函数自建的临时目录
+            if _created_cache:
+                try:
+                    shutil.rmtree(cache_dir)
+                except:
+                    pass
 
     def check_for_updates(self, current_version: str) -> Dict[str, Any]:
         """

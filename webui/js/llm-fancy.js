@@ -9,6 +9,7 @@
         apiEncrypted: false,
         apiSettings: {},         // 解密后的 {服务名: 设置}
         busy: false,             // 任务执行中
+        cancelRequested: false,  // 解密/校验窗口期内按下的取消（后端尚无 _cancel_event）
         theme: 'light',
     };
 
@@ -329,6 +330,7 @@
     function onRun() {
         var api = getApi();
         if (!api || state.busy) return;
+        state.cancelRequested = false;
         var payload = collectPayload();
         if (payload.selection === null) {
             addLog('JSON 格式错误：无法解析匹配规则');
@@ -347,10 +349,19 @@
                 return;
             }
             addLog('开始 LLM 美化...');
+            var cancelRequested = state.cancelRequested;
+            state.cancelRequested = false;
             return api.run_beautify({
                 config: payload,
                 api_settings: llm,
             }).then(function (res) {
+                // 解密/校验窗口期按下的取消在启动后补发（后端 _cancel_event 在
+                // run_beautify 内创建，run_beautify 返回时事件已就绪）
+                if (cancelRequested) {
+                    api.cancel_beautify().catch(function (err) {
+                        console.error('取消 LLM 美化失败:', err);
+                    });
+                }
                 if (res && res.success === false) {
                     addLog('启动失败: ' + ((res && res.message) || '未知错误'));
                     setBusy(false);
@@ -394,7 +405,12 @@
     function onCancel() {
         var api = getApi();
         if (!api) return;
-        api.cancel_beautify();
+        // 先记录取消意图再调用后端：解密窗口期后端 _cancel_event 尚不存在，
+        // 取消会由 onRun 在启动后补发
+        state.cancelRequested = true;
+        api.cancel_beautify().catch(function (err) {
+            console.error('取消 LLM 美化失败:', err);
+        });
     }
 
     function onSaveConfig() {

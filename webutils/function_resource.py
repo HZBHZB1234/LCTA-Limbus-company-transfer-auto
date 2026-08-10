@@ -39,7 +39,7 @@ def extract_files_from_resource(resource_path: str, file_names: List[str], outpu
             continue
         if not isinstance(container, str):
             continue
-        file_name = next((name for name in remaining if container.endswith(name)), None)
+        file_name = next((name for name in sorted(remaining, key=lambda n: (-len(n), n)) if container.endswith(name)), None)
         if file_name is None:
             continue
         try:
@@ -117,7 +117,7 @@ def load_text_assets(
                 continue
             if not isinstance(container, str):
                 continue
-            target_name = next((name for name in remaining if container.endswith(name)), None)
+            target_name = next((name for name in sorted(remaining, key=lambda n: (-len(n), n)) if container.endswith(name)), None)
             if target_name is None or obj.type != ClassIDType.TextAsset:
                 continue
             try:

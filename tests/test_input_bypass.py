@@ -70,6 +70,10 @@ class TestParseCount:
         assert parse_count(None, "x") == 0
         assert parse_count("", "x") == 0
 
+    def test_overflow_exponent_default(self):
+        # F-9.10：int(float("1e400")) 抛 OverflowError，应回退默认值
+        assert parse_count("1e400", "x", default=7) == 7
+
 
 class TestParsePercent:
     """parse_percent：[0, VOLATILITY_MAX] 浮点，超上限钳制。"""

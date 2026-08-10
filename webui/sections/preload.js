@@ -1,23 +1,33 @@
 const loadedSections = new Set();
+const loadingSections = new Map();
 
 async function preloadAllSections() {
     await loadSection('dashboard');
 }
 
 async function loadSection(name) {
-    if (loadedSections.has(name)) return;
-    try {
-        const response = await fetch(`sections/${name}.html`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const html = await response.text();
-        const container = document.getElementById(`${name}-section`);
-        if (container) container.innerHTML = html;
-        loadedSections.add(name);
-        console.log('[LCTA] Section loaded:', name);
-        onSectionLoaded(name);
-    } catch (err) {
-        console.error(`Failed to load section ${name}:`, err);
-    }
+    if (loadedSections.has(name)) return true;
+    if (loadingSections.has(name)) return loadingSections.get(name);
+    const promise = (async () => {
+        try {
+            const response = await fetch(`sections/${name}.html`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const html = await response.text();
+            const container = document.getElementById(`${name}-section`);
+            if (container) container.innerHTML = html;
+            loadedSections.add(name);
+            console.log('[LCTA] Section loaded:', name);
+            onSectionLoaded(name);
+            return true;
+        } catch (err) {
+            console.error(`Failed to load section ${name}:`, err);
+            return false;
+        } finally {
+            loadingSections.delete(name);
+        }
+    })();
+    loadingSections.set(name, promise);
+    return promise;
 }
 
 function isSectionLoaded(name) {

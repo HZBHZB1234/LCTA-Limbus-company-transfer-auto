@@ -43,10 +43,16 @@ class CustomNote(Note):
             return note
 
 def get_note_content():
-    note_ = CustomNote.create(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
-    note_content = note_.note_content
-    note_content = json.loads(note_content)
-    return note_content
+    try:
+        note_ = CustomNote.create(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
+        note_content = json.loads(note_.note_content)
+        if not isinstance(note_content, dict):
+            raise ValueError("笔记内容不是 JSON 对象")
+        return note_content
+    except Exception as e:
+        _log_manager.log(f"获取笔记内容失败，回退到默认值: {e}")
+        CustomNote._cache_instance.pop(("1df3ff8fe2ff2e4c", "AutoTranslate", True), None)
+        return {}
 
 def update_config_last(name, version):
     ConfigManager().set(f"launcher.last_install.{name}", str(version))

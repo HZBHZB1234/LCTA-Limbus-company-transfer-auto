@@ -125,7 +125,7 @@ def _read_hosts_lines(hosts_path: str) -> Tuple[List[Tuple[str, str]], str, byte
     每行: (content, terminator)
     """
     encoding_name, bom = _detect_encoding(hosts_path)
-    with open(hosts_path, "r", encoding=encoding_name, errors="replace") as f:
+    with open(hosts_path, "r", encoding=encoding_name, errors="replace", newline="") as f:
         text = f.read()
 
     # utf-16/utf-32 系列 codec 不消费 BOM，读取后首行残留 \ufeff；

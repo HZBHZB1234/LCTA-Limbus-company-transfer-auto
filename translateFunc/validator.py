@@ -264,7 +264,12 @@ class RuleBasedValidator:
             # 4. 每个效果只检查一次：原 ID 或对应中文名任一存在即可
             for effect_id in sorted(source_ids):
                 cn_name = self._affect_id_to_cn.get(effect_id, "")
-                if effect_id in cn_ids or (cn_name and cn_name in cn_text):
+                if effect_id in cn_ids or (
+                    cn_name and re.search(
+                        r'(?<![\w])' + re.escape(cn_name) + r'(?![\w])',
+                        cn_text,
+                    )
+                ):
                     continue
 
                 if cn_name:

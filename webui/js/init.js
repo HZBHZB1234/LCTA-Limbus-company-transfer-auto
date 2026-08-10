@@ -103,6 +103,8 @@ window.addEventListener('pywebviewready', function() {
                             window._pendingWelcomeContent = { type: 'html', html: simpleMarkdownToHtml(result.message) };
                             goAndShow('welcome');
                         }
+                }).catch(function(error) {
+                    console.error('检查欢迎提示失败:', error);
                 });
 
                 fancyManager = new FancyManager();
@@ -120,7 +122,9 @@ window.addEventListener('pywebviewready', function() {
                     autoCheckUpdates();
                     }
                 }
-            );
+            ).catch(function(error) {
+                console.error('初始化GitHub失败:', error);
+            });
 
             pywebview.api.init_log();
 
@@ -170,6 +174,9 @@ window.addEventListener('pywebviewready', function() {
                     };
                 }
             });
+        })
+        .catch(function(error) {
+            console.error('获取启动数据失败:', error);
         });
 
     pywebview.api.run_func('change_icon').catch(

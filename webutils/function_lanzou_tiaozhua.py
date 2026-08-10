@@ -136,7 +136,7 @@ def function_lanzou_tiaozhua_main(modal_id):
     if enable_cache:
         version = check_tiaozhua(modal_id, file_list)
         version_config = cache_path / 'tiaozhua_version.txt'
-        if version_config.exists() and version and \
+        if version_config.exists() and mod_.exists() and version and \
                 version == version_config.read_text(encoding='utf-8'):
             _log_manager.log_modal_process("缓存已存在，无需下载", modal_id)
         elif download_tiaozhua(modal_id, cache_path, file_list):

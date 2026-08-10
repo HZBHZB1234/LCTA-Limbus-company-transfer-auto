@@ -857,12 +857,14 @@ class FileProcessor:
                             recovered_by=supplemental_call,
                         )
 
-                    for failed_call in failed_format_calls:
-                        self._mark_call_recovered(
-                            failed_call,
-                            recovery_kind="format_fallback",
-                            recovered_by=selected_call_record,
-                        )
+                    # 仅当该部分最终完全解决时才标记格式失败调用为 recovered
+                    if unresolved_count == 0:
+                        for failed_call in failed_format_calls:
+                            self._mark_call_recovered(
+                                failed_call,
+                                recovery_kind="format_fallback",
+                                recovered_by=selected_call_record,
+                            )
 
                 result.extend(part_result)
 
@@ -1351,35 +1353,46 @@ class FileProcessor:
 
     def _load_jsons(self) -> ProcessOutcome | None:
         """加载 KR/EN/JP/LLC JSON 文件。出错时返回 ProcessOutcome。"""
+        kr_path = self.path_config.KR_path
         try:
-            with open(self.path_config.KR_path, "r", encoding="utf-8-sig") as f:
+            with open(kr_path, "r", encoding="utf-8-sig") as f:
                 self.kr_json = json.load(f)
-            try:
-                with open(self.path_config.EN_path, "r", encoding="utf-8-sig") as f:
-                    self.en_json = json.load(f)
-            except FileNotFoundError:
-                _logger.debug(f"[{self.file_name}] EN 参考文件缺失: {self.path_config.EN_path}")
-                self.en_json = deepcopy(self.kr_json)
-            try:
-                with open(self.path_config.JP_path, "r", encoding="utf-8-sig") as f:
-                    self.jp_json = json.load(f)
-            except FileNotFoundError:
-                _logger.debug(f"[{self.file_name}] JP 参考文件缺失: {self.path_config.JP_path}")
-                self.jp_json = deepcopy(self.kr_json)
-            try:
-                with open(self.path_config.LLC_path, "r", encoding="utf-8-sig") as f:
-                    self.llc_json = json.load(f)
-            except FileNotFoundError:
-                _logger.debug(f"[{self.file_name}] LLC 参考文件缺失: {self.path_config.LLC_path}")
-                self.llc_json = {}
         except json.JSONDecodeError as e:
-            _logger.exception(f"[{self.file_name}] JSON 解析失败: {self.path_config.KR_path} (line {e.lineno}, col {e.colno})")
+            _logger.exception(
+                f"[{self.file_name}] JSON 解析失败: {kr_path} (line {e.lineno}, col {e.colno})"
+            )
             self._save_except()
             return ProcessOutcome(
                 ProcessResult.JSON_DECODE_ERROR,
                 self.file_name,
-                {"file_path": str(self.path_config.KR_path), "reason": f"line {e.lineno}, col {e.colno}: {e.msg}"},
+                {"file_path": str(kr_path), "reason": f"line {e.lineno}, col {e.colno}: {e.msg}"},
             )
+        except OSError as e:
+            _logger.exception(f"[{self.file_name}] 读取失败: {kr_path}: {e}")
+            self._save_except()
+            return ProcessOutcome(
+                ProcessResult.JSON_DECODE_ERROR,
+                self.file_name,
+                {"file_path": str(kr_path), "reason": str(e)},
+            )
+
+        # EN/JP/LLC 为可选参考文件：缺失或损坏时按缺失回退，不中断流程
+        for attr, path, fallback in (
+            ("en_json", self.path_config.EN_path, deepcopy(self.kr_json)),
+            ("jp_json", self.path_config.JP_path, deepcopy(self.kr_json)),
+            ("llc_json", self.path_config.LLC_path, {}),
+        ):
+            try:
+                with open(path, "r", encoding="utf-8-sig") as f:
+                    setattr(self, attr, json.load(f))
+            except FileNotFoundError:
+                _logger.debug(f"[{self.file_name}] 参考文件缺失: {path}")
+                setattr(self, attr, fallback)
+            except (json.JSONDecodeError, OSError) as e:
+                _logger.warning(
+                    f"[{self.file_name}] 参考文件解析失败: {path}（{e}），按缺失回退"
+                )
+                setattr(self, attr, fallback)
         return None
 
     def _check_empty(self) -> ProcessOutcome | None:
@@ -1415,6 +1428,11 @@ class FileProcessor:
         if self.llc_index and self.path_config.LLC_path.exists():
             missing_keys = set(self.kr_index.keys()) - set(self.llc_index.keys())
             if not missing_keys:
+                if self.is_story:
+                    _logger.warning(
+                        f"[{self.file_name}] 故事文件按位置键判定已翻译，"
+                        "无法检测中间行插入/删除导致的旧译文错位"
+                    )
                 self._save_llc()
                 return ProcessOutcome(ProcessResult.ALREADY_TRANSLATED, self.file_name)
             _logger.info(
@@ -1500,11 +1518,13 @@ class FileProcessor:
         shutil.copy2(self.path_config.LLC_path, self.path_config.target_file)
 
     def _save_except(self) -> None:
-        """回退保存：依次尝试 LLC → EN → JP → KR。"""
+        """回退保存：依次尝试 LLC → EN → JP → KR（跳过无效 JSON 源）。"""
         for path_attr in ("LLC_path", "EN_path", "JP_path", "KR_path"):
             try:
                 src = getattr(self.path_config, path_attr)
                 if src.exists():
+                    with open(src, "r", encoding="utf-8-sig") as f:
+                        json.load(f)
                     shutil.copy2(src, self.path_config.target_file)
                     return
             except Exception:

@@ -189,10 +189,9 @@ class FancyManager {
         this.selectedRuleset.rules = newRules;
 
         // 重新选中该规则集（刷新高亮）
-        this.listManager.setSelectedItem(newName);
-        // 刷新列表显示（名称可能已变）
         this.listManager.items = this.rulesets.map(rs => rs.name);
         this.listManager.updateList();
+        this.listManager.setSelectedItem(newName);
 
         // 持久化到后端
         try {

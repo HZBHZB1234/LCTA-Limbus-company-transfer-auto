@@ -129,7 +129,10 @@ class PackagesMixin:
     def get_installed_packages(self):
         '''获取翻译包列表'''
         try:
-            enable = check_lang_enabled(ConfigManager().get('game_path', ''))
+            game_path = ConfigManager().get('game_path', '')
+            if not game_path:
+                return {"success": True, "enable": False}
+            enable = check_lang_enabled(game_path)
             if not enable:
                 return {"success": True, "enable": False}
             packages, selected = find_installed_packages()

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import requests
 
 from globalManagers.LogManager import LogManager
+from globalManagers.exceptions import CancelRunning
 
 if TYPE_CHECKING:
     from webFunc.GithubDownload import ReleaseAsset
@@ -72,6 +73,8 @@ def download_with(url, save_path, size=0, chunk_size=1024 * 100,
                     f"文件校验失败: 期望大小 {size} 字节，实际大小 {actual_size} 字节")
                 return False
         return True
+    except CancelRunning:
+        raise
     except Exception as e:
         _log_manager.log(f"\n下载失败 ({url}): {e}")
         _log_manager.log_error(e)
@@ -142,6 +145,8 @@ def download_with_github(asset: 'ReleaseAsset', save_path, chunk_size=1024 * 100
             else:
                 _log_manager.log(f"下载失败 (URL {i + 1}/{len_proxies})")
 
+        except CancelRunning:
+            raise
         except Exception as e:
             _log_manager.log(f"下载失败 (URL {i + 1}/{len_proxies}): {e}")
             _log_manager.log_error(e)

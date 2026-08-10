@@ -4,12 +4,12 @@ translateFunc.TranslationPipeline 的 WebUI 薄封装。
 负责：配置加载、临时目录设置、UI 回调绑定、产物打包。
 """
 import os
-import time
+import sys
 import tempfile
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from datetime import datetime
-from contextlib import suppress
-from typing import Callable
+from typing import Callable, Iterator
 
 from translateFunc import TranslationPipeline, TranslateConfig
 from globalManagers.LogManager import LogManager
@@ -20,19 +20,44 @@ from webutils.utils.io import zip_folder
 _log_manager = LogManager()
 
 
+@contextmanager
+def _translation_tmpdir() -> Iterator[str]:
+    """翻译用临时目录：清理失败不顶替业务异常。
+
+    取消后 worker 线程可能仍在写临时目录，立刻 rmtree 会抛
+    PermissionError 顶替 CancelRunning（见 workers.py 取消语义）。
+    Python 3.10+ 可用 TemporaryDirectory(ignore_cleanup_errors=True)，
+    3.9（打包产物内嵌 3.9.6）无此参数，统一用 suppress 兜底。
+    注意：3.9 下清理失败会残留临时目录于 %TEMP%（OS 自清理，可接受）。
+    """
+    if sys.version_info >= (3, 10):
+        ctx = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+    else:
+        ctx = tempfile.TemporaryDirectory()
+    tmpdir = ctx.__enter__()
+    try:
+        yield tmpdir
+    finally:
+        with suppress(Exception):
+            ctx.cleanup()
+
+
 def translate_main(
     modal_id,
     translator_config: dict,
     formating_function: Callable[[dict, dict], dict],
-):
+) -> bool:
     """WebUI 翻译主入口。
 
     Args:
         modal_id: UI 模态框标识符，用于进度上报。
         translator_config: 以翻译器名称为键的 API 设置字典。
         formating_function: (api_settings, translator_cls) -> 格式化后的 api_settings。
+
+    Returns:
+        汉化包打包是否成功。
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _translation_tmpdir() as tmpdir:
         _log_manager.log_modal_process("开始初始化", modal_id)
         _log_manager.log_modal_status("正在初始化", modal_id)
 
@@ -110,20 +135,31 @@ def translate_main(
         _copy_assets(target_dir, config.game_path, VERSION)
 
         work_dir = Path(os.getcwd())
-        r = zip_folder(target_dir, work_dir / f"LCTA_{VERSION}.zip")
+        r = zip_folder(target_dir, work_dir / f"LCTA_{VERSION}.zip", modal_id=modal_id)
         if r:
             _log_manager.log_modal_process("压缩完成", modal_id)
             _log_manager.log_modal_status("翻译完成", modal_id)
             _log_manager.update_modal_progress(100, "全部操作完成", modal_id)
+            return True
         else:
             _log_manager.log_modal_process("压缩失败", modal_id)
             _log_manager.log_modal_status("操作失败", modal_id)
-            _log_manager.update_modal_progress(100, "操作失败", modal_id)
-            os.system(f'explorer "{tmp}"')
-            _log_manager.log_modal_process(
-                "目前已打开产物文件夹，如果有需要，请在60秒内保存数据", modal_id
-            )
-            time.sleep(60)
+            _log_manager.update_modal_progress(0, "操作失败", modal_id)
+            # 临时目录在 with 块退出后即被删除，失败时将产物复制到持久目录，
+            # 避免"翻译结果直接消失"（旧实现靠 sleep(60) 留时间手动保存）
+            preserved_dir = Path(os.getcwd()) / "logs" / "translation_output" / f"LCTA_{VERSION}"
+            try:
+                if target_dir.exists():
+                    import shutil as _shutil
+                    _shutil.copytree(target_dir, preserved_dir, dirs_exist_ok=True)
+                    _log_manager.log_modal_process(
+                        f"打包失败，产物已保留至: {preserved_dir}", modal_id)
+            except Exception as exc:
+                _log_manager.log_error(exc)
+            if not (preserved_dir / "Info" / "version.json").exists():
+                _log_manager.log_modal_process(
+                    "打包失败且产物保留失败，请重新翻译", modal_id)
+            return False
 
 
 def _generate_version() -> str:

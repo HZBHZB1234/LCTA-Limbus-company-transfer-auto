@@ -134,7 +134,9 @@ def _run_extract(decompile_text: str, decompile_file: str, candidate_profile: st
         raise ValueError("反编译文本为空：请粘贴文本或选择反编译 .c 文件")
 
     on_log(f"阶段 1（提取）：从反编译文本提取解密参数（{len(text)} 字符）...")
+    cancel_check()
     ext = extract_from_text(text)
+    cancel_check()
     rep = build_report(ext, version=Path(decompile_file).name if decompile_file else "",
                        func_addr="")
     on_log(f"  提取：header_size={ext.header_size} header_seed={ext.header_seed} "
@@ -156,7 +158,9 @@ def _run_verify(metadata_path: str, profile: dict, run_dir: Path, on_log: Callab
                 cancel_check: Callable) -> Report:
     on_log("阶段 2（验证）：参数级验证闭环（header 解密 + 布局判定 + 节段结构门）...")
     metadata = Path(metadata_path).read_bytes()
+    cancel_check()
     rep = verify_profile(metadata, profile, run_dir, "verify-report")
+    cancel_check()
     on_log(f"  裁决：{rep.verdict()}")
     return rep
 
@@ -169,7 +173,9 @@ def _run_solve(metadata_path: str, profile: dict, reference_path: str,
     reference = parse_reference(Path(reference_path).read_bytes())
     rep = Report(tool="solve_section_map", version=profile.get("profile_id", ""),
                  title="31 段映射求解")
+    cancel_check()
     solution = solve(metadata, profile, reference, rep)
+    cancel_check()
     section_map = {
         "profile_id": profile.get("profile_id", ""),
         "protected": {
@@ -214,6 +220,7 @@ def _run_apply(metadata_path: str, profile: dict, section_map: dict,
     on_log("阶段 4（提升）：生成正式 profile 并自检重建 ...")
     metadata = Path(metadata_path).read_bytes()
     reference = parse_reference(Path(reference_path).read_bytes())
+    cancel_check()
     final_profile = build_profile(metadata, profile, section_map, reference, profile_id)
     rep = Report(tool="apply_profile", version=profile_id, title="候选提升为正式 profile")
     entries, _layout, table = decrypt_header(metadata, profile)

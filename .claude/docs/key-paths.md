@@ -503,6 +503,8 @@ Both paths
     → state-change logs via LogManager.log_modal_process() (规则集加载/编译完成/技能颜色缓存命中或重建/开始处理/完成汇总/每文件错误) —
       pushed to the modal when modal_id is given, otherwise plain file/console INFO on app.log;
       per-file error detail still logs to `fancy` logger with traceback
+  → API 层 LCTA_API.fancy_main() 返回 {"success": bool, "message": str}；文件循环头 check_running
+    支持取消（取消返回 "已取消"，前端 modal.cancel()）
 ```
 
 ```
@@ -574,6 +576,8 @@ JS: user clicks "check for updates" or auto-check on startup
   → restart required                manual program restart needed（依赖变更同样在重启后生效）
 ```
 
+> 注：`perform_update_in_modal` 已把 modal_id 传给 Updater（下载阶段可取消），返回 `{"success": bool, "message": str}`；取消返回 `"已取消"` + `del_modal_list`。前端 `doUpdate` 对 `"已取消"` 走 `modal.cancel()`。
+
 Files: `webui/app.py`, `webutils/update.py`, `webFunc/GithubDownload.py`, `start_webui.py`
 
 ## 11. Manual Update from Local Package
@@ -589,6 +593,8 @@ JS: user clicks "从本地更新包手动更新" in debug settings
     → webutils/update.py            Updater.update_files()
   → restart required                manual program restart needed
 ```
+
+> 注：`perform_update_from_file` 在依赖与文件替换之间已有 `check_modal_running` 检查点，取消返回 `"已取消"` + `del_modal_list`；前端特判 `"已取消"` 走 `modal.cancel()`。
 
 Files: `webui/js/features.js`, `webui/app.py`, `webutils/update.py`
 
@@ -615,6 +621,8 @@ JS: user drags files onto window
     → update:                     handlers/update.py Updater() via webutils/update.py
     → progress:                   LogManager modal callbacks
 ```
+
+> 注：`evalFiles` 中 handler 抛 `CancelRunning` 立即上抛（不再吞成 errors），`drops.py` 捕获后返回 `"已取消"`；存在错误时不推 100% 进度。前端 `setupDragDropCallback` 的 `.then` 按 success/`已取消` 分支调用 `complete()`/`cancel()`，`.catch` 兜底关闭窗口。
 
 Files: `webui/js/features.js`, `webui/app.py`, `webutils/drop/`, `webutils/function_fancy.py`, `webutils/fancy/bus.py`, `webutils/update.py`
 
@@ -688,6 +696,8 @@ User clicks 「下载(导入)调爪文本修改包」(download.html)
               → scan root *.json → is_tiaozhua_config/is_bus_ruleset
               → import_bus_rules_file()           save as ruleset in fancy ruleset folder
 ```
+
+> 注：前端 configManager 保存失败时窗口会 complete(false) 关闭；`download_with` 透传 `CancelRunning`（取消 → `"已取消"` 特判），下载失败不再被伪装成成功。
 
 Launcher auto path: `launcher/updates.py UpdateBase.post_update` → `run_tiaozhua` (launcher.work.tiaozhua) → sets `ui_default.tiaozhua.install` → `function_lanzou_tiaozhua_main('安装调爪JSON')`.
 
@@ -804,6 +814,8 @@ JS: user opens 侧边栏「Metadata 恢复」页（首次导航懒加载）
       阶段2 verify.verify_profile()：header 解密 + 布局判定 + 节段结构门
       阶段3 solver.solve()：C1 记录大小 / C5 内容指纹 / C3 链装配 / 相4 重建 SHA-256
       阶段4 profile.build_profile()：正式 profile + 自检重建
+      阶段边界 + 各 _run_* 内重操作前后均有 cancel_check() 取消点；
+      取消 -> 返回 "已取消" + del_modal_list（modal_id 仅由前端注册，后端不再重复 add_modal_id）
       每阶段 report.json/md 落盘 <path_>/metadata_recovery/run_<时间戳>/
   -> 页面渲染 verdicts 徽标 + 输出文件列表
 

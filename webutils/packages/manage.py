@@ -9,6 +9,10 @@ from typing import Tuple
 import json
 
 from globalManagers.ConfigManager import ConfigManager
+from globalManagers.LogManager import LogManager
+from globalManagers.exceptions import CancelRunning
+
+_log_manager = LogManager()
 
 
 def safe_join_path(base_path, name):
@@ -59,7 +63,7 @@ def find_installed_packages() -> Tuple[list, str]:
         config_lang = {}
     return r, config_lang.get('lang', '')
 
-def use_translation_package(package_name: str):
+def use_translation_package(package_name: str, modal_id: str = "false"):
     game_path = ConfigManager().get('game_path', '')
     if not package_name or not game_path:
         raise ValueError("未选择汉化包或未设置游戏路径")
@@ -67,10 +71,12 @@ def use_translation_package(package_name: str):
     if not (lang_path / package_name).exists():
         raise FileNotFoundError(f"汉化包不存在: {package_name}")
     lang_config = lang_path / 'config.json'
+    _log_manager.check_running(modal_id)
     try:
         config_lang = json.loads(lang_config.read_text(encoding='utf-8'))
     except:
         config_lang = {}
+    _log_manager.check_running(modal_id)
     config_lang['lang'] = package_name
     lang_config.write_text(json.dumps(config_lang, indent=4, ensure_ascii=False))
     return True

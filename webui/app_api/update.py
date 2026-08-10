@@ -62,28 +62,30 @@ class UpdateMixin:
         """在模态窗口中执行更新"""
         try:
             self.add_modal_log("开始执行更新...", modal_id)
-        
-            if os.getenv('update') == False:
-                self.add_modal_log("当前处于打包环境，跳过更新", modal_id)
-                return 
 
             # 创建更新器实例，使用新配置
             updater = Updater(
-                "HZBHZB1234", 
+                "HZBHZB1234",
                 "LCTA-Limbus-company-transfer-auto",
                 delete_old_files=ConfigManager().get("delete_updating", True),
-                                use_proxy=ConfigManager().get("update_use_proxy", True),
-                only_stable=ConfigManager().get("update_only_stable", False)
+                use_proxy=ConfigManager().get("update_use_proxy", True),
+                only_stable=ConfigManager().get("update_only_stable", False),
+                modal_id=modal_id
             )
-        
+
             # 执行更新
             result = updater.check_and_update(self.current_version)
-            
-            return result
+            if result:
+                return {"success": True, "message": "更新完成"}
+            return {"success": False, "message": "更新失败"}
+        except CancelRunning:
+            self.log('更新任务已取消')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
         except Exception as e:
             self.add_modal_log(f"更新失败：{e}", modal_id)
             self.log_error(e)
-            return False
+            return {"success": False, "message": str(e)}
 
     def perform_update_from_file(self, file_path, modal_id=""):
         """从本地 LCTA 更新包 (zip) 执行手动更新"""
@@ -147,6 +149,7 @@ class UpdateMixin:
             
         except CancelRunning:
             self.log('手动更新任务已取消')
+            self.del_modal_list(modal_id)
             return {"success": False, "message": "已取消"}
         except Exception as e:
             self.add_modal_log(f"更新失败: {e}", modal_id)

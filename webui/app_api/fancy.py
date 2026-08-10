@@ -9,6 +9,7 @@ from globalManagers.ConfigManager import ConfigManager
 from webutils.fancy.builtin_data import fancy as builtinFancyConfig
 from webutils.function_fancy import fancy_main
 from webui.rule_editor_api import RuleEditorAPI
+from webui.app_api.exceptions import CancelRunning
 
 class FancyMixin:
 
@@ -57,7 +58,13 @@ class FancyMixin:
         except Exception as e:
             self.log_manager.log_error(e)
             raise RuntimeError('获取当前安装汉化包失败')
-        fancy_main(gamePath, config_lang, config_list, enableMap, modal_id=modal_id)
+        try:
+            fancy_main(gamePath, config_lang, config_list, enableMap, modal_id=modal_id)
+        except CancelRunning:
+            self.log('美化任务已取消')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
+        return {"success": True, "message": "美化完成"}
 
     def check_fancy_marker(self) -> dict:
         """检查当前语言包目录是否存在美化标记文件"""

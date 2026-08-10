@@ -61,8 +61,6 @@ class MetadataRecoveryMixin:
     def metadata_recovery_run(self, config, modal_id=""):
         """执行完整离线恢复流水线（pywebview 后台线程 + 模态窗口进度）。"""
         try:
-            if modal_id and modal_id != "false":
-                self.add_modal_id(modal_id)
             self.add_modal_log("Metadata 恢复流水线开始", modal_id)
 
             def on_log(msg):
@@ -91,6 +89,7 @@ class MetadataRecoveryMixin:
             return result
         except CancelRunning:
             self.add_modal_log("Metadata 恢复已取消", modal_id)
+            self.del_modal_list(modal_id)
             return {"success": False, "message": "已取消",
                     "run_dir": str(output_dir())}
         except Exception as e:

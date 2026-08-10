@@ -5,6 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from globalManagers.ConfigManager import ConfigManager
+from webutils import function_fetch_main
 from webutils.function_translate import translate_main
 from webui.app_api.exceptions import CancelRunning
 
@@ -18,11 +19,13 @@ class TranslatorMixin:
         try:
             self.add_modal_log("开始翻译...", modal_id)
             os.environ['DUMP'] = str(ConfigManager().get('ui_default.translator.dump', False)).lower()
-            translate_main(modal_id,
-                           translator_config,
-                           formating_function=self.format_api_settings)
-            self.add_modal_log("翻译完成", modal_id)
-            return {"success": True, "message": "翻译完成"}
+            ok = translate_main(modal_id,
+                                translator_config,
+                                formating_function=self.format_api_settings)
+            self.add_modal_log("翻译完成" if ok else "翻译失败", modal_id)
+            if ok:
+                return {"success": True, "message": "翻译完成"}
+            return {"success": False, "message": "打包汉化包失败，详情见模态日志"}
         except CancelRunning:
             self.log('用户已取消翻译流程')
             self.del_modal_list(modal_id)
@@ -52,7 +55,7 @@ class TranslatorMixin:
                             result_settings[setting_id] = float(result_settings[setting_id])
         return result_settings
 
-    def test_api(self, key: str, api_settings: dict) -> dict:
+    def test_api(self, key: str, api_settings: dict, modal_id: str = "false") -> dict:
         """测试API密钥是否有效"""
         try:
             self.log(f"开始测试API密钥: {key}")
@@ -68,9 +71,14 @@ class TranslatorMixin:
             if not self.debug_mode:
                 logger_c.setLevel(logging.DEBUG)
             lang_dict = self.TKIT_MACHINE[key]['langCode']
-            kr_result = translator.translate("안녕", lang_dict['kr'], lang_dict['zh']) if lang_dict['kr'] else '暂不支持该语言'
-            en_result = translator.translate("Hello", lang_dict['en'], lang_dict['zh']) if lang_dict['en'] else '暂不支持该语言'
-            jp_result = translator.translate("こんにちは", lang_dict['jp'], lang_dict['zh']) if lang_dict['jp'] else '暂不支持该语言'
+
+            def _do(text, code_from, code_to):
+                self.check_modal_running(modal_id, log=False)
+                return translator.translate(text, code_from, code_to)
+
+            kr_result = _do("안녕", lang_dict['kr'], lang_dict['zh']) if lang_dict['kr'] else '暂不支持该语言'
+            en_result = _do("Hello", lang_dict['en'], lang_dict['zh']) if lang_dict['en'] else '暂不支持该语言'
+            jp_result = _do("こんにちは", lang_dict['jp'], lang_dict['zh']) if lang_dict['jp'] else '暂不支持该语言'
             self.log("API密钥测试成功")
             result_dict = {
                 'kr': kr_result,
@@ -79,6 +87,10 @@ class TranslatorMixin:
             }
             self.log(f'结果:{result_dict}')
             return {"success": True, "message": result_dict}
+        except CancelRunning:
+            self.log('API测试已取消')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}
@@ -94,6 +106,10 @@ class TranslatorMixin:
             )
             self.add_modal_log("专有词汇抓取成功", modal_id)
             return {"success": True, "message": "专有词汇抓取成功"}
+        except CancelRunning:
+            self.log('专有词汇抓取已取消')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
         except Exception as e:
             self.log_error(e)
             return {"success": False, "message": str(e)}

@@ -171,8 +171,10 @@ def change_font_for_package(path, path_font, modal_id = None):
                 _log_manager.log('文件夹冲突')
                 return False, "文件夹冲突"
             _log_manager.log_modal_process('正在创建文件夹副本...', modal_id)
+            _log_manager.check_running(modal_id)
             shutil.copytree(path, path+'_font')
             _log_manager.log_modal_process('正在替换字体文件...', modal_id)
+            _log_manager.check_running(modal_id)
 
             shutil.rmtree(f'{path}_font\\Font\\Context')
             os.mkdir(f'{path}_font\\Font\\Context')
@@ -201,7 +203,7 @@ def change_font_for_package(path, path_font, modal_id = None):
         new_path = os.path.join(directory, new_filename)
         if os.path.exists(new_path):
             os.remove(new_path)
-        zip_folder(f'{temp_dir}\\{dir_name}', new_path)
+        zip_folder(f'{temp_dir}\\{dir_name}', new_path, modal_id=modal_id)
 
         _log_manager.log_modal_process('字体替换完成', modal_id)
         return True, "正常完成"
@@ -209,6 +211,7 @@ def change_font_for_package(path, path_font, modal_id = None):
 
 def install_translation_package(package_path, game_path, modal_id: str = None):    
     _log_manager.log_modal_process(f"准备安装汉化包: {package_path}", modal_id)
+    _log_manager.check_running(modal_id)
     game_path = os.path.join(game_path, 'LimbusCompany_Data', 'Lang')
     
     # 确保目标目录存在
@@ -232,6 +235,7 @@ def install_translation_package(package_path, game_path, modal_id: str = None):
     target_package_path = os.path.join(game_path, package_name)
     if os.path.exists(target_package_path) and os.path.isdir(target_package_path):
         _log_manager.log_modal_process(f"正在删除旧的汉化包文件夹: {package_name}", modal_id)
+        _log_manager.check_running(modal_id)
         try:
             shutil.rmtree(target_package_path)
             _log_manager.log(f"已删除旧汉化包文件夹: {package_name}")
@@ -253,11 +257,20 @@ def install_translation_package(package_path, game_path, modal_id: str = None):
     else:
         _log_manager.log_modal_process("开始复制文件夹...", modal_id)
         dest_path = os.path.join(game_path, package_name)
-        shutil.copytree(package_path, dest_path)
+        os.makedirs(dest_path, exist_ok=True)
+        for root, dirs, files in os.walk(package_path):
+            _log_manager.check_running(modal_id)
+            rel_root = os.path.relpath(root, package_path)
+            target_root = dest_path if rel_root == '.' else os.path.join(dest_path, rel_root)
+            os.makedirs(target_root, exist_ok=True)
+            for file in files:
+                _log_manager.check_running(modal_id)
+                shutil.copy2(os.path.join(root, file), os.path.join(target_root, file))
     
     # 写入配置文件
     config_path = os.path.join(game_path, 'config.json')
     _log_manager.log_modal_process("正在写入配置文件...", modal_id)
+    _log_manager.check_running(modal_id)
     with open(config_path, 'w', encoding='utf-8') as file:
         json.dump({
             "lang": package_name,

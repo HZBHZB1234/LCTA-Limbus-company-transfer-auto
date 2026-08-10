@@ -686,22 +686,30 @@ class APIConfigManager {
             modal.complete(false, '测试失败');
             return;
         }
-        const result = await pywebview.api.test_api(
-            this.selectedService, apiConfig
-        )
+        try {
+            const result = await pywebview.api.test_api(
+                this.selectedService, apiConfig, modal.id
+            )
 
-        if (result.success) {
-            modal.addLog('API配置测试成功！');
-            modal.addLog('测试信息如下');
-            const result_json = result.message;
-            modal.addLog(`韩文：안녕 -> ${result_json.kr}`);
-            modal.addLog(`英文：hello -> ${result_json.en}`);
-            modal.addLog(`日文：こんにちは -> ${result_json.jp}`);
-            modal.complete(true, '测试成功');
-        } else {
-            modal.addLog('API配置测试失败！');
-            modal.addLog(result.message);
-            modal.complete(false, '测试失败');
+            if (result && result.message === '已取消') {
+                modal.cancel();
+                return;
+            }
+            if (result.success) {
+                modal.addLog('API配置测试成功！');
+                modal.addLog('测试信息如下');
+                const result_json = result.message;
+                modal.addLog(`韩文：안녕 -> ${result_json.kr}`);
+                modal.addLog(`英文：hello -> ${result_json.en}`);
+                modal.addLog(`日文：こんにちは -> ${result_json.jp}`);
+                modal.complete(true, '测试成功');
+            } else {
+                modal.addLog('API配置测试失败！');
+                modal.addLog(result.message);
+                modal.complete(false, '测试失败');
+            }
+        } catch (error) {
+            modal.complete(false, '测试过程中发生错误: ' + error);
         }
     }
 }

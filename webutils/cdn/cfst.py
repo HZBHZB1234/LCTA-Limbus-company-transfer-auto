@@ -18,6 +18,7 @@ from .constants import (
     IP_FILE,
     IP_TXT_URL,
 )
+from globalManagers.exceptions import CancelRunning
 
 
 def _get_app_dir() -> str:
@@ -295,6 +296,8 @@ def run_cfst(
 
         return result
 
+    except CancelRunning:
+        raise
     except Exception as e:
         if log_cb:
             log_cb(f"cfst 运行出错：{e}")

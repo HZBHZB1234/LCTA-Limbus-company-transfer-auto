@@ -277,9 +277,15 @@ class CoreMixin:
 
     def _wait_continue(self, modal_id):
         for _ in range(_MODAL_WAIT_MAX_SECONDS):
-            if self._check_modal_running(modal_id) != "pause":
+            status = self._check_modal_running(modal_id)
+            if status == "cancel":
+                raise CancelRunning
+            if status != "pause":
                 return
             time.sleep(1)
+        # 超时兜底：最后再查一次，避免超时瞬间恰好处于 cancel
+        if self._check_modal_running(modal_id) == "cancel":
+            raise CancelRunning
 
     def check_modal_running(self, modal_id, log=True):
         if log:
@@ -363,6 +369,10 @@ class CoreMixin:
 
     def update_modal_progress(self, percent, text, modal_id,log=True):
         """更新模态窗口进度"""
+        try:
+            percent = max(0, min(100, int(percent)))
+        except (TypeError, ValueError, OverflowError):
+            percent = 0
         try:
             if log:
                 self.log(f"[{modal_id}] 进度变更至{percent}% 消息内容[{text}]")

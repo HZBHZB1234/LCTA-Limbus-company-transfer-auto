@@ -10,6 +10,7 @@ from typing import List, Optional
 from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 from .manage import safe_join_path
+from globalManagers.exceptions import CancelRunning
 
 
 def _sanitize_zip_member_name(name: str) -> str:
@@ -90,6 +91,7 @@ def clean_config_main(modal_id: str, clean_progress: bool = False, clean_notice:
     if custom_files:
         deleted_count = 0
         for file_path in custom_files:
+            _log_manager.check_running(modal_id)
             try:
                 if os.path.isfile(file_path):
                     deleted_count += clear_by_mod(file_path, modal_id)
@@ -98,13 +100,14 @@ def clean_config_main(modal_id: str, clean_progress: bool = False, clean_notice:
                     _log_manager.log_modal_process(f"已删除mod目录{file_path}下的对应文件", modal_id)
                 else:
                     _log_manager.log_modal_process(f"{file_path} 不存在", modal_id)
+            except CancelRunning:
+                raise
             except Exception as e:
                 _log_manager.log_modal_process(f"删除 {file_path} 失败: {str(e)}", modal_id)
                 _log_manager.log_error(e)
         
         if deleted_count > 0:
             _log_manager.log_modal_process(f"已删除 {deleted_count} 个自定义文件/文件夹", modal_id)
-    
     _log_manager.log_modal_process("清理完成", modal_id)
     _log_manager.log_modal_status("操作完成", modal_id)
 
@@ -134,6 +137,7 @@ def clear_by_mod(mod_path: str, modal_id: str) -> int:
         
         deleted_count = 0
         for dir_path in dirs_to_delete:
+            _log_manager.check_running(modal_id)
             # 如果路径包含Installation，取其后的目录名
             if 'Installation/' in dir_path:
                 path_del = Path(dir_path).name
@@ -162,6 +166,8 @@ def clear_by_mod(mod_path: str, modal_id: str) -> int:
         
         return deleted_count
         
+    except CancelRunning:
+        raise
     except Exception as e:
         _log_manager.log_modal_process(f"处理mod清理时发生错误: {str(e)}", modal_id)
         _log_manager.log_error(e)

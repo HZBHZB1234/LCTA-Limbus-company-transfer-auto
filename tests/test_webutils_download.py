@@ -175,7 +175,7 @@ class TestBareRaiseWithContext:
                             lambda td, rp: str(tmp_path / "ourplay"))
         captured = {}
 
-        def fake_zip_folder(folder, out):
+        def fake_zip_folder(folder, out, modal_id=None):
             captured["out"] = out
             return False
 
@@ -262,7 +262,7 @@ class TestOutputToCwd:
         font.write_bytes(b"f")
         captured = {}
 
-        def fake_zip_folder(folder, out):
+        def fake_zip_folder(folder, out, modal_id=None):
             captured["out"] = out
             return True
 
@@ -277,7 +277,7 @@ class TestOutputToCwd:
         _write_workdir_zip(tmp_path)
         captured = {}
 
-        def fake_zip_folder(folder, out):
+        def fake_zip_folder(folder, out, modal_id=None):
             captured["out"] = out
             return True
 

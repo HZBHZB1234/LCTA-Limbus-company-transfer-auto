@@ -12,6 +12,7 @@ from typing import Optional, Set
 
 from globalManagers.LogManager import LogManager
 from .net import download_with
+from globalManagers.exceptions import CancelRunning
 
 _log_manager = LogManager()
 _7Z_DOWNLOAD_URL = "https://www.7-zip.org/"
@@ -30,11 +31,12 @@ _SYSTEM_7Z_PATHS = (
 # 压缩 / 解压
 # ============================================================
 
-def zip_folder(folder_path, output_path):
+def zip_folder(folder_path, output_path, modal_id=None):
     """将文件夹压缩为 ZIP 文件。"""
     try:
         with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(folder_path):
+                _log_manager.check_running(modal_id)
                 # 添加空文件夹到 zip
                 for dir in dirs:
                     dir_path = os.path.join(root, dir)
@@ -42,10 +44,18 @@ def zip_folder(folder_path, output_path):
                     zipf.write(dir_path, arc_path)
                 # 添加文件到 zip
                 for file in files:
+                    _log_manager.check_running(modal_id)
                     file_path = os.path.join(root, file)
                     arc_path = os.path.relpath(file_path, os.path.dirname(folder_path))
                     zipf.write(file_path, arc_path)
         return True
+    except CancelRunning:
+        try:
+            if output_path and os.path.exists(output_path):
+                os.remove(output_path)
+        except Exception:
+            pass
+        raise
     except Exception as e:
         _log_manager.log(f"压缩文件夹失败: {e}")
         _log_manager.log_error(e)

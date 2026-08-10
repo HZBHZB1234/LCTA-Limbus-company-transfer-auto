@@ -197,6 +197,10 @@ function installSelectedPackage() {
 
     pywebview.api.install_translation(packageName, modal.id)
         .then(function(result) {
+            if (result && result.message === '已取消') {
+                modal.cancel();
+                return;
+            }
             if (result.success) {
                 modal.complete(true, '汉化包安装成功');
             } else {
@@ -253,15 +257,23 @@ async function changeFontForPackage() {
             if (fontPath) {
                 const modal = new ProgressModal('更换字体');
                 modal.setStatus('开始');
-                const result = await pywebview.api.change_font_for_package(packageName, fontPath, modal.id);
-                if (result.success) {
-                    modal.complete(true, '完成更换字体');
-                    setTimeout(modal.close, 500);
-                    refreshInstallPackageList();
-                } else {
-                    modal.addLog('更换失败');
-                    modal.addLog(result.message);
-                    modal.complete(false, result.message);
+                try {
+                    const result = await pywebview.api.change_font_for_package(packageName, fontPath, modal.id);
+                    if (result && result.message === '已取消') {
+                        modal.cancel();
+                        return;
+                    }
+                    if (result.success) {
+                        modal.complete(true, '完成更换字体');
+                        setTimeout(() => modal.close(), 500);
+                        refreshInstallPackageList();
+                    } else {
+                        modal.addLog('更换失败');
+                        modal.addLog(result.message);
+                        modal.complete(false, result.message);
+                    }
+                } catch (error) {
+                    modal.complete(false, '更换字体时出错: ' + error);
                 }
             }
         }
@@ -413,7 +425,7 @@ function getFontFromInstalled() {
                                 .then(function(result) {
                                     if (result.success) {
                                         progressModal.complete(true, '字体导出成功');
-                                    setTimeout(progressModal.close, 250);
+                                    setTimeout(() => progressModal.close(), 250);
                                     } else {
                                         progressModal.complete(false, '字体导出失败: ' + result.message);
                                     }
@@ -509,6 +521,10 @@ function useSelectedPackage() {
 
     pywebview.api.use_translation(packageName, modal.id)
         .then(function(result) {
+            if (result && result.message === '已取消') {
+                modal.cancel();
+                return;
+            }
             if (result.success) {
                 modal.complete(true, '汉化包切换成功');
 

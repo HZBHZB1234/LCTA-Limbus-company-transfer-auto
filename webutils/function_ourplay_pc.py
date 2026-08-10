@@ -137,7 +137,7 @@ def _process_ourplay_package(temp_dir, modal_id, font_option, cache_path, hash_o
         _log_manager.log("已替换为缓存字体")
 
     _log_manager.log("正在压缩文件...")
-    if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua', 'ourplay.zip'):
+    if not zip_folder(f'{temp_dir}\\com.ProjectMoon.LimbusCompany\\Lang\\OurPlayHanHua', 'ourplay.zip', modal_id=modal_id):
         _log_manager.log_modal_process("处理文件时出现错误", modal_id)
         raise Exception("打包文件时出现错误")
 

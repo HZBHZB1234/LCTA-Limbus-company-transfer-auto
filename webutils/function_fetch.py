@@ -11,6 +11,7 @@ def function_fetch_main(modal_id, **kwargs):
     _log_manager.log_modal_status("正在抓取数据", modal_id)
     data = []
     for i in range(10):
+        _log_manager.check_running(modal_id)
         r=requests.get(f"https://paratranz.cn/api/projects/6860/terms?pageSize=800&page={i+1}",timeout=10)
         r.raise_for_status()
         _log_manager.log_modal_process(f"正在获取第{i+1}页数据", modal_id)

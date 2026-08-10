@@ -298,11 +298,19 @@ function doApplyFancy() {
     modal.addLog(`开始执行美化`);
     modal.addLog(`应用规则集${fancyManager.enabledMap}`);
     pywebview.api.fancy_main(fancyManager.rulesets, fancyManager.enabledMap, modal.id).then(
-        () => {
-            modal.complete(true, '完成美化');
-            setTimeout(() => {
-                modal.close();
-            }, 2000);
+        (result) => {
+            if (result && result.message === '已取消') {
+                modal.cancel();
+                return;
+            }
+            if (result && result.success) {
+                modal.complete(true, '完成美化');
+                setTimeout(() => {
+                    modal.close();
+                }, 2000);
+            } else {
+                modal.complete(false, '美化执行失败');
+            }
         }
     ).catch(
         (error) => {
@@ -362,7 +370,9 @@ function fetchProperNouns() {
         .then(() => {
             pywebview.api.fetch_proper_nouns(modal.id)
                 .then(function(result) {
-                    if (result.success) {
+                    if (result && result.message === '已取消') {
+                        modal.cancel();
+                    } else if (result.success) {
                         modal.complete(true, '专有词汇抓取成功');
                     } else {
                         modal.complete(false, '抓取失败: ' + result.message);
@@ -372,6 +382,9 @@ function fetchProperNouns() {
                     modal.complete(false, '抓取过程中发生错误: ' + error);
                 });
         })
+        .catch(function(error) {
+            modal.complete(false, '配置保存失败: ' + error);
+        });
 }
 
 
@@ -430,6 +443,9 @@ function downloadOurplay() {
             }).catch(function(error) {
                 modal.complete(false, '下载过程中发生错误: ' + error);
             });
+        })
+        .catch(function(error) {
+            modal.complete(false, '配置保存失败: ' + error);
         });
 }
 
@@ -437,11 +453,18 @@ async function downloadTiaozhua() {
     const modal = new ProgressModal('开始下载');
     modal.setStatus('正在初始化...');
     modal.addLog('开始下载任务');
-    await configManager.updateConfigValues(configManager.collectConfigFromUI());
+    try {
+        await configManager.updateConfigValues(configManager.collectConfigFromUI());
+    } catch (error) {
+        modal.complete(false, '配置保存失败: ' + error);
+        return;
+    }
     
     pywebview.api.download_lanzou_tiaozhua(
         modal.id).then(function(result) {
-        if (result.success) {
+        if (result && result.message === '已取消') {
+            modal.cancel();
+        } else if (result.success) {
             modal.complete(true, '下载任务已完成');
         } else {
             modal.complete(false, '下载失败: ' + result.message);
@@ -489,7 +512,7 @@ function cleanCache() {
                     modal.complete(true, '缓存清除成功');
                 } else {
                     if (result.message === '已取消') {
-                        modal.complete(null, '操作已取消');
+                        modal.cancel();
                     } else {
                         modal.complete(false, '清除失败: ' + result.message);
                     }
@@ -607,17 +630,17 @@ function downloadLLC() {
         'llc-dump-default': dumpDefault,
         'llc-download-source': download_source
     };
-    
+
+    const modal = new ProgressModal('下载零协汉化包');
+    modal.addLog('开始下载零协汉化包...');
+    modal.addLog(`压缩格式: ${zipType}`);
+    modal.addLog(`使用代理: ${useProxy ? '是' : '否'}`);
+    modal.addLog(`使用缓存: ${useCache ? '是' : '否'}`);
+    modal.addLog(`导出默认配置: ${dumpDefault ? '是' : '否'}`);
+    modal.addLog(`下载源: ${download_source}`);
+
     configManager.updateConfigValues(updates)
         .then(() => {
-            const modal = new ProgressModal('下载零协汉化包');
-            modal.addLog('开始下载零协汉化包...');
-            modal.addLog(`压缩格式: ${zipType}`);
-            modal.addLog(`使用代理: ${useProxy ? '是' : '否'}`);
-            modal.addLog(`使用缓存: ${useCache ? '是' : '否'}`);
-            modal.addLog(`导出默认配置: ${dumpDefault ? '是' : '否'}`);
-            modal.addLog(`下载源: ${download_source}`);
-            
             pywebview.api.download_llc_translation(modal.id).then(function(result) {
                 if (result.success) {
                     modal.complete(true, '零协汉化包下载成功');
@@ -631,6 +654,9 @@ function downloadLLC() {
             }).catch(function(error) {
                 modal.complete(false, '下载过程中发生错误: ' + error);
             });
+        })
+        .catch(function(error) {
+            modal.complete(false, '配置保存失败: ' + error);
         });
 }
 
@@ -638,10 +664,17 @@ async function downloadMachine() {
     const modal = new ProgressModal('开始下载');
     modal.setStatus('正在初始化下载过程...');
     modal.addLog('开始下载任务');
-    await configManager.updateConfigValues(configManager.collectConfigFromUI());
+    try {
+        await configManager.updateConfigValues(configManager.collectConfigFromUI());
+    } catch (error) {
+        modal.complete(false, '配置保存失败: ' + error);
+        return;
+    }
     
     pywebview.api.download_LCTA_auto(modal.id).then(function(result) {
-        if (result.success) {
+        if (result && result.message === '已取消') {
+            modal.cancel();
+        } else if (result.success) {
             modal.complete(true, '下载任务已完成');
         } else {
             modal.complete(false, '下载失败: ' + result.message);
@@ -696,6 +729,9 @@ function saveSettings() {
                             modal.close();
                         }, 500
                         )
+                    })
+                    .catch(function(error) {
+                        modal.complete(false, '保存配置刷新失败: ' + error);
                     });
             } else {
                 modal.complete(false, '保存失败: ' + result.message);
@@ -744,11 +780,11 @@ function resetConfig() {
                         // 重新加载配置
                         if (configManager) {
                             configManager.applyConfigToUI();
-                            modal.complete(true, '配置已重置');
-                            setTimeout(function() {
-                                modal.close();
-                            }, 1000)
                         }
+                        modal.complete(true, '配置已重置');
+                        setTimeout(function() {
+                            modal.close();
+                        }, 1000)
                     } else {
                         modal.complete(false, '配置重置失败: ' + result.message);
                     }
@@ -780,6 +816,10 @@ function manualUpdateFromLocalZip() {
                 
                 pywebview.api.perform_update_from_file(filePath, progressModal.id)
                     .then(function(result) {
+                        if (result && result.message === '已取消') {
+                            progressModal.cancel();
+                            return;
+                        }
                         if (result && result.success) {
                             progressModal.addLog('更新完成，请手动重启程序。');
                             progressModal.complete(true, '更新完成');
@@ -814,26 +854,20 @@ function manualCheckUpdates() {
             if (result.has_update) {
                 modal.complete(true, `发现新版本 ${result.latest_version}，请前往GitHub下载更新`);
                 setTimeout(() => {
-                    if (!modal.isMinimized) {
-                        modal.close();
-                        showUpdateInfo(result);
-                    }
+                    modal.close();
+                    showUpdateInfo(result);
                 }, 2000);
             } else {
                 modal.complete(true, '当前已是最新版本');
                 setTimeout(() => {
-                    if (!modal.isMinimized) {
-                        modal.close();
-                    }
+                    modal.close();
                 }, 2000);
             }
         })
         .catch(function(error) {
             modal.complete(false, '检查更新时发生错误: ' + error);
             setTimeout(() => {
-                if (!modal.isMinimized) {
-                    modal.close();
-                }
+                modal.close();
             }, 3000);
         });
 }
@@ -882,13 +916,16 @@ function doUpdate() {
             progressModal.addLog('开始下载并安装更新...');
             pywebview.api.perform_update_in_modal(progressModal.id)
                 .then(function(result) {
-                    if (!result) {
+                    if (result && result.message === '已取消') {
+                        progressModal.cancel();
+                        return;
+                    }
+                    if (!result || !result.success) {
                         progressModal.addLog('更新失败');
                         progressModal.complete(false, '更新失败');
                         return;
                     }
-                    progressModal.addLog('更新完成');
-                    progressModal.addLog('正在重新启动程序...');
+                    progressModal.addLog('更新完成，请手动重启程序。');
                     progressModal.complete(true, '更新完成');
                 })
                 .catch(function(error) {
@@ -1485,9 +1522,24 @@ function setupDragDropCallback() {
                     const progressModal = new ProgressModal('处理文件');
                     progressModal.addLog('正在处理文件...');
                     pywebview.api.eval_dropped_files(result.file_info, progressModal.id).then(async (processed) => {
-                        if (processed && processed.imported) {
-                            await fancyManager.loadRulesets();
+                        if (processed && processed.message === '已取消') {
+                            progressModal.cancel();
+                            return;
                         }
+                        if (processed && processed.imported) {
+                            try {
+                                await fancyManager.loadRulesets();
+                            } catch (error) {
+                                console.error('加载规则集失败:', error);
+                            }
+                        }
+                        if (processed && processed.success) {
+                            progressModal.complete(true, processed.message || '处理完成');
+                        } else {
+                            progressModal.complete(false, processed && processed.message ? processed.message : '处理失败');
+                        }
+                    }).catch(function(error) {
+                        progressModal.complete(false, '处理过程中发生错误: ' + error);
                     });
                 }
                 modal.onConfirmCallback = modal.eval_dropped_files;

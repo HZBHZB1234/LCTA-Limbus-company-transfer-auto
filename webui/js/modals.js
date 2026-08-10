@@ -535,6 +535,7 @@ class ModalWindow {
     }
     
     updateProgress(percent, text = '') {
+        percent = Math.max(0, Math.min(100, Number(percent) || 0));
         this.percent = percent
         const progressFill = document.getElementById(`modal-progress-fill-${this.id}`);
         if (progressFill) {
@@ -550,7 +551,7 @@ class ModalWindow {
         const mainProgressText = document.getElementById('progress-text');
         const progressContainer = document.getElementById('translation-progress');
         
-        if (mainProgressFill && mainProgressPercent) {
+        if (mainProgressFill && mainProgressPercent && progressContainer) {
             mainProgressFill.style.width = percent + '%';
             mainProgressPercent.textContent = percent + '%';
             progressContainer.style.display = 'block';
@@ -826,6 +827,11 @@ class ProgressModal extends ModalWindow {
             this.addLog(message);
         }
         this.setCompleted();
+        if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.del_modal_list) {
+            pywebview.api.del_modal_list(this.id).catch(function(error) {
+                console.error('删除模态窗口ID失败:', error);
+            });
+        }
     }
     
     cancel() {
@@ -882,11 +888,18 @@ async function startTranslation() {
     const modal = new ProgressModal('开始翻译');
     modal.setStatus('正在初始化翻译过程...');
     modal.addLog('开始翻译任务');
-    await configManager.updateConfigValues(configManager.collectConfigFromUI());
+    try {
+        await configManager.updateConfigValues(configManager.collectConfigFromUI());
+    } catch (error) {
+        modal.complete(false, '配置保存失败: ' + error);
+        return;
+    }
     
     pywebview.api.start_translation(apiConfigManager.currentSettings,
         modal.id).then(function(result) {
-        if (result.success) {
+        if (result && result.message === '已取消') {
+            modal.cancel();
+        } else if (result.success) {
             modal.complete(true, '翻译任务已完成');
         } else {
             modal.complete(false, '翻译失败: ' + result.message);

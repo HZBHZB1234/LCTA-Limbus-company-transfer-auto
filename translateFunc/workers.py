@@ -12,6 +12,7 @@ from typing import Any, Callable
 _logger = logging.getLogger("LCTA")
 
 from translateFunc.config import ProcessOutcome, ProcessResult
+from globalManagers.exceptions import CancelRunning
 
 
 class WorkerPool:
@@ -53,7 +54,8 @@ class WorkerPool:
         indexed: list[tuple[int, Any]] = list(enumerate(files))
         results: list[ProcessOutcome | None] = [None] * total
 
-        with ThreadPoolExecutor(max_workers=int(self._max_workers)) as executor:
+        executor = ThreadPoolExecutor(max_workers=int(self._max_workers))
+        try:
             import threading
             thread_local = threading.local()
 
@@ -76,6 +78,8 @@ class WorkerPool:
                 try:
                     outcome = future.result()
                     results[idx] = outcome
+                except CancelRunning:
+                    raise
                 except Exception as e:
                     # 将未预期异常转换为错误结果，同时写入完整日志
                     file_name = str(files[idx]) if idx < len(files) else f"index_{idx}"
@@ -89,6 +93,13 @@ class WorkerPool:
                 if on_progress:
                     fname = results[idx].file_name if results[idx] else str(files[idx])
                     on_progress(completed, total, fname)
+        except BaseException:
+            # 取消/异常时不等待在飞任务：立即返回让上层处理取消，
+            # 未启动的任务尽量取消（在飞翻译请求无法中断，交由后台自然结束）
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise
+        else:
+            executor.shutdown(wait=True)
 
         # 汇总统计
         error_count = sum(

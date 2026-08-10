@@ -7,6 +7,7 @@ from typing import Callable, Optional
 
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
+from globalManagers.exceptions import CancelRunning
 
 _log_manager = LogManager()
 
@@ -57,7 +58,7 @@ def run_cdn_optimization(
 
         def cancel_check():
             if cancel_event and cancel_event.is_set():
-                raise RuntimeError("cancelled")
+                raise CancelRunning("cancelled")
 
         result = cdn.cdn_full_optimization_simple(
             cfst_dir=cdn_dir,
@@ -87,6 +88,8 @@ def run_cdn_optimization(
         else:
             _log_manager.log(f"CDN优选完成，但hosts写入失败：{err_msg or '未知原因'}")
 
+    except CancelRunning:
+        _log_manager.log("用户已取消CDN优选")
     except Exception as e:
         _log_manager.log_error(e)
         _log_manager.log("CDN优选失败，继续启动游戏")

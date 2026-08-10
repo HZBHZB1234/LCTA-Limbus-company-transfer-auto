@@ -7,6 +7,7 @@ from .handlers import REGISTRY
 from ..packages.manage import get_mod_path
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
+from globalManagers.exceptions import CancelRunning
 _log_manager = LogManager()
 
 
@@ -108,6 +109,8 @@ def evalFiles(files_data: Mapping[str, str], modal_id: str = "false") -> EvalFil
             result_key = handler.execute(context)
             if result_key in results:
                 results[result_key] += 1
+        except CancelRunning:
+            raise
         except Exception as error:
             error_msg = f"处理文件 '{context.file_name}' 时出错: {error}"
             _log_manager.log_modal_process(error_msg, modal_id)
@@ -120,8 +123,11 @@ def evalFiles(files_data: Mapping[str, str], modal_id: str = "false") -> EvalFil
 
     summary = _build_execution_summary(results)
     _log_manager.log_modal_process(summary, modal_id)
-    _log_manager.log_modal_status("处理完成", modal_id)
-    _log_manager.update_modal_progress(100, summary, modal_id)
+    if results["errors"] == 0:
+        _log_manager.log_modal_status("处理完成", modal_id)
+        _log_manager.update_modal_progress(100, summary, modal_id)
+    else:
+        _log_manager.log_modal_status(f"处理完成，{results['errors']} 个失败", modal_id)
 
     return {
         "success": results["errors"] == 0,

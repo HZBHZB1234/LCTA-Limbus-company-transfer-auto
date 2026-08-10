@@ -64,7 +64,7 @@ def _process_llc_package(temp_dir, modal_id, save_path_text, save_path_font,
         final_zip_path = final_name.replace(".7z", ".zip")
         _log_manager.log_modal_process("开始重新打包文件", modal_id)
         lang_path = f'{temp_dir}\\LimbusCompany_Data\\Lang\\LLC_zh-CN'
-        if not zip_folder(lang_path, final_zip_path):
+        if not zip_folder(lang_path, final_zip_path, modal_id=modal_id):
             _log_manager.log_modal_process("打包文件时出现错误", modal_id)
             raise Exception("打包文件时出现错误")
         _log_manager.update_modal_progress(100, "成功打包文件", modal_id)

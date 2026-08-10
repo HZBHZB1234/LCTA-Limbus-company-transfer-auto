@@ -184,6 +184,7 @@ class TranslationPipeline:
         summary = PipelineSummary()
         with profiler.phase("处理优先文件"):
             for pf in priority_files:
+                self._on_check_running()
                 outcome = self._process_one(pf, base_path_config, has_prefix, translator)
                 self._record_outcome(outcome, summary)
 
@@ -217,6 +218,7 @@ class TranslationPipeline:
             else:
                 outcomes = []
                 for i, file_path in enumerate(target_files):
+                    self._on_check_running()
                     outcome = self._process_one(file_path, base_path_config, has_prefix, translator)
                     outcomes.append(outcome)
                     pct = 10 + int(((i + 1) / len(target_files)) * 80)

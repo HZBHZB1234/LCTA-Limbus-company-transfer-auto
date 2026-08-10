@@ -107,6 +107,10 @@ class PackagesMixin:
                 return {"success": True, "message": message}
             else:
                 return {"success": False, "message": message}
+        except CancelRunning:
+            self.log('安装汉化包任务已取消')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
         except Exception as e:
             error_msg = f"安装翻译包时出错: {str(e)}"
             self.log(error_msg)
@@ -153,12 +157,17 @@ class PackagesMixin:
             self.add_modal_log(f"开始切换汉化包: {package_name}", modal_id)
             # 调用安装函数
             success = use_translation_package(
-                package_name
+                package_name,
+                modal_id=modal_id
             )
             if success:
                 return {"success": True, "message": "成功切换汉化包"}
             else:
                 return {"success": False, "message": "切换汉化包失败"}
+        except CancelRunning:
+            self.log('切换汉化包任务已取消')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
         except Exception as e:
             error_msg = f"安装翻译包时出错: {str(e)}"
             self.log(error_msg)
@@ -242,6 +251,10 @@ class PackagesMixin:
             else:  # 失败
                 self.log(f"为翻译包 {package_name} 更换字体失败: {result[1]}")
                 return {"success": False, "message": result[1]}
+        except CancelRunning:
+            self.log('更换字体任务已取消')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
         except Exception as e:
             error_msg = f"更换字体时出错: {str(e)}"
             self.log(error_msg)

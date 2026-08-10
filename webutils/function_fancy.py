@@ -199,6 +199,7 @@ def fancy_main(
     write_elapsed = 0.0
 
     for file in files:
+        _log_manager.check_running(modal_id)
         relative_path = file.relative_to(lang_path).as_posix()
         matched_entries = []
         for entry in compiled_rulesets:

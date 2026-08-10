@@ -224,6 +224,10 @@ class MetadataRecoveryPage {
                     modal.complete(false, '恢复失败：无返回结果');
                     return;
                 }
+                if (result.message === '已取消') {
+                    modal.cancel();
+                    return;
+                }
                 if (!result.success && !result.verdicts) {
                     modal.complete(false, '恢复失败：' + (result.message || '未知错误'));
                     return;

@@ -13,6 +13,7 @@ sys.path.insert(0, str(file_dir))
 
 from webFunc import GithubDownload
 from globalManagers.LogManager import LogManager
+from globalManagers.exceptions import CancelRunning
 try:
     _log_manager = LogManager()
 except Exception as e:
@@ -231,7 +232,7 @@ def main():
 
     def _launcher_check_running(modal_id=None, log=True):
         if pipeline.cancel_event.is_set():
-            raise RuntimeError("cancelled")
+            raise CancelRunning("cancelled")
     modal_callbacks = {"check_running": _launcher_check_running}
     if progress and progress.is_alive():
         modal_callbacks.update(
@@ -263,6 +264,10 @@ def main():
                 update_obj.run()
                 if progress and progress.is_alive():
                     progress.update_phase_progress(100, "汉化更新检查完成")
+            except CancelRunning:
+                _log_manager.log("用户已取消更新任务")
+                if progress and progress.is_alive():
+                    progress.update_phase_progress(100, "已取消")
             except Exception as e:
                 _log_manager.log_error(e)
                 if progress and progress.is_alive():

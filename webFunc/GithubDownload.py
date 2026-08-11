@@ -1,3 +1,5 @@
+import os
+import json
 import requests
 import warnings
 import time
@@ -82,42 +84,51 @@ class ProxyManager:
     
     def _initialize_proxies(self):
         """初始化代理列表"""
-        # 添加默认代理
+        # 默认代理
         self.proxies.append("https://gh-proxy.org/")
-        self.proxies.append("")
         
-        # 尝试从API获取代理列表
-        try:
-            self._fetch_proxies_from_api()
-        except Exception as e:
-            if not self.quiet:
-                print(f"从API获取代理列表失败，使用默认代理: {e}")
+        # 从随包分发的静态列表加载代理
+        self._load_static_proxies()
+        
+        # 直连兜底
+        self.proxies.append("")
     
-    def _fetch_proxies_from_api(self):
-        """从API获取代理列表"""
-        api_url = "https://api.akams.cn/github"
-        try:
-            response = requests.get(api_url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            if data.get("code") == 200:
-                nodes_data = data.get("data", [])
-                new_proxies = []
+    def _load_static_proxies(self):
+        """从静态 JSON 文件加载代理列表（webui/assets/github_proxies.json）"""
+        candidates = []
+        path_ = os.getenv("path_", "")
+        if path_:
+            candidates.append(os.path.join(path_, "webui", "assets", "github_proxies.json"))
+        candidates.append(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "webui", "assets", "github_proxies.json")
+        )
+        
+        for path in candidates:
+            try:
+                if not os.path.isfile(path):
+                    continue
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
                 
-                for node_data in nodes_data:
-                    url = node_data.get("url", "").rstrip('/') + '/'
-                    # 只添加有效的HTTPS代理
-                    if url.startswith("https://") and "gh-proxy.org" not in url:
+                new_proxies = []
+                for host in data:
+                    host = str(host).strip()
+                    if not host:
+                        continue
+                    url = f"https://{host}/"
+                    if url not in self.proxies and url not in new_proxies:
                         new_proxies.append(url)
                 
                 if new_proxies:
                     self.proxies.extend(new_proxies)
-                    print(f"成功加载 {len(new_proxies)} 个代理")
+                    if not self.quiet:
+                        print(f"成功加载 {len(new_proxies)} 个静态代理")
+                    return
                     
-        except Exception as e:
-            if not self.quiet:
-                print(f"获取代理列表失败: {e}")
+            except Exception as e:
+                if not self.quiet:
+                    print(f"加载静态代理列表失败: {e}")
     
     def set_proxy_by_url(self, proxy_url: str):
         """根据代理URL设置当前代理，并记录为成功代理"""

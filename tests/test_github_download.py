@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from webFunc.GithubDownload import (
@@ -32,8 +34,30 @@ def make_release_dict(tag_name="v1.0.0"):
 
 
 def make_fetcher(monkeypatch, use_proxy, **kwargs):
-    monkeypatch.setattr(ProxyManager, "_fetch_proxies_from_api", lambda self: None)
+    monkeypatch.setattr(ProxyManager, "_load_static_proxies", lambda self: None)
     return GitHubReleaseFetcher(use_proxy=use_proxy, quiet=True, **kwargs)
+
+
+class TestStaticProxyLoading:
+    """静态代理列表：从 JSON 文件加载域名并转换为 https://host/ 形式"""
+
+    def test_loads_proxies_from_static_json(self, monkeypatch, tmp_path):
+        assets_dir = tmp_path / "webui" / "assets"
+        assets_dir.mkdir(parents=True)
+        (assets_dir / "github_proxies.json").write_text(
+            json.dumps(["gh.dpik.top", "gh-proxy.com", "gh.dpik.top", ""]),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("path_", str(tmp_path))
+
+        manager = ProxyManager(quiet=True)
+
+        assert manager.proxies[0] == "https://gh-proxy.org/"
+        assert "https://gh.dpik.top/" in manager.proxies
+        assert "https://gh-proxy.com/" in manager.proxies
+        assert manager.proxies.count("https://gh.dpik.top/") == 1
+        assert manager.proxies[-1] == ""
+        assert len(manager.proxies) == 4
 
 
 class TestProxyParamsPassthrough:
@@ -82,7 +106,7 @@ class TestUpdateConfigRebuildsProxyManager:
     """Bug 2: update_config 切换 use_proxy 时必须重建 proxy_manager"""
 
     def test_disable_to_enable_rebuilds_manager(self, monkeypatch):
-        monkeypatch.setattr(ProxyManager, "_fetch_proxies_from_api", lambda self: None)
+        monkeypatch.setattr(ProxyManager, "_load_static_proxies", lambda self: None)
         fetcher = GitHubReleaseFetcher(use_proxy=False, quiet=True)
 
         assert fetcher.proxy_manager is None
@@ -99,7 +123,7 @@ class TestUpdateConfigRebuildsProxyManager:
         assert fetcher.use_proxy is False
 
     def test_repair_stale_none_when_proxy_enabled(self, monkeypatch):
-        monkeypatch.setattr(ProxyManager, "_fetch_proxies_from_api", lambda self: None)
+        monkeypatch.setattr(ProxyManager, "_load_static_proxies", lambda self: None)
         fetcher = GitHubReleaseFetcher(use_proxy=True, quiet=True)
         monkeypatch.setattr(fetcher, "proxy_manager", None)
 

@@ -152,7 +152,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 
 | File | Purpose |
 |------|---------|
-| `GithubDownload.py` | GitHub Release API client: proxy support, rate limiting, concurrent downloads |
+| `GithubDownload.py` | GitHub Release API client: static proxy list (`webui/assets/github_proxies.json`, loaded via `path_`/项目根回退, `gh-proxy.org` 首位 + 直连兜底), concurrent proxy attempts |
 | `FileTransfer.py` | File upload client (UpFileClient) |
 | `LanzouFolder.py` | Lanzou cloud drive folder downloader (modified from 52pojie) |
 | `Webnote.py` | Webnote/note.chat API client for remote config/data |

@@ -194,7 +194,7 @@ body {
 .re-file-group-count {
     font-weight: 400;
     font-size: 11px;
-    color: var(--color-text-tertiary, #b0b0b0);
+    color: var(--color-text-secondary, #b0b0b0);
 }
 
 .re-search-category {
@@ -481,7 +481,7 @@ body {
 }
 
 .re-search-hint.re-search-hint-content {
-    color: var(--color-accent, #8a2be2);
+    color: var(--color-primary, #8a2be2);
 }
 
 .re-toolbar {
@@ -574,8 +574,8 @@ body {
 }
 
 .re-btn-accent {
-    background: var(--re-accent, #8a2be2);
-    border-color: var(--re-accent, #8a2be2);
+    background: var(--color-primary, #8a2be2);
+    border-color: var(--color-primary, #8a2be2);
     color: #fff;
 }
 
@@ -1317,16 +1317,50 @@ body {
 .re-toast.re-toast-info    { background: var(--color-primary, #3498db); }
 
 /* ---- Editor Theme Variables ---- */
-.theme-light .re-file-editor-area {
+.theme-light {
     --cm-bg: #ffffff;
     --cm-gutter-bg: #f8f9fa;
     --cm-active-line: rgba(52, 152, 219, 0.08);
 }
 
-.theme-dark .re-file-editor-area {
+.theme-dark {
     --cm-bg: #1e1e1e;
     --cm-gutter-bg: #252526;
     --cm-active-line: rgba(255, 255, 255, 0.06);
+}
+
+.theme-purple {
+    --cm-bg: #ffffff;
+    --cm-gutter-bg: #f5f0ff;
+    --cm-active-line: rgba(138, 43, 226, 0.08);
+}
+
+/* CodeMirror 主题跟随（覆盖 CM 默认浅色主题，适配三套主题） */
+.cm-editor {
+    background: var(--cm-bg, #ffffff);
+    color: var(--color-text-primary, #2c3e50);
+}
+
+.cm-editor .cm-content {
+    caret-color: var(--color-primary, #3498db);
+}
+
+.cm-editor .cm-gutters {
+    background: var(--cm-gutter-bg, #f8f9fa);
+    color: var(--color-text-secondary, #7f8c8d);
+    border-right: 1px solid var(--color-border-light, #ecf0f1);
+}
+
+.cm-editor .cm-activeLine {
+    background: var(--cm-active-line, rgba(52, 152, 219, 0.08));
+}
+
+.cm-editor .cm-activeLineGutter {
+    background: var(--cm-active-line, rgba(52, 152, 219, 0.08));
+}
+
+.cm-editor .cm-selectionBackground {
+    background: color-mix(in srgb, var(--color-primary, #3498db) 25%, transparent);
 }
 
 /* ---- Editor Status Bar ---- */
@@ -1800,7 +1834,7 @@ body.re-resizing-bottom {
 }
 
 .re-bias-option:hover {
-    background: var(--color-bg-hover, rgba(0,0,0,0.04));
+    background: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
 }
 
 .re-bias-option input[type="radio"] {
@@ -2213,17 +2247,17 @@ body.re-resizing-bottom {
     margin-left: 6px;
     padding: 1px 8px;
     font-size: 10px;
-    border: 1px dashed var(--color-accent, #8a2be2);
+    border: 1px dashed var(--color-primary, #8a2be2);
     border-radius: 10px;
     background: rgba(138, 43, 226, 0.05);
     cursor: pointer;
-    color: var(--color-accent, #8a2be2);
+    color: var(--color-primary, #8a2be2);
     transition: all 0.15s;
     white-space: nowrap;
 }
 
 .re-v3-promote-btn:hover {
-    background: var(--color-accent, #8a2be2);
+    background: var(--color-primary, #8a2be2);
     color: #fff;
     border-style: solid;
 }

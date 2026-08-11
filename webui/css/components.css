@@ -381,7 +381,7 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(var(--color-primary), 0.1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 /* 带图标的输入框 */
@@ -500,14 +500,14 @@ button {
     display: inline-flex;
     align-items: center;
     gap: var(--spacing-sm);
-    box-shadow: 0 4px 12px rgba(var(--color-primary), 0.3);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 30%, transparent);
     position: relative;
     overflow: hidden;
 }
 
 .primary-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(var(--color-primary), 0.4);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 .primary-btn:active {
@@ -680,7 +680,7 @@ button {
 }
 
 .list-item.selected {
-    background-color: rgba(var(--color-primary), 0.1);
+    background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
     border-left: 3px solid var(--color-primary);
 }
 
@@ -865,13 +865,13 @@ button {
     border-radius: 50%;
     background: var(--color-primary);
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(var(--color-primary), 0.3);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 30%, transparent);
     transition: all var(--transition-speed) var(--transition-easing);
 }
 
 .slider-container input[type="range"]::-webkit-slider-thumb:hover {
     transform: scale(1.2);
-    box-shadow: 0 4px 12px rgba(var(--color-primary), 0.5);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 50%, transparent);
 }
 
 .slider-ticks {

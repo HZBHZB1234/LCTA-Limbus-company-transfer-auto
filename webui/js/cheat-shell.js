@@ -159,10 +159,10 @@ let cheatPage = {
         if (msg) {
             if (reason === 'invalid_key') {
                 msg.textContent = '密钥错误，请重试';
-                msg.style.color = 'var(--danger-color, #e74c3c)';
+                msg.style.color = 'var(--color-danger, #e74c3c)';
             } else if (reason === 'blob_corrupt') {
                 msg.textContent = '工具箱数据损坏，请重新安装后重试';
-                msg.style.color = 'var(--danger-color, #e74c3c)';
+                msg.style.color = 'var(--color-danger, #e74c3c)';
             } else {
                 msg.textContent = '';
                 msg.style.color = '';
@@ -211,7 +211,7 @@ let cheatPage = {
                 console.error('cheat unlock error:', e);
                 if (msg) {
                     msg.textContent = '解锁失败: ' + e;
-                    msg.style.color = 'var(--danger-color, #e74c3c)';
+                    msg.style.color = 'var(--color-danger, #e74c3c)';
                 }
             }
         };

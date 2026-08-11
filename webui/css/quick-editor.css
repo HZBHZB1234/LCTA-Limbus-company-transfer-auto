@@ -375,6 +375,52 @@ html, body {
     overflow: auto;
 }
 
+/* 编辑器主题跟随（覆盖 CM 默认浅色主题，适配三套主题） */
+.theme-light {
+    --qe-cm-bg: #ffffff;
+    --qe-cm-gutter-bg: #f8f9fa;
+    --qe-cm-active-line: rgba(52, 152, 219, 0.08);
+}
+
+.theme-dark {
+    --qe-cm-bg: #1e1e1e;
+    --qe-cm-gutter-bg: #252526;
+    --qe-cm-active-line: rgba(255, 255, 255, 0.06);
+}
+
+.theme-purple {
+    --qe-cm-bg: #ffffff;
+    --qe-cm-gutter-bg: #f5f0ff;
+    --qe-cm-active-line: rgba(138, 43, 226, 0.08);
+}
+
+.qe-editor-area .cm-editor {
+    background: var(--qe-cm-bg, #ffffff);
+    color: var(--color-text-primary, #2c3e50);
+}
+
+.qe-editor-area .cm-editor .cm-content {
+    caret-color: var(--color-primary, #3498db);
+}
+
+.qe-editor-area .cm-editor .cm-gutters {
+    background: var(--qe-cm-gutter-bg, #f8f9fa);
+    color: var(--color-text-secondary, #7f8c8d);
+    border-right: 1px solid var(--color-border-light, #ecf0f1);
+}
+
+.qe-editor-area .cm-editor .cm-activeLine {
+    background: var(--qe-cm-active-line, rgba(52, 152, 219, 0.08));
+}
+
+.qe-editor-area .cm-editor .cm-activeLineGutter {
+    background: var(--qe-cm-active-line, rgba(52, 152, 219, 0.08));
+}
+
+.qe-editor-area .cm-editor .cm-selectionBackground {
+    background: color-mix(in srgb, var(--color-primary, #3498db) 25%, transparent);
+}
+
 /* 空状态 */
 .qe-empty-state {
     display: flex;

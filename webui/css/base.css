@@ -197,7 +197,7 @@ body {
 .theme-btn.active {
     background: var(--color-primary);
     color: white;
-    box-shadow: 0 4px 12px rgba(var(--color-primary), 0.3);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 /* 添加主题按钮点击反馈 */
@@ -518,12 +518,12 @@ body {
 
 .status-dot.connected {
     background: var(--color-success);
-    box-shadow: 0 0 10px rgba(var(--color-success), 0.5);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--color-success) 50%, transparent);
 }
 
 .status-dot.connecting {
     background: var(--color-warning);
-    box-shadow: 0 0 10px rgba(var(--color-warning), 0.5);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--color-warning) 50%, transparent);
 }
 
 /* 连接遮罩层 */

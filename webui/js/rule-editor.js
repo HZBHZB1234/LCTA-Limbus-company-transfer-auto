@@ -577,6 +577,8 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         updateEditorTheme(t);
     }
 
+    window.applyTheme = applyTheme;
+
     function updateEditorTheme(theme) {
         // CodeMirror 编辑器通过 CSS 变量适配主题，无需额外操作
         // 如需刷新编辑器可 dispatch 空事务
@@ -2405,7 +2407,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         if (!card) return;
         card.scrollIntoView({ behavior: 'smooth', block: 'start' });
         card.style.transition = 'outline-color 0.3s ease';
-        card.style.outline = '2px solid var(--color-accent, #4f8cff)';
+        card.style.outline = '2px solid var(--color-primary, #4f8cff)';
         setTimeout(function () { card.style.outline = ''; }, 2000);
     }
 

@@ -99,6 +99,32 @@ Translation page: user clicks "查看翻译日志"
 
 The viewer does not scan directories or provide content search. It only accepts the file explicitly selected by the user and requires current `schema_version: 2` JSONL records. Lists use cached summaries and byte offsets; full prompts, AI responses, HTTP details, and exception chains are loaded only when a record is opened.
 
+### 3d. 翻译页 API 配置未完成提示（横幅 + 跳转）
+
+翻译工具页顶部有红色警告横幅（`#api-config-warning`），当**所选翻译服务**的必填字段（服务 `api-setting` 中 `required: true`，对照已保存配置 `api_config` 解密后的 `currentSettings[serviceKey]`）未保存完整时显示，并列出缺失字段名；横幅内「前往配置」与「翻译服务配置」卡内的「配置汉化API」按钮均 `goAndShow('config')` 跳转「配置汉化API」页。仅警告不拦截「开始翻译」。
+
+```
+进入翻译页（section 首次加载）:
+  → webui/sections/preload.js     'translate' 分支 loadAPIServicesTranslator()
+  → webui/js/api-config.js        updateTranslatorApiWarning() 计算并显示/隐藏横幅
+进入翻译页（后续导航，section 缓存不重载）:
+  → webui/js/utils.js             initNavigation() translate-section 钩子
+  → webui/js/api-config.js        updateTranslatorApiWarning() 重查（配置页保存后返回实时刷新）
+切换翻译服务下拉:
+  → webui/js/api-config.js        loadAPIServicesTranslator() 的 change 监听 → updateTranslatorApiWarning()
+横幅/卡片「前往配置」按钮（携带当前翻译服务跳转）:
+  → webui/js/api-config.js        goConfigWithTranslator() 读 .translator-service-select 当前值
+                                   → 存入 pendingConfigService（一次性）→ goAndShow('config')
+  → 首次进入: preload.js config 分支消费 pendingConfigService 作 cKey 回填下拉
+  → 已缓存:   utils.js initNavigation config-section 钩子消费（onSectionLoaded 不重跑），
+              值不同才设置 + dispatch change 刷新表单；消费后清空
+核心判定:
+  → getMissingRequiredSettings(serviceKey)   服务 api-setting 必填项对照 currentSettings
+                                             空值/未保存 → 缺失；无必填项的服务（空翻译器/MyMemory/Linguee 等）恒通过
+```
+
+Files: `webui/sections/translate.html`（横幅 + 跳转按钮）, `webui/js/api-config.js`（`getMissingRequiredSettings`/`updateTranslatorApiWarning`/`goConfigWithTranslator`）, `webui/js/utils.js`（导航钩子）, `webui/sections/preload.js`, `webui/css/components.css`（`.api-config-warning`/`.form-group-header`）
+
 ---
 
 ## 4. CDN Optimization

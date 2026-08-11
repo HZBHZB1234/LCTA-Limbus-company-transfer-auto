@@ -75,6 +75,73 @@ class APIConfigManager {
             this.onServiceSelected(e.target.value);
         });
     }
+
+    // 获取指定服务未填写的必填字段名列表（以已保存配置 currentSettings 为准）
+    getMissingRequiredSettings(serviceKey) {
+        if (!this.apiServices || !this.apiServices[serviceKey]) {
+            return [];
+        }
+        const apiSetting = this.apiServices[serviceKey]['api-setting'];
+        if (!apiSetting || !Array.isArray(apiSetting) || apiSetting.length === 0) {
+            return [];
+        }
+        const saved = this.currentSettings[serviceKey] || {};
+        const missing = [];
+        apiSetting.forEach(setting => {
+            if (!setting.required) return;
+            const value = saved[setting.id];
+            const empty = value === undefined || value === null ||
+                (typeof value === 'string' && value.trim() === '');
+            if (empty) {
+                missing.push(setting.name || setting.id);
+            }
+        });
+        return missing;
+    }
+
+    // 刷新翻译页的API配置警告横幅（未配置所选服务必填字段时醒目提示）
+    updateTranslatorApiWarning() {
+        const warningElement = document.getElementById('api-config-warning');
+        if (!warningElement) {
+            return;
+        }
+        const detailElement = document.getElementById('api-config-warning-detail');
+        let missing = [];
+        let serviceKey = '';
+        if (this.initialized && this.apiServices) {
+            const selectElement = document.querySelector('.translator-service-select');
+            if (selectElement) {
+                serviceKey = selectElement.value || '';
+            }
+            if (serviceKey) {
+                missing = this.getMissingRequiredSettings(serviceKey);
+            }
+        }
+        if (missing.length > 0) {
+            if (detailElement) {
+                detailElement.textContent = `当前所选翻译服务「${serviceKey}」缺少必填配置：${missing.join('、')}`;
+            }
+            warningElement.style.display = 'flex';
+        } else {
+            warningElement.style.display = 'none';
+        }
+    }
+
+    // 从翻译页跳转配置页：携带翻译页当前所选服务，进入配置页后自动切换对应服务
+    goConfigWithTranslator() {
+        let serviceKey = '';
+        const selectElement = document.querySelector('.translator-service-select');
+        if (selectElement) {
+            serviceKey = selectElement.value || '';
+        }
+        if (!serviceKey) {
+            try { serviceKey = configManager.getCachedValue('ui_default.translator.translator') || ''; } catch (e) {}
+        }
+        if (serviceKey && this.apiServices && this.apiServices[serviceKey]) {
+            this.pendingConfigService = serviceKey;
+        }
+        goAndShow('config');
+    }
     
     // 当服务被选中时
     onServiceSelected(serviceKey) {
@@ -221,6 +288,11 @@ class APIConfigManager {
         
         // 添加到容器
         apiSelectContainer.appendChild(selectElement);
+        
+        // 切换服务时刷新API配置警告
+        selectElement.addEventListener('change', (e) => {
+            this.updateTranslatorApiWarning();
+        });
     }
     
     // 生成API设置表单

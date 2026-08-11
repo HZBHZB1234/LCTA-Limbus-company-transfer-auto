@@ -6,6 +6,17 @@
     <p class="section-subtitle">使用多种翻译服务自动翻译游戏文本</p>
 </div>
 
+<div id="api-config-warning" class="api-config-warning" style="display: none;">
+    <i class="fas fa-exclamation-triangle"></i>
+    <div class="api-config-warning-text">
+        <strong>尚未完成API配置</strong>
+        <span id="api-config-warning-detail"></span>
+    </div>
+    <button class="action-btn" onclick="apiConfigManager.goConfigWithTranslator()">
+        <i class="fas fa-cog"></i> 前往配置
+    </button>
+</div>
+
 <div class="settings-grid">
     <div class="setting-card">
         <h3 class="setting-title">翻译选项</h3>
@@ -129,7 +140,12 @@
     <div class="setting-card">
         <h3 class="setting-title">翻译服务配置</h3>
         <div class="form-group">
-            <label for="translation-service">翻译服务:</label>
+            <div class="form-group-header">
+                <label for="translation-service">翻译服务:</label>
+                <button class="action-btn secondary" onclick="apiConfigManager.goConfigWithTranslator()">
+                    <i class="fas fa-cog"></i> 配置汉化API
+                </button>
+            </div>
             <div class="translator-services">
             </div>
         </div>

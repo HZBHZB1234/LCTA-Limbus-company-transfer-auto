@@ -156,6 +156,25 @@ function initNavigation() {
                         }
                     }
 
+                    // 翻译页每次进入时刷新API配置警告（section 只加载一次，
+                    // 在配置页保存API后返回时横幅状态须按导航生命周期重查）
+                    if (sectionId === 'translate-section' && typeof apiConfigManager !== 'undefined' &&
+                        typeof apiConfigManager.updateTranslatorApiWarning === 'function') {
+                        apiConfigManager.updateTranslatorApiWarning();
+                    }
+
+                    // 配置页已缓存时 onSectionLoaded 不重跑：从翻译页横幅跳转携带的服务
+                    // 由这里消费（首次加载由 preload.js config 分支处理，二者互斥）
+                    if (sectionId === 'config-section' && typeof apiConfigManager !== 'undefined' &&
+                        apiConfigManager.pendingConfigService) {
+                        const cBox = document.querySelector('.api-service-select');
+                        if (cBox && cBox.value !== apiConfigManager.pendingConfigService) {
+                            cBox.value = apiConfigManager.pendingConfigService;
+                            cBox.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                        }
+                        apiConfigManager.pendingConfigService = null;
+                    }
+
                     if (sectionId !== 'test-section') {
                         goTestSection(false);
                     }

@@ -187,6 +187,62 @@
     margin-bottom: var(--spacing-md);
 }
 
+/* 表单行头：标签与行内操作按钮左右分布 */
+.form-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-xs);
+}
+
+.form-group-header label {
+    margin-bottom: 0;
+}
+
+/* 翻译页 API 配置未完成警告横幅 */
+.api-config-warning {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+    border: 1px solid var(--color-danger);
+    border-left: 4px solid var(--color-danger);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-danger) 10%, var(--color-bg-card));
+    color: var(--color-text-primary);
+}
+
+.api-config-warning > i {
+    font-size: 22px;
+    color: var(--color-danger);
+    flex-shrink: 0;
+}
+
+.api-config-warning-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.api-config-warning-text strong {
+    color: var(--color-danger);
+    font-size: 15px;
+}
+
+.api-config-warning-text span {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    word-break: break-all;
+}
+
+.api-config-warning .action-btn {
+    flex-shrink: 0;
+}
+
 label {
     display: block;
     margin-bottom: var(--spacing-xs);

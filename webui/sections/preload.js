@@ -51,6 +51,7 @@ async function onSectionLoaded(name) {
                     tBox.value = tKey;
                     tBox.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
                 }
+                apiConfigManager.updateTranslatorApiWarning();
             }
             break;
         case 'launcher-config':
@@ -99,8 +100,15 @@ async function onSectionLoaded(name) {
             console.log('[LCTA] Init section: config');
             if (typeof apiConfigManager !== 'undefined' && apiConfigManager.apiServices) {
                 apiConfigManager.loadAPIServices();
+                // 优先消费翻译页跳转携带的服务（一次性，消费后清除）
                 var cKey = null;
-                try { cKey = configManager.getCachedValue('ui_default.api_config.key'); } catch (e) {}
+                if (apiConfigManager.pendingConfigService) {
+                    cKey = apiConfigManager.pendingConfigService;
+                    apiConfigManager.pendingConfigService = null;
+                }
+                if (!cKey) {
+                    try { cKey = configManager.getCachedValue('ui_default.api_config.key'); } catch (e) {}
+                }
                 if (!cKey) cKey = Object.keys(apiConfigManager.apiServices)[0];
                 var cBox = document.querySelector('.api-service-select');
                 if (cBox && cKey) {

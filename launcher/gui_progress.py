@@ -94,6 +94,9 @@ def _feature_summary(config) -> str:
         features.append("文本美化")
     if config.get("launcher.work.tiaozhua", False):
         features.append("调爪文本")
+    tiaozhua_config = config.get("ui_default.tiaozhua", {})
+    if any(tiaozhua_config.get(f"replace_{n}", False) for n in (3, 4, 5, 7, 8)):
+        features.append("调爪替换文本")
     if config.get("launcher.resource_update.enabled", False):
         features.append("资源预下载")
     if config.get("launcher.work.cdn_optimize", False):

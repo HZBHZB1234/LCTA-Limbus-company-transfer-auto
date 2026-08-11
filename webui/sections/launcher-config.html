@@ -8,12 +8,47 @@
 
 <div class="settings-grid">
     <div class="setting-card">
-        <h3 class="setting-title">汉化包下载配置</h3>
-        <p class="form-hint">汉化包的下载来源、压缩格式、字体处理等详细选项已与「汉化包下载」页面共用同一套配置，请在该页面统一设置。</p>
-        <div style="margin-top: 0.5rem;">
-            <button type="button" class="action-btn secondary" onclick="goAndShow('download')">
-                <i class="fas fa-arrow-right"></i> 前往汉化包下载页面
-            </button>
+        <h3 class="setting-title">调爪替换文本包</h3>
+        <p class="form-hint">汉化包更新后自动下载并应用所选调爪「替换」文本包（直接覆盖当前语言包中的文本文件）。无需备份，重装/更新汉化包即可还原原文本。三种气泡（彩色 / 无色 / 旧翻译版）为互斥选项，仅可勾选其一。</p>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="lc-tiaozhua-replace-3">
+                <span class="checkmark"></span>
+                彩色气泡 BattleSpeechBubbleDlg
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="lc-tiaozhua-replace-4">
+                <span class="checkmark"></span>
+                无色气泡 BattleSpeechBubbleDlg
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="lc-tiaozhua-replace-5">
+                <span class="checkmark"></span>
+                随机加载文本
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="lc-tiaozhua-replace-7">
+                <span class="checkmark"></span>
+                事件美化
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="lc-tiaozhua-replace-8">
+                <span class="checkmark"></span>
+                旧翻译版气泡 BattleSpeechBubbleDlg
+            </label>
         </div>
     </div>
 

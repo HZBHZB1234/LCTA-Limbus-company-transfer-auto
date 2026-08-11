@@ -258,6 +258,17 @@ class ConfigManager {
 
             // 调爪文本修改包配置
             'tiaozhua-install': 'ui_default.tiaozhua.install',
+            // 调爪「替换」文本包：下载页 dl-* 与 Launcher 页 lc-* 共享同一配置键
+            'dl-tiaozhua-replace-3': 'ui_default.tiaozhua.replace_3',
+            'dl-tiaozhua-replace-4': 'ui_default.tiaozhua.replace_4',
+            'dl-tiaozhua-replace-5': 'ui_default.tiaozhua.replace_5',
+            'dl-tiaozhua-replace-7': 'ui_default.tiaozhua.replace_7',
+            'dl-tiaozhua-replace-8': 'ui_default.tiaozhua.replace_8',
+            'lc-tiaozhua-replace-3': 'ui_default.tiaozhua.replace_3',
+            'lc-tiaozhua-replace-4': 'ui_default.tiaozhua.replace_4',
+            'lc-tiaozhua-replace-5': 'ui_default.tiaozhua.replace_5',
+            'lc-tiaozhua-replace-7': 'ui_default.tiaozhua.replace_7',
+            'lc-tiaozhua-replace-8': 'ui_default.tiaozhua.replace_8',
 
             // 安装数据管理设置
             'installed-mod-directory': 'ui_default.manage.mod_path',
@@ -550,6 +561,74 @@ function bindConfigAutoSave() {
             value = target.value;
         }
         configManager.updateConfigValue(target.id, value);
+    });
+}
+
+// 调爪「替换」文本包跨页同步 + 互斥：
+// 下载页（dl-*）与 Launcher 页（lc-*）各有一份复选框，映射到同一配置键。
+// 任一页勾选时：1) 同步另一页对应复选框的视觉状态；2) 三种气泡
+// （彩色 3 / 无色 4 / 旧翻译版 8）互斥，勾选其一自动取消其余两个并保存。
+// 程序赋值不触发 change，不会造成事件循环。
+function bindTiaozhuaReplaceSync() {
+    const bubbleKeys = {
+        'ui_default.tiaozhua.replace_3': true,
+        'ui_default.tiaozhua.replace_4': true,
+        'ui_default.tiaozhua.replace_8': true,
+    };
+    document.addEventListener('change', function (e) {
+        if (!configManager) return;
+        const target = e.target;
+        if (!target || !target.id || target.type !== 'checkbox') return;
+        const keyPath = configManager.configKeyMap[target.id];
+        if (!keyPath || keyPath.indexOf('ui_default.tiaozhua.replace_') !== 0) return;
+
+        // 1. 同步所有映射到同一配置键的复选框（两页）
+        Object.keys(configManager.configKeyMap).forEach(function (id) {
+            if (configManager.configKeyMap[id] === keyPath) {
+                const el = document.getElementById(id);
+                if (el && el.type === 'checkbox' && el.checked !== target.checked) {
+                    el.checked = target.checked;
+                }
+            }
+        });
+
+        // 2. 气泡互斥：勾选某气泡时取消其余两个气泡（两页所有对应复选框）
+        if (target.checked && bubbleKeys[keyPath]) {
+            Object.keys(bubbleKeys).forEach(function (kp) {
+                if (kp === keyPath) return;
+                Object.keys(configManager.configKeyMap).forEach(function (id) {
+                    if (configManager.configKeyMap[id] !== kp) return;
+                    const el = document.getElementById(id);
+                    if (el && el.checked) {
+                        el.checked = false;
+                        configManager.updateConfigValue(id, false);
+                    }
+                });
+            });
+        }
+    });
+}
+
+// 按当前配置刷新调爪「替换」文本包复选框（两页），用于进入页面时兜底同步，
+// 防止跨会话/外部修改后任一侧状态滞后。
+async function syncTiaozhuaReplaceFromConfig() {
+    if (!configManager) return;
+    const suffixes = ['3', '4', '5', '7', '8'];
+    const ids = [];
+    suffixes.forEach(function (n) {
+        ids.push('dl-tiaozhua-replace-' + n, 'lc-tiaozhua-replace-' + n);
+    });
+    const values = await configManager.getConfigValues(ids);
+    if (!values) return;
+    Object.keys(values).forEach(function (keyPath) {
+        Object.keys(configManager.configKeyMap).forEach(function (id) {
+            if (configManager.configKeyMap[id] === keyPath) {
+                const el = document.getElementById(id);
+                if (el && el.type === 'checkbox' && el.checked !== Boolean(values[keyPath])) {
+                    el.checked = Boolean(values[keyPath]);
+                }
+            }
+        });
     });
 }
 

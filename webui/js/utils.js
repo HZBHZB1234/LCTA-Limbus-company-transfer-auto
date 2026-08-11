@@ -148,6 +148,14 @@ function initNavigation() {
                         }
                     }
 
+                    // 调爪「替换」文本包：下载页与 Launcher 页各有同一配置的复选框，
+                    // 进入任一页时按配置兜底同步两侧（section 只加载一次）
+                    if (sectionId === 'download-section' || sectionId === 'launcher-config-section') {
+                        if (typeof syncTiaozhuaReplaceFromConfig === 'function') {
+                            syncTiaozhuaReplaceFromConfig();
+                        }
+                    }
+
                     if (sectionId !== 'test-section') {
                         goTestSection(false);
                     }
@@ -412,6 +420,16 @@ const TOOLTIP_DATA = {
     'machine-download-source': 'LCTA-AU 汉化包的下载来源。可选择 GitHub 或公益镜像，实际可用性取决于当前网络环境。',
     'machine-use-proxy': '通过代理服务器加速 LCTA-AU 汉化包的 GitHub 下载。建议开启。',
     'tiaozhua-install': '下载完成后自动将调爪文本修改包导入为文本替换规则集。建议开启，省去手动导入步骤。',
+    'dl-tiaozhua-replace-3': '汉化包更新后自动应用调爪「彩色气泡 BattleSpeechBubbleDlg」替换文本包。',
+    'dl-tiaozhua-replace-4': '汉化包更新后自动应用调爪「无色气泡 BattleSpeechBubbleDlg」替换文本包。',
+    'dl-tiaozhua-replace-5': '汉化包更新后自动应用调爪「随机加载文本」替换文本包。',
+    'dl-tiaozhua-replace-7': '汉化包更新后自动应用调爪「事件美化」替换文本包。',
+    'dl-tiaozhua-replace-8': '汉化包更新后自动应用调爪「旧翻译版气泡 BattleSpeechBubbleDlg」替换文本包。',
+    'lc-tiaozhua-replace-3': '汉化包更新后自动应用调爪「彩色气泡 BattleSpeechBubbleDlg」替换文本包。',
+    'lc-tiaozhua-replace-4': '汉化包更新后自动应用调爪「无色气泡 BattleSpeechBubbleDlg」替换文本包。',
+    'lc-tiaozhua-replace-5': '汉化包更新后自动应用调爪「随机加载文本」替换文本包。',
+    'lc-tiaozhua-replace-7': '汉化包更新后自动应用调爪「事件美化」替换文本包。',
+    'lc-tiaozhua-replace-8': '汉化包更新后自动应用调爪「旧翻译版气泡 BattleSpeechBubbleDlg」替换文本包。',
 
     // ===== 设置 =====
     'game-path': '游戏 Limbus Company 的安装根目录。选择正确的游戏路径后，程序才能自动定位游戏文件和汉化包安装位置。',

@@ -49,7 +49,12 @@
             "refer_package": ""
         },
         "tiaozhua": {
-            "install": true
+            "install": true,
+            "replace_3": false,
+            "replace_4": false,
+            "replace_5": false,
+            "replace_7": false,
+            "replace_8": false
         },
         "manage": {
             "mod_path": ""

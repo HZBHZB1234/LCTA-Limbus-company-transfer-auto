@@ -57,7 +57,12 @@
             "key": "str"
         },
         "tiaozhua": {
-            "install": "bool"
+            "install": "bool",
+            "replace_3": "bool",
+            "replace_4": "bool",
+            "replace_5": "bool",
+            "replace_7": "bool",
+            "replace_8": "bool"
         },
         "manage": {
             "mod_path": "str"

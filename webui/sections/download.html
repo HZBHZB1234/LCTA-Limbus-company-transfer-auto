@@ -185,5 +185,61 @@
                 下载(导入)调爪文本修改包
             </button>
         </div>
+
+        <hr style="border: none; border-top: 1px solid var(--border-color, #ddd); margin: 1rem 0;">
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="dl-tiaozhua-replace-3">
+                <span class="checkmark"></span>
+                彩色气泡 BattleSpeechBubbleDlg
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="dl-tiaozhua-replace-4">
+                <span class="checkmark"></span>
+                无色气泡 BattleSpeechBubbleDlg
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="dl-tiaozhua-replace-5">
+                <span class="checkmark"></span>
+                随机加载文本
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="dl-tiaozhua-replace-7">
+                <span class="checkmark"></span>
+                事件美化
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="dl-tiaozhua-replace-8">
+                <span class="checkmark"></span>
+                旧翻译版气泡 BattleSpeechBubbleDlg
+            </label>
+        </div>
+
+        <div class="form-group">
+            <p class="form-hint">调爪「替换」文本包会直接覆盖当前语言包中的对应文本文件。三种气泡（彩色 / 无色 / 旧翻译版）为互斥选项，仅可勾选其一。</p>
+        </div>
+
+        <div class="action-area" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
+            <button class="primary-btn" onclick="downloadTiaozhuaReplace()">
+                <i class="fas fa-download"></i>
+                下载并应用所选调爪替换文本包
+            </button>
+            <button type="button" class="action-btn secondary" onclick="goAndShow('launcher-config')">
+                <i class="fas fa-rocket"></i> 前往Launcher配置页
+            </button>
+        </div>
     </div>
 </div>

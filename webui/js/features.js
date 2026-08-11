@@ -487,6 +487,31 @@ async function downloadTiaozhua() {
     });
 }
 
+async function downloadTiaozhuaReplace() {
+    const modal = new ProgressModal('开始下载');
+    modal.setStatus('正在初始化...');
+    modal.addLog('开始下载任务');
+    try {
+        await configManager.updateConfigValues(configManager.collectConfigFromUI());
+    } catch (error) {
+        modal.complete(false, '配置保存失败: ' + error);
+        return;
+    }
+
+    pywebview.api.download_lanzou_tiaozhua_replace(
+        modal.id).then(function(result) {
+        if (result && result.message === '已取消') {
+            modal.cancel();
+        } else if (result.success) {
+            modal.complete(true, '下载任务已完成');
+        } else {
+            modal.complete(false, '下载失败: ' + result.message);
+        }
+    }).catch(function(error) {
+        modal.complete(false, '下载过程中发生错误: ' + error);
+    });
+}
+
 function cleanCache() {
     const modal = new ProgressModal('清除缓存');
     
@@ -994,6 +1019,9 @@ async function init() {
     
     // 配置控件 change 时经防抖懒同步自动保存
     bindConfigAutoSave();
+    
+    // 调爪「替换」文本包跨页同步 + 气泡互斥
+    bindTiaozhuaReplaceSync();
     
     // 初始化主题管理器
     themeManager = new ThemeManager();

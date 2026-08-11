@@ -13,7 +13,8 @@ from webutils import (
     function_ourplay_main, function_ourplay_api, check_ver_ourplay,
     function_ourplay_new_main, check_ver_ourplay_new,
     check_ver_github_M,
-    function_lanzou_tiaozhua_main, fancy_main, builtinFancyConfig,
+    function_lanzou_tiaozhua_main, function_lanzou_tiaozhua_replace_main,
+    fancy_main, builtinFancyConfig,
 )
 import webutils.utils as func_utils
 from globalManagers.LogManager import LogManager
@@ -128,6 +129,11 @@ class UpdateBase(ABC):
         if run_tiaozhua:
             ConfigManager().set('ui_default.tiaozhua.install', True)
             function_lanzou_tiaozhua_main('安装调爪JSON')
+
+        tiaozhua_config = ConfigManager().get('ui_default.tiaozhua', {})
+        if any(tiaozhua_config.get(f'replace_{n}', False)
+               for n in (3, 4, 5, 7, 8)):
+            function_lanzou_tiaozhua_replace_main('安装调爪替换文本包')
 
         run_fancy = self.launcher_config.get('work', {}).get('fancy', False)
         if run_fancy:

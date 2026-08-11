@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-10 -->
+<!-- Last updated: 2026-08-11 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -725,7 +725,26 @@ User clicks 「下载(导入)调爪文本修改包」(download.html)
 
 Launcher auto path: `launcher/updates.py UpdateBase.post_update` → `run_tiaozhua` (launcher.work.tiaozhua) → sets `ui_default.tiaozhua.install` → `function_lanzou_tiaozhua_main('安装调爪JSON')`.
 
-Files: `webutils/function_lanzou_tiaozhua.py`, `webutils/utils/io.py` (decompress_7z), `webutils/utils/net.py` (download_with), `webutils/function_fancy.py` (import_bus_rules_file), `webui/app.py`, `webui/js/features.js`, `webui/sections/download.html`, `webui/sections/launcher-config.html`, `launcher/updates.py`
+### 14b. 调爪「替换」文本包 Download & Apply
+
+```
+User clicks 「下载并应用所选调爪替换文本包」(download.html)  或 launcher 更新后
+  → js/features.js downloadTiaozhuaReplace()          (下载页手动)
+    → pywebview.api.download_lanzou_tiaozhua_replace(modal.id)
+  → launcher/updates.py run(): ui_default.tiaozhua.replace_* 任一启用
+    → function_lanzou_tiaozhua_replace_main('安装调爪替换文本包')   (launcher 自动)
+      → _select_replace_packages()       3/4/8 气泡互斥，仅留编号最小者
+      → fetch_file_list()
+      → for num in {3,4,5,7,8}: find_replace_file(prefix "n.") → 缺失跳过
+      → 版本缓存 tiaozhua_replace_<n>.zip / _version.txt → download_with(parser 302)
+      → install_replace_package(): zipfile 选择性读 `文件/*.json`
+          → _sanitize_zip_member_name 校验 → 写入 resolve_replace_target_dir()
+          (= get_active_lang_path + config.json lang，即 fancy 目标目录)，跳过 python/
+```
+
+> 包 6（技能被动饰品BUFF美化）永不集成（与文本美化功能重复）。独立开关在**汉化包下载页与 Launcher 页各有一份相同复选框**（下载页 `dl-tiaozhua-replace-*` / Launcher 页 `lc-tiaozhua-replace-*`，两套 id 映射同一 `ui_default.tiaozhua.replace_*` 配置键，页面间经 `bindTiaozhuaReplaceSync` 实时同步、进入页面时经 `syncTiaozhuaReplaceFromConfig` 兜底刷新）；三种气泡（3彩色/4无色/8旧翻译版）互斥：前端勾选其一自动取消其余两个（两页全量）并同步保存，后端 `_select_replace_packages` 兜底仅应用编号最小者。
+
+Files: `webutils/function_lanzou_tiaozhua.py`, `webui/app_api/download.py`, `webui/sections/launcher-config.html`, `webui/sections/download.html`, `webui/js/core.js`, `webui/js/features.js`, `webui/js/utils.js`, `launcher/updates.py`, `config_check.json`
 
 ## 15. Three-Step Quick Start
 

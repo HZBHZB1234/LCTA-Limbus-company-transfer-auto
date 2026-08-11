@@ -8,6 +8,7 @@ from webutils import (
     function_llc_main,
     function_LCTA_auto_main,
     function_lanzou_tiaozhua_main,
+    function_lanzou_tiaozhua_replace_main,
 )
 from webutils.utils import get_cache_font
 from webui.app_api.exceptions import CancelRunning
@@ -109,6 +110,21 @@ class DownloadMixin:
         try:
             self.add_modal_log("开始下载...", modal_id)
             function_lanzou_tiaozhua_main(modal_id)
+            self.add_modal_log("下载完成", modal_id)
+            return {"success": True, "message": "下载完成"}
+        except CancelRunning:
+            self.log('用户已取消下载流程')
+            self.del_modal_list(modal_id)
+            return {"success": False, "message": "已取消"}
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def download_lanzou_tiaozhua_replace(self, modal_id= "false"):
+        """下载并应用调爪替换文本包（勾选的 replace_* 包）"""
+        try:
+            self.add_modal_log("开始下载...", modal_id)
+            function_lanzou_tiaozhua_replace_main(modal_id)
             self.add_modal_log("下载完成", modal_id)
             return {"success": True, "message": "下载完成"}
         except CancelRunning:

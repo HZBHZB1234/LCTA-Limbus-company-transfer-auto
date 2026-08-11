@@ -537,9 +537,8 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         setMode('simple', true);
         initAdvancedMode();
         initFileEditor();
-        await Promise.all([loadEditorConstants(), loadLangFiles(), loadRulesets(), initSimpleFileSelect(), loadTemplates()]);
+        await Promise.all([loadEditorConstants(), loadLangFiles(), loadRulesets(), initSimpleFileSelect(), loadTemplates(), syncThemeFromMain()]);
         syncAdvancedFromRuleset();
-        syncThemeFromMain();
     }
 
     async function loadEditorConstants() {

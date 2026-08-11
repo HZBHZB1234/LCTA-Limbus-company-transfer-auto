@@ -141,17 +141,17 @@
 
     async function onApiReady() {
         try {
-            await Promise.all([
-                loadLangFiles(),
-                loadQuickEdits(),
-                syncThemeFromMain(),
-            ]);
+            syncThemeFromMain();
             initFileEditor();
             if (window.EditorSearchPanel) {
                 EditorSearchPanel.attach($i('qe-editor-area'), qeSearchBridge);
             } else {
                 console.warn('[quick-editor] EditorSearchPanel 未加载，编辑器内搜索面板不可用');
             }
+            await Promise.all([
+                loadLangFiles(),
+                loadQuickEdits(),
+            ]);
             renderFileList();
         } catch (e) {
             console.error('初始化失败:', e);

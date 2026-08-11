@@ -333,6 +333,14 @@ class ConfigManager {
         setConfigToCache(obj);
     }
     
+    // 动态登记配置键：id -> 配置键路径（如作弊工具箱插件按注册表登记的 Launcher 集成开关）。
+    // 登记后该控件即纳入 applyConfigToUI/applyConfigToSection 回填、bindConfigAutoSave
+    // 自动保存与 configCache 缓存管理，无需改动静态 configKeyMap。
+    registerConfigKey(id, keyPath) {
+        if (!id || !keyPath) return;
+        this.configKeyMap[id] = keyPath;
+    }
+
     // 批量获取配置值
     async getConfigValues(ids) {
         const keyPaths = ids.map(id => this.configKeyMap[id]).filter(path => path);

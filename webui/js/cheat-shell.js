@@ -7,6 +7,7 @@
 //   - 已解锁：经 cheat_plugins_list 遍历插件，拉取各插件解密后的 HTML/JS 注入页面，
 //     然后调用插件 JS 导出的 initCheatPage() 实例化工具箱页
 //   - Launcher 配置页：按插件注册表的 launcher 元数据动态渲染集成开关
+//     （渲染前先触发自动解锁保证插件已注册；配置键动态登记进 configManager）
 // 本壳不感知任何具体工具（工具名/API/配置键全部来自插件注册表）。
 
 let cheatPage = {
@@ -232,10 +233,22 @@ let cheatPage = {
     },
 
     // Launcher 配置页：按插件注册表的 launcher 元数据动态渲染集成开关
+    // 规范（AGENTS.md「作弊工具箱 Launcher 集成动态配置规范」）：
+    //   1) 渲染前先触发自动解锁（cheat_core_status → ensure_unlocked），保证持久化密钥
+    //      会话即使未先打开过作弊工具箱页，插件也已注册，开关仍会显示；
+    //   2) 用 configManager.registerConfigKey(checkbox_id, enabled_key) 把开关配置键动态
+    //      登记进 configKeyMap，纳入 bindConfigAutoSave / applyConfigToUI / 缓存管理；
+    //   3) change 处理器只保留风险同意门控，值持久化由 bindConfigAutoSave 接管；未同意
+    //      回滚时须同步覆盖 configManager.pendingUpdates，避免异步门控期间误落盘。
     async renderLauncherPlugins() {
         const container = document.getElementById('cheat-plugin-launcher');
         if (!container) return;
         try {
+            // 时序修复：渲染前先查询解锁状态（触发自动解锁 → 插件注册）。
+            // 否则新会话直接进入 Launcher 配置页时插件尚未注册，集成开关不显示。
+            try {
+                await pywebview.api.cheat_core_status();
+            } catch (e) { /* ignore */ }
             const res = await pywebview.api.cheat_plugins_list();
             const plugins = (res && res.success && res.data) ? res.data : [];
             container.innerHTML = '';
@@ -247,6 +260,10 @@ let cheatPage = {
                 const spec = (p.config || {})[lc.enabled_key] || {};
                 const id = lc.checkbox_id || ('launcher-work-' + p.id);
                 const consent = lc.consent || 'cheat';
+                // 动态登记配置键进 configManager，纳入自动保存/回填/缓存管理
+                if (typeof configManager !== 'undefined' && typeof configManager.registerConfigKey === 'function') {
+                    configManager.registerConfigKey(id, lc.enabled_key);
+                }
                 let checked = false;
                 try {
                     checked = !!(await pywebview.api.get_config_value(lc.enabled_key, false));
@@ -271,10 +288,21 @@ let cheatPage = {
                 checkbox.checked = checked;
                 checkbox.addEventListener('change', async () => {
                     const want = checkbox.checked;
+                    // 值持久化已由 bindConfigAutoSave 接管（键已登记 configKeyMap，防抖批量落盘），
+                    // 此处即时同步 configManager 缓存，避免其它读取滞后。
+                    if (typeof configManager !== 'undefined') {
+                        configManager.setCachedValue(lc.enabled_key, want);
+                    }
                     if (want) {
                         const accepted = await RiskGate.getConsent(consent);
                         if (!accepted) {
                             checkbox.checked = false;
+                            if (typeof configManager !== 'undefined') {
+                                configManager.setCachedValue(lc.enabled_key, false);
+                                // 覆盖 bindConfigAutoSave 已入队的 true（getConsent 异步期间
+                                // 事件已先派发），未同意前不得落盘
+                                configManager.pendingUpdates[id] = false;
+                            }
                             RiskGate.showConsentModal(consent, async () => {
                                 checkbox.checked = true;
                                 try {
@@ -286,14 +314,6 @@ let cheatPage = {
                             });
                             return;
                         }
-                    }
-                    try {
-                        await pywebview.api.update_config_value(lc.enabled_key, want);
-                        if (typeof configManager !== 'undefined') {
-                            configManager.setCachedValue(lc.enabled_key, want);
-                        }
-                    } catch (e) {
-                        console.error('launcher plugin toggle error:', e);
                     }
                 });
             }

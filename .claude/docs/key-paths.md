@@ -307,10 +307,12 @@ Key gate (解锁门) + first-time gate (risk notice):
                                           cheat_plugins_list() 遍历插件，逐个
                                           cheat_core_get_section_html/js(webui.*) 拉取
                                           解密 HTML/JS，new Function 注入后调
-                                          initCheatPage()（解密 JS 挂到 window）；
-                                          另暴露 cheatCoreLockAndReload()（「锁定」按钮）；
-                                          renderLauncherPlugins() 按注册表动态渲染
-                                          Launcher 配置页的插件集成开关
+                                           initCheatPage()（解密 JS 挂到 window）；
+                                           另暴露 cheatCoreLockAndReload()（「锁定」按钮）；
+                                           renderLauncherPlugins() 按注册表动态渲染
+                                           Launcher 配置页的插件集成开关（渲染前先
+                                           cheat_core_status() 触发 ensure_unlocked()
+                                           自动解锁 → 插件注册，见下）
   → webui/sections/cheat.html             公共版本 = 密钥门 UI（密钥输入 + 解锁按钮 +
                                           功能数据缺失提示）；完整工具箱 UI 来自私有仓库
   → webui/js/risk-gate.js          RiskGate.gatePage('cheat') → 未同意
@@ -324,12 +326,21 @@ Key gate (解锁门) + first-time gate (risk notice):
 Launcher 集成（动态渲染，AGENTS 规则：开关仍只出现在 launcher-config.html）:
   → webui/sections/launcher-config.html            占位容器 #cheat-plugin-launcher
                                                       （data-risk-service=cheat）
-  → webui/js/cheat-shell.js renderLauncherPlugins() 按插件 launcher 元数据生成
-                                                      checkbox（enabled_key/checkbox_id/
-                                                      label/hint），change 时未同意就地
-                                                      RiskGate.showConsentModal；值直写
-                                                      pywebview.api.update_config_value +
-                                                      configManager.setCachedValue
+  → webui/js/cheat-shell.js renderLauncherPlugins() ① 渲染前先 cheat_core_status()
+                                                      触发 ensure_unlocked()（持久化
+                                                      密钥自动解锁 → 插件注册），否则
+                                                      新会话未打开作弊页时插件未注册、
+                                                      开关不显示；② 按插件 launcher
+                                                      元数据生成 checkbox（enabled_key/
+                                                      checkbox_id/label/hint），并把
+                                                      configManager.registerConfigKey(
+                                                      checkbox_id, enabled_key) 动态登记
+                                                      进 configKeyMap（纳入 bindConfig
+                                                      AutoSave/applyConfigToUI/缓存管理）；
+                                                      ③ change 仅做风险同意门控，值由
+                                                      bindConfigAutoSave 持久化，未同意
+                                                      回滚时覆盖 configManager.pendingUpdates
+                                                      防止误落盘；同意后仍手动写值
   → 私有仓库 webui/sections/cheat.html         倍率(0.1-1000)、日志开关、偏移 API、
                                                       注入/弹出/立即刷新偏移、锁定按钮
                                                       （配置经 update_config_batch 落库）

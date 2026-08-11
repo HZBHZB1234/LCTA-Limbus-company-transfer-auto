@@ -14,7 +14,7 @@ from .io import (
 )
 from .misc import get_steam_command, change_icon
 from .net import download_with, download_with_github
-from .shell import _move_folders
+from .shell import _move_folders, get_downloads_dir
 
 __all__ = [
     'zip_folder',
@@ -31,4 +31,5 @@ __all__ = [
     'get_steam_command',
     'change_icon',
     '_move_folders',
+    'get_downloads_dir',
 ]

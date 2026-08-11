@@ -105,6 +105,7 @@ def test_add_urls_validates_schemes_and_dedups(tmp_path):
     fake = FakeClient()
     mgr = make_manager(fake)
     save_dir = tmp_path / "dl"
+    save_dir.mkdir()
 
     result = mgr.add_urls([
         "  https://a.com/x.zip  ",
@@ -124,14 +125,24 @@ def test_add_urls_validates_schemes_and_dedups(tmp_path):
     assert kinds["https://a.com/x.zip"] == "http"
     assert len(result["errors"]) == 2
     assert result["errors"][0]["url"] == "not-a-url"
-    assert save_dir.is_dir()
     # 去重 + 空白行过滤：提交 4 次
     assert len([c for c in fake.calls if c[0] == "add_uri"]) == 4
-    # magnet 不推导 out，http 推导文件名
-    _, _, _, out_magnet = fake.calls[3]
-    assert out_magnet is None
-    _, _, _, out_http = fake.calls[0]
-    assert out_http == "x.zip"
+    # 不再强制 out：http 与 magnet 均由 aria2 原生命名（Content-Disposition 优先）
+    for call in fake.calls:
+        if call[0] == "add_uri":
+            assert call[3] is None
+
+
+def test_add_urls_rejects_missing_save_dir(tmp_path):
+    fake = FakeClient()
+    mgr = make_manager(fake)
+
+    result = mgr.add_urls(["https://a.com/x.zip"], str(tmp_path / "dl"))
+
+    assert result["success"] is False
+    assert "保存目录不存在" in result["message"]
+    assert fake.calls == []
+    assert mgr._tasks == {}
 
 
 def test_add_urls_requires_started_server(tmp_path):
@@ -150,7 +161,9 @@ def test_add_urls_error_reported_per_line(tmp_path):
             return super().add_uri(url, save_dir, out)
 
     mgr = make_manager(FlakyClient())
-    result = mgr.add_urls(["https://a.com/ok.zip", "https://a.com/bad.zip"], str(tmp_path / "dl"))
+    save_dir = tmp_path / "dl"
+    save_dir.mkdir()
+    result = mgr.add_urls(["https://a.com/ok.zip", "https://a.com/bad.zip"], str(save_dir))
 
     assert len(result["added"]) == 1
     assert result["errors"] == [{
@@ -177,15 +190,30 @@ def test_add_torrent_sends_base64_content(tmp_path):
     torrent = tmp_path / "test.torrent"
     payload = b"\xd1\x00\x00\x00torrent-bytes"
     torrent.write_bytes(payload)
+    save_dir = tmp_path / "dl"
+    save_dir.mkdir()
 
-    result = mgr.add_torrent(str(torrent), str(tmp_path / "dl"))
+    result = mgr.add_torrent(str(torrent), str(save_dir))
 
     assert result["success"] is True
     call = [c for c in fake.calls if c[0] == "add_torrent"][0]
     assert base64.b64decode(call[1]) == payload
-    assert call[2] == str(tmp_path / "dl")
+    assert call[2] == str(save_dir)
     task = mgr._tasks[result["gid"]]
     assert task["kind"] == "torrent"
+
+
+def test_add_torrent_rejects_missing_save_dir(tmp_path):
+    fake = FakeClient()
+    mgr = make_manager(fake)
+    torrent = tmp_path / "test.torrent"
+    torrent.write_bytes(b"torrent")
+
+    result = mgr.add_torrent(str(torrent), str(tmp_path / "dl"))
+
+    assert result["success"] is False
+    assert "保存目录不存在" in result["message"]
+    assert mgr._tasks == {}
 
 
 # ---- pause / resume / remove ----
@@ -247,8 +275,9 @@ def test_remove_unknown_task_returns_error():
 def test_purge_completed_removes_terminal_tasks(tmp_path):
     fake = FakeClient()
     mgr = make_manager(fake)
-    save_dir = str(tmp_path / "dl")
-    result = mgr.add_urls(["https://a.com/one.zip", "https://a.com/two.zip"], save_dir)
+    save_dir = tmp_path / "dl"
+    save_dir.mkdir()
+    result = mgr.add_urls(["https://a.com/one.zip", "https://a.com/two.zip"], str(save_dir))
     gid_ok, gid_waiting = [item["gid"] for item in result["added"]]
     fake.gids[gid_ok]["status"] = "complete"
     fake.gids[gid_waiting]["status"] = "active"
@@ -268,6 +297,7 @@ def test_snapshot_aggregates_statuses_and_counts(tmp_path):
     fake = FakeClient()
     mgr = make_manager(fake)
     save_dir = tmp_path / "dl"
+    save_dir.mkdir()
     result = mgr.add_urls(["https://a.com/one.zip", "https://a.com/two.zip"], str(save_dir))
     gids = [item["gid"] for item in result["added"]]
     fake.gids[gids[0]].update({
@@ -309,12 +339,32 @@ def test_snapshot_reports_server_stopped():
     assert snapshot["server_running"] is False
 
 
+def test_http_task_display_name_from_resolved_path(tmp_path):
+    fake = FakeClient()
+    mgr = make_manager(fake)
+    save_dir = tmp_path / "dl"
+    save_dir.mkdir()
+    result = mgr.add_urls(["https://objects.githubusercontent.com/uuid-segment"], str(save_dir))
+    gid = result["added"][0]["gid"]
+    # aria2 按 Content-Disposition 解析出的真实落盘名出现在 files[0].path
+    fake.gids[gid].update({
+        "status": "active",
+        "files": [{"path": str(save_dir / "真实文件名.zip")}],
+    })
+    fake.active = [{"gid": gid, "dir": str(save_dir), "status": "active"}]
+
+    snapshot = mgr.snapshot()
+
+    assert snapshot["tasks"][0]["name"] == "真实文件名.zip"
+
+
 # ---- magnet child adoption ----
 
 def test_magnet_child_adoption(tmp_path):
     fake = FakeClient()
     mgr = make_manager(fake)
     save_dir = tmp_path / "dl"
+    save_dir.mkdir()
     result = mgr.add_urls(["magnet:?xt=urn:btih:aaaa"], str(save_dir))
     parent_gid = result["added"][0]["gid"]
     fake.gids[parent_gid]["status"] = "complete"
@@ -356,7 +406,9 @@ def test_start_server_idempotent_when_running():
 def test_stop_clears_tasks_and_client(tmp_path):
     fake = FakeClient()
     mgr = make_manager(fake)
-    mgr.add_urls(["https://a.com/x.zip"], str(tmp_path / "dl"))
+    save_dir = tmp_path / "dl"
+    save_dir.mkdir()
+    mgr.add_urls(["https://a.com/x.zip"], str(save_dir))
     assert mgr._tasks
 
     mgr.stop()
@@ -364,3 +416,13 @@ def test_stop_clears_tasks_and_client(tmp_path):
     assert mgr._client is None
     assert mgr._tasks == {}
     assert mgr.is_running() is False
+
+
+# ---- 默认下载目录解析 ----
+
+def test_get_downloads_dir_falls_back_without_windows(monkeypatch):
+    import types
+    import webutils.utils.shell as shell_module
+    monkeypatch.setattr(shell_module, "os", types.SimpleNamespace(name="posix"))
+    result = shell_module.get_downloads_dir()
+    assert result == str(Path.home() / "Downloads")

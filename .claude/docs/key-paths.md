@@ -905,20 +905,29 @@ JS: 游戏资源更新页「打开高速下载器」按钮（resource-updater.js
 
 窗口初始化（webui/js/aria2-downloader.js init）:
   → api.get_state()          aria2c 可用性 + 服务状态 + ui_default.aria2_dl 配置快照
+                             （默认目录经 shell.get_downloads_dir() 解析系统真实
+                             「下载」已知文件夹；save_dir_exists=false 时显示
+                             常驻警告 #adl-dir-warning，浏览成功后隐藏）
   → 可用则 api.start_server() → aria2_manager.start_server()
       → resolve_aria2_binary()（复用 resource_updater.core，随包 tools/aria2/aria2c.exe）
       → Aria2DlClient.start()  随机端口 + --rpc-secret + 并发/连接数/做种时间
                                 （jobs/connection_limit/seed_time 来自配置）
       → 后台轮询线程 _poll_loop（1s）→ snapshot() → set_snapshot_callback 回调
           → window.__aria2DlDispatch({type:'snapshot', payload}) → renderTasks()
+          显示名链：bittorrent.info.name → files[0].path 基名（全类型）→
+          derive_display_name(url)（仅显示回退）
 
 添加任务:
   → api.add_urls({urls, save_dir}) → aria2_manager.add_urls()
+      → 保存目录必须已存在（is_dir 校验，不自动创建；缺失 → 报错「保存目录不存在」，
+        不创建任务、不持久化）
       → 校验 http/https/ftp/magnet:? 前缀 + 去重 + 每行错误明细
-      → client.add_uri(url, dir, out)   （magnet 不设 out；http 推导文件名）
+      → client.add_uri(url, dir, out=None)   （不强制 out：落盘名由 aria2 按
+        Content-Disposition 优先解析，哈希段 URL 不再落成长 hex 文件名；
+        --content-disposition-default-utf8=true 保证中文文件名不乱码）
   → api.add_torrent({path, save_dir}) → aria2_manager.add_torrent()
       → 校验 .torrent 扩展名 → base64 → client.addTorrent()
-  → 保存目录持久化 ui_default.aria2_dl.save_dir
+  → 保存目录持久化 ui_default.aria2_dl.save_dir（仅任务添加成功时）
 
 任务控制（每任务/全局）:
   → api.pause_task(gid)/resume_task(gid)/remove_task(gid)/pause_all()/resume_all()/purge_completed()
@@ -939,6 +948,7 @@ JS: 游戏资源更新页「打开高速下载器」按钮（resource-updater.js
 
 Files: `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `webui/app_api/windows.py`,
       `webui/aria2_downloader_api.py`, `webui/aria2-downloader.html`, `webui/js/aria2-downloader.js`,
-      `webui/css/aria2-downloader.css`, `webutils/function_aria2_downloader.py`, `webutils/__init__.py`,
+      `webui/css/aria2-downloader.css`, `webutils/function_aria2_downloader.py`,
+      `webutils/utils/shell.py`（get_downloads_dir）, `webutils/__init__.py`,
       `webui/app.py`（atexit 清理）, `config_default.json`, `config_check.json`, `.github/InitCode.py`（HTML 本地化）, `tests/test_aria2_downloader.py`
 

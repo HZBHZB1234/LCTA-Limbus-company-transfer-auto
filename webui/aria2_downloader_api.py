@@ -5,13 +5,21 @@
 进度快照由后台轮询线程经 _push 分发到窗口 JS 的 __aria2DlDispatch 事件。
 """
 import json
+import os
 from pathlib import Path
 
 import webview
 
 from globalManagers.ConfigManager import ConfigManager
 
-DEFAULT_SAVE_DIR = str(Path.home() / "Downloads")
+
+def resolve_default_save_dir() -> str:
+    """解析默认保存目录：优先系统真实「下载」目录（支持迁移后的已知文件夹）。"""
+    try:
+        from webutils.utils.shell import get_downloads_dir
+        return get_downloads_dir()
+    except Exception:
+        return str(Path.home() / "Downloads")
 
 
 class Aria2DownloaderAPI:
@@ -65,12 +73,14 @@ class Aria2DownloaderAPI:
             self._bind_snapshot()
             mgr = ConfigManager()
             cfg = mgr.get('ui_default.aria2_dl', {}) or {}
+            save_dir = cfg.get('save_dir') or resolve_default_save_dir()
             return {
                 "success": True,
                 "available": resolve_aria2_binary() is not None,
                 "server_running": aria2_manager.is_running(),
                 "config": {
-                    "save_dir": cfg.get('save_dir') or DEFAULT_SAVE_DIR,
+                    "save_dir": save_dir,
+                    "save_dir_exists": bool(save_dir) and Path(save_dir).is_dir(),
                     "jobs": int(cfg.get('jobs') or 8),
                     "connection_limit": int(cfg.get('connection_limit') or 16),
                     "seed_time": int(cfg.get('seed_time') or 0),
@@ -223,7 +233,7 @@ class Aria2DownloaderAPI:
             )
             seed_time = int(payload.get('seed_time') or current.get('seed_time') or 0)
             cfg.set('ui_default.aria2_dl', {
-                "save_dir": payload.get('save_dir') or current.get('save_dir') or DEFAULT_SAVE_DIR,
+                "save_dir": payload.get('save_dir') or current.get('save_dir') or resolve_default_save_dir(),
                 "jobs": max(1, jobs),
                 "connection_limit": max(1, min(16, connection_limit)),
                 "seed_time": max(0, seed_time),

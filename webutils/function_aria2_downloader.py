@@ -78,6 +78,7 @@ class Aria2DlClient:
             "--continue=true", "--file-allocation=none",
             "--max-tries=5", "--retry-wait=3",
             "--seed-time={}".format(self.seed_time),
+            "--content-disposition-default-utf8=true",
             "--console-log-level=error", "--quiet=true",
         ]
         try:
@@ -148,8 +149,6 @@ class Aria2DlClient:
         return body.get("result")
 
     def add_uri(self, url: str, save_dir: Path, out: Optional[str]) -> str:
-        save_dir = Path(save_dir)
-        save_dir.mkdir(parents=True, exist_ok=True)
         options = {"dir": str(save_dir)}
         if out:
             options["out"] = out
@@ -160,8 +159,6 @@ class Aria2DlClient:
         return gid
 
     def add_torrent(self, torrent_b64: str, save_dir: Path) -> str:
-        save_dir = Path(save_dir)
-        save_dir.mkdir(parents=True, exist_ok=True)
         options = {"dir": str(save_dir)}
         gid = str(self.call("addTorrent", [torrent_b64, [], options]))
         _log_manager.debug(
@@ -225,7 +222,11 @@ class Aria2DlClient:
 
 
 def derive_display_name(url: str) -> Optional[str]:
-    """从 URL 推导用于显示/落盘的默认文件名（去除查询串与路径遍历段）。"""
+    """从 URL 推导显示用文件名（去除查询串与路径遍历段）。
+
+    仅供任务列表显示回退；落盘文件名由 aria2 按 Content-Disposition 优先解析，
+    不强制 out，避免哈希段 URL 落成长 hex 文件名。
+    """
     try:
         parsed = urllib.parse.urlparse(url.strip())
     except Exception:
@@ -337,11 +338,19 @@ class Aria2DownloaderManager:
     # ---- 任务操作 ----
 
     def add_urls(self, urls: List[str], save_dir: str) -> dict:
-        """批量提交 URL（http/https/ftp/magnet），返回新增任务与错误明细。"""
+        """批量提交 URL（http/https/ftp/magnet），返回新增任务与错误明细。
+
+        保存目录必须已存在（不做自动创建）；http 不强制 out，
+        由 aria2 按 Content-Disposition 优先命名，避免哈希段 URL 落成 hex 文件名。
+        """
         with self._lock:
             client = self._require_client()
             save_path = Path(save_dir)
-            save_path.mkdir(parents=True, exist_ok=True)
+            if not save_path.is_dir():
+                return {
+                    "success": False,
+                    "message": "保存目录不存在：{}，请重新选择".format(save_path),
+                }
             added = []
             errors = []
             seen = set()
@@ -356,9 +365,8 @@ class Aria2DownloaderManager:
                     continue
                 seen.add(url)
                 kind = "magnet" if url.startswith(MAGNET_PREFIX) else "http"
-                out = None if kind == "magnet" else derive_display_name(url)
                 try:
-                    gid = client.add_uri(url, save_path, out)
+                    gid = client.add_uri(url, save_path, None)
                 except Aria2Error as exc:
                     _log_manager.log_error(exc)
                     errors.append({"url": url, "error": "提交失败: {}".format(exc)})
@@ -366,7 +374,7 @@ class Aria2DownloaderManager:
                 self._tasks[gid] = {
                     "url": url,
                     "save_dir": str(save_path),
-                    "out": out,
+                    "out": None,
                     "kind": kind,
                     "status": "waiting",
                     "total": 0,
@@ -375,7 +383,7 @@ class Aria2DownloaderManager:
                     "error_code": 0,
                     "error_message": "",
                 }
-                added.append({"gid": gid, "url": url, "out": out, "kind": kind})
+                added.append({"gid": gid, "url": url, "out": None, "kind": kind})
             return {"success": True, "added": added, "errors": errors}
 
     def add_torrent(self, torrent_path: str, save_dir: str) -> dict:
@@ -388,7 +396,11 @@ class Aria2DownloaderManager:
         with self._lock:
             client = self._require_client()
             save_path = Path(save_dir)
-            save_path.mkdir(parents=True, exist_ok=True)
+            if not save_path.is_dir():
+                return {
+                    "success": False,
+                    "message": "保存目录不存在：{}，请重新选择".format(save_path),
+                }
             try:
                 torrent_b64 = base64.b64encode(path.read_bytes()).decode("ascii")
                 gid = client.add_torrent(torrent_b64, save_path)
@@ -547,12 +559,14 @@ class Aria2DownloaderManager:
                     "error_code": int(status.get("errorCode") or 0),
                     "error_message": status.get("errorMessage") or "",
                 })
-                name = task.get("out") or task.get("url") or ""
+                name = task.get("out") or ""
+                if not name:
+                    name = derive_display_name(task.get("url") or "") or task.get("url") or ""
                 bittorrent = status.get("bittorrent") or {}
                 info = bittorrent.get("info") or {}
                 if info.get("name"):
                     name = info["name"]
-                elif task.get("kind") in ("torrent", "magnet"):
+                else:
                     files = status.get("files") or []
                     if files:
                         try:
@@ -579,9 +593,12 @@ class Aria2DownloaderManager:
             self._adopt_magnet_children(client, active_list)
         else:
             for gid, task in tasks:
+                name = task.get("out") or ""
+                if not name:
+                    name = derive_display_name(task.get("url") or "") or task.get("url") or ""
                 result_tasks.append({
                     "gid": gid,
-                    "name": task.get("out") or task.get("url", ""),
+                    "name": name,
                     "url": task.get("url", ""),
                     "kind": task.get("kind", "http"),
                     "status": task.get("status", "waiting"),

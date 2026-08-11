@@ -5,9 +5,11 @@
 (function () {
     'use strict';
 
-    const api = (typeof window !== 'undefined' && window.pywebview && window.pywebview.api)
-        ? window.pywebview.api
-        : null;
+    function getApi() {
+        return (typeof window !== 'undefined' && window.pywebview && window.pywebview.api)
+            ? window.pywebview.api
+            : null;
+    }
 
     const STATUS_TEXT = {
         active: '下载中',
@@ -135,11 +137,11 @@
         const actions = document.createElement('div');
         actions.className = 'adl-task-actions';
         if (task.status === 'active' || task.status === 'waiting') {
-            actions.appendChild(makeActionButton('fa-pause', '暂停', () => api.pause_task(task.gid)));
+            actions.appendChild(makeActionButton('fa-pause', '暂停', a => a.pause_task(task.gid)));
         } else if (task.status === 'paused') {
-            actions.appendChild(makeActionButton('fa-play', '继续', () => api.resume_task(task.gid)));
+            actions.appendChild(makeActionButton('fa-play', '继续', a => a.resume_task(task.gid)));
         }
-        actions.appendChild(makeActionButton('fa-trash', '删除', () => api.remove_task(task.gid), true));
+        actions.appendChild(makeActionButton('fa-trash', '删除', a => a.remove_task(task.gid), true));
 
         main.appendChild(icon);
         main.appendChild(info);
@@ -198,9 +200,14 @@
         btn.className = `adl-btn${isDanger ? ' adl-btn-danger' : ''}`;
         btn.innerHTML = `<i class="fas ${icon}"></i> ${text}`;
         btn.addEventListener('click', async () => {
+            const api = getApi();
+            if (!api) {
+                showToast('后端尚未就绪，请稍候重试', true);
+                return;
+            }
             btn.disabled = true;
             try {
-                const result = await onClick();
+                const result = await onClick(api);
                 if (result && !result.success && result.message) {
                     showToast(result.message, true);
                 }
@@ -229,9 +236,16 @@
         }
     }
 
+    function setDirWarningVisible(visible) {
+        const warning = $('adl-dir-warning');
+        if (warning) warning.style.display = visible ? '' : 'none';
+    }
+
     // ---- 初始化 ----
 
     async function init() {
+        const api = getApi();
+        if (!api) return;
         const state = await api.get_state();
         if (!state || !state.success) {
             showToast((state && state.message) || '初始化失败', true);
@@ -242,6 +256,7 @@
         $('adl-jobs').value = cfg.jobs || 8;
         $('adl-connection-limit').value = cfg.connection_limit || 16;
         $('adl-seed-time').value = cfg.seed_time || 0;
+        setDirWarningVisible(cfg.save_dir_exists === false);
         updateChips(state);
         if (state.available && !state.server_running) {
             const started = await api.start_server();
@@ -251,20 +266,20 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        window.__aria2DlDispatch = onDispatch;
-
-        if (!api) {
-            showToast('pywebview 桥接尚未就绪', true);
-            return;
-        }
-
+    function bindEvents() {
         $('adl-browse-dir').addEventListener('click', async () => {
+            const api = getApi();
+            if (!api) { showToast('后端尚未就绪，请稍候重试', true); return; }
             const result = await api.browse_folder();
-            if (result && result.success) $('adl-save-dir').value = result.path;
+            if (result && result.success) {
+                $('adl-save-dir').value = result.path;
+                setDirWarningVisible(false);
+            }
         });
 
         $('adl-add-urls').addEventListener('click', async () => {
+            const api = getApi();
+            if (!api) { showToast('后端尚未就绪，请稍候重试', true); return; }
             const textarea = $('adl-urls');
             const urls = (textarea.value || '')
                 .split('\n')
@@ -298,6 +313,8 @@
         });
 
         $('adl-add-torrent').addEventListener('click', async () => {
+            const api = getApi();
+            if (!api) { showToast('后端尚未就绪，请稍候重试', true); return; }
             const saveDir = $('adl-save-dir').value.trim();
             if (!saveDir) {
                 showToast('请先选择保存目录', true);
@@ -314,6 +331,8 @@
         });
 
         $('adl-save-config').addEventListener('click', async () => {
+            const api = getApi();
+            if (!api) { showToast('后端尚未就绪，请稍候重试', true); return; }
             const payload = {
                 save_dir: $('adl-save-dir').value.trim(),
                 jobs: Number($('adl-jobs').value) || 8,
@@ -325,22 +344,53 @@
         });
 
         $('adl-pause-all').addEventListener('click', async () => {
+            const api = getApi();
+            if (!api) { showToast('后端尚未就绪，请稍候重试', true); return; }
             const result = await api.pause_all();
             if (result && !result.success && result.message) showToast(result.message, true);
         });
 
         $('adl-resume-all').addEventListener('click', async () => {
+            const api = getApi();
+            if (!api) { showToast('后端尚未就绪，请稍候重试', true); return; }
             const result = await api.resume_all();
             if (result && !result.success && result.message) showToast(result.message, true);
         });
 
         $('adl-purge').addEventListener('click', async () => {
+            const api = getApi();
+            if (!api) { showToast('后端尚未就绪，请稍候重试', true); return; }
             const result = await api.purge_completed();
             if (result && !result.success && result.message) showToast(result.message, true);
         });
+    }
 
-        init();
-    });
+    function bootstrap() {
+        window.__aria2DlDispatch = onDispatch;
+        bindEvents();
+        // pywebview API 可能尚未注入（DOMContentLoaded 早于 pywebviewready），
+        // 按 llm-fancy 同款模式：先查一次，未就绪则等 pywebviewready 事件
+        if (getApi()) {
+            init();
+            return;
+        }
+        let ready = false;
+        function handleReady() {
+            if (ready) return;
+            ready = true;
+            init();
+        }
+        window.addEventListener('pywebviewready', handleReady);
+        // 兜底：事件注册前 API 已就绪（事件可能已错过）
+        if (window.pywebview && window.pywebview.api) handleReady();
+        // 兜底：10 秒仍未就绪，提示重开窗口
+        setTimeout(() => {
+            if (ready || getApi()) return;
+            showToast('无法连接后端 API，请关闭窗口后重新打开', true);
+        }, 10000);
+    }
+
+    document.addEventListener('DOMContentLoaded', bootstrap);
 })();
 
 function applyTheme(theme) {

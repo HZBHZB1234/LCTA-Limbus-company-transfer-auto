@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-08-10 -->
+<!-- Last updated: 2026-08-11 -->
 
 ## Project Purpose
 
@@ -101,6 +101,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `RuleEditorAPI` | `webui/rule_editor_api.py` | Secondary pywebview bridge for the rule editor window: wraps `webutils/rule_editor/` methods (file browser, rules CRUD, rule building, validation, smart analysis), plus `get_config_value()` for cross-window config queries (e.g. theme). Instantiated as `js_api=RuleEditorAPI()` in a separate `webview.create_window()` call |
 | `QuickEditorAPI` | `webui/quick_editor_api.py` | Pywebview bridge for the quick editor window: wraps `webutils/rule_editor/quick.py` methods (diff_json, load/save/apply_quick_edits) plus shared methods from `webutils/rule_editor/browser.py` (file browser, search). Instantiated as `js_api=QuickEditorAPI()` in `open_quick_editor()` |
 | `LLMFancyAPI` | `webui/llm_fancy_api.py` | Pywebview bridge for the LLM 文本美化 window: wraps `webutils/llm_fancy/` (selection scan preview, exclusion-ruleset simulation, batched LLM beautification with progress/log callbacks and cancel, ruleset build/save/auto-enable) plus config persistence (`ui_default.llm_fancy`). Instantiated as `js_api=LLMFancyAPI()` in `LCTA_API.open_llm_fancy()` |
+| `Aria2DownloaderAPI` | `webui/aria2_downloader_api.py` | Pywebview bridge for the 泛用高速下载器 window: wraps the module-level singleton `webutils/function_aria2_downloader.py aria2_manager` (aria2c server start/stop, URL/magnet batch add, .torrent add, pause/resume/remove, global pause/resume/purge, folder/torrent pickers, config persistence under `ui_default.aria2_dl`). Background 1s poll pushes task snapshots to `window.__aria2DlDispatch`. Instantiated as `js_api=Aria2DownloaderAPI()` in `LCTA_API.open_aria2_downloader()`; window close stops the aria2c child process |
 | `ResourceUpdaterAPI` | `resource_updater/web_api.py` | Resource-update controller owned by `LCTA_API`. Probes game files, persists updater options (incl. retry settings), runs/cancels the worker thread, records results, exposes the last update result (failure list for the manual retry button), and emits per-channel progress into the main SPA's `resource-updater.js` controller |
 | `ResourceUpdater` | `resource_updater/core.py` | Extracts S/L CDN tokens, downloads token-scoped localize ZIPs, parses remote/fallback catalog data, populates Unity cache entries, and selects bundled aria2c or the built-in downloader. Transient download failures auto-retry with `retry_max`/`retry_delay` backoff; exhausted retries emit a Range probe with diagnostic headers; aria2 uses a per-file connection limit |
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LCTA - 高速下载器</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/aria2-downloader.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<div class="adl-container">
+    <div class="adl-header">
+        <h1><i class="fas fa-bolt"></i> 高速下载器</h1>
+        <p>基于 aria2c 的泛用高速下载：支持 http/https/ftp、磁力链接与 .torrent 种子，多连接分段加速，断点续传。</p>
+        <div class="adl-status-row">
+            <span id="adl-engine-chip" class="adl-chip"><i class="fas fa-circle-notch fa-spin"></i> 检测下载引擎</span>
+            <span id="adl-server-chip" class="adl-chip"><i class="fas fa-server"></i> 服务未启动</span>
+        </div>
+    </div>
+
+    <!-- 添加任务 -->
+    <div class="adl-card">
+        <h3><i class="fas fa-plus-circle"></i> 添加下载任务</h3>
+        <div class="adl-field">
+            <label for="adl-urls">链接（每行一个，支持 URL / 磁力链接 magnet:?xt=...）</label>
+            <textarea id="adl-urls" class="adl-code" rows="5" spellcheck="false"
+                      placeholder="https://example.com/file.zip&#10;magnet:?xt=urn:btih:..."></textarea>
+        </div>
+        <div class="adl-field">
+            <label for="adl-save-dir">保存目录</label>
+            <div class="adl-dir-row">
+                <input type="text" id="adl-save-dir" placeholder="选择下载保存目录">
+                <button type="button" class="adl-btn" id="adl-browse-dir">
+                    <i class="fas fa-folder-open"></i> 浏览
+                </button>
+            </div>
+        </div>
+        <div class="adl-actions">
+            <button class="adl-btn adl-btn-primary" id="adl-add-urls">
+                <i class="fas fa-download"></i> 添加下载任务
+            </button>
+            <button class="adl-btn" id="adl-add-torrent">
+                <i class="fas fa-file-arrow-down"></i> 选择 .torrent 文件
+            </button>
+        </div>
+    </div>
+
+    <!-- 下载设置 -->
+    <div class="adl-card">
+        <h3><i class="fas fa-sliders"></i> 下载设置
+            <small>修改后将在下次启动下载服务后生效</small>
+        </h3>
+        <div class="adl-row">
+            <div class="adl-field">
+                <label for="adl-jobs">同时下载任务数</label>
+                <input type="number" id="adl-jobs" min="1" max="32" value="8">
+            </div>
+            <div class="adl-field">
+                <label for="adl-connection-limit">每文件连接数</label>
+                <input type="number" id="adl-connection-limit" min="1" max="16" value="16">
+            </div>
+            <div class="adl-field">
+                <label for="adl-seed-time">BT 做种时间（分钟，0 = 不做种）</label>
+                <input type="number" id="adl-seed-time" min="0" step="5" value="0">
+            </div>
+        </div>
+        <div class="adl-actions">
+            <button class="adl-btn" id="adl-save-config">
+                <i class="fas fa-save"></i> 保存设置
+            </button>
+        </div>
+    </div>
+
+    <!-- 任务列表 -->
+    <div class="adl-card">
+        <div class="adl-list-header">
+            <h3><i class="fas fa-tasks"></i> 下载任务</h3>
+            <span id="adl-total-speed" class="adl-total-speed"></span>
+        </div>
+        <div id="adl-stats" class="adl-stats">
+            <span class="adl-stat active"><i class="fas fa-play"></i> 下载中 <b id="adl-count-active">0</b></span>
+            <span class="adl-stat waiting"><i class="fas fa-clock"></i> 等待 <b id="adl-count-waiting">0</b></span>
+            <span class="adl-stat paused"><i class="fas fa-pause"></i> 暂停 <b id="adl-count-paused">0</b></span>
+            <span class="adl-stat complete"><i class="fas fa-check"></i> 完成 <b id="adl-count-complete">0</b></span>
+            <span class="adl-stat error"><i class="fas fa-exclamation-circle"></i> 失败 <b id="adl-count-error">0</b></span>
+        </div>
+        <div class="adl-actions">
+            <button class="adl-btn" id="adl-pause-all">
+                <i class="fas fa-pause"></i> 暂停全部
+            </button>
+            <button class="adl-btn" id="adl-resume-all">
+                <i class="fas fa-play"></i> 继续全部
+            </button>
+            <button class="adl-btn" id="adl-purge">
+                <i class="fas fa-trash-alt"></i> 清除已完成/失败
+            </button>
+        </div>
+        <div id="adl-task-list" class="adl-task-list">
+            <div class="adl-empty"><i class="fas fa-inbox"></i> 暂无任务，粘贴链接或选择种子文件开始下载</div>
+        </div>
+    </div>
+
+    <div id="adl-toast" class="adl-toast"></div>
+</div>
+
+<script src="js/aria2-downloader.js"></script>
+</body>
+</html>

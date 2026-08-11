@@ -73,6 +73,12 @@
             "max_length": "0",
             "min_length": "0",
             "output_type": "json"
+        },
+        "aria2_dl": {
+            "save_dir": "",
+            "jobs": 8,
+            "connection_limit": 16,
+            "seed_time": 0
         }
     },
     "api_config": "",

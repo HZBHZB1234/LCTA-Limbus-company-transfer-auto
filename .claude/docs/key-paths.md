@@ -893,3 +893,52 @@ JS: user opens 侧边栏「Metadata 恢复」页（首次导航懒加载）
       webui/guide/metadata-recovery.md, .github/InitCode.py(js_files), tests/test_metadata_recovery.py
 ```
 
+## 18. 泛用高速下载器（aria2c 独立窗口）
+
+```
+JS: 游戏资源更新页「打开高速下载器」按钮（resource-updater.js bindEvents）
+  → pywebview.api.open_aria2_downloader()
+  → webui/app_api/windows.py WindowMixin.open_aria2_downloader()
+      → webview.create_window("LCTA - 高速下载器", webui/aria2-downloader.html,
+                               js_api=Aria2DownloaderAPI()) + 主题注入
+      → window.events.closed → aria2_manager.stop()（释放 aria2c 进程）
+
+窗口初始化（webui/js/aria2-downloader.js init）:
+  → api.get_state()          aria2c 可用性 + 服务状态 + ui_default.aria2_dl 配置快照
+  → 可用则 api.start_server() → aria2_manager.start_server()
+      → resolve_aria2_binary()（复用 resource_updater.core，随包 tools/aria2/aria2c.exe）
+      → Aria2DlClient.start()  随机端口 + --rpc-secret + 并发/连接数/做种时间
+                                （jobs/connection_limit/seed_time 来自配置）
+      → 后台轮询线程 _poll_loop（1s）→ snapshot() → set_snapshot_callback 回调
+          → window.__aria2DlDispatch({type:'snapshot', payload}) → renderTasks()
+
+添加任务:
+  → api.add_urls({urls, save_dir}) → aria2_manager.add_urls()
+      → 校验 http/https/ftp/magnet:? 前缀 + 去重 + 每行错误明细
+      → client.add_uri(url, dir, out)   （magnet 不设 out；http 推导文件名）
+  → api.add_torrent({path, save_dir}) → aria2_manager.add_torrent()
+      → 校验 .torrent 扩展名 → base64 → client.addTorrent()
+  → 保存目录持久化 ui_default.aria2_dl.save_dir
+
+任务控制（每任务/全局）:
+  → api.pause_task(gid)/resume_task(gid)/remove_task(gid)/pause_all()/resume_all()/purge_completed()
+  → aria2_manager.pause()/resume()/remove()/...
+      → aria2.pause → forcePause 兜底；remove → forceRemove → removeDownloadResult 兜底
+  → 快照渲染：进度条/速度/大小/状态徽标；error 显示错误码+信息
+
+磁力派生收养:
+  → 磁力元数据取回后 aria2 以新 gid 派生文件下载
+  → snapshot() 内 _adopt_magnet_children()：tell_active 中未知 gid 且 dir 匹配
+     已完成元数据的磁力任务 → 收养进原任务记录（任务列表连续显示）
+
+配置（ui_default.aria2_dl）:
+  → save_dir/jobs(8)/connection_limit(16)/seed_time(0=不做种)
+  → 窗口「保存设置」→ api.save_window_config() 持久化；修改后下次启动下载服务生效
+  → 与 resource_updater 的 aria2 实例相互独立（各自进程/随机端口/secret）
+```
+
+Files: `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `webui/app_api/windows.py`,
+      `webui/aria2_downloader_api.py`, `webui/aria2-downloader.html`, `webui/js/aria2-downloader.js`,
+      `webui/css/aria2-downloader.css`, `webutils/function_aria2_downloader.py`, `webutils/__init__.py`,
+      `webui/app.py`（atexit 清理）, `config_default.json`, `config_check.json`, `.github/InitCode.py`（HTML 本地化）, `tests/test_aria2_downloader.py`
+

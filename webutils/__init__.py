@@ -45,6 +45,7 @@ from .cdn import (
 )
 from .function_speed import SpeedManager
 from .function_input_bypass import InputBypassManager
+from .function_aria2_downloader import Aria2DownloaderManager, aria2_manager
 from . import metadata_recovery
 from .cheat_plugins import CheatPluginHost
 from .function_steam_launcher import (
@@ -111,6 +112,8 @@ __all__ = [
     'elevate_remove_hosts',
     'SpeedManager',
     'InputBypassManager',
+    'Aria2DownloaderManager',
+    'aria2_manager',
     'metadata_recovery',
     'CheatPluginHost',
     'get_steam_path',

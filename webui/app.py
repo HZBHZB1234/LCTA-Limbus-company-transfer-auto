@@ -15,6 +15,7 @@ from globalManagers.ConfigManager import ConfigManager
 from webutils import SpeedManager
 from webutils import InputBypassManager
 from webutils import CheatPluginHost
+from webutils import aria2_manager
 
 from webui.app_api.exceptions import CancelRunning
 from webui.app_api.core import CoreMixin
@@ -36,6 +37,7 @@ from webui.rule_editor_api import RuleEditorAPI
 from webui.quick_editor_api import QuickEditorAPI
 from webui.llm_fancy_api import LLMFancyAPI
 from webui.translation_log_api import TranslationLogViewerAPI
+from webui.aria2_downloader_api import Aria2DownloaderAPI
 
 
 class LCTA_API(CoreMixin, TranslatorMixin, PackagesMixin, DownloadMixin, FancyMixin,
@@ -73,6 +75,7 @@ def main():
     atexit.register(lambda: SpeedManager.close())
     atexit.register(lambda: InputBypassManager.close())
     atexit.register(lambda: CheatPluginHost.close_all())
+    atexit.register(lambda: aria2_manager.stop())
     # 设置模态窗口相关的回调
     LogManager().set_modal_callbacks(
         status_callback=api.set_modal_status,

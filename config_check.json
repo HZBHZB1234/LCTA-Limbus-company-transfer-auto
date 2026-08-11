@@ -82,6 +82,12 @@
             "max_length": "str",
             "max_workers": "str",
             "dedup_enabled": "bool"
+        },
+        "aria2_dl": {
+            "save_dir": "str",
+            "jobs": "int",
+            "connection_limit": "int",
+            "seed_time": "int"
         }
     },
     "api_config": "str",

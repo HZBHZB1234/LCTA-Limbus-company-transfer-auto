@@ -78,6 +78,9 @@ HTML_RESOURCE_TRANSFERS = {
     'llm-fancy.html': [
         (FONT_AWESOME_URL, 'css/all.min.css'),
     ],
+    'aria2-downloader.html': [
+        (FONT_AWESOME_URL, 'css/all.min.css'),
+    ],
     'translation-log-viewer.html': [
         (FONT_AWESOME_URL, 'css/all.min.css'),
     ],

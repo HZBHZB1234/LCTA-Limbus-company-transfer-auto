@@ -8,6 +8,7 @@ from globalManagers.ConfigManager import ConfigManager
 from webui.quick_editor_api import QuickEditorAPI
 from webui.llm_fancy_api import LLMFancyAPI
 from webui.translation_log_api import TranslationLogViewerAPI
+from webui.aria2_downloader_api import Aria2DownloaderAPI
 
 class WindowMixin:
 
@@ -175,3 +176,62 @@ class WindowMixin:
             """)
         except Exception:
             self._translation_log_window = None
+
+    def open_aria2_downloader(self):
+        """打开泛用高速下载器独立窗口。"""
+        from webutils import aria2_manager
+        existing = getattr(self, '_aria2_downloader_window', None)
+        if existing is not None:
+            try:
+                existing.restore()
+                existing.show()
+                return {"success": True, "message": "高速下载器已打开"}
+            except Exception:
+                self._aria2_downloader_window = None
+
+        html_path = os.path.join(os.getenv('path_'), "webui/aria2-downloader.html")
+        current_theme = ConfigManager().get('theme', 'light')
+        api = Aria2DownloaderAPI()
+        window = webview.create_window(
+            "LCTA - 高速下载器", url=html_path,
+            width=980, height=760, resizable=True, text_select=True,
+            js_api=api,
+        )
+        api.set_window(window)
+        self._aria2_downloader_window = window
+
+        def on_closed(*_args):
+            if getattr(self, '_aria2_downloader_window', None) is window:
+                self._aria2_downloader_window = None
+            try:
+                aria2_manager.stop()
+            except Exception:
+                pass
+
+        window.events.closed += on_closed
+        try:
+            window.evaluate_js(f"""
+                (function() {{
+                    if (document.body) {{
+                        document.body.className = 'theme-{current_theme}';
+                        document.body.setAttribute('data-injected-theme', '{current_theme}');
+                    }}
+                }})();
+            """)
+        except Exception:
+            pass
+        return {"success": True, "message": "高速下载器已打开"}
+
+    def sync_theme_to_aria2_downloader(self, theme):
+        """推送主题变更到高速下载器窗口。"""
+        window = getattr(self, '_aria2_downloader_window', None)
+        if window is None:
+            return
+        try:
+            window.evaluate_js(f"""
+                if (typeof applyTheme === 'function') {{
+                    applyTheme('{theme}');
+                }}
+            """)
+        except Exception:
+            self._aria2_downloader_window = None

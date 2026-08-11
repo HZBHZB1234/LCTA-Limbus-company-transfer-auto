@@ -127,3 +127,4 @@ class FancyMixin:
         self.sync_theme_to_quick_editor(theme)
         self.sync_theme_to_translation_log_viewer(theme)
         self.sync_theme_to_llm_fancy(theme)
+        self.sync_theme_to_aria2_downloader(theme)

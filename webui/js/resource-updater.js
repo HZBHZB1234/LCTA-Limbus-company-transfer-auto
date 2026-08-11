@@ -49,6 +49,7 @@ class ResourceUpdaterPage {
         this.element('ru-start').addEventListener('click', () => this.start());
         this.element('ru-cancel').addEventListener('click', () => this.cancel());
         this.element('ru-go-launcher').addEventListener('click', () => goAndShow('launcher-config'));
+        this.element('ru-open-downloader').addEventListener('click', () => pywebview.api.open_aria2_downloader());
 
         this.element('ru-localize').addEventListener('change', () => this.syncScopeState());
         this.element('ru-bundle').addEventListener('change', () => this.syncScopeState());

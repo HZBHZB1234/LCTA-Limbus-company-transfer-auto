@@ -57,8 +57,8 @@
     <div class="qe-main">
         <!-- 工具栏 -->
         <div class="qe-toolbar">
-            <button id="qe-record-btn" class="qe-btn qe-btn-primary" title="记录当前修改到规则集">
-                <i class="fas fa-save"></i> 记录修改
+            <button id="qe-record-btn" class="qe-btn qe-btn-primary" title="记录后还需点「应用到游戏」才写入语言包">
+                <i class="fas fa-save"></i> 记录修改（生成替换规则）
             </button>
             <button id="qe-apply-btn" class="qe-btn qe-btn-success" title="应用所有变更到游戏文件">
                 <i class="fas fa-play"></i> 应用到游戏
@@ -75,8 +75,16 @@
             <button id="qe-replace-btn" class="qe-btn" title="批量查找替换">
                 <i class="fas fa-exchange-alt"></i> 批量替换
             </button>
+            <button id="qe-help-btn" class="qe-btn" title="完整教程见主窗口帮助中心（长按 W）">
+                <i class="fas fa-question-circle"></i> 使用教程
+            </button>
             <span style="flex:1;"></span>
             <span id="qe-current-file-label" style="font-size:11px;color:var(--color-text-secondary);align-self:center;"></span>
+        </div>
+
+        <!-- 流程提示 -->
+        <div class="qe-workflow-hint" style="font-size:11px;color:var(--color-text-secondary);padding:4px 10px;border-bottom:1px solid var(--color-border,#ddd);">
+            <i class="fas fa-shoe-prints"></i> 流程：1. 编辑文本 → 2. 点「记录修改」（Ctrl+S）→ 3. 点「应用到游戏」写入语言包
         </div>
 
         <!-- 编辑器 -->
@@ -110,7 +118,7 @@
         <span class="qe-change-count" id="qe-change-count">0</span>
         <span class="qe-spacer"></span>
         <button class="qe-btn-sm qe-btn-success" id="qe-changes-apply-btn">
-            <i class="fas fa-play"></i> 应用
+            <i class="fas fa-play"></i> 应用全部到游戏
         </button>
         <button class="qe-btn-sm qe-btn-danger" id="qe-changes-clear-btn">
             <i class="fas fa-trash"></i> 清空

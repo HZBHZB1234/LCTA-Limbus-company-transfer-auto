@@ -4,7 +4,11 @@
             <i class="fas fa-image"></i>
             加载页 CG 替换
         </h2>
-        <p class="section-subtitle">锁定游戏加载页背景图（存档注入）与替换缓存贴图（方案 A）— 零 hook，纯文件层操作</p>
+        <a href="javascript:void(0)" class="action-btn primary" onclick="showGuide('cg')"
+           style="margin-left:auto; display:inline-flex; align-items:center; gap:0.35rem;">
+            <i class="fas fa-book-open"></i> 查看使用教程
+        </a>
+        <p class="section-subtitle">把指定 CG 固定到游戏加载页；首次使用请先看右上角「使用教程」</p>
     </div>
 
     <div class="cg-guide-box">
@@ -32,7 +36,7 @@
                 <i class="fas fa-info-circle"></i> 状态总览
             </h3>
             <div class="form-group">
-                <label for="cg-slot-select">存档槽（切换后自动读取 CG 状态）</label>
+                <label for="cg-slot-select">游戏存档（自动读取该存档的 CG 状态）</label>
                 <div class="select-wrapper">
                     <select id="cg-slot-select"></select>
                     <i class="fas fa-chevron-down"></i>
@@ -48,22 +52,26 @@
             <h3 class="setting-title">
                 <i class="fas fa-list"></i> 当前 CG 状态
             </h3>
-            <p class="form-hint">锁定列表（<b style="color:#f39c12;">琥珀色</b>）中的 CG 将固定显示在加载页（方案 A，仅人格 CG）；解锁池为随机候选，可注入任意资源（方案 B，游戏保存后可能被重建）。</p>
+            <p class="form-hint">
+                · 锁定列表：指定的 CG 每次都显示——推荐、稳定（仅支持人格 CG）<br>
+                · 解锁池：把任意资源（Dummy、自定义背景）加入随机候选——游戏保存后可能失效<br>
+                · 显示优先级：锁定列表 ＞ 解锁池 ＞ 默认图
+            </p>
             <div class="form-group">
-                <label>解锁池 <code>_cgIdList</code>（点 × 移除）</label>
+                <label title="存档字段 _cgIdList">解锁池（点 × 移除）</label>
                 <div id="cg-unlocked-list" class="cg-chip-list"><span class="form-hint">—</span></div>
             </div>
             <div class="form-group">
-                <label>锁定列表 <code>_forcedCharacterCgIdList</code>（点 × 移除）</label>
+                <label title="存档字段 _forcedCharacterCgIdList">锁定列表（点 × 移除）</label>
                 <div id="cg-forced-list" class="cg-chip-list"><span class="form-hint">—</span></div>
             </div>
             <div class="form-group">
-                <label>上次显示 <code>_latestCg</code></label>
+                <label title="仅作记录，不影响设置">上次加载页显示的 CG</label>
                 <small id="cg-latest" class="form-hint">—</small>
             </div>
             <div style="margin-top: 0.6rem;">
                 <button id="cg-btn-clear" class="action-btn danger">
-                    <i class="fas fa-eraser"></i> 清除全部锁定
+                    <i class="fas fa-eraser"></i> 清空锁定列表（解锁池保留）
                 </button>
             </div>
         </div>
@@ -84,7 +92,7 @@
                 </div>
             </div>
             <div class="form-group">
-                <label>可用 CG（bundle 扫描 + catalog 全量 ID；同路径缓存自动命中，仅扫新增/变动）</label>
+                <label title="bundle 扫描 + catalog 全量 ID；同路径缓存自动命中，仅扫新增/变动">可用 CG（需先扫描；未下载缓存的仅可锁定、不可预览/替换）</label>
                 <div style="margin-top: 0.4rem; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                     <button id="cg-btn-scan" class="action-btn secondary">
                         <i class="fas fa-search"></i> 扫描可用 CG
@@ -110,10 +118,10 @@
             </div>
         </div>
 
-        <!-- 卡片 4：贴图替换（方案 A） -->
+        <!-- 卡片 4：贴图替换（配合锁定使用） -->
         <div class="setting-card">
             <h3 class="setting-title">
-                <i class="fas fa-palette"></i> 贴图替换
+                <i class="fas fa-palette"></i> 贴图替换（配合锁定使用）
             </h3>
             <div class="cg-share-warning">
                 <i class="fas fa-exclamation-triangle"></i>
@@ -122,9 +130,8 @@
                 替换后<b>所有引用原图的地方都会显示替换后的图片</b>（原图引用处随之变化），不仅是加载页。
                 可随时「还原原图」恢复；</div>
             </div>
-            <p class="form-hint">替换缓存 bundle 中该 CG 对应的贴图（保留原尺寸/格式/细节层次，自动缩放）。
-                <b>游戏更新重新下载缓存后会还原</b>；部分压缩格式无法重编码，仅可锁定。<b>替换前请先在卡片 3 锁定该 CG</b>，
-                否则加载页仍会随机显示其他 CG。</p>
+            <p class="form-hint">① 在「锁定管理」把目标 CG 加入锁定 → ② 在本卡替换它的贴图。<b>只替换不锁定，加载页不会显示该图。</b>
+                <b>游戏更新重新下载缓存后会还原</b>；部分压缩格式无法重编码，仅可锁定。</p>
             <div class="form-group">
                 <label for="cg-replace-id">目标 CG ID</label>
                 <div class="speed-input-group">

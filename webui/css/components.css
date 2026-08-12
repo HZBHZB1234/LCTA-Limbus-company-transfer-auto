@@ -2479,3 +2479,18 @@ select.elder-select:focus {
     color: #e67e22;
 }
 
+
+/* Jump-target flash highlight (used by goAndShow(name, anchorId)) */
+.target-flash {
+    animation: target-flash-pulse 2s ease-out;
+}
+
+@keyframes target-flash-pulse {
+    0%, 100% {
+        box-shadow: none;
+    }
+    25%, 70% {
+        box-shadow: 0 0 0 3px var(--color-primary, #3498db);
+        border-color: var(--color-primary, #3498db);
+    }
+}

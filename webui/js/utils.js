@@ -482,6 +482,15 @@ const TOOLTIP_DATA = {
     'ru-retry-delay': '每轮自动重试前的等待时间（秒）。等待窗口覆盖 CDN 资源传播时间，推荐 30 秒。',
     'ru-connection-limit': 'aria2 每个文件的并发下载连接数。数值过高会瞬间打出大量连接，可能触发源站拒绝；网络不稳定时可适当调低。',
     'launcher-work-speed': '通过 Launcher 启动游戏时自动启用游戏加速并注册全局热键。首次勾选需阅读并同意风险须知（未同意时就地弹出）。相关设置请在"游戏加速"页面配置。',
+
+    // ===== 游戏资源更新 =====
+    'ru-localize': '下载游戏官方各语言文本到游戏目录，汉化依赖这些文本。',
+    'ru-bundle': '把官方资源包预下载到 Unity 缓存，减少进新内容时的卡顿。',
+    'ru-lang-jp': '选择要预下载的官方语言文本。',
+    'ru-lang-en': '选择要预下载的官方语言文本。',
+    'ru-lang-kr': '选择要预下载的官方语言文本。',
+    'ru-engine': '自动=推荐；aria2c 为内置高速下载器。',
+    'ru-jobs': '同时下载的文件数，网络差可调低。',
     'launcher-speed-factor': 'Ctrl+S 热键切换时的目标倍率（默认 2.0x）。',
     'launcher-work-input-bypass': '通过 Launcher 启动游戏时自动注入输入反检测 hook，改写游戏上报的合成输入计数。首次勾选需阅读并同意风险须知（未同意时就地弹出）。相关设置请在"输入反检测"页面配置。',
     'input-bypass-mode': 'auto：仅清零合成计数/比例，真实输入保持自然统计（推荐，规避宏产生的虚拟点击）；manual：真实/合成计数使用手动填报值（用于 PostMessage 类宏导致的"双零"数据），合成比例由计数自动计算。',
@@ -511,8 +520,9 @@ function initTooltips() {
         let tooltipTarget = null;
 
         if (element.tagName === 'INPUT' && element.type === 'checkbox') {
-            // 复选框：使用 .checkbox-container 作为 tooltip 目标
-            tooltipTarget = element.closest('.checkbox-container');
+            // 复选框：优先使用 .checkbox-container 作为 tooltip 目标，
+            // 无容器（如 .resource-language-option 中的裸复选框）则回退到最近的 label
+            tooltipTarget = element.closest('.checkbox-container') || element.closest('label') || element;
         } else if (element.tagName === 'INPUT' || element.tagName === 'SELECT' || element.tagName === 'TEXTAREA') {
             // 普通输入框/下拉框：优先使用关联的 label
             const formGroup = element.closest('.form-group');
@@ -595,7 +605,7 @@ function removeConnectionMask() {
     }
 }
 
-async function goAndShow(name) {
+async function goAndShow(name, anchorId) {
     const targetButton = document.getElementById(`${name}-btn`);
     if (!targetButton) return;
     await loadSection(name);
@@ -604,6 +614,26 @@ async function goAndShow(name) {
     // 如果切换到首页，刷新仪表盘
     if (name === 'dashboard') {
         refreshDashboard();
+    }
+    // 可选锚点：等待目标 section 渲染（懒加载 + 淡入）完成后滚动定位并闪烁提示
+    if (anchorId) {
+        let attempts = 0;
+        const poll = () => {
+            attempts++;
+            const target = document.getElementById(anchorId);
+            if (!target) return;
+            if (target.offsetParent !== null || attempts >= 15) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                target.classList.remove('target-flash');
+                // 强制重排以重新触发动画
+                void target.offsetWidth;
+                target.classList.add('target-flash');
+                setTimeout(() => target.classList.remove('target-flash'), 2000);
+            } else {
+                setTimeout(poll, 150);
+            }
+        };
+        setTimeout(poll, 200);
     }
 }
 

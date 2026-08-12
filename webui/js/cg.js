@@ -15,6 +15,7 @@ class CgPage {
         this._filterTimer = null;  // 过滤输入防抖定时器
         this._modded = [];         // 已替换贴图的 CG ID 列表
         this._indexCount = 0;      // 缓存索引中的 CG 数量（决定替换前是否需先扫描）
+        this._syncingInputs = false; // 卡片3/卡片4 CG ID 输入框双向同步标志（防循环触发）
         this._initDomRefs();
     }
 
@@ -87,12 +88,25 @@ class CgPage {
                 }
             });
         }
+        if (this.cgInput) {
+            this.cgInput.addEventListener('input', () => this._syncCgIdInputs());
+        }
         if (this.replaceIdInput) {
-            this.replaceIdInput.addEventListener('input', () => this._updateRestoreButton());
+            this.replaceIdInput.addEventListener('input', () => this._syncCgIdInputs());
         }
         if (this.replaceImgInput) {
             this.replaceImgInput.addEventListener('change', () => this._validateImageInput());
         }
+    }
+
+    // 卡片 3「CG ID」与卡片 4「目标 CG ID」双向同步（同步标志位防止循环触发）
+    _syncCgIdInputs() {
+        if (this._syncingInputs || !this.cgInput || !this.replaceIdInput) return;
+        this._syncingInputs = true;
+        this.cgInput.value = this.replaceIdInput.value;
+        this.replaceIdInput.value = this.cgInput.value;
+        this._syncingInputs = false;
+        this._updateRestoreButton();
     }
 
     _showMain() {
@@ -137,8 +151,8 @@ class CgPage {
 
             if (this.keyStatusEl) {
                 this.keyStatusEl.innerHTML = d.key_available
-                    ? '<i class="fas fa-check" style="color:#27ae60;"></i> 加密密钥可用（注册表 PlayerPrefs）'
-                    : `<i class="fas fa-times" style="color:#e74c3c;"></i> 密钥不可用：${escapeHtml(d.key_error || '未找到注册表密钥')}`;
+                    ? '<i class="fas fa-check" style="color:#27ae60;"></i> 加密密钥可用（已找到游戏密钥）'
+                    : `<i class="fas fa-times" style="color:#e74c3c;"></i> 密钥不可用：${escapeHtml(d.key_error || '请先启动一次游戏生成密钥')}`;
             }
             this._modded = (d.bundle && d.bundle.modded) || [];
 
@@ -152,7 +166,9 @@ class CgPage {
                     ? `，<span style="color:#e67e22;">已替换贴图 ${this._modded.length} 个</span>`
                     : '';
                 this.cacheStatusEl.innerHTML = b.cache_count
-                    ? `<i class="fas fa-check" style="color:#27ae60;"></i> 缓存 bundle：${b.cache_count} 个${idxInfo}${moddedInfo}`
+                    ? (b.index_count
+                        ? `<i class="fas fa-check" style="color:#27ae60;"></i> 缓存资源：${b.cache_count} 个 bundle 已下载${idxInfo}${moddedInfo}`
+                        : `<i class="fas fa-check" style="color:#27ae60;"></i> 缓存资源：${b.cache_count} 个 bundle 已下载（尚未建立 CG 索引——请到「锁定管理」点「扫描可用 CG」）${moddedInfo}`)
                     : '<i class="fas fa-times" style="color:#e74c3c;"></i> 未找到 Unity 缓存目录（游戏未下载过资源？）';
             }
             if (this.saveDirEl) {
@@ -300,9 +316,8 @@ class CgPage {
         } else {
             // 方案 B：非人格资源（Dummy/自定义等）→ 解锁池注入（游戏保存后可能被重建）
             showConfirm('解锁池注入（方案 B）',
-                `「${id}」为非人格资源，无法写入锁定列表（forced 仅支持人格 CG）。`
-                + '将注入解锁池 _cgIdList 使其成为唯一候选并固定显示。'
-                + '注意：游戏保存时会重建解锁池，该条目可能失效，需重新注入。继续？',
+                `「${id}」为非人格资源，无法写入锁定列表，将加入解锁池随机候选。`
+                + '若解锁池为空，加载页将显示它；游戏保存后解锁池可能被重建，条目需重新注入。继续？',
                 () => this._applyPool(id, `解锁池已注入：${id}`));
         }
     }
@@ -348,8 +363,9 @@ class CgPage {
     }
 
     clearLock() {
-        showConfirm('清除全部锁定',
-            '将清空锁定列表，加载页恢复随机显示解锁池 CG。此操作立即写入存档，不做备份。继续？',
+        showConfirm('清空锁定列表（解锁池保留）',
+            '将清空锁定列表，加载页恢复随机显示解锁池 CG。此操作立即写入存档，不做备份。\n'
+            + '解锁池中的候选不会被清除，如需一并移除请点解锁池条目上的 ×。继续？',
             () => this._applyForced([], '已清除全部锁定'));
     }
 
@@ -428,7 +444,9 @@ class CgPage {
         this.listEl.style.display = '';
 
         if (!items.length) {
-            this.listEl.innerHTML = '<div class="cg-list-empty">无匹配的 CG（调整筛选条件）</div>';
+            this.listEl.innerHTML = this._scanItems.length
+                ? '<div class="cg-list-empty">无匹配的 CG（调整筛选条件）</div>'
+                : '<div class="cg-list-empty">未发现加载页 CG（游戏未下载过资源？可先启动游戏下载资源后重扫）</div>';
             return;
         }
         this._renderListRows(true);
@@ -461,6 +479,19 @@ class CgPage {
                     ? (uncached ? '未下载缓存，可锁定（方案 A）' : '点击选用并预览（人格 CG，可锁定）')
                     : '非人格资源，仅可注入解锁池（方案 B，游戏保存后可能被重建）');
             row.addEventListener('click', () => this._selectCg(id));
+            const lockBtn = document.createElement('button');
+            lockBtn.className = 'cg-list-tag';
+            lockBtn.style.cssText = 'margin-left:0; color:#8aa2ff; border-color:rgba(77,107,254,.5); background:rgba(77,107,254,.12); cursor:pointer;';
+            lockBtn.textContent = lockable ? '锁定' : '注入解锁池';
+            lockBtn.title = lockable
+                ? '直接添加锁定（方案 A，稳定）'
+                : '注入解锁池随机候选（方案 B，游戏保存后可能被重建）';
+            lockBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.cgInput) this.cgInput.value = id;
+                this.addLock();
+            });
+            row.appendChild(lockBtn);
             frag.appendChild(row);
         }
         this._renderedCount = end;
@@ -581,7 +612,7 @@ class CgPage {
             + '<b style="color:#e67e22;">⚠ 共享贴图影响：</b>该 CG 与游戏中其他位置（人格立绘/剧情/战斗等）'
             + '共用同一张贴图，替换后<b>所有引用原图的地方都会一并显示替换后的图片</b>，不只是加载页。\n\n'
             + '游戏更新重新下载缓存后会还原；原始贴图数据已留存，可随时「还原原图」。\n'
-            + '另建议先在卡片 3 锁定该 CG，否则加载页仍会随机显示其他 CG。继续？',
+            + `提示：替换仅修改缓存贴图，还需在「锁定管理」中锁定「${cgId}」才会显示在加载页。继续？`,
             () => {
                 const modal = new ProgressModal('替换贴图');
                 modal.addLog(`开始替换 ${cgId} ...`);
@@ -596,13 +627,21 @@ class CgPage {
                             this._modded.push(result.key || cgId);
                             this._updateRestoreButton();
                             this._renderScanList();
-                            if (this.replaceStatusEl) {
-                                this.replaceStatusEl.innerHTML = `<i class="fas fa-check" style="color:#27ae60;"></i> ${escapeHtml(result.message)}`;
-                            }
-                            // 防呆：已替换但未锁定 → 提示到卡片 3 锁定，否则加载页不显示
+                            // 防呆：已替换但未在锁定列表/解锁池 → 状态行追加黄色提示，否则加载页不显示
                             const forced = (this._model && this._model.forced_ids) || [];
+                            const pool = (this._model && this._model.cg_id_list) || [];
                             const norm = cgId.replace(/^Story_CG\//, 'CG/').replace(/^Unit_CG\//, 'CG/');
-                            if (!forced.includes(cgId) && !forced.includes(norm)) {
+                            const locked = forced.includes(cgId) || forced.includes(norm)
+                                || pool.includes(cgId) || pool.includes(norm);
+                            if (this.replaceStatusEl) {
+                                let statusHtml = `<i class="fas fa-check" style="color:#27ae60;"></i> ${escapeHtml(result.message)}`;
+                                if (!locked) {
+                                    statusHtml += ' <span style="color:#e67e22;">该 CG 尚未锁定，锁定后才会固定显示在加载页。</span>';
+                                }
+                                statusHtml += ' 原始贴图已留存，输入该 CG 后会出现「还原原图」按钮。';
+                                this.replaceStatusEl.innerHTML = statusHtml;
+                            }
+                            if (!locked) {
                                 showMessage('提示',
                                     `贴图已替换，但「${cgId}」尚未锁定：请到「锁定 CG」卡片添加锁定，否则加载页不会稳定显示该 CG。`);
                             }

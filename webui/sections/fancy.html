@@ -9,6 +9,7 @@
 <div class="settings-grid" style="grid-template-columns: 1fr 2fr;">
     <div class="setting-card">
         <h3 class="setting-title">规则集列表</h3>
+        <p class="form-hint">应用顺序：bus 文本替换 → v2 美化（同引擎内按列表顺序）</p>
         <div class="form-group">
             <div class="list-container">
                 <div class="list-header">
@@ -27,7 +28,7 @@
             <button class="action-btn" onclick="fancyManager.newRuleset()">
                 <i class="fas fa-plus"></i> 新建
             </button>
-            <button class="action-btn success" onclick="fancyManager.saveAll()">
+            <button class="action-btn success" id="fancy-save-all-btn" onclick="fancyManager.saveAll()" title="勾选状态修改后需点击「保存全部」才会长期保存；「立即应用美化」直接对当前语言包生效（未保存的勾选状态重启后会丢失）">
                 <i class="fas fa-save"></i> 保存全部
             </button>
             <button class="action-btn danger" onclick="fancyManager.deleteSelected()">
@@ -64,6 +65,7 @@
         </div>
         <div class="form-group">
             <label for="fancy-ruleset-rules">规则 (JSON 格式)</label>
+            <small class="form-hint" id="fancy-rules-format-hint"></small>
             <textarea id="fancy-ruleset-rules" rows="15" placeholder='[ { "files": ["Skills*.json"], "path": "dataList[*].name", "replacements": [{"from": "旧文本", "to": "新文本"}] } ]' disabled style="font-family: monospace; width: 100%;"></textarea>
         </div>
         <div class="form-group" id="builtinRule" style="display: none;">
@@ -75,6 +77,16 @@
             </button>
             <button class="action-btn" onclick="fancyManager.formatJson()">
                 <i class="fas fa-code"></i> 格式化JSON
+            </button>
+        </div>
+    </div>
+
+    <div class="setting-card" style="grid-column: 1 / -1;">
+        <h3 class="setting-title"><i class="fas fa-rocket"></i> Launcher 集成</h3>
+        <p class="form-hint">开启后，更新汉化包后自动应用文本美化，开关请在 Launcher 配置页设置。</p>
+        <div style="margin-top: 0.5rem;">
+            <button type="button" class="action-btn secondary" onclick="goAndShow('launcher-config')">
+                <i class="fas fa-arrow-right"></i> 前往 Launcher 配置
             </button>
         </div>
     </div>

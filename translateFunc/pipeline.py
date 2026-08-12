@@ -95,7 +95,7 @@ class TranslationPipeline:
         profiler.reset()
 
         self._on_status("正在初始化...")
-        _logger.info("=== 阶段 1/5: 解析路径配置 ===")
+        self._log_bridge.info("=== 阶段 1/5: 解析路径配置 ===")
 
         # 1. 解析路径
         game_path = self._config.game_path
@@ -119,10 +119,11 @@ class TranslationPipeline:
         )
 
         # 2. 获取专有名词
-        _logger.info("=== 阶段 2/5: 获取专有名词 ===")
+        self._log_bridge.info("=== 阶段 2/5: 获取专有名词 ===")
         with profiler.phase("获取专有名词"):
             if self._config.enable_proper:
-                self._on_status("正在获取专有名词...")
+                self._on_status("正在获取专有名词...（可能耗时较长）")
+                self._on_progress(5, "正在获取专有名词...（可能耗时较长）")
                 self._analyzer = ProperAnalyzer(kr_path, jp_path, en_path)
 
                 with profiler.phase("专有名词抓取"):
@@ -154,7 +155,7 @@ class TranslationPipeline:
                 self._log_bridge.info("专有名词分析已跳过（enable_proper=False）")
 
         # 3. 构建翻译器
-        _logger.info("=== 阶段 3/5: 构建匹配引擎与翻译器 ===")
+        self._log_bridge.info("=== 阶段 3/5: 构建匹配引擎与翻译器 ===")
         with profiler.phase("构建匹配引擎"):
             translator = self._build_translator()
 
@@ -181,7 +182,9 @@ class TranslationPipeline:
             self._log_bridge.warning(f"未找到模型文件 {model_name}，跳过优先处理")
 
         # 6. 串行处理优先文件
-        _logger.info("=== 阶段 4/5: 处理优先文件 ===")
+        self._log_bridge.info("=== 阶段 4/5: 处理优先文件 ===")
+        self._on_status("正在处理优先文件...")
+        self._on_progress(10, "正在处理优先文件...")
         summary = PipelineSummary()
         with profiler.phase("处理优先文件"):
             for pf in priority_files:
@@ -196,7 +199,7 @@ class TranslationPipeline:
                     self._update_roles(pf, base_path_config, has_prefix)
 
         # 7. 并发处理剩余文件
-        _logger.info(f"=== 阶段 5/5: 并发翻译 ({len(target_files)} 个文件) ===")
+        self._log_bridge.info(f"=== 阶段 5/5: 并发翻译 ({len(target_files)} 个文件) ===")
         self._on_status("正在执行翻译...")
         self._on_progress(10, "正在执行翻译...")
 

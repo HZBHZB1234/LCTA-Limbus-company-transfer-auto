@@ -727,11 +727,46 @@
                 newContent = content.replace(re, replaceStr);
             }
             setEditorContent(newContent);
-            updateStatus('批量替换完成');
             close();
+            // 批量替换即编辑内容变化：自动记录为规则集变更，避免用户忘记「记录修改」
+            recordChanges();
         });
 
         findInput.focus();
+    }
+
+    // ──── 使用教程（独立窗口无主窗口 showGuide，复用 qe-dialog 样式） ────
+    function openHelpDialog() {
+        var overlay = document.createElement('div');
+        overlay.className = 'qe-dialog-overlay';
+        overlay.innerHTML = '<div class="qe-dialog">' +
+            '<h3><i class="fas fa-question-circle"></i> 简易翻译编辑器使用教程</h3>' +
+            '<div style="font-size:12px;line-height:1.9;">' +
+            '<p><b>三步流程：</b></p>' +
+            '<p>1. 双击左侧文件编辑文本（可批量替换）；</p>' +
+            '<p>2. 点「记录修改（生成替换规则）」（Ctrl+S）把改动记录为规则集；</p>' +
+            '<p>3. 点「应用到游戏」把变更写入语言包文件。</p>' +
+            '<p><b>提示：</b>只记录不应用不会改动游戏文件；变更面板可逐条删除、清空。</p>' +
+            '<p>快捷键：Ctrl+S 记录修改，Ctrl+F 编辑器内查找替换，Ctrl+Shift+F 侧栏搜索。</p>' +
+            '<p style="color:var(--color-text-secondary, #666);">完整教程见主窗口帮助中心（长按 W）。</p>' +
+            '</div>' +
+            '<div class="qe-dialog-buttons">' +
+            '<button id="qe-help-close-btn" class="qe-btn-primary">知道了</button>' +
+            '</div></div>';
+        document.body.appendChild(overlay);
+
+        function close() {
+            document.removeEventListener('keydown', onKey);
+            overlay.remove();
+        }
+        function onKey(e) {
+            if (e.key === 'Escape') close();
+        }
+        overlay.querySelector('#qe-help-close-btn').addEventListener('click', close);
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) close();
+        });
+        document.addEventListener('keydown', onKey);
     }
 
     // ──── 标签切换 ────
@@ -888,6 +923,7 @@
         $i('qe-refresh-btn').addEventListener('click', refreshFileList);
         $i('qe-format-btn').addEventListener('click', formatJson);
         $i('qe-replace-btn').addEventListener('click', openBatchReplaceDialog);
+        $i('qe-help-btn').addEventListener('click', openHelpDialog);
         $i('qe-changes-apply-btn').addEventListener('click', applyEditsToGame);
         $i('qe-changes-clear-btn').addEventListener('click', clearAllEdits);
 

@@ -5,6 +5,7 @@ class ResourceUpdaterPage {
         this.running = false;
         this._bound = false;
         this._starting = false;
+        this.channelProgress = {};
     }
 
     element(id) {
@@ -45,10 +46,11 @@ class ResourceUpdaterPage {
         if (this._bound) return;
         this._bound = true;
         this.element('ru-go-settings').addEventListener('click', () => goAndShow('settings'));
+        this.element('ru-path-missing-go-settings').addEventListener('click', () => goAndShow('settings'));
         this.element('ru-probe').addEventListener('click', () => this.probe());
         this.element('ru-start').addEventListener('click', () => this.start());
         this.element('ru-cancel').addEventListener('click', () => this.cancel());
-        this.element('ru-go-launcher').addEventListener('click', () => goAndShow('launcher-config'));
+        this.element('ru-go-launcher').addEventListener('click', () => goAndShow('launcher-config', 'lc-card-resource-update'));
         this.element('ru-open-downloader').addEventListener('click', () => pywebview.api.open_aria2_downloader());
 
         this.element('ru-localize').addEventListener('change', () => this.syncScopeState());
@@ -88,7 +90,16 @@ class ResourceUpdaterPage {
             state.status || 'idle',
             running ? '资源更新正在后台执行，请保持工具箱开启。' : '配置更新范围后即可开始手动预下载。'
         );
+        this.updatePathMissingState();
         if (this.element('ru-game-path').value && !running) this.probe();
+    }
+
+    // 游戏目录为空时：禁用「开始更新」并展示前往设置页的提示
+    updatePathMissingState() {
+        const missing = !this.element('ru-game-path').value.trim();
+        const notice = this.element('ru-path-missing-notice');
+        if (notice) notice.style.display = missing ? 'flex' : 'none';
+        this.element('ru-start').disabled = missing || this.running;
     }
 
     collectOptions() {
@@ -144,13 +155,15 @@ class ResourceUpdaterPage {
             return false;
         }
 
-        this.setProbeState('running', '检测中', '正在验证游戏文件并读取 CDN 令牌…');
+        this.setProbeState('running', '检测中', '正在验证游戏文件并识别游戏当前资源版本…');
         try {
             const result = await pywebview.api.resource_updater_probe_game_dir(gamePath);
             this.setProbeState(
                 result.success ? 'success' : 'error',
                 result.success ? '目录有效' : '检测失败',
-                result.message
+                result.success
+                    ? `${result.message} 已就绪，勾选更新范围后点击右侧「开始更新」。`
+                    : result.message
             );
             return !!result.success;
         } catch (error) {
@@ -215,9 +228,9 @@ class ResourceUpdaterPage {
             } else if (status === 'cancelled') {
                 description = '任务已停止，已完成的文件会保留并可在下次继续使用。';
             } else if (failedItems.length) {
-                description = `以下 ${failedItems.length} 个文件下载失败：${failedItems.map((item) => item.name).join('、')}。详情见 logs/app.log。`;
+                description = `以下 ${failedItems.length} 个文件下载失败：${failedItems.map((item) => item.name).join('、')}。日志位于程序安装目录下 logs 文件夹的 app.log。`;
             } else {
-                description = '部分资源未能完成，请查看 logs/app.log 中的日志后重试。';
+                description = '部分资源未能完成，请重试。日志位于程序安装目录下 logs 文件夹的 app.log。';
             }
             this.setStatus(event.message, status, description);
         }
@@ -273,31 +286,60 @@ class ResourceUpdaterPage {
         badge.className = `resource-status-badge ${normalized}`;
         badge.innerHTML = `<i class="fas ${icons[normalized]}"></i><span>${this.escapeHtml(text)}</span>`;
         this.element('ru-status-description').textContent = description || '';
+
+        // 失败状态时「开始更新」按钮变为「重试更新」，其他状态恢复
+        const startBtn = this.element('ru-start');
+        if (startBtn) {
+            startBtn.innerHTML = normalized === 'error'
+                ? '<i class="fas fa-rotate-right"></i> 重试更新'
+                : '<i class="fas fa-cloud-arrow-down"></i> 开始更新';
+        }
     }
 
     setProgress(channel, fraction, message) {
         if (!['manifest', 'localize', 'bundle'].includes(channel)) return;
         if (fraction != null) {
+            this.channelProgress[channel] = fraction;
             const percent = Math.max(0, Math.min(100, Math.round(fraction * 100)));
             this.element(`ru-${channel}-bar`).style.width = `${percent}%`;
             this.element(`ru-${channel}-text`).textContent = `${percent}%`;
+            this.updateTotalProgress();
         }
-        if (message) this.element(`ru-${channel}-message`).textContent = message;
+        if (channel === 'manifest') {
+            this.element('ru-manifest-message').textContent = message
+                ? `${message}（网络慢时可能需要数分钟）`
+                : '正在解析资源清单，网络慢时可能需要数分钟';
+        } else if (message) {
+            this.element(`ru-${channel}-message`).textContent = message;
+        }
+    }
+
+    // 总进度 = 三个 channel 的加权平均（manifest 轻量 10%，Localize 45%，Bundle 45%）
+    updateTotalProgress() {
+        const weights = { manifest: 0.1, localize: 0.45, bundle: 0.45 };
+        let sum = 0;
+        ['manifest', 'localize', 'bundle'].forEach((channel) => {
+            if (this.channelProgress[channel] != null) sum += this.channelProgress[channel] * weights[channel];
+        });
+        const percent = Math.max(0, Math.min(100, Math.round(sum * 100)));
+        this.element('ru-total-bar').style.width = `${percent}%`;
+        this.element('ru-total-text').textContent = `${percent}%`;
     }
 
     resetProgress() {
-        ['manifest', 'localize', 'bundle'].forEach((channel) => {
+        this.channelProgress = {};
+        ['manifest', 'localize', 'bundle', 'total'].forEach((channel) => {
             this.element(`ru-${channel}-bar`).style.width = '0%';
             this.element(`ru-${channel}-text`).textContent = '0%';
         });
-        this.element('ru-manifest-message').textContent = '正在准备资源清单';
+        this.element('ru-manifest-message').textContent = '正在解析资源清单，网络慢时可能需要数分钟';
         this.element('ru-localize-message').textContent = '等待下载本地化资源';
         this.element('ru-bundle-message').textContent = '等待下载 Bundle 缓存';
     }
 
     setRunning(value) {
         this.running = value;
-        this.element('ru-start').disabled = value;
+        this.element('ru-start').disabled = value || !this.element('ru-game-path').value.trim();
         this.element('ru-cancel').disabled = !value;
         this.element('ru-go-settings').disabled = value;
         this.element('ru-probe').disabled = value;

@@ -10,6 +10,7 @@
         apiSettings: {},         // 解密后的 {服务名: 设置}
         busy: false,             // 任务执行中
         cancelRequested: false,  // 解密/校验窗口期内按下的取消（后端尚无 _cancel_event）
+        scanned: false,          // 是否已完成过一次扫描预览（排除项勾选提示用）
         theme: 'light',
     };
 
@@ -107,11 +108,25 @@
         $i('llmf-cancel-btn').disabled = !busy;
     }
 
-    function showResult(html) {
+    function showResult(title, html) {
         var box = $i('llmf-result');
+        var titleEl = $i('llmf-result-title');
+        if (titleEl) titleEl.innerHTML = '<i class="fas fa-check-circle"></i> ' + escapeHtml(title);
         $i('llmf-result-body').innerHTML = html;
         box.classList.add('active');
         box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // 内联反馈：校验/保存配置/排除项提示（非隐藏日志卡）
+    function showInlineFeedback(elId, message, isError) {
+        var el = $i(elId);
+        if (!el) return;
+        el.textContent = message;
+        el.style.color = isError ? 'var(--color-danger, #e74c3c)' : 'var(--color-success, #27ae60)';
+        clearTimeout(showInlineFeedback._t);
+        showInlineFeedback._t = setTimeout(function () {
+            if (el && el.textContent === message) el.textContent = '';
+        }, 6000);
     }
 
     // 后端线程事件分发入口
@@ -217,6 +232,18 @@
                 '</label>';
         }
         container.innerHTML = html;
+        // 已扫描过时，勾选排除项提示重新扫描
+        var boxes = container.querySelectorAll('input[type="checkbox"]');
+        for (var j = 0; j < boxes.length; j++) {
+            boxes[j].addEventListener('change', function () {
+                if (!state.scanned) return;
+                var hint = $i('llmf-exclusion-hint');
+                if (hint) {
+                    hint.textContent = '排除项已生效，请重新扫描预览以更新统计';
+                    hint.style.color = 'var(--color-danger, #e74c3c)';
+                }
+            });
+        }
     }
 
     function truncate(str, maxLen) {
@@ -261,14 +288,14 @@
         if (!api) return;
         var selection = collectSelection();
         if (selection === null) {
-            addLog('JSON 格式错误：无法解析匹配规则');
+            showInlineFeedback('llmf-validation-result', 'JSON 格式错误：无法解析匹配规则', true);
             return;
         }
         api.validate_selection(selection).then(function (result) {
             if (result && result.success) {
-                addLog('匹配规则校验通过');
+                showInlineFeedback('llmf-validation-result', '匹配规则校验通过', false);
             } else {
-                addLog('匹配规则错误: ' + ((result && result.message) || '未知错误'));
+                showInlineFeedback('llmf-validation-result', '匹配规则错误: ' + ((result && result.message) || '未知错误'), true);
             }
         });
     }
@@ -285,6 +312,9 @@
             addLog('JSON 格式错误：无法解析匹配规则');
             return;
         }
+        state.scanned = false;
+        var hint = $i('llmf-exclusion-hint');
+        if (hint) hint.textContent = '';
         $i('llmf-result').classList.remove('active');
         $i('llmf-log').innerHTML = '';
         setProgress(0, '');
@@ -305,6 +335,7 @@
 
     function onScanDone(result) {
         setBusy(false);
+        state.scanned = true;
         if (!result) return;
         setProgress(100, '扫描完成');
         if (result.candidates > 0) {
@@ -313,6 +344,7 @@
                 ? '，去重合并：' + result.deduped + ' 条相同文本'
                 : '';
             showResult(
+                '扫描预览结果',
                 '<div class="llmf-result-row"><b>扫描完成</b></div>' +
                 '<div class="llmf-result-row">语言包目录：<span class="llmf-result-path">' + escapeHtml(result.lang_dir || '') + '</span></div>' +
                 '<div class="llmf-result-row">扫描文件：' + result.files_scanned + '，候选文本：' + result.candidates +
@@ -321,6 +353,7 @@
             );
         } else {
             showResult(
+                '扫描预览结果',
                 '<div class="llmf-result-row"><b>没有匹配到任何候选文本</b></div>' +
                 '<div class="llmf-result-row">请检查匹配规则（bus 语法）或排除规则集是否过宽</div>'
             );
@@ -379,11 +412,12 @@
         setProgress(100, '');
         if (result.cancelled) {
             addLog('任务已取消');
-            showResult('<div class="llmf-result-row"><b>任务已取消，未生成规则集</b></div>');
+            showResult('任务已取消', '<div class="llmf-result-row"><b>任务已取消，未生成规则集</b></div>');
             return;
         }
         if (result.success === false) {
             addLog('美化失败: ' + (result.message || '未知错误'));
+            showResult('美化失败', '<div class="llmf-result-row"><b>美化失败</b></div><div class="llmf-result-row">' + escapeHtml(result.message || '未知错误') + '</div>');
             return;
         }
         var html =
@@ -399,7 +433,7 @@
         } else {
             html += '<div class="llmf-result-row">没有产生任何文本变化，未生成规则集</div>';
         }
-        showResult(html);
+        showResult('美化完成', html);
     }
 
     function onCancel() {
@@ -423,12 +457,12 @@
         }
         api.save_window_config(payload).then(function (res) {
             if (res && res.success) {
-                addLog('配置已保存');
+                showInlineFeedback('llmf-save-feedback', '已保存匹配规则/排除项/提示词等窗口配置，下次打开自动恢复', false);
             } else {
-                addLog('保存失败: ' + ((res && res.message) || '未知错误'));
+                showInlineFeedback('llmf-save-feedback', '保存失败: ' + ((res && res.message) || '未知错误'), true);
             }
         }).catch(function (err) {
-            addLog('保存出错: ' + err);
+            showInlineFeedback('llmf-save-feedback', '保存出错: ' + err, true);
         });
     }
 
@@ -440,6 +474,12 @@
         $i('llmf-run-btn').addEventListener('click', onRun);
         $i('llmf-cancel-btn').addEventListener('click', onCancel);
         $i('llmf-save-config-btn').addEventListener('click', onSaveConfig);
+        var helpBtn = $i('llmf-help-btn');
+        if (helpBtn) {
+            helpBtn.addEventListener('click', function () {
+                showInlineFeedback('llmf-save-feedback', '流程：填写匹配规则 → 扫描预览确认范围 → 开始美化生成规则集 → 主窗口「立即应用美化」生效；完整教程见主窗口帮助中心（长按 W）。', false);
+            });
+        }
     }
 
     document.addEventListener('DOMContentLoaded', function () {

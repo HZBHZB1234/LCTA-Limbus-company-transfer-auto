@@ -23,49 +23,67 @@
 
         <div class="form-group">
             <label class="checkbox-container">
-                <input type="checkbox" id="enable-proper" onchange="toggleProper()">
+                <input type="checkbox" id="llm-options-toggle" onchange="toggleLLMOptions()" checked>
                 <span class="checkmark"></span>
-                启用专有名词 (LLM翻译专用)
+                LLM 专属选项（使用在线翻译服务时无需设置）
             </label>
         </div>
 
-        <div id="proper-settings">
+        <div id="llm-options">
             <div class="form-group">
                 <label class="checkbox-container">
-                    <input type="checkbox" id="auto-fetch-proper" onchange="toggleAutoProper()">
+                    <input type="checkbox" id="enable-proper" onchange="toggleProper()">
                     <span class="checkmark"></span>
-                    在进行翻译时自动抓取专有词汇 (无法使用自定义设置)
+                    启用专有名词
                 </label>
             </div>
-            
-            <div class="form-group" id="proper-path-text">
-                <label for="proper-path-text">专有名词json路径</label>
-                <div class="file-input-group">
-                    <input type="text" id="proper-path" placeholder="选择专有名词json文件">
-                    <button class="action-btn secondary" 
-                    onclick="pywebview.api.browse_file('proper-path')">
-                        <i class="fas fa-folder-open"></i> 浏览
-                    </button>
+
+            <div id="proper-settings">
+                <div class="form-group">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="auto-fetch-proper" onchange="toggleAutoProper()">
+                        <span class="checkmark"></span>
+                        在进行翻译时自动抓取专有词汇 (无法使用自定义设置)
+                    </label>
                 </div>
+                
+                <div class="form-group" id="proper-path-text">
+                    <label for="proper-path-text">专有名词json路径</label>
+                    <div class="file-input-group">
+                        <input type="text" id="proper-path" placeholder="选择专有名词json文件">
+                        <button class="action-btn secondary" 
+                        onclick="pywebview.api.browse_file('proper-path')">
+                            <i class="fas fa-folder-open"></i> 浏览
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="enable-role" onchange="toggleProper()">
+                    <span class="checkmark"></span>
+                    启用人物角色标识
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="enable-skill" onchange="toggleProper()">
+                    <span class="checkmark"></span>
+                    启用状态效果标识
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="fallback" checked>
+                    <span class="checkmark"></span>
+                    失败时进行相反重试
+                </label>
             </div>
         </div>
 
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="enable-role" onchange="toggleProper()">
-                <span class="checkmark"></span>
-                启用人物角色标识 (LLM翻译专用)
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="enable-skill" onchange="toggleProper()">
-                <span class="checkmark"></span>
-                启用状态效果标识 (LLM翻译专用)
-            </label>
-        </div>
-        
         <div class="form-group">
             <label class="checkbox-container">
                 <input type="checkbox" id="enable-dev-settings" onchange="toggleDevelopSettings()">
@@ -148,14 +166,7 @@
             </div>
             <div class="translator-services">
             </div>
-        </div>
-        
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="fallback" checked>
-                <span class="checkmark"></span>
-                失败时进行相反重试 (LLM翻译专用)
-            </label>
+            <small class="form-hint">未显示服务选项时，请先到「配置汉化API」页配置翻译服务</small>
         </div>
         
         <div class="form-group">
@@ -171,7 +182,7 @@
         </div>
 
         <div class="form-group">
-            <label for="from-lang">使用源语言 (除LLM翻译外使用):</label>
+            <label for="from-lang">源语言（非 LLM 服务时使用）:</label>
             <div class="select-wrapper">
                 <select id="from-lang">
                     <option value="EN">英文</option>

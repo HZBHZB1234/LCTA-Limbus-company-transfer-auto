@@ -592,6 +592,8 @@ class ToggleItemListManager extends ItemListManager {
         this.defaultEnabled = options.defaultEnabled || false;
         this.onToggle = options.onToggle || null;
         this.itemKey = options.itemKey || 'name'; // 从对象中提取键的属性
+        // 可选：列表项徽标回调 (item) => string，返回空串则不显示
+        this.itemBadge = options.itemBadge || null;
     }
 
     /**
@@ -645,6 +647,7 @@ class ToggleItemListManager extends ItemListManager {
         const key = this._getItemKey(item);
         const displayName = this._getDisplayName(item);
         const isEnabled = this.enabledMap[key] || false;
+        const badgeText = (typeof this.itemBadge === 'function') ? (this.itemBadge(item) || '') : '';
 
         const itemDiv = document.createElement('div');
         itemDiv.className = 'list-item';
@@ -653,10 +656,15 @@ class ToggleItemListManager extends ItemListManager {
             itemDiv.setAttribute('data-selected', 'true');
         }
 
+        const badgeHtml = badgeText
+            ? `<span class="list-item-badge" style="font-size:10px;padding:1px 6px;border-radius:8px;margin-left:6px;background:var(--color-bg-input,#eee);color:var(--color-text-secondary,#666);border:1px solid var(--color-border,#ddd);">${badgeText}</span>`
+            : '';
+
         itemDiv.innerHTML = `
             <div class="list-item-content">
                 <i class="fas ${this.itemIcon}"></i>
                 <span>${displayName}</span>
+                ${badgeHtml}
             </div>
             <div class="list-item-actions">
                 <button class="list-action-btn toggle-btn" title="${isEnabled ? '禁用' : '启用'}" style="margin-right: 5px;">

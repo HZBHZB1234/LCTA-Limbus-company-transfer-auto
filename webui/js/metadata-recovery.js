@@ -10,10 +10,85 @@ class MetadataRecoveryPage {
 
     init() {
         this._bindEvents();
+        this.updateStepBadges(1);
         this.refreshStatus();
     }
 
     stop() {}
+
+    // 步骤徽标动态状态：step 为当前步骤号（1-6）
+    updateStepBadges(step) {
+        const badgeIds = [
+            'metadata-recovery-badge-1',
+            'metadata-recovery-badge-2',
+            'metadata-recovery-badge-3',
+            'metadata-recovery-badge-4',
+            'metadata-recovery-badge-5',
+        ];
+        // 徽标覆盖区间：步骤 1-2 → badge0，步骤 3/4/5/6 → badge1~4
+        const currentIdx = Math.max(0, Math.min(badgeIds.length - 1, step - 2));
+        for (let i = 0; i < badgeIds.length; i++) {
+            const badge = document.getElementById(badgeIds[i]);
+            if (!badge) continue;
+            if (!badge.dataset.label) badge.dataset.label = badge.textContent.trim();
+            badge.classList.remove('current');
+            badge.style.cssText = '';
+            badge.innerHTML = badge.dataset.label;
+            if (i === currentIdx) {
+                badge.classList.add('current');
+            } else if (i < currentIdx) {
+                // 已完成步骤：绿色填充 + 对勾（内联样式，不依赖 CSS 类）
+                badge.style.cssText = 'background:#27ae60; border-color:#27ae60; color:#fff; opacity:0.9;';
+                badge.innerHTML = badge.dataset.label + ' <i class="fas fa-check" style="font-size:0.85em;"></i>';
+            }
+        }
+    }
+
+    // 输入框后追加/移除「已自动填充」小标签
+    _setFillTag(anchorId, tagId, labelText, show) {
+        const anchor = document.getElementById(anchorId);
+        if (!anchor) return;
+        let tag = document.getElementById(tagId);
+        if (show) {
+            if (!tag) {
+                tag = document.createElement('small');
+                tag.id = tagId;
+                tag.className = 'form-hint';
+                tag.style.cssText = 'color:#27ae60; font-weight:600; margin-top:4px;';
+                anchor.insertAdjacentElement('afterend', tag);
+            }
+            tag.innerHTML = `<i class="fas fa-check-circle"></i> ${labelText}`;
+            tag.style.display = 'block';
+        } else if (tag) {
+            tag.style.display = 'none';
+        }
+    }
+
+    // 卡片短暂高亮提示（2 秒后移除，内联样式，不依赖 CSS 类）
+    _highlightCard(cardId) {
+        const card = document.getElementById(cardId);
+        if (!card) return;
+        card.style.boxShadow = '0 0 0 2px #27ae60, 0 4px 12px rgba(39,174,96,0.25)';
+        card.style.transition = 'box-shadow 0.3s ease';
+        setTimeout(() => { card.style.boxShadow = ''; }, 2000);
+    }
+
+    // 「打开输出目录」按钮：输出目录为「—」或空时禁用
+    _updateOpenDirButton() {
+        const openBtn = document.getElementById('metadata-recovery-btn-open-out');
+        const outEl = document.getElementById('metadata-recovery-out-dir');
+        if (!openBtn) return;
+        const text = outEl ? outEl.textContent.trim() : '';
+        openBtn.disabled = !text || text === '—';
+    }
+
+    // 运行按钮恢复可点状态
+    _restoreRunButton() {
+        const runBtn = document.getElementById('metadata-recovery-btn-run');
+        if (!runBtn) return;
+        runBtn.disabled = false;
+        runBtn.innerHTML = '<i class="fas fa-play"></i> 开始完整恢复';
+    }
 
     _bindEvents() {
         if (this._bound) return;
@@ -62,13 +137,19 @@ class MetadataRecoveryPage {
         if (!rankSel) return;
         const current = rankSel.value;
         rankSel.innerHTML = '';
-        for (const c of candidates || []) {
+        if (!candidates || !candidates.length) {
+            rankSel.innerHTML = '<option value="">请先在上方载入导出</option>';
+            rankSel.disabled = true;
+            return;
+        }
+        for (const c of candidates) {
             const opt = document.createElement('option');
             opt.value = c.rank;
-            opt.textContent = `#${c.rank} ${c.name || '?'} (score=${c.score != null ? c.score : '?'})`
-                + (c.has_decompile ? '' : ' — 无反编译文本');
+            opt.textContent = `候选 #${c.rank}：${c.name || '?'}（匹配分 ${c.score != null ? c.score : '?'}）`
+                + (c.has_decompile ? '' : '（该候选无反编译文本，需在步骤 5 手动粘贴）');
             rankSel.appendChild(opt);
         }
+        rankSel.disabled = false;
         if (current && [...rankSel.options].some(o => o.value === current)) {
             rankSel.value = current;
         }
@@ -81,20 +162,25 @@ class MetadataRecoveryPage {
         const fileEl = document.getElementById('metadata-recovery-decompile-file');
         if (!infoEl) return;
         if (!result || !result.success) {
+            this._fillRankSelect(null);
+            this._setFillTag('metadata-recovery-decompile-text', 'metadata-recovery-tag-decompile-text', '', false);
+            this._setFillTag('metadata-recovery-table-hex', 'metadata-recovery-tag-table-hex', '', false);
             const errors = (result && result.errors || ['未知错误']).join('；');
             infoEl.innerHTML = `<i class="fas fa-times-circle" style="color:#e74c3c;"></i> 载入失败：${escapeHtml(errors)}`;
             return;
         }
         this._fillRankSelect(result.candidates);
+        this.updateStepBadges(6);
 
-        let html = '';
+        let html = '<div style="margin-bottom:6px; padding:6px 10px; background:rgba(39,174,96,0.1); border-left:3px solid #27ae60; border-radius:4px;">'
+            + `<i class="fas fa-check-circle" style="color:#27ae60;"></i> 载入成功：候选 #${escapeHtml(result.rank)} 已就绪，替换表与反编译文本已自动填入步骤 5</div>`;
         if (result.verdict) {
             const ok = result.verdict === 'PASS';
             html += `<div><i class="fas ${ok ? 'fa-check-circle' : 'fa-exclamation-circle'}" style="color:${ok ? '#27ae60' : '#f39c12'};"></i> `
                 + `定位器裁决：<b>${escapeHtml(result.verdict)}</b></div>`;
         }
         html += `<div>候选：<b>#${result.rank} ${escapeHtml(result.candidate_name || '')}</b>`
-            + `（score=${result.score != null ? result.score : '?'}）</div>`;
+            + `（匹配分 ${result.score != null ? result.score : '?'}）</div>`;
         html += `<div>替换表 hex：${result.table_hex
             ? '<i class="fas fa-check" style="color:#27ae60;"></i> 已载入（256 字节）'
             : '<i class="fas fa-times" style="color:#e74c3c;"></i> 缺失'}</div>`;
@@ -104,15 +190,29 @@ class MetadataRecoveryPage {
         for (const err of result.errors || []) {
             html += `<div style="color:#f39c12;"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(err)}</div>`;
         }
-        infoEl.innerHTML = html;
-
-        if (textEl && result.decompile_text) textEl.value = result.decompile_text;
-        if (hexEl && result.table_hex) hexEl.value = result.table_hex;
         if (fileEl && result.decompile_file) {
             fileEl.value = result.decompile_file;
         } else if (fileEl && result.decompile_text) {
             fileEl.value = ''; // 文本已直接载入，清空文件输入避免歧义
+            html += '<div class="form-hint" style="margin-top:4px;"><i class="fas fa-info-circle" style="color:#27ae60;"></i> '
+                + '反编译文本已直接载入步骤 5，原文件路径已清空，无需重复选择</div>';
         }
+        infoEl.innerHTML = html;
+
+        if (textEl && result.decompile_text) {
+            textEl.value = result.decompile_text;
+            this._setFillTag('metadata-recovery-decompile-text', 'metadata-recovery-tag-decompile-text', '已自动填充（来源：IDA 导出）', true);
+        } else {
+            this._setFillTag('metadata-recovery-decompile-text', 'metadata-recovery-tag-decompile-text', '', false);
+        }
+        if (hexEl && result.table_hex) {
+            hexEl.value = result.table_hex;
+            this._setFillTag('metadata-recovery-table-hex', 'metadata-recovery-tag-table-hex', '已自动填充（来源：IDA 导出）', true);
+        } else {
+            this._setFillTag('metadata-recovery-table-hex', 'metadata-recovery-tag-table-hex', '', false);
+        }
+        this._highlightCard('metadata-recovery-card-input');
+        this._highlightCard('metadata-recovery-card-decompile');
     }
 
     refreshStatus() {
@@ -120,17 +220,26 @@ class MetadataRecoveryPage {
         pywebview.api.metadata_recovery_status().then((result) => {
             const statusEl = document.getElementById('metadata-recovery-plugin-status');
             const outEl = document.getElementById('metadata-recovery-out-dir');
-            if (outEl && result && result.success) outEl.textContent = result.data.out_dir;
+            if (outEl && result && result.success) {
+                outEl.textContent = result.data.out_dir;
+                this._updateOpenDirButton();
+            }
             if (result && result.success && result.data.derived) {
                 this._applyDerived(result.data.derived);
             }
             if (!statusEl || !result || !result.success) return;
-            const dir = result.data.ida_plugins_dir || '未探测到';
+            const dir = result.data.ida_plugins_dir || '';
             const installed = result.data.plugin_installed;
-            statusEl.innerHTML = (installed
-                ? '<i class="fas fa-check" style="color:#27ae60;"></i> 插件已安装：'
-                : '<i class="fas fa-times" style="color:#e74c3c;"></i> 插件未安装（自动探测到）：')
-                + `<code>${escapeHtml(dir)}</code>`;
+            if (!dir) {
+                statusEl.innerHTML = '<i class="fas fa-exclamation-circle" style="color:#f39c12;"></i> '
+                    + '未找到 IDA 安装。若没有 IDA Pro，可跳过本卡：手动从 locate_candidates.json 复制 table_hex 粘贴到步骤 5，并粘贴反编译文本。';
+            } else if (!installed) {
+                statusEl.innerHTML = '<i class="fas fa-times" style="color:#e74c3c;"></i> '
+                    + `检测到 IDA plugins 目录：<code>${escapeHtml(dir)}</code>。点击下方按钮一键安装，然后重启 IDA。`;
+            } else {
+                statusEl.innerHTML = '<i class="fas fa-check" style="color:#27ae60;"></i> '
+                    + `插件已安装：<code>${escapeHtml(dir)}</code>`;
+            }
         }).catch(() => {});
     }
 
@@ -140,7 +249,9 @@ class MetadataRecoveryPage {
         const metaInput = document.getElementById('metadata-recovery-metadata');
         const dllInput = document.getElementById('metadata-recovery-dll');
         if (!derived.derived) {
-            if (hint) hint.innerHTML = '未配置游戏路径：请先在「设置」页填写，或手动选择文件。';
+            if (hint) hint.innerHTML = '未配置游戏路径，无法自动推导文件。 '
+                + `<button class="action-btn secondary" style="margin:4px 6px; padding:4px 10px; font-size:12px;" onclick="goAndShow('settings')">去设置页配置游戏路径</button>`
+                + '或手动选择文件。';
             return;
         }
         if (metaInput && !metaInput.value) metaInput.value = derived.metadata_path;
@@ -169,6 +280,7 @@ class MetadataRecoveryPage {
             .then((result) => {
                 if (!statusEl) return;
                 if (result && result.success) {
+                    this.updateStepBadges(3);
                     statusEl.innerHTML = '<i class="fas fa-check" style="color:#27ae60;"></i> '
                         + `插件安装成功：<code>${escapeHtml(result.data.plugin_path)}</code>`
                         + '<br>重启 IDA 后按 Ctrl-Alt-Shift-M 运行定位器';
@@ -221,12 +333,19 @@ class MetadataRecoveryPage {
             return;
         }
         this._running = true;
+        this.updateStepBadges(6);
+        const runBtn = document.getElementById('metadata-recovery-btn-run');
+        if (runBtn) {
+            runBtn.disabled = true;
+            runBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 运行中…';
+        }
 
         const modal = new ProgressModal('Metadata 恢复');
         modal.addLog('正在启动恢复流水线...');
         pywebview.api.metadata_recovery_run(config, modal.id)
             .then((result) => {
                 this._running = false;
+                this._restoreRunButton();
                 if (!result) {
                     modal.complete(false, '恢复失败：无返回结果');
                     return;
@@ -245,19 +364,58 @@ class MetadataRecoveryPage {
             })
             .catch((error) => {
                 this._running = false;
+                this._restoreRunButton();
                 modal.complete(false, '恢复过程中发生错误：' + error);
             });
     }
 
     _verdictBadge(verdict) {
         const map = {
-            'PASS': ['<i class="fas fa-check-circle"></i>', '#27ae60'],
-            'PASS_WITH_REVIEW': ['<i class="fas fa-exclamation-circle"></i>', '#f39c12'],
-            'FAIL': ['<i class="fas fa-times-circle"></i>', '#e74c3c'],
-            'SKIP': ['<i class="fas fa-forward"></i>', '#7f8c8d'],
+            'PASS': ['<i class="fas fa-check-circle"></i>', '#27ae60', '通过'],
+            'PASS_WITH_REVIEW': ['<i class="fas fa-exclamation-circle"></i>', '#f39c12', '有疑点，查看报告'],
+            'FAIL': ['<i class="fas fa-times-circle"></i>', '#e74c3c', '未通过'],
+            'SKIP': ['<i class="fas fa-forward"></i>', '#7f8c8d', '已跳过'],
         };
-        const [icon, color] = map[verdict] || map.SKIP;
-        return `<span style="color:${color}; font-weight:600;">${icon} ${verdict}</span>`;
+        const [icon, color, label] = map[verdict] || map.SKIP;
+        return `<span style="color:${color}; font-weight:600;">${icon} ${verdict}（${label}）</span>`;
+    }
+
+    // 存在 FAIL / PASS_WITH_REVIEW / 求解 SKIP 时输出排查建议
+    _troubleshootTips(verdicts) {
+        const names = this._stageNames();
+        const tips = [];
+        if (verdicts.extract === 'FAIL') {
+            tips.push('提取失败：常见原因：反编译文本未载入或内容不完整、替换表 hex 格式错误。');
+        }
+        if (verdicts.verify === 'FAIL') {
+            tips.push('验证失败：1) 打开 verify-report.md 查看哪道验证门未通过；2) 常见原因：反编译文本不完整（只复制了部分函数体）、替换表 hex 错误、参考文件版本与目标不匹配。');
+        }
+        if (verdicts.solve === 'SKIP') {
+            tips.push('SKIP：未提供参考标准文件，仅执行了提取与验证，31 段映射求解未运行。');
+        }
+        for (const [stage, v] of Object.entries(verdicts)) {
+            if (v === 'PASS_WITH_REVIEW') {
+                tips.push(`阶段「${names[stage] || stage}」有疑点：查看对应报告中的「需复核项」，凭证据人工判断后决定是否继续。`);
+            }
+        }
+        return tips;
+    }
+
+    // 输出文件 key → 一句话用途
+    _outputDescriptions() {
+        return {
+            candidate_profile: '候选参数',
+            extract_report_json: '提取报告（JSON）',
+            verify_report_json: '验证报告（JSON）',
+            verify_report_md: '验证报告',
+            section_map: '数据区映射',
+            solve_report_json: '求解报告（JSON）',
+            solve_report_md: '求解报告',
+            standard_rebuilt: '重建的标准文件',
+            profile: '★ 正式 profile（给 Il2CppDumper 用）',
+            apply_report_json: '提升报告（JSON）',
+            apply_report_md: '提升报告',
+        };
     }
 
     _stageNames() {
@@ -277,18 +435,35 @@ class MetadataRecoveryPage {
         if (!box || !verdictsEl || !outputsEl) return;
 
         box.style.display = 'block';
-        if (outEl && result.run_dir) outEl.textContent = result.run_dir;
+        if (outEl && result.run_dir) {
+            outEl.textContent = result.run_dir;
+        } else if (outEl) {
+            outEl.textContent = '—';
+        }
+        this._updateOpenDirButton();
 
         const names = this._stageNames();
-        let verdictHtml = '';
+        let verdictHtml = '<div class="form-hint" style="margin:0 0 6px;">图例：'
+            + '<span style="color:#27ae60;">PASS=通过</span> · '
+            + '<span style="color:#f39c12;">PASS_WITH_REVIEW=基本通过有疑点</span> · '
+            + '<span style="color:#e74c3c;">FAIL=未通过</span> · '
+            + '<span style="color:#7f8c8d;">SKIP=未执行（缺前置输入）</span></div>';
         for (const [stage, verdict] of Object.entries(result.verdicts || {})) {
             verdictHtml += `<div style="margin: 2px 0;">${names[stage] || stage}：${this._verdictBadge(verdict)}</div>`;
         }
+        const tips = this._troubleshootTips(result.verdicts || {});
+        if (tips.length) {
+            verdictHtml += '<div class="form-hint" style="margin:8px 0 0; padding:8px 10px; background:rgba(231,76,60,0.07); border-left:3px solid #e74c3c; border-radius:4px; line-height:1.8;">'
+                + `<b>排查建议</b><br>${tips.join('<br>')}</div>`;
+        }
         verdictsEl.innerHTML = verdictHtml;
 
+        const desc = this._outputDescriptions();
         let outputsHtml = '';
         for (const [key, path] of Object.entries(result.outputs || {})) {
-            outputsHtml += `<div><code style="word-break: break-all;">${escapeHtml(path)}</code></div>`;
+            const label = desc[key] || key;
+            const fileName = String(path).split(/[\\/]/).pop();
+            outputsHtml += `<div>${label}：<code title="${escapeHtml(path)}" style="word-break: break-all;">${escapeHtml(fileName)}</code></div>`;
         }
         outputsEl.innerHTML = outputsHtml || '<div>（无输出文件）</div>';
 

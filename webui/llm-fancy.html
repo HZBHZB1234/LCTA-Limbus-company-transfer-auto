@@ -13,13 +13,16 @@
 <div class="llmf-container">
     <div class="llmf-header">
         <h1><i class="fas fa-wand-magic-sparkles"></i> LLM 文本美化</h1>
+        <button class="llmf-btn" id="llmf-help-btn" title="流程：1. 填写匹配规则（可加载示例/校验）→ 2. 点「扫描预览」确认匹配范围 → 3. 点「开始美化」生成规则集 → 4. 回主窗口「文本美化」页点「立即应用美化」生效。完整教程见主窗口帮助中心（长按 W）。">
+            <i class="fas fa-question-circle"></i> 使用教程
+        </button>
         <p>使用 bus 语法匹配文本组，交由 LLM 美化，输出 bus 引擎格式规则集（自动保存至 fancy/ 并启用）。</p>
     </div>
 
     <!-- 选择规则 -->
     <div class="llmf-card">
         <h3><i class="fas fa-bullseye"></i> 匹配规则（bus 语法）
-            <small>path 支持 key、[*] 通配、[索引]、[?字段=值] 选择器；path 为空表示匹配全部字符串叶子</small>
+            <small>path 支持 key、[*] 通配、[索引]、[?字段=值] 选择器；path 为空表示匹配全部字符串叶子。例如 dataList[?id=10100201].name 只匹配指定技能的名称；dataList[*].desc 匹配所有技能的描述</small>
         </h3>
         <div class="llmf-field">
             <textarea id="llmf-selection" class="llmf-code" rows="8" spellcheck="false"></textarea>
@@ -33,6 +36,7 @@
                 <i class="fas fa-file-code"></i> 加载示例
             </button>
         </div>
+        <div class="llmf-hint" id="llmf-validation-result" style="margin-top:8px;min-height:0;"></div>
     </div>
 
     <!-- 排除规则集 -->
@@ -43,6 +47,7 @@
         <div class="llmf-exclusion-list" id="llmf-exclusions">
             <div class="llmf-empty"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>
         </div>
+        <div class="llmf-hint" id="llmf-exclusion-hint" style="margin-top:8px;min-height:0;"></div>
     </div>
 
     <!-- LLM 设置 -->
@@ -60,11 +65,13 @@
         <div class="llmf-row">
             <div class="llmf-field">
                 <label for="llmf-max-length">批大小（字符上限）</label>
-                <input type="number" id="llmf-max-length" min="1000" step="1000" value="20000">
+                <input type="number" id="llmf-max-length" min="1000" step="1000" value="20000"
+                       title="批大小：每次请求发送给 LLM 的字符数上限，越大调用次数越少但超长可能出错">
             </div>
             <div class="llmf-field">
                 <label for="llmf-max-workers">并发数</label>
-                <input type="number" id="llmf-max-workers" min="1" max="16" value="4">
+                <input type="number" id="llmf-max-workers" min="1" max="16" value="4"
+                       title="并发数：同时进行的请求数，过大会触发 API 限流，建议 4">
             </div>
         </div>
     </div>
@@ -100,6 +107,7 @@
             <i class="fas fa-save"></i> 保存配置
         </button>
     </div>
+    <div class="llmf-hint" id="llmf-save-feedback" style="margin-top:8px;min-height:0;"></div>
 
     <!-- 进度与日志 -->
     <div class="llmf-card llmf-progress-card" id="llmf-progress-card">
@@ -110,7 +118,7 @@
 
     <!-- 结果 -->
     <div class="llmf-result" id="llmf-result">
-        <h4><i class="fas fa-check-circle"></i> 美化完成</h4>
+        <h4 id="llmf-result-title"><i class="fas fa-check-circle"></i> 美化完成</h4>
         <div id="llmf-result-body"></div>
     </div>
 </div>

@@ -2,6 +2,14 @@
 // 业务功能模块
 // ============================
 
+// 折叠/展开翻译页「LLM 专属选项」分组（对应 translate.html #llm-options）
+function toggleLLMOptions() {
+    const group = document.getElementById('llm-options');
+    const toggle = document.getElementById('llm-options-toggle');
+    if (!group || !toggle) return;
+    group.style.display = toggle.checked ? 'block' : 'none';
+}
+
 // === 文本美化 ===
 class FancyManager {
     constructor() {
@@ -20,7 +28,11 @@ class FancyManager {
             itemIcon: 'fa-paint-brush',
             defaultEnabled: false,
             onSelect: (item) => this.onSelectRuleset(item),
-            onToggle: (item, enabled) => this.onToggleRuleset(item, enabled)
+            onToggle: (item, enabled) => this.onToggleRuleset(item, enabled),
+            itemBadge: (item) => {
+                const rs = this.rulesets.find(r => r.name === item);
+                return rs ? (rs.format === 'lcta-bus' ? 'bus' : 'v2') : '';
+            }
         });
 
         await this.loadRulesets();
@@ -59,6 +71,7 @@ class FancyManager {
                     this.listManager.setSelectedItem(this.rulesets[0].name);
                     this.onSelectRuleset(this.rulesets[0].name);
                 }
+                this.markRulesetDirty(false);
             } else {
                 showMessage('错误', '加载规则集失败: ' + result.message);
             }
@@ -100,6 +113,25 @@ class FancyManager {
             console.log(`切换时警告: ${e} 一般而言不是问题`)
         }
         this.enabledMap[itemName] = enabled;
+        // 勾选状态变化 → 「保存全部」按钮提示有未保存更改
+        this.markRulesetDirty(true);
+    }
+
+    // 「保存全部」按钮的未保存标记（红点 + 提示）
+    markRulesetDirty(dirty) {
+        const btn = document.getElementById('fancy-save-all-btn');
+        if (!btn) return;
+        let mark = btn.querySelector('.fancy-unsaved-mark');
+        if (dirty && !mark) {
+            mark = document.createElement('span');
+            mark.className = 'fancy-unsaved-mark';
+            mark.textContent = ' ●';
+            mark.title = '有未保存的勾选更改';
+            mark.style.color = 'var(--color-danger, #e74c3c)';
+            btn.appendChild(mark);
+        } else if (!dirty && mark) {
+            mark.remove();
+        }
     }
 
     updateEditorUI() {
@@ -112,6 +144,8 @@ class FancyManager {
             if (descEl) { descEl.value = ''; descEl.disabled = true; }
             const rulesEl = document.getElementById('fancy-ruleset-rules');
             if (rulesEl) { rulesEl.value = ''; rulesEl.disabled = true; }
+            const formatHintEl = document.getElementById('fancy-rules-format-hint');
+            if (formatHintEl) { formatHintEl.textContent = ''; }
             const saveBtn = document.getElementById('fancy-save-current-btn');
             if (saveBtn) saveBtn.disabled = true;
             const ruleEditorBtn = document.getElementById('fancy-open-rule-editor-btn');
@@ -132,6 +166,18 @@ class FancyManager {
         descInput.value = this.selectedRuleset.desc || '';
         rulesTextarea.value = JSON.stringify(this.selectedRuleset.rules, null, 2);
         builtinCheck.style = (this.selectedRuleset.builtin || false) ? 'display: block;' : 'display: none;' ;
+
+        // 按规则集格式动态提示结构与 placeholder 示例
+        const formatHint = document.getElementById('fancy-rules-format-hint');
+        const isBusFormat = this.selectedRuleset.format === 'lcta-bus';
+        if (formatHint) {
+            formatHint.textContent = isBusFormat
+                ? '当前格式：bus 文本替换规则 — 使用 files/path/replacements 结构'
+                : '当前格式：v2 美化规则 — 使用 files/scope/targets/actions 结构';
+        }
+        rulesTextarea.placeholder = isBusFormat
+            ? '[ { "files": ["Skills*.json"], "path": "dataList[*].name", "replacements": [{"from": "旧文本", "to": "新文本"}] } ]'
+            : '[ { "files": ["Skills*.json"], "scope": "dataList[*]", "targets": ["name", "desc"], "actions": [{ "type": "replace", "mode": "literal", "from": "旧文本", "to": "新文本" }] } ]';
 
         // 内置规则集不可编辑
         const isBuiltin = this.selectedRuleset.builtin;
@@ -248,6 +294,10 @@ class FancyManager {
             showMessage('提示', '内置规则集不能删除');
             return;
         }
+        if (this.selectedRuleset.name === '_quick_edits') {
+            showMessage('提示', '该规则集由简易翻译编辑器维护，请勿删除');
+            return;
+        }
 
         showConfirm('确认删除', `确定要删除规则集 "${this.selectedRuleset.name}" 吗？`,
             () => {
@@ -288,6 +338,7 @@ class FancyManager {
             }
             await configManager.updateConfigValue('fancy-allow', JSON.stringify(this.enabledMap));
             await configManager.flushPendingUpdates();
+            this.markRulesetDirty(false);
             showMessage('成功', '全部规则集已保存');
         } catch (e) {
             showMessage('错误', '保存全部失败: ' + (e.message || e));
@@ -309,7 +360,8 @@ class FancyManager {
 function doApplyFancy() {
     const modal = new ProgressModal('应用美化文本');
     modal.addLog(`开始执行美化`);
-    modal.addLog(`应用规则集${fancyManager.enabledMap}`);
+    const enabledNames = Object.keys(fancyManager.enabledMap).filter(name => fancyManager.enabledMap[name]);
+    modal.addLog(`应用规则集: ${enabledNames.length ? enabledNames.join('、') : '无'}`);
     pywebview.api.fancy_main(fancyManager.rulesets, fancyManager.enabledMap, modal.id).then(
         (result) => {
             if (result && result.message === '已取消') {
@@ -335,6 +387,16 @@ function doApplyFancy() {
 };
 
 async function applyFancy() {
+    // 无任何启用规则集时先确认，避免"点了没反应"
+    const anyEnabled = Object.keys(fancyManager.enabledMap).some(name => fancyManager.enabledMap[name]);
+    if (!anyEnabled) {
+        showConfirm('提示',
+            '尚未启用任何规则集，将不会产生任何美化效果。是否仍要继续？',
+            () => doApplyFancy(),
+            () => {}
+        );
+        return;
+    }
     try {
         const result = await pywebview.api.check_fancy_marker();
         if (result && result.success && result.beautified) {

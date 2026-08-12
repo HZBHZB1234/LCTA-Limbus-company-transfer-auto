@@ -70,7 +70,7 @@
 
 定位器在 IDA 内运行，扫描指令级特征 + 反编译级评分，输出 top-K 候选与替换表字节 dump。
 
-### 4.1 一键安装插件
+### 5.1 一键安装插件
 
 1. 打开本页「定位器（IDA 插件）」卡片，插件目录留空自动探测（注册表 + 常见安装路径），或手动点击「选择目录」。
 2. 点击「安装定位器插件」，写入：
@@ -78,17 +78,17 @@
    - `<plugins>/metadata_recovery_tools/`（locator + 报告框架，自包含）
 3. 重启 IDA。
 
-### 4.2 运行
+### 5.2 运行
 
 - **热键**：在 IDA 中打开 `GameAssembly.dll` 的 IDB，按 `Ctrl-Alt-Shift-M`。
 - **输出**：`<IDB目录>/locator_out/locate_candidates.json` + 报告 + top-5 反编译文本（`decompile_rank*.c`，直接用于本页阶段 1）。
 - **MCP 方式**：在 ida-pro-mcp 中 `py_exec_file` 执行 `webutils/metadata_recovery/locator.py`，然后调用 `run_background(out_dir, top_k=20)`；也可设置环境变量 `LIMBUS_LOCATOR_OUT` 指定输出目录。
 
-### 4.3 结果判读
+### 5.3 结果判读
 
 `locate_candidates.json` 中按 `score` 排序的候选，Top-1 应同时具备：`xorshift_loops >= 5`、`imm64 >= 5`、拷贝类特征（memmove/table_ref/oword ≥3），且 `fanout_stats.fanout` 较大（写出的全局被广泛读取）。
 
-参考真值（用于核对）：08-06 构建 init 函数为 `sub_18069C5E0`、替换表 RVA `0x7354910`；07-30 为 `sub_1806AB0E0`、表 `0x18759C190`。
+参考真值（用于核对）：08-06 构建 init 函数为 `sub_18069C5E0`、替换表 RVA `0x7354910`；07-30 为 `sub_1806AB0E0`、表 `0x18759C190`。（以上 07-30 / 08-06 真值均为给开发者参考的回归基线，普通用户无需核对。）
 
 ## 六、阶段 1：参数提取（本页）
 
@@ -172,6 +172,15 @@
 
 ## 十二、常见问题
 
+**阶段 ↔ 步骤对照**：下文 FAQ 中提到的「阶段 1~4」与页面步骤的对应关系：
+
+| 阶段 | 对应页面步骤 |
+| --- | --- |
+| 阶段 1（参数提取） | 步骤 4 / 步骤 5（提供反编译文本、替换表 hex 等输入） |
+| 阶段 2（参数验证） | 步骤 6（点「开始完整恢复」运行） |
+| 阶段 3（31 段映射求解） | 步骤 6（运行流水线） |
+| 阶段 4（正式 profile 提升） | 步骤 6（运行流水线） |
+
 **Q: 找不到 IDA 或插件不生效？**  
 A: 插件目录自动探测失败时手动选择（IDA 9.x 通常在 `C:\Program Files\IDA Professional 9.3\plugins`）；安装后必须**重启 IDA**，在「Edit → Plugins」中应看到 "Locate Metadata Init"。
 
@@ -207,4 +216,4 @@ A: 期望值填写错误（大小写不敏感，应为 64 位 hex）；或映射
 - **修复版 Il2CppDumper**（配合本工具输出 profile 使用）：https://github.com/HZBHZB1234/Il2CppDumper
 - **LimbusMetadataRecovery Releases**（标准版本 metadata 文件下载，作参考标准文件）：https://github.com/HZBHZB1234/LimbusMetadataRecovery/releases
 - 本功能移植自开源仓库 HZBHZB1234/LimbusMetadataRecovery（证据驱动定位器、参数提取、验证闭环、31 段求解器的完整设计与回归记录见该仓库文档）。
-- 参考基线：08-06 构建真值 init `sub_18069C5E0`、map `sub_180693580`；07-30 夹具覆盖两代构建的提取回归。
+- 参考基线（给开发者参考的回归基线）：08-06 构建真值 init `sub_18069C5E0`、map `sub_180693580`；07-30 夹具覆盖两代构建的提取回归。

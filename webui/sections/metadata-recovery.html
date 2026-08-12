@@ -3,14 +3,14 @@
         <i class="fas fa-key"></i>
         Metadata 恢复
     </h2>
-    <p class="section-subtitle">自动恢复《边狱公司》IL2CPP global-metadata.dat 的解密参数与 31 段映射，输出可直接用于 Il2CppDumper 的正式 profile</p>
+    <p class="section-subtitle">游戏文件中的 global-metadata.dat 是加密的。本页自动分析它的解密参数与 31 个数据区，生成可直接交给 Il2CppDumper 使用的正式配置。</p>
 </div>
 
 <div class="settings-grid">
 
     <div class="setting-card">
         <h3 class="setting-title">
-            <span class="step-badge">步骤 1-2</span>
+            <span class="step-badge" id="metadata-recovery-badge-1">步骤 1-2</span>
             <i class="fas fa-bullseye"></i> 定位器（IDA 插件）
         </h3>
         <p class="form-hint">阶段 0 定位器在 IDA 内运行：扫描 xorshift 模式与反编译特征，对解密入口函数候选评分（top-K）。本页提供一键安装 IDA 插件。</p>
@@ -25,12 +25,13 @@
             </div>
         </div>
         <small class="form-hint" id="metadata-recovery-plugin-status">正在检测插件状态...</small>
-        <small class="form-hint">安装后在 IDA 中打开 GameAssembly.dll 的 IDB，按 <kbd>Ctrl-Alt-Shift-M</kbd> 运行；导出写入 <code>&lt;IDB目录&gt;/locator_out/</code>（<code>locate_candidates.json</code> + <code>decompile_rank*.c</code>）。下一步直接导入该目录即可，无需手动传参。</small>
+        <label class="form-hint" data-tooltip="IDA 打开 dll 后保存的分析工程文件">安装后在 IDA 中打开 GameAssembly.dll 的 IDB，按 <kbd>Ctrl-Alt-Shift-M</kbd> 运行；导出写入 <code>&lt;IDB目录&gt;/locator_out/</code>（<code>locate_candidates.json</code> + <code>decompile_rank*.c</code>）。下一步直接导入该目录即可，无需手动传参。</label>
+        <small class="form-hint">没有 IDA？也可以手动操作（见教程「高级/手动模式」）。</small>
     </div>
 
     <div class="setting-card">
         <h3 class="setting-title">
-            <span class="step-badge current">步骤 3</span>
+            <span class="step-badge" id="metadata-recovery-badge-2">步骤 3</span>
             <i class="fas fa-file-import"></i> 导入定位器导出
         </h3>
         <p class="form-hint">选择 IDA 插件导出（<code>locate_candidates.json</code> 或其所在目录），载入后自动填充替换表 hex 与反编译文本，其余参数继续由游戏目录推导。</p>
@@ -46,9 +47,11 @@
             </div>
         </div>
         <div class="form-group">
-            <label for="metadata-recovery-candidate-rank">候选（top-1 通常为真值，可切换 rank 1-5）</label>
+            <label for="metadata-recovery-candidate-rank" data-tooltip="IDA 扫描找到的多个『可能是解密函数』的结果，按匹配度从高到低排列（#1 最可信）。真值即正确答案——top-1 通常就是真正的解密函数">候选（默认 #1 最可信，可切换其它候选）</label>
             <div class="select-wrapper">
-                <select id="metadata-recovery-candidate-rank"></select>
+                <select id="metadata-recovery-candidate-rank" disabled>
+                    <option value="">请先在上方载入导出</option>
+                </select>
                 <i class="fas fa-chevron-down"></i>
             </div>
             <small class="form-hint">切换候选后自动重新载入对应的反编译文本与替换表 hex。</small>
@@ -56,9 +59,9 @@
         <small class="form-hint" id="metadata-recovery-export-info"></small>
     </div>
 
-    <div class="setting-card">
+    <div class="setting-card" id="metadata-recovery-card-input">
         <h3 class="setting-title">
-            <span class="step-badge">步骤 4</span>
+            <span class="step-badge" id="metadata-recovery-badge-3">步骤 4</span>
             <i class="fas fa-file-archive"></i> 输入文件
         </h3>
         <small class="form-hint" id="metadata-recovery-derived-hint"></small>
@@ -84,17 +87,17 @@
         </div>
     </div>
 
-    <div class="setting-card">
+    <div class="setting-card" id="metadata-recovery-card-decompile">
         <h3 class="setting-title">
-            <span class="step-badge">步骤 5</span>
+            <span class="step-badge" id="metadata-recovery-badge-4">步骤 5</span>
             <i class="fas fa-paste"></i> 反编译文本 / 高级参数
         </h3>
         <div class="form-group">
-            <label for="metadata-recovery-decompile-text">反编译文本（步骤 3 载入后自动填充，可手改）</label>
+            <label for="metadata-recovery-decompile-text" data-tooltip="IDA 把汇编指令翻译成的类 C 代码，本页从中提取解密参数">反编译文本（步骤 3 载入后自动填充，可手改）</label>
             <textarea id="metadata-recovery-decompile-text" rows="6" placeholder="解密入口函数反编译文本，如 IDA 伪代码视图全选复制"></textarea>
         </div>
         <div class="form-group">
-            <label for="metadata-recovery-table-hex">替换表 hex（256 字节；步骤 3 载入后自动填充）</label>
+            <label for="metadata-recovery-table-hex" data-tooltip="解密用的 256 字节密钥表（hex 文本形式，512 个字符）。通常由 IDA 定位器自动载入，无需手动填写">替换表 hex（256 字节；步骤 3 载入后自动填充）</label>
             <input type="text" id="metadata-recovery-table-hex" placeholder="512 位十六进制字符">
         </div>
         <div class="form-group">
@@ -102,7 +105,7 @@
             <input type="text" id="metadata-recovery-expect-sha" placeholder="64 位十六进制字符">
         </div>
         <div class="form-group">
-            <label for="metadata-recovery-candidate-profile">已有 candidate_profile.json（可选，跳过参数提取阶段）</label>
+            <label for="metadata-recovery-candidate-profile" data-tooltip="最终生成的配置文件，直接交给 Il2CppDumper 使用">已有 candidate_profile.json（可选，跳过参数提取阶段）</label>
             <input type="text" id="metadata-recovery-candidate-profile" placeholder="直接从此文件开始验证/求解">
             <div style="margin-top: 0.4rem;"><button class="action-btn secondary" onclick="pywebview.api.browse_file('metadata-recovery-candidate-profile')">选择文件</button></div>
         </div>
@@ -110,10 +113,10 @@
 
     <div class="setting-card">
         <h3 class="setting-title">
-            <span class="step-badge">步骤 6</span>
+            <span class="step-badge" id="metadata-recovery-badge-5">步骤 6</span>
             <i class="fas fa-play-circle"></i> 运行流水线
         </h3>
-        <p class="form-hint">执行顺序：替换表解析 → 参数提取 → 参数验证 → 31 段映射求解 → 正式 profile 提升。每个阶段独立裁决并产出报告。</p>
+        <label class="form-hint" data-tooltip="把候选参数转正为可用的正式文件">执行顺序：替换表解析（读取密钥表）→ 参数提取（从代码中找出解密参数）→ 参数验证（用真实游戏文件核对）→ 31 段映射求解（还原数据区布局）→ 正式 profile 提升（生成 Il2CppDumper 可用配置）。每个阶段独立裁决并产出报告。</label>
         <div style="margin-top: 0.6rem; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
             <button id="metadata-recovery-btn-run" class="primary-btn">
                 <i class="fas fa-play"></i> 开始完整恢复
@@ -127,7 +130,7 @@
                 <label>输出文件</label>
                 <div id="metadata-recovery-outputs" style="font-size: 0.85em; line-height: 1.7;"></div>
             </div>
-            <button class="action-btn secondary" onclick="pywebview.api.open_explorer(document.getElementById('metadata-recovery-out-dir').textContent)">打开输出目录</button>
+            <button id="metadata-recovery-btn-open-out" class="action-btn secondary" onclick="pywebview.api.open_explorer(document.getElementById('metadata-recovery-out-dir').textContent)">打开输出目录</button>
         </div>
     </div>
 

@@ -8,51 +8,6 @@
 
 <div class="settings-grid">
     <div class="setting-card">
-        <h3 class="setting-title">调爪替换文本包</h3>
-        <p class="form-hint">汉化包更新后自动下载并应用所选调爪「替换」文本包（直接覆盖当前语言包中的文本文件）。无需备份，重装/更新汉化包即可还原原文本。三种气泡（彩色 / 无色 / 旧翻译版）为互斥选项，仅可勾选其一。</p>
-
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="lc-tiaozhua-replace-3">
-                <span class="checkmark"></span>
-                彩色气泡 BattleSpeechBubbleDlg
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="lc-tiaozhua-replace-4">
-                <span class="checkmark"></span>
-                无色气泡 BattleSpeechBubbleDlg
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="lc-tiaozhua-replace-5">
-                <span class="checkmark"></span>
-                随机加载文本
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="lc-tiaozhua-replace-7">
-                <span class="checkmark"></span>
-                事件美化
-            </label>
-        </div>
-
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="lc-tiaozhua-replace-8">
-                <span class="checkmark"></span>
-                旧翻译版气泡 BattleSpeechBubbleDlg
-            </label>
-        </div>
-    </div>
-
-    <div class="setting-card">
         <h3 class="setting-title">工作模式配置</h3>
         <div class="form-group">
             <label for="launcher-work-update">更新模式:</label>
@@ -109,7 +64,7 @@
         </div>
     </div>
 
-    <div class="setting-card">
+    <div class="setting-card" id="lc-card-resource-update">
         <h3 class="setting-title">更新集成</h3>
 
         <div class="form-group">
@@ -120,16 +75,22 @@
             </label>
             <small class="form-hint">更新汉化包后将自动进行文本美化</small>
             <small class="form-hint">相关设置请在文本美化页面配置</small>
+            <button type="button" class="action-btn secondary" style="margin:4px 6px 0 0; padding:4px 10px; font-size:12px;" onclick="goAndShow('fancy')">
+                <i class="fas fa-arrow-right"></i> 前往文本美化页面
+            </button>
         </div>
 
         <div class="form-group">
             <label class="checkbox-container">
                 <input type="checkbox" id="launcher-work-tiaozhua">
                 <span class="checkmark"></span>
-                启用调爪文本
+                启用调爪文本（修改包，导入规则集）
             </label>
-            <small class="form-hint">启用后将自动下载导入调爪文本修改包</small>
+            <small class="form-hint">启用后将自动下载导入调爪文本修改包。这是导入规则集，与「调爪替换文本包」（直接覆盖文本）是两种不同的包。</small>
             <small class="form-hint">相关设置请在汉化包下载页面配置</small>
+            <button type="button" class="action-btn secondary" style="margin:4px 6px 0 0; padding:4px 10px; font-size:12px;" onclick="goAndShow('download')">
+                <i class="fas fa-arrow-right"></i> 前往汉化包下载页面
+            </button>
         </div>
 
         <div class="form-group">
@@ -140,10 +101,71 @@
             </label>
             <small class="form-hint">Launcher 会比较 LimbusCompany.exe 的 SHA-256，仅在游戏版本变化后执行，不需要联网检查版本。</small>
             <small class="form-hint">相关设置请在游戏资源更新页面配置</small>
+            <button type="button" class="action-btn secondary" style="margin:4px 6px 0 0; padding:4px 10px; font-size:12px;" onclick="goAndShow('resource-updater')">
+                <i class="fas fa-arrow-right"></i> 前往游戏资源更新页面
+            </button>
         </div>
     </div>
 
-    <div class="setting-card">
+    <div class="setting-card" id="lc-card-tiaozhua-replace">
+        <h3 class="setting-title">调爪替换文本包（覆盖文本）</h3>
+        <p class="form-hint">汉化包更新后自动下载并应用所选调爪「替换」文本包，直接覆盖当前语言包中的文本文件。无需备份，重装/更新汉化包即可还原原文本。</p>
+
+        <fieldset style="border:1px solid var(--color-border); border-radius:8px; padding:10px 12px; margin:12px 0;">
+            <legend style="padding:0 6px; font-size:12px; color:var(--color-text-secondary);">气泡样式（三选一）</legend>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="lc-tiaozhua-replace-3">
+                    <span class="checkmark"></span>
+                    彩色气泡 BattleSpeechBubbleDlg
+                </label>
+                <small class="form-hint">对话气泡带彩色背景</small>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="lc-tiaozhua-replace-4">
+                    <span class="checkmark"></span>
+                    无色气泡 BattleSpeechBubbleDlg
+                </label>
+                <small class="form-hint">纯文本无背景</small>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="lc-tiaozhua-replace-8">
+                    <span class="checkmark"></span>
+                    旧翻译版气泡 BattleSpeechBubbleDlg
+                </label>
+                <small class="form-hint">早期汉化版本的翻译文案</small>
+            </div>
+        </fieldset>
+
+        <fieldset style="border:1px solid var(--color-border); border-radius:8px; padding:10px 12px; margin:12px 0;">
+            <legend style="padding:0 6px; font-size:12px; color:var(--color-text-secondary);">其它替换（可与气泡叠加）</legend>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="lc-tiaozhua-replace-5">
+                    <span class="checkmark"></span>
+                    随机加载文本
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="lc-tiaozhua-replace-7">
+                    <span class="checkmark"></span>
+                    事件美化
+                </label>
+            </div>
+        </fieldset>
+
+        <small class="form-hint">该选项与「汉化包下载页」同步，修改任意一处均生效。</small>
+    </div>
+
+    <div class="setting-card" id="lc-card-speed">
         <h3 class="setting-title">游戏加速</h3>
 
         <div class="form-group" data-risk-service="speed">
@@ -197,7 +219,7 @@
         </div>
     </div>
 
-    <div class="setting-card">
+    <div class="setting-card" id="lc-card-input-bypass">
         <h3 class="setting-title">启动增强</h3>
 
         <div class="form-group" data-risk-service="input_bypass">

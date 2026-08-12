@@ -94,9 +94,14 @@ def translate_main(
         pipeline = TranslationPipeline(config)
 
         # 6. 绑定 UI 回调
+        # on_log/on_status 同步桥接到模态窗口日志（log_modal_process），
+        # 使「=== 阶段 X/5 …」与状态文本在模态日志中可见阶段流转
         pipeline.set_callbacks(
-            on_log=lambda msg: _log_manager.log(msg),
-            on_status=lambda msg: _log_manager.log_modal_status(msg, modal_id),
+            on_log=lambda msg: _log_manager.log_modal_process(msg, modal_id),
+            on_status=lambda msg: (
+                _log_manager.log_modal_status(msg, modal_id),
+                _log_manager.log_modal_process(msg, modal_id),
+            ),
             on_progress=lambda pct, msg: (
                 _log_manager.update_modal_progress(pct, msg, modal_id),
                 _log_manager.log_modal_process(msg, modal_id),

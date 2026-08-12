@@ -1555,6 +1555,45 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         const genFromChanges = $i('re-gen-from-changes-btn');
         if (genFromChanges) genFromChanges.addEventListener('click', generateRulesFromChanges);
 
+        // 使用教程（独立窗口无主窗口 showGuide，提供简单帮助弹窗）
+        const reHelpBtn = $i('re-help-btn');
+        if (reHelpBtn) reHelpBtn.addEventListener('click', showHelpDialog);
+
+    }
+
+    // ──── 使用教程弹窗（复用 re-confirm-dialog 样式） ────
+    function showHelpDialog() {
+        var overlay = document.createElement('div');
+        overlay.className = 're-overlay';
+        overlay.innerHTML =
+            '<div class="re-confirm-dialog" style="max-width:560px;">' +
+            '<div class="re-confirm-header">' +
+            '<h4><i class="fas fa-question-circle"></i> 规则编辑器使用教程</h4>' +
+            '</div>' +
+            '<div class="re-confirm-body" style="line-height:1.9;font-size:13px;">' +
+            '<p><b>推荐流程：</b>双击左侧文件编辑 → 点「保存到游戏」写入语言包 → 点「比较变更」查看改动 → 点「智能生成规则集」生成规则 → 在「规则集编辑」页确认后点「应用规则集到游戏」生效。</p>' +
+            '<p><b>提示：</b>「保存到游戏」只写入磁盘，之后仍可「比较变更」生成规则（变更记录保留）；顶部 tab 圆点表示未保存修改。</p>' +
+            '<p><b>规则格式：</b>bus 替换规则用 files/path/replacements；v2 美化规则用 files/scope/targets/actions。</p>' +
+            '<p>快捷键：Ctrl+S 保存到游戏，Ctrl+F 查找替换，Ctrl+W 关闭当前文件。</p>' +
+            '<p style="color:var(--color-text-secondary, #666);">完整教程见主窗口帮助中心（长按 W）。</p>' +
+            '</div>' +
+            '<div class="re-confirm-actions">' +
+            '<button class="re-btn re-btn-primary re-confirm-save-btn">知道了</button>' +
+            '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+        var close = function () {
+            document.removeEventListener('keydown', onKey);
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        };
+        function onKey(e) {
+            if (e.key === 'Escape') close();
+        }
+        overlay.querySelector('.re-confirm-save-btn').addEventListener('click', close);
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) close();
+        });
+        document.addEventListener('keydown', onKey);
     }
 
     function onContentPanelClick(e) {
@@ -4409,7 +4448,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         }
         var diffs = diffJson(originalParsed, parsed, '');
         if (!diffs.length) {
-            showToast('未检测到变更', 'info');
+            showToast('暂无变更 — 若刚保存过文件，请重新编辑后再比较', 'info');
             ts.pendingChanges = [];
             renderChangeList();
             return;
@@ -4430,7 +4469,7 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         if (panel) panel.style.display = changes.length ? '' : 'none';
         if (countEl) countEl.textContent = String(changes.length);
         if (!changes.length) {
-            container.innerHTML = '<div class="re-change-empty">暂无变更 — 编辑文件后点击「比较变更」</div>';
+            container.innerHTML = '<div class="re-change-empty">暂无变更 — 若刚保存过文件，请重新编辑后再比较</div>';
             return;
         }
         let html = '';
@@ -4477,12 +4516,10 @@ if (ts && ts.editor && _searchBridge.isOpen) {
         try {
             var res = await api.save_file_content(path, raw);
             if (res && res.success) {
+                // 仅更新磁盘内容：保留 baselineContent 与 pendingChanges，
+                // 使保存后仍可「比较变更」→「智能生成规则集」
                 ts.diskContent = raw;
-                ts.baselineContent = raw;
-                try { ts.baselineParsed = JSON.parse(raw); } catch (e) { void e; }
                 ts.lastSavedAt = Date.now();
-                ts.pendingChanges = [];
-                state.pendingChanges = [];
                 updateFileEditStatus(ts);
                 renderChangeList();
 
@@ -4496,7 +4533,11 @@ if (ts && ts.editor && _searchBridge.isOpen) {
                 renderFileList();
                 updateFileEditTabLabel();
                 document.title = 'LCTA - 美化规则编辑器';
-                showToast('文件已保存到游戏: ' + path, 'success');
+                var savedMsg = '文件已保存到游戏: ' + path;
+                if (state.pendingChanges && state.pendingChanges.length) {
+                    savedMsg += '。保存后仍可继续「比较变更」生成规则（变更记录已保留）';
+                }
+                showToast(savedMsg, 'success');
             } else {
                 showToast('保存失败: ' + ((res && res.error) || ''), 'error');
             }

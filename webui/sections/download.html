@@ -46,9 +46,11 @@
                 <span class="checkmark"></span>
                 使用API获取链接
             </label>
+            <small class="form-hint">通过 Webnote API 获取下载链接，有延迟，通常无需开启；直连失败时可尝试。</small>
         </div>
 
         <div id="ourplay-android-options" style="display:none;">
+            <small class="form-hint" style="display:block; margin-bottom: 0.5rem;">神人汉化=社区修改版汉化；基板包=用于把手机版汉化包转为 PC 通用格式的参考包，留空自动从游戏目录检测。</small>
             <div class="form-group">
                 <label class="checkbox-container">
                     <input type="checkbox" id="ourplay-official" checked>
@@ -126,7 +128,7 @@
                 <span class="checkmark"></span>
                 保存原始文件而不打包
             </label>
-            <small class="form-hint">保存解压后的原始文件而非打包格式</small>
+            <small class="form-hint">保存解压后的原始文件而非打包格式。历史遗留选项，一般无需开启。</small>
         </div>
         
         <div class="action-area">
@@ -168,7 +170,8 @@
     </div>
 
     <div class="setting-card">
-        <h3 class="setting-title">调爪文本修改包下载配置</h3>
+        <h3 class="setting-title">调爪文本修改包（导入规则）</h3>
+        <p class="form-hint">下载后导入为文本替换规则集，可在文本美化页面管理。</p>
 
         <div class="form-group">
             <label class="checkbox-container">
@@ -185,59 +188,75 @@
                 下载(导入)调爪文本修改包
             </button>
         </div>
+    </div>
 
-        <hr style="border: none; border-top: 1px solid var(--color-border, #ddd); margin: 1rem 0;">
+    <p class="form-hint" style="grid-column: 1 / -1; margin: 0; text-align: center;">
+        两者的区别：修改包=规则集可开关管理；替换包=直接改文件
+    </p>
 
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="dl-tiaozhua-replace-3">
-                <span class="checkmark"></span>
-                彩色气泡 BattleSpeechBubbleDlg
-            </label>
-        </div>
+    <div class="setting-card">
+        <h3 class="setting-title">调爪替换文本包（覆盖文本）</h3>
+        <p class="form-hint">直接覆盖当前语言包中的文本文件，重装汉化包即可还原。三种气泡（彩色 / 无色 / 旧翻译版）为互斥选项，仅可勾选其一。</p>
 
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="dl-tiaozhua-replace-4">
-                <span class="checkmark"></span>
-                无色气泡 BattleSpeechBubbleDlg
-            </label>
-        </div>
+        <fieldset style="border:1px solid var(--color-border); border-radius:8px; padding:10px 12px; margin:12px 0;">
+            <legend style="padding:0 6px; font-size:12px; color:var(--color-text-secondary);">气泡样式（三选一）</legend>
 
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="dl-tiaozhua-replace-5">
-                <span class="checkmark"></span>
-                随机加载文本
-            </label>
-        </div>
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="dl-tiaozhua-replace-3">
+                    <span class="checkmark"></span>
+                    彩色气泡 BattleSpeechBubbleDlg
+                </label>
+                <small class="form-hint">对话气泡带彩色背景</small>
+            </div>
 
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="dl-tiaozhua-replace-7">
-                <span class="checkmark"></span>
-                事件美化
-            </label>
-        </div>
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="dl-tiaozhua-replace-4">
+                    <span class="checkmark"></span>
+                    无色气泡 BattleSpeechBubbleDlg
+                </label>
+                <small class="form-hint">纯文本无背景</small>
+            </div>
 
-        <div class="form-group">
-            <label class="checkbox-container">
-                <input type="checkbox" id="dl-tiaozhua-replace-8">
-                <span class="checkmark"></span>
-                旧翻译版气泡 BattleSpeechBubbleDlg
-            </label>
-        </div>
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="dl-tiaozhua-replace-8">
+                    <span class="checkmark"></span>
+                    旧翻译版气泡 BattleSpeechBubbleDlg
+                </label>
+                <small class="form-hint">早期汉化版本的翻译文案</small>
+            </div>
+        </fieldset>
 
-        <div class="form-group">
-            <p class="form-hint">调爪「替换」文本包会直接覆盖当前语言包中的对应文本文件。三种气泡（彩色 / 无色 / 旧翻译版）为互斥选项，仅可勾选其一。</p>
-        </div>
+        <fieldset style="border:1px solid var(--color-border); border-radius:8px; padding:10px 12px; margin:12px 0;">
+            <legend style="padding:0 6px; font-size:12px; color:var(--color-text-secondary);">其它替换（可与气泡叠加）</legend>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="dl-tiaozhua-replace-5">
+                    <span class="checkmark"></span>
+                    随机加载文本
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="dl-tiaozhua-replace-7">
+                    <span class="checkmark"></span>
+                    事件美化
+                </label>
+            </div>
+        </fieldset>
+
+        <small class="form-hint">该选项与「Launcher 配置页」同步，修改任意一处均生效。</small>
 
         <div class="action-area" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
             <button class="primary-btn" onclick="downloadTiaozhuaReplace()">
                 <i class="fas fa-download"></i>
                 下载并应用所选调爪替换文本包
             </button>
-            <button type="button" class="action-btn secondary" onclick="goAndShow('launcher-config')">
+            <button type="button" class="action-btn secondary" onclick="goAndShow('launcher-config', 'lc-card-tiaozhua-replace')">
                 <i class="fas fa-rocket"></i> 前往Launcher配置页
             </button>
         </div>

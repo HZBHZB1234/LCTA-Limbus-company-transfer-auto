@@ -62,6 +62,7 @@ JS: user configures & clicks translate
     Stage 5: translateFunc/matcher/engine.py post-translation proper matching
     Stage 6: translateFunc/pipeline.py       aggregate results → PipelineSummary
   → webutils/function_translate.py  write output files
+  （进度可视化：pipeline.py 各阶段日志经 `_log_bridge.info` 同步桥接 `log_modal_process`，阶段 2 状态带「（可能耗时较长）」并推 `_on_progress(5)`、阶段 4 推 `_on_progress(10)`，模态日志可见阶段流转，专有名词阶段不再卡 0%）
   → webui/app.py                    callback: summary → JS modal
 ```
 
@@ -499,6 +500,7 @@ User clicks "保存到游戏" (optional direct save)
   → saveEditedFile()
     → api.save_file_content(path, raw)              writes to game Lang file
     → webutils/rule_editor/browser.py save_file_content()
+    保存后仅更新 diskContent，**保留 baselineContent 与 pendingChanges**（变更记录不销毁），保存后仍可「比较变更」→「智能生成规则集」
 
 User clicks "智能生成规则集" (from changes panel or ruleset-edit tab)
   → generateRulesFromChanges()
@@ -785,7 +787,7 @@ User clicks 「下载并应用所选调爪替换文本包」(download.html)  或
           (= get_active_lang_path + config.json lang，即 fancy 目标目录)，跳过 python/
 ```
 
-> 包 6（技能被动饰品BUFF美化）永不集成（与文本美化功能重复）。独立开关在**汉化包下载页与 Launcher 页各有一份相同复选框**（下载页 `dl-tiaozhua-replace-*` / Launcher 页 `lc-tiaozhua-replace-*`，两套 id 映射同一 `ui_default.tiaozhua.replace_*` 配置键，页面间经 `bindTiaozhuaReplaceSync` 实时同步、进入页面时经 `syncTiaozhuaReplaceFromConfig` 兜底刷新）；三种气泡（3彩色/4无色/8旧翻译版）互斥：前端勾选其一自动取消其余两个（两页全量）并同步保存，后端 `_select_replace_packages` 兜底仅应用编号最小者。
+> 包 6（技能被动饰品BUFF美化）永不集成（与文本美化功能重复）。独立开关在**汉化包下载页与 Launcher 页各有一份相同复选框**（下载页 `dl-tiaozhua-replace-*` / Launcher 页 `lc-tiaozhua-replace-*`，两套 id 映射同一 `ui_default.tiaozhua.replace_*` 配置键，页面间经 `bindTiaozhuaReplaceSync` 实时同步、进入页面时经 `syncTiaozhuaReplaceFromConfig` 兜底刷新，两页复选框旁均注明「与该页同步」）；三种气泡（3彩色/4无色/8旧翻译版）互斥：前端勾选其一自动取消其余两个（两页全量）并同步保存，后端 `_select_replace_packages` 兜底仅应用编号最小者。下载页「调爪文本修改包」拆为两张卡（修改包=导入规则集/替换包=覆盖文本，中间注明区别），Launcher 页「调爪替换文本包」卡移至「更新集成」之后并带锚点 `lc-card-tiaozhua-replace`。
 
 Files: `webutils/function_lanzou_tiaozhua.py`, `webui/app_api/download.py`, `webui/sections/launcher-config.html`, `webui/sections/download.html`, `webui/js/core.js`, `webui/js/features.js`, `webui/js/utils.js`, `launcher/updates.py`, `config_check.json`
 
@@ -814,7 +816,7 @@ Files: `webui/js/quick-start.js`, `webui/sections/elder.html`, `webui/js/utils.j
 
 ```
 Manual path:
-  Sidebar 「游戏资源更新」（页面内含 Launcher 集成介绍 + 跳转按钮；启用开关位于 Launcher 配置页「工作模式」）
+  Sidebar 「游戏资源更新」（页面内含 Launcher 集成介绍 + 跳转按钮；启用开关位于 Launcher 配置页「更新集成」，跳转带锚点 `goAndShow('launcher-config', 'lc-card-resource-update')` 直达卡片并高亮）
     → webui/js/utils.js goAndShow('resource-updater')
       → webui/sections/resource-updater.html + js/resource-updater.js
       → webui/app.py LCTA_API.resource_updater_start_update()

@@ -28,7 +28,7 @@
                 </div>
                 <div id="ru-probe-result" class="resource-inline-notice neutral">
                     <i class="fas fa-circle-info"></i>
-                    <span>游戏目录与主程序共用，可在设置页修改。配置后点击检测验证游戏文件并读取当前 CDN 令牌。</span>
+                    <span>游戏目录与主程序共用，可在设置页修改。配置后点击检测验证游戏文件并识别游戏当前资源版本。</span>
                 </div>
             </div>
 
@@ -100,7 +100,7 @@
                         <label for="ru-engine">下载引擎</label>
                         <div class="select-wrapper">
                             <select id="ru-engine">
-                                <option value="auto">自动（优先随包 aria2c）</option>
+                                <option value="auto">自动（推荐，优先使用高速下载器）</option>
                                 <option value="aria2">强制 aria2c</option>
                                 <option value="builtin">Python 内置下载器</option>
                             </select>
@@ -121,7 +121,7 @@
                         </div>
                         <div class="resource-integration-text">
                             <strong>已集成至 Launcher</strong>
-                            <small>开启后，Launcher 在检测到游戏版本变化（LimbusCompany.exe 的 SHA-256 指纹）时会自动预下载官方资源，无需联网检查版本。开关位于 Launcher 配置页的「工作模式」中。</small>
+                            <small>开启后，Launcher 在检测到游戏版本变化（LimbusCompany.exe 的 SHA-256 指纹）时会自动预下载官方资源，无需联网检查版本。开关位于 Launcher 配置页的「更新集成」中。</small>
                         </div>
                     </div>
                     <div class="resource-integration-actions">
@@ -138,7 +138,7 @@
             <div class="setting-card resource-updater-card">
                 <div class="resource-card-heading">
                     <div>
-                        <span class="resource-card-eyebrow">泛用下载</span>
+                        <span class="resource-card-eyebrow">独立工具</span>
                         <h3 class="setting-title"><i class="fas fa-bolt"></i> 高速下载器</h3>
                     </div>
                     <span id="ru-downloader-chip" class="resource-state-chip neutral">
@@ -153,7 +153,7 @@
                         </div>
                         <div class="resource-integration-text">
                             <strong>基于 aria2c 的泛用高速下载器</strong>
-                            <small>独立窗口：粘贴 URL / 磁力链接批量下载、支持 .torrent 种子、多任务队列、暂停/继续/删除、断点续传与实时速度显示。与本页资源更新互不影响。</small>
+                            <small>这是一个独立的批量下载窗口（粘贴链接 / 种子下载），与本页资源更新无关。支持 .torrent 种子、多任务队列、暂停/继续/删除、断点续传与实时速度显示。</small>
                         </div>
                     </div>
                     <div class="resource-integration-actions">
@@ -178,7 +178,24 @@
             </div>
             <p id="ru-status-description" class="resource-task-description">配置更新范围后即可开始手动预下载。</p>
 
+            <div id="ru-path-missing-notice" class="resource-inline-notice error" style="display:none; margin-top: 0;">
+                <i class="fas fa-circle-exclamation"></i>
+                <span>游戏目录为空，请先前往设置页配置游戏目录。</span>
+                <button id="ru-path-missing-go-settings" type="button" class="action-btn secondary" style="flex-shrink:0; padding:4px 10px; font-size:12px;">
+                    <i class="fas fa-gear"></i> 前往设置
+                </button>
+            </div>
+
             <div class="resource-progress-list">
+                <div class="resource-progress-item" data-channel="total">
+                    <div class="resource-progress-heading">
+                        <span><i class="fas fa-arrow-trend-up"></i> 总进度</span>
+                        <strong id="ru-total-text">0%</strong>
+                    </div>
+                    <div class="resource-progress-track">
+                        <div id="ru-total-bar" class="resource-progress-bar"></div>
+                    </div>
+                </div>
                 <div class="resource-progress-item" data-channel="manifest">
                     <div class="resource-progress-heading">
                         <span><i class="fas fa-list-check"></i> 资源清单</span>

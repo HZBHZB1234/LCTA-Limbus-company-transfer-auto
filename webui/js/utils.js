@@ -507,6 +507,10 @@ const TOOLTIP_DATA = {
     'proper-max-count': '限制最多提取的专有名词数量。留空表示不限制。数值越大结果越多但可能包含更多噪声。',
     'proper-min-count': '专有名词的最小字符长度。增大此值可减少短词汇的错误匹配，提高提取精度。',
     'proper-join-char': '单文件格式输出时分隔"原词"与"译词"的分隔符，默认值为 |||。仅在输出格式为"单文件格式"时生效。',
+
+    // ===== 音频工具 =====
+    'bank-dll-dir': 'FMOD 工具 DLL 目录（fmod64.dll / fsbank64.dll / libfsbvorbis64.dll）。留空自动检测（LCTA_FMOD_DLL_DIR 环境变量 / 程序目录），也可将「工具.zip」直接拖入窗口一键导入。',
+    'bank-extract-dir': 'bank 解包输出目录。留空则输出到 模组目录/BankExtract。',
 };
 
 // 初始化所有静态配置项的悬停提示

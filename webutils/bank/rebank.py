@@ -181,7 +181,12 @@ def patch_banks(dlls: FmodDlls, bank_path: str, rebank_paths: List[str], out_dir
         if replaced == 0:
             raise BankToolError("没有成功替换任何文件，取消重打包。")
 
-        options = {"format": 5, "quality": 92, "threads": 2,
+        from globalManagers.ConfigManager import ConfigManager
+        from .fmod import default_threads
+        cfg = ConfigManager()
+        options = {"format": 5,
+                   "quality": int(cfg.get("ui_default.bank.quality", 92)),
+                   "threads": int(cfg.get("ui_default.bank.threads", 0) or 0) or default_threads(),
                    "cache_dir": os.path.join(work, "cache"), "password": password}
         out_bank = rebuild_bank(dlls, bank_path, wav_dir, fsb_dir, out_dir, options, log)
         return {"replaced": replaced, "skipped_new": skipped_new, "skipped_bad": skipped_bad,

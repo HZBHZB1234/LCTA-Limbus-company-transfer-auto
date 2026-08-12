@@ -79,6 +79,13 @@
             "jobs": 8,
             "connection_limit": 16,
             "seed_time": 0
+        },
+        "bank": {
+            "dll_dir": "",
+            "dll_url": "",
+            "extract_dir": "",
+            "quality": 92,
+            "threads": 0
         }
     },
     "api_config": "",
@@ -96,7 +103,7 @@
     "cache_path": "tmp",
     "enable_storage": false,
     "storage_path": "tmp",
-    "last_version": "v5.0.2",
+    "last_version": "v5.0.3",
     "launcher": {
         "work": {
             "update": "LM-G",

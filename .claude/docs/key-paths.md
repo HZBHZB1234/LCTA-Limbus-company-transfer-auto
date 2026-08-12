@@ -997,3 +997,42 @@ Files: `webui/sections/cg.html`, `webui/js/cg.js`, `webui/app_api/cg.py`,
       `webui/app.py`, `webutils/cg/save.py`, `webutils/cg/bundle.py`, `webutils/cg/__init__.py`, `webutils/__init__.py`,
       `webui/index.html`, `webui/sections/preload.js`, `webui/js/utils.js`, `webui/guide/cg.md`,
       `webui/css/components.css`（cg-chip/cg-list）, `.github/InitCode.py`（js_files）, `tests/test_cg_save.py`
+
+## 20. 音频工具 / fsb 补丁模组（.rebank）
+
+音频工具页导出 .rebank 差分包（只含改动的 wav，rebank.json 记录 base_bank/format 等元信息）:
+
+```
+JS: sections/bank.html + js/bank.js（initBankSection；bankBusy 互斥防并发）
+  → pywebview.api.bank_export_rebank(original, modded, out, name, version, author, desc, into_mod_folder)
+  → webui/app_api/bank.py（BankMixin 转发）
+  → webutils/function_bank.py bank_export_rebank（into_mod_folder 时复制进 get_mod_path()）
+  → webutils/bank/rebank.py build_rebank()
+      → fmod.extract_bank(FmodDlls, 原版 bank) 与 (模组版 bank) 各一次（FSB→WAV 解码）
+        → dlls.py FmodDlls（FMOD/FSBANK ctypes 封装；DLL 定位 default_dll_candidates():
+          配置 ui_default.bank.dll_dir → 环境变量 LCTA_FMOD_DLL_DIR → 仓库根 → tools/fmod → cwd）
+      → 时长对比（wav_duration_file 3 位小数）→ modified/added → make_rebank() 打包 .rebank
+```
+
+启动应用链（.rebank 模组启动时自动补丁，哈希缓存命中免重编码）:
+
+```
+launcher: game_launch.prepare_mod()
+  → sound.replace_sound(mod_folder, steam_argv)（扫模组目录 .bank/.rebank 存在性，命中才起线程）
+    → sound.sound_replace_thread()
+        → wait_for_validation()（删最小 .bank 等游戏校验回滚，超时恢复备份）
+        → .bank 模组备份为 .bak 后拷贝进 FMODBuilds/Desktop
+        → launcher/bankmod.py apply_rebanks(mod_folder)
+            → rebank_files_in 递归收集 .rebank；mod_digest（SHA-256 + 修改时间）
+            → 缓存 cache_path/bankmod/<digest>.bank 命中直接复用（prune_cache(20) 淘汰）
+            → 未命中：rebank.json base_bank 匹配游戏原版 bank
+              → webutils/bank/rebank.py patch_banks()（配置 ui_default.bank.{quality,threads}，
+                threads=0 → default_threads()=cpu/2）→ fmod.rebuild_bank（WAV→FSB vorbis）
+              → 原子替换目标 bank
+        → 游戏退出 → restore_sound()（.bak 还原）
+```
+
+Files: `webui/sections/bank.html`, `webui/js/bank.js`, `webui/app_api/bank.py`,
+      `webui/app.py`, `webutils/function_bank.py`, `webutils/bank/`（dlls/format/fmod/wav/rebank/errors）,
+      `launcher/sound.py`, `launcher/bankmod.py`, `webui/drop/`（工具.zip 拖入导入 DLL）,
+      `config_default.json`（ui_default.bank）, `tests/test_bank_rebank.py`, `tests/test_bank_fmod.py`

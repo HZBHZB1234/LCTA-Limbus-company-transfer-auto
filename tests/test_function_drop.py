@@ -382,7 +382,7 @@ class TestEvalFilesUpdate:
                 pass
 
             def install_requirements(self, path):
-                pass
+                return True
 
             def update_files(self, path):
                 return True
@@ -444,4 +444,3 @@ class TestCacheFontHandler:
         assert result['errors'] == 0
         assert Path(saved['target']).name == 'ChineseFont.ttf'
         assert Path(saved['target']).read_bytes() == b'fontdata'
-

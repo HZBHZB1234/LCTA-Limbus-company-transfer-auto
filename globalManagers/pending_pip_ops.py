@@ -2,10 +2,10 @@
 globalManagers/pending_pip_ops.py
 延迟依赖操作（pending pip ops）——纯标准库模块。
 
-更新流程中涉及依赖卸载/版本变动时，pythonnet/clr_loader/pywebview 等扩展包
-DLL 已被当前进程加载，无法在更新会话内卸载/替换，因此统一写入 pending 文件
+更新流程中的新增/升级依赖会优先在 GUI 内安装。若安装因 DLL 占用、权限等
+非网络原因失败，则写入 pending 文件
 （%LOCALAPPDATA%/LCTA/pending_pip_ops.json），延迟到下次启动、加载任何第三方
-库之前由 apply_pending_pip_ops() 执行（先卸载后安装）。
+库之前由 apply_pending_pip_ops() 重试安装。废弃依赖永久保留，不执行卸载。
 
 !!! 本模块必须保持纯标准库导入 !!!
 start_webui.py init_env() 在任何第三方库导入之前直接导入本模块执行 pending
@@ -19,6 +19,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -27,9 +28,49 @@ from globalManagers.LogManager import LogManager
 _log_manager = LogManager()
 
 _PENDING_OPS_FILENAME = "pending_pip_ops.json"
+_TSINGHUA_PYPI_INDEX = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
 _REQUIREMENT_PACKAGE_RE = re.compile(r"^\s*([A-Za-z0-9._-]+)")
 _REQUIREMENT_NORMALIZE_RE = re.compile(r"[-_.]+")
+
+_NETWORK_ERROR_MARKERS = (
+    "cannot connect to proxy",
+    "certificate verify failed",
+    "connection aborted",
+    "connection broken",
+    "connection refused",
+    "connection reset",
+    "connection timed out",
+    "could not fetch url",
+    "failed to establish a new connection",
+    "getaddrinfo failed",
+    "max retries exceeded",
+    "name or service not known",
+    "network is unreachable",
+    "proxy error",
+    "proxyerror",
+    "read timed out",
+    "readtimeout",
+    "remote end closed connection",
+    "sslerror",
+    "temporary failure in name resolution",
+    "tunnel connection failed",
+    "winerror 10054",
+    "winerror 10060",
+    "winerror 10061",
+    "winerror 11001",
+)
+
+
+@dataclass(frozen=True)
+class PipOperationResult:
+    success: bool
+    network_error: bool = False
+    returncode: Optional[int] = None
+    error: str = ""
+
+    def __bool__(self) -> bool:
+        return self.success
 
 
 def _normalize_pkg_name(name: str) -> str:
@@ -93,7 +134,8 @@ def load_pending_ops(path: Optional[Path] = None) -> Dict[str, List[str]]:
         uninstall = data.get("uninstall", [])
         install = data.get("install", [])
         return {
-            "uninstall": list(uninstall) if isinstance(uninstall, list) else [],
+            # 兼容读取旧格式，但永远不再执行依赖卸载。
+            "uninstall": [],
             "install": list(install) if isinstance(install, list) else [],
         }
     except Exception:
@@ -107,7 +149,9 @@ def save_pending_ops(ops: Dict[str, List[str]], path: Optional[Path] = None) -> 
     """
     p = path or _pending_ops_default_path()
     clean = {
-        "uninstall": list(dict.fromkeys(ops.get("uninstall", []))),
+        # 更新流程永久保留废弃依赖。即使读取到旧版本遗留的卸载任务，
+        # 后续写回时也会将其清空，避免先卸载导致当前或新版本依赖缺失。
+        "uninstall": [],
         "install": list(dict.fromkeys(ops.get("install", []))),
     }
     try:
@@ -124,8 +168,22 @@ def save_pending_ops(ops: Dict[str, List[str]], path: Optional[Path] = None) -> 
         return False
 
 
-def _run_pip(args: List[str]) -> bool:
-    """执行 pip 子命令，失败记日志并返回 False。
+def _decode_pip_output(raw) -> str:
+    if isinstance(raw, str):
+        return raw
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("gbk", errors="replace")
+
+
+def _is_network_error(text: str) -> bool:
+    lowered = text.lower()
+    return any(marker in lowered for marker in _NETWORK_ERROR_MARKERS)
+
+
+def _run_pip(args: List[str]) -> PipOperationResult:
+    """执行 pip 子命令并返回可分类的结果。
 
     pip 子进程注入 PYTHONIOENCODING=utf-8，保证其输出为 UTF-8；
     stderr 解码失败时回退 GBK，避免中文 Windows 下乱码进日志。
@@ -135,36 +193,51 @@ def _run_pip(args: List[str]) -> bool:
     try:
         subprocess.check_call(
             [sys.executable, "-m", "pip"] + args, capture_output=True, env=env)
-        return True
+        return PipOperationResult(success=True)
+    except subprocess.TimeoutExpired as e:
+        stderr = _decode_pip_output(e.stderr or b"")
+        stdout = _decode_pip_output(e.stdout or b"")
+        raw = f"{stderr}\n{stdout}".strip()
+        error = raw or str(e)
+        _log_manager.log(f"pip {' '.join(args)} 网络超时: {error}")
+        return PipOperationResult(success=False, network_error=True, error=error)
     except subprocess.CalledProcessError as e:
         _log_manager.log(f"pip {' '.join(args)} 失败: {e}")
-        raw = e.stderr or b""
-        try:
-            err = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            err = raw.decode("gbk", errors="replace")
+        stderr = _decode_pip_output(e.stderr or b"")
+        stdout = _decode_pip_output(e.stdout or b"")
+        err = f"{stderr}\n{stdout}".strip()
         _log_manager.log(f"退出码: {e.returncode}，错误输出: {err or '无'}")
-        return False
+        return PipOperationResult(
+            success=False,
+            network_error=_is_network_error(err),
+            returncode=e.returncode,
+            error=err,
+        )
+    except Exception as e:
+        _log_manager.log(f"pip {' '.join(args)} 无法执行: {e}")
+        return PipOperationResult(success=False, error=str(e))
 
 
-def _run_pip_install(spec: str) -> bool:
-    return _run_pip(["install", spec])
-
-
-def _run_pip_uninstall(name: str) -> bool:
-    # 不带版本号：兼容旧版 pip（pip uninstall 不接受版本 specifier）
-    return _run_pip(["uninstall", name, "-y"])
+def _run_pip_install(
+    spec: str,
+    index_url: Optional[str] = None,
+) -> PipOperationResult:
+    args = ["install"]
+    if index_url:
+        args.extend(["--index-url", index_url])
+    args.append(spec)
+    return _run_pip(args)
 
 
 def apply_pending_pip_ops(
     path: Optional[Path] = None,
     progress_callback: Optional[Callable[[str], None]] = None,
 ) -> bool:
-    """启动早期执行待处理的依赖操作（先卸载后安装）。
+    """启动早期重试待处理的依赖安装。
 
     必须在加载任何第三方库之前调用（start_webui.py init_env() 启动钩子）：
-    此时进程尚未加载第三方模块，被锁定而无法在更新会话中卸载/替换的包
-    （pythonnet/clr_loader 等）可以正常处理。全部成功后删除记录；部分失败
+    此时进程尚未加载第三方模块，GUI 更新会话中因 DLL 占用等非网络原因
+    无法升级的包可以正常处理。废弃依赖不会卸载。全部成功后删除记录；部分失败
     保留剩余项，记日志并在下次启动时重试。异常不外抛，不阻塞启动。
 
     progress_callback: 可选，每个 pip 操作执行前后回调状态文本
@@ -179,14 +252,15 @@ def apply_pending_pip_ops(
 
     ops = load_pending_ops(path)
     if not ops["uninstall"] and not ops["install"]:
+        save_pending_ops(ops, path)
         return True
-    for name in list(ops["uninstall"]):
-        _notify(f"正在卸载依赖 {name}…")
-        if _run_pip_uninstall(name):
-            ops["uninstall"].remove(name)
     for spec in list(ops["install"]):
         _notify(f"正在安装依赖 {spec}…")
-        if _run_pip_install(spec):
+        result = _run_pip_install(spec)
+        if not result and result.network_error:
+            _notify(f"默认源连接失败，正在通过清华源安装 {spec}…")
+            result = _run_pip_install(spec, _TSINGHUA_PYPI_INDEX)
+        if result:
             ops["install"].remove(spec)
     if not ops["uninstall"] and not ops["install"]:
         try:
@@ -197,7 +271,6 @@ def apply_pending_pip_ops(
             return False
     save_pending_ops(ops, path)
     _log_manager.log(
-        f"仍有依赖操作未完成，将在下次启动时重试: "
-        f"卸载 {ops['uninstall']}，安装 {ops['install']}"
+        f"仍有依赖安装未完成，将在下次启动时重试: {ops['install']}"
     )
     return False

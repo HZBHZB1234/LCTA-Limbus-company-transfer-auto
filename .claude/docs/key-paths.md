@@ -621,17 +621,20 @@ JS: user clicks "check for updates" or auto-check on startup
     → compare versions              current vs latest tag
   → download & extract              fetch ZIP, extract (tempfile 临时目录，非应用目录内 updateCache)
   → webutils/update.py              Updater.install_requirements() 按包名比对（spec 归一化防误判）：
-      - 涉及依赖移除/版本变动 → 整个依赖修改写入 %LOCALAPPDATA%/LCTA/pending_pip_ops.json，
-        本次不执行任何 pip 操作，并弹模态状态提示"依赖变更将在下次启动时自动完成"
-      - 仅全新依赖 → 立即 pip install，失败跳过继续
+      - 新版本不再声明的旧依赖永久保留，不执行 pip uninstall；`delete_updating` 配置已移除
+      - 新增/版本变动依赖在 GUI 内先用默认 PyPI 源安装
+      - 默认源为网络失败 → 仅本次命令切换清华源重试；仍失败则中止文件替换，
+        提示关闭系统代理/加速器后重试，不写 pending
+      - 最终为 DLL 占用/权限/构建等非网络失败 → 仅该安装项写入
+        %LOCALAPPDATA%/LCTA/pending_pip_ops.json；非 GUI 调用不得创建 pending
   → webutils/update.py              Updater.update_files() 替换文件（失败 return False 并还原
-                                       install_requirements 写入的 pending 依赖操作，避免下次启动
-                                       按新版本依赖卸载旧代码；缓存仅清理自建临时目录，传入的保留）
-  → restart required                manual program restart needed（依赖变更同样在重启后生效；
-                                      更新完成提示按 pending 存在性联动"请重启程序"文案）
+                                       install_requirements 写入的 pending 安装项；缓存仅清理自建
+                                       临时目录，调用方传入的缓存目录保留）
+  → restart required                manual program restart needed（非网络失败的依赖安装在重启后重试；
+                                       更新完成提示按 pending 存在性联动"请重启程序"文案）
   → start_webui.py init_env()       下次启动：直接导入 globalManagers/pending_pip_ops.py（纯标准库，
                                        不触发 webutils 包导入），ctypes MessageBoxW 弹原生进度窗，
-                                       apply_pending_pip_ops() 在加载任何第三方库之前先卸载后安装
+                                       apply_pending_pip_ops() 在加载任何第三方库之前仅重试安装
 ```
 
 > 注：`perform_update_in_modal` 已把 modal_id 传给 Updater（下载阶段可取消），返回 `{"success": bool, "message": str}`；取消返回 `"已取消"` + `del_modal_list`。前端 `doUpdate` 对 `"已取消"` 走 `modal.cancel()`。

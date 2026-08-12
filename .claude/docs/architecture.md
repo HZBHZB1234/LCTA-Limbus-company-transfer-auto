@@ -34,8 +34,9 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │  webutils/__init__.py    public API aggregation      │
 │  webutils/function_*.py  feature modules             │
 │  webutils/update.py      self-update via GitHub API;   │
-│                          dep changes deferred to next  │
-│                          startup pre-import hook       │
+│                          GUI-first dependency install, │
+│                          Tsinghua network fallback,    │
+│                          non-network failures pending  │
 │                          (globalManagers/pending_pip_ops│
 │                          .py 纯 stdlib，零第三方导入)   │
 │  webutils/load.py        config loading/validation   │
@@ -74,7 +75,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `webutils/` | Business logic: one `function_*.py` per feature, all exported via `__init__.py` |
 | `webFunc/` | Infrastructure: GitHub downloads, file transfer, Lanzou parsing, web notes |
 | `translateFunc/` | Translation engine: multi-stage LLM pipeline with proper noun matching |
-| `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py`；`pending_pip_ops.py` — 延迟依赖操作（纯标准库模块，启动早期钩子在导入任何第三方库之前执行待处理 pip 卸载/升级） |
+| `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py`；`pending_pip_ops.py` — 延迟依赖安装（纯标准库模块，启动早期钩子在导入任何第三方库之前重试 GUI 阶段因非网络原因失败的安装；更新永久保留废弃依赖，不执行 pip uninstall） |
 | `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey, and an optional WinForms launch center with configuration summary, vertical phase tracking, overall/stage progress, expandable logs, runtime PID/uptime, and cancellation controls |
 | `resource_updater/` | Official game resource updater: CDN token extraction, localize ZIP deployment, Unity Bundle cache population, aria2 RPC, Launcher fingerprint state, and the main-window page API |
 

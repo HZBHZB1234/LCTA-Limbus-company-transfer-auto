@@ -13,6 +13,11 @@ from ...packages.clean import _sanitize_zip_member_name
 from ...update import Updater
 from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
+from globalManagers.pending_pip_ops import (
+    load_pending_ops,
+    save_pending_ops,
+    _pending_ops_default_path,
+)
 
 _log_manager = LogManager()
 
@@ -64,15 +69,25 @@ class UpdatePackageHandler(DropFileHandler):
             cfg = ConfigManager()
             updater = Updater(
                 "HZBHZB1234", "LCTA-Limbus-company-transfer-auto",
-                delete_old_files=cfg.get("delete_updating", True),
                 use_proxy=cfg.get("update_use_proxy", True),
                 only_stable=cfg.get("update_only_stable", False),
                 modal_id=context.modal_id,
             )
-            updater.install_requirements(str(source_dir))
-            _log_manager.check_running(context.modal_id)
-            if not updater.update_files(source_dir):
-                raise RuntimeError("更新文件失败")
+            pending_path = _pending_ops_default_path()
+            pending_before = load_pending_ops(pending_path)
+            files_updated = False
+            try:
+                install_result = updater.install_requirements(str(source_dir))
+                if not install_result:
+                    raise RuntimeError(install_result.message or "依赖安装失败")
+                _log_manager.check_running(context.modal_id)
+                if not updater.update_files(source_dir):
+                    raise RuntimeError("更新文件失败")
+                files_updated = True
+            finally:
+                if (not files_updated and
+                        load_pending_ops(pending_path) != pending_before):
+                    save_pending_ops(pending_before, pending_path)
 
         _log_manager.log_modal_process(
             f"更新包安装完成，请手动重启程序: {context.file_name}",

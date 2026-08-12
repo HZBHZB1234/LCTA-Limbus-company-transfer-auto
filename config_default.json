@@ -88,7 +88,6 @@
     "game_path": "",
     "debug": false,
     "auto_check_update": true,
-    "delete_updating": true,
     "update_use_proxy": true,
     "update_only_stable": true,
     "github_max_workers": "4",

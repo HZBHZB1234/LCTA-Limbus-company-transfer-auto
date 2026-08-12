@@ -4,10 +4,10 @@ webutils.update 修复回归测试。
 覆盖：
 - compare_versions 逐段整数比较（不再拼接整数），跨大版本与小版本号段位差正确判定
 - v 前缀与非数字段容错
-- install_requirements 按包名比对：涉及移除/版本变动 → 整个依赖修改延迟到下次启动
-  （写入 pending，本次不执行任何 pip 操作）；仅全新依赖 → 立即安装，失败跳过继续
+- install_requirements 按包名比对：废弃依赖永久保留；新增/升级依赖在 GUI 内先安装，
+  默认源网络失败时切换清华源；仅非网络失败写入 pending
 - spec 归一化比较：包名大小写等纯格式差异不误判为版本变动
-- pending 持久化与 apply_pending_pip_ops 启动钩子（先卸载后安装、成功清空、失败保留、
+- pending 持久化与 apply_pending_pip_ops 启动钩子（仅安装、成功清空、失败保留、
   pip 子进程 UTF-8 环境、stderr GBK 回退解码）
 - globalManagers.pending_pip_ops 导入链纯标准库（不触发 webutils 等第三方导入）
 - check_and_update 缓存迁移到应用目录外的临时目录并在 finally 中清理
@@ -131,10 +131,9 @@ def _write_req(path, content):
 
 
 def _setup(monkeypatch, updater, app_dir, old_req, source_dir, new_req,
-           pending_path, delete_old_files=True):
+           pending_path):
     _write_req(app_dir / "requirements.txt", old_req)
     _write_req(source_dir / "requirements.txt", new_req)
-    updater.delete_old_files = delete_old_files
     calls = []
     monkeypatch.setattr(subprocess, "check_call", lambda cmd, **kw: calls.append(cmd))
     monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
@@ -143,9 +142,9 @@ def _setup(monkeypatch, updater, app_dir, old_req, source_dir, new_req,
     return calls
 
 
-def test_install_requirements_defers_removal_to_next_start(
+def test_install_requirements_keeps_removed_dependency_and_installs_new_one(
         monkeypatch, updater, tmp_path, pending_path):
-    # 涉及移除依赖：整个依赖修改（卸载+安装）进 pending，本次无任何 pip 操作
+    # requirements 中删除的依赖永久保留，只安装新增项。
     app_dir = tmp_path / "app"
     source_dir = tmp_path / "src"
     calls = _setup(monkeypatch, updater, app_dir, "olddep==1.0\nkeep==2.0\n",
@@ -153,16 +152,14 @@ def test_install_requirements_defers_removal_to_next_start(
 
     result = updater.install_requirements(source_dir)
 
-    assert result is True
-    assert calls == []
-    ops = json.loads(pending_path.read_text(encoding="utf-8"))
-    assert sorted(ops["uninstall"]) == ["olddep"]
-    assert sorted(ops["install"]) == ["fresh==3.0"]
+    assert result.success is True
+    assert calls == [[sys.executable, "-m", "pip", "install", "fresh==3.0"]]
+    assert not pending_path.exists()
 
 
-def test_install_requirements_defers_version_bump_to_next_start(
+def test_install_requirements_installs_version_bump_in_gui(
         monkeypatch, updater, tmp_path, pending_path):
-    # 版本 pin 变更（升级）：同样延迟到下次启动，本次无 pip 操作
+    # 版本 pin 变更先在当前 GUI 更新流程中安装。
     app_dir = tmp_path / "app"
     source_dir = tmp_path / "src"
     calls = _setup(monkeypatch, updater, app_dir, "pywebview==6.2.1\n",
@@ -170,11 +167,9 @@ def test_install_requirements_defers_version_bump_to_next_start(
 
     result = updater.install_requirements(source_dir)
 
-    assert result is True
-    assert calls == []
-    ops = json.loads(pending_path.read_text(encoding="utf-8"))
-    assert ops["uninstall"] == []
-    assert ops["install"] == ["pywebview==6.3.0"]
+    assert result.success is True
+    assert calls == [[sys.executable, "-m", "pip", "install", "pywebview==6.3.0"]]
+    assert not pending_path.exists()
 
 
 def test_install_requirements_comment_change_is_not_a_bump(
@@ -188,7 +183,7 @@ def test_install_requirements_comment_change_is_not_a_bump(
 
     result = updater.install_requirements(source_dir)
 
-    assert result is True
+    assert result.success is True
     assert calls == []
     assert not pending_path.exists()
 
@@ -201,23 +196,22 @@ def test_install_requirements_no_diff_returns_true(monkeypatch, updater, tmp_pat
 
     result = updater.install_requirements(source_dir)
 
-    assert result is True
+    assert result.success is True
     assert calls == []
     assert not pending_path.exists()
 
 
-def test_install_requirements_keep_old_files_skips_uninstall(
+def test_install_requirements_always_skips_uninstall(
         monkeypatch, updater, tmp_path, pending_path):
-    # delete_old_files=False：移除项不卸载、不触发延迟；全新依赖立即安装
+    # 不再提供删除旧依赖的配置，移除项始终保留。
     app_dir = tmp_path / "app"
     source_dir = tmp_path / "src"
     calls = _setup(monkeypatch, updater, app_dir, "old==1.0\n",
-                   source_dir, "new==1.0\n", pending_path,
-                   delete_old_files=False)
+                   source_dir, "new==1.0\n", pending_path)
 
     result = updater.install_requirements(source_dir)
 
-    assert result is True
+    assert result.success is True
     assert calls == [[sys.executable, "-m", "pip", "install", "new==1.0"]]
     assert not pending_path.exists()
 
@@ -229,19 +223,20 @@ def test_install_requirements_missing_file_returns_false(updater, tmp_path, monk
     source_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
 
-    assert updater.install_requirements(source_dir) is False
+    assert not updater.install_requirements(source_dir)
 
 
-def test_install_requirements_fresh_install_failure_skips_and_continues(
+def test_install_requirements_non_network_failure_moves_only_item_to_pending(
         monkeypatch, updater, tmp_path, pending_path):
-    # 仅全新依赖：立即安装；失败仅记日志，跳过该依赖继续，不中断更新
+    # 文件占用、权限或构建失败等非网络错误才允许进入 pending。
     app_dir = tmp_path / "app"
     source_dir = tmp_path / "src"
     calls = []
 
     def fake_check_call(cmd, **kw):
         calls.append(cmd)
-        raise subprocess.CalledProcessError(1, cmd)
+        raise subprocess.CalledProcessError(
+            1, cmd, stderr=b"Permission denied while replacing extension.pyd")
 
     _write_req(app_dir / "requirements.txt", "keep==2.0\n")
     _write_req(source_dir / "requirements.txt", "keep==2.0\nfresh==3.0\n")
@@ -250,10 +245,97 @@ def test_install_requirements_fresh_install_failure_skips_and_continues(
     monkeypatch.setattr(update_mod, "_pending_ops_default_path",
                         lambda: pending_path)
 
+    updater.modal_id = "modal-test"
     result = updater.install_requirements(source_dir)
 
-    assert result is True
+    assert result.success is True
+    assert result.pending_specs == ["fresh==3.0"]
     assert calls == [[sys.executable, "-m", "pip", "install", "fresh==3.0"]]
+    assert json.loads(pending_path.read_text(encoding="utf-8")) == {
+        "uninstall": [],
+        "install": ["fresh==3.0"],
+    }
+
+
+def test_install_requirements_non_gui_failure_never_creates_pending(
+        monkeypatch, updater, tmp_path, pending_path):
+    app_dir = tmp_path / "app"
+    source_dir = tmp_path / "src"
+    _write_req(app_dir / "requirements.txt", "keep==2.0\n")
+    _write_req(source_dir / "requirements.txt", "keep==2.0\nfresh==3.0\n")
+
+    def fake_check_call(cmd, **kw):
+        raise subprocess.CalledProcessError(
+            1, cmd, stderr=b"Permission denied while replacing extension.pyd")
+
+    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
+    monkeypatch.setattr(update_mod, "_pending_ops_default_path",
+                        lambda: pending_path)
+
+    result = updater.install_requirements(source_dir)
+
+    assert result.success is False
+    assert "不在 GUI 更新流程" in result.message
+    assert not pending_path.exists()
+
+
+def test_install_requirements_network_failure_retries_tsinghua(
+        monkeypatch, updater, tmp_path, pending_path):
+    app_dir = tmp_path / "app"
+    source_dir = tmp_path / "src"
+    _write_req(app_dir / "requirements.txt", "keep==2.0\n")
+    _write_req(source_dir / "requirements.txt", "keep==2.0\nfresh==3.0\n")
+    calls = []
+
+    def fake_check_call(cmd, **kw):
+        calls.append(cmd)
+        if "--index-url" not in cmd:
+            raise subprocess.CalledProcessError(
+                1, cmd, stderr=b"ProxyError: Cannot connect to proxy")
+
+    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
+    monkeypatch.setattr(update_mod, "_pending_ops_default_path",
+                        lambda: pending_path)
+
+    result = updater.install_requirements(source_dir)
+
+    assert result.success is True
+    assert calls == [
+        [sys.executable, "-m", "pip", "install", "fresh==3.0"],
+        [
+            sys.executable, "-m", "pip", "install", "--index-url",
+            ppo._TSINGHUA_PYPI_INDEX, "fresh==3.0",
+        ],
+    ]
+    assert not pending_path.exists()
+
+
+def test_install_requirements_double_source_failure_stops_without_pending(
+        monkeypatch, updater, tmp_path, pending_path):
+    app_dir = tmp_path / "app"
+    source_dir = tmp_path / "src"
+    _write_req(app_dir / "requirements.txt", "keep==2.0\n")
+    _write_req(source_dir / "requirements.txt", "keep==2.0\nfresh==3.0\n")
+    calls = []
+
+    def fake_check_call(cmd, **kw):
+        calls.append(cmd)
+        raise subprocess.CalledProcessError(
+            1, cmd, stderr=b"ProxyError: Cannot connect to proxy")
+
+    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
+    monkeypatch.setattr(update_mod, "_pending_ops_default_path",
+                        lambda: pending_path)
+
+    result = updater.install_requirements(source_dir)
+
+    assert result.success is False
+    assert result.network_blocked is True
+    assert "关闭系统代理" in result.message
+    assert len(calls) == 2
     assert not pending_path.exists()
 
 
@@ -273,7 +355,7 @@ def test_save_pending_ops_dedups_and_keeps_order(tmp_path):
     update_mod.save_pending_ops(
         {"uninstall": ["b", "a", "b"], "install": ["x", "y", "x"]}, path)
     ops = json.loads(path.read_text(encoding="utf-8"))
-    assert ops == {"uninstall": ["b", "a"], "install": ["x", "y"]}
+    assert ops == {"uninstall": [], "install": ["x", "y"]}
 
 
 def test_load_pending_ops_missing_file_returns_empty(tmp_path):
@@ -281,9 +363,11 @@ def test_load_pending_ops_missing_file_returns_empty(tmp_path):
         tmp_path / "nope.json") == {"uninstall": [], "install": []}
 
 
-def test_apply_pending_pip_ops_uninstall_then_install(monkeypatch, tmp_path, pending_path):
-    ops = {"uninstall": ["olddep"], "install": ["fresh==3.0"]}
-    update_mod.save_pending_ops(ops, pending_path)
+def test_apply_pending_pip_ops_ignores_legacy_uninstall(monkeypatch, tmp_path, pending_path):
+    pending_path.write_text(json.dumps({
+        "uninstall": ["olddep"],
+        "install": ["fresh==3.0"],
+    }), encoding="utf-8")
     calls = []
     monkeypatch.setattr(subprocess, "check_call", lambda cmd, **kw: calls.append(cmd))
 
@@ -291,22 +375,20 @@ def test_apply_pending_pip_ops_uninstall_then_install(monkeypatch, tmp_path, pen
 
     assert result is True
     assert not pending_path.exists()
-    assert calls == [
-        [sys.executable, "-m", "pip", "uninstall", "olddep", "-y"],
-        [sys.executable, "-m", "pip", "install", "fresh==3.0"],
-    ]
+    assert calls == [[sys.executable, "-m", "pip", "install", "fresh==3.0"]]
 
 
 def test_apply_pending_pip_ops_keeps_remaining_on_failure(
         monkeypatch, tmp_path, pending_path):
-    ops = {"uninstall": ["a", "b"], "install": ["c"]}
+    ops = {"uninstall": ["a", "b"], "install": ["c", "d"]}
     update_mod.save_pending_ops(ops, pending_path)
     calls = []
 
     def fake_check_call(cmd, **kw):
         calls.append(cmd)
-        if cmd[4] == "b":
-            raise subprocess.CalledProcessError(1, cmd)
+        if cmd[-1] == "c":
+            raise subprocess.CalledProcessError(
+                1, cmd, stderr=b"Permission denied")
 
     monkeypatch.setattr(subprocess, "check_call", fake_check_call)
 
@@ -314,13 +396,12 @@ def test_apply_pending_pip_ops_keeps_remaining_on_failure(
 
     assert result is False
     remaining = json.loads(pending_path.read_text(encoding="utf-8"))
-    assert sorted(remaining["uninstall"]) == ["b"]
-    assert remaining["install"] == []
-    # a 已成功卸载、c 已成功安装，不得再次执行
+    assert remaining["uninstall"] == []
+    assert remaining["install"] == ["c"]
+    # 历史卸载项被忽略，d 已成功安装，不得再次执行。
     assert calls == [
-        [sys.executable, "-m", "pip", "uninstall", "a", "-y"],
-        [sys.executable, "-m", "pip", "uninstall", "b", "-y"],
         [sys.executable, "-m", "pip", "install", "c"],
+        [sys.executable, "-m", "pip", "install", "d"],
     ]
 
 
@@ -342,7 +423,7 @@ def test_install_requirements_spec_case_only_diff_is_not_a_bump(
 
     result = updater.install_requirements(source_dir)
 
-    assert result is True
+    assert result.success is True
     assert calls == []
     assert not pending_path.exists()
 
@@ -357,7 +438,7 @@ def test_install_requirements_spec_whitespace_diff_is_not_a_bump(
 
     result = updater.install_requirements(source_dir)
 
-    assert result is True
+    assert result.success is True
     assert calls == []
     assert not pending_path.exists()
 
@@ -387,7 +468,9 @@ def test_run_pip_utf8_env_and_gbk_stderr_fallback(monkeypatch):
     monkeypatch.setattr(subprocess, "check_call", fake_check_call)
     monkeypatch.setattr(ppo, "_log_manager", _LogStub())
 
-    assert ppo._run_pip(["install", "nope"]) is False
+    result = ppo._run_pip(["install", "nope"])
+    assert not result
+    assert result.network_error is False
     cmd, env = calls[0]
     assert cmd[:3] == [sys.executable, "-m", "pip"]
     assert env.get("PYTHONIOENCODING") == "utf-8"
@@ -408,8 +491,24 @@ def test_run_pip_utf8_stderr_passthrough(monkeypatch):
     monkeypatch.setattr(subprocess, "check_call", fake_check_call)
     monkeypatch.setattr(ppo, "_log_manager", _Log())
 
-    assert ppo._run_pip(["install", "x"]) is False
+    result = ppo._run_pip(["install", "x"])
+    assert not result
+    assert result.network_error is False
     assert any("distutils 被移除" in m for m in messages)
+
+
+def test_run_pip_classifies_proxy_failure_as_network(monkeypatch):
+    def fake_check_call(cmd, **kw):
+        raise subprocess.CalledProcessError(
+            1, cmd, stderr=b"ProxyError: Cannot connect to proxy")
+
+    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(ppo, "_log_manager", _LogStub())
+
+    result = ppo._run_pip(["install", "x"])
+
+    assert result.success is False
+    assert result.network_error is True
 
 
 # ========== 启动钩子导入链纯标准库 ==========
@@ -574,8 +673,7 @@ def test_check_and_update_keeps_custom_cache_dir(monkeypatch, tmp_path, updater)
 
 def test_check_and_update_restores_pending_when_update_files_fails(
         monkeypatch, tmp_path, updater, pending_path):
-    # F-9.2：install_requirements 先写入 pending，update_files 失败后必须还原，
-    # 否则下次启动会按新版本依赖卸载旧代码依赖
+    # install_requirements 写入非网络失败安装项后，文件替换失败必须还原 pending。
     app_dir = tmp_path / "app"
     app_dir.mkdir()
     _write_req(app_dir / "requirements.txt", "olddep==1.0\n")
@@ -599,6 +697,13 @@ def test_check_and_update_restores_pending_when_update_files_fails(
     monkeypatch.setattr(updater, "download_latest_release",
                         lambda cache_dir_, release_info: str(zip_path))
     monkeypatch.setattr(updater, "update_files", lambda source_dir: False)
+    updater.modal_id = "modal-test"
+
+    def fail_non_network(cmd, **kw):
+        raise subprocess.CalledProcessError(
+            1, cmd, stderr=b"Permission denied while replacing extension.pyd")
+
+    monkeypatch.setattr(subprocess, "check_call", fail_non_network)
 
     result = updater.check_and_update("1.0.0")
 
@@ -633,12 +738,19 @@ def test_check_and_update_keeps_pending_when_update_succeeds(
         update_mod.GithubDownload, "GithubRequester", _StubRequester)
     monkeypatch.setattr(updater, "download_latest_release",
                         lambda cache_dir_, release_info: str(zip_path))
+    updater.modal_id = "modal-test"
+
+    def fail_non_network(cmd, **kw):
+        raise subprocess.CalledProcessError(
+            1, cmd, stderr=b"Permission denied while replacing extension.pyd")
+
+    monkeypatch.setattr(subprocess, "check_call", fail_non_network)
 
     result = updater.check_and_update("1.0.0")
 
     assert result is True
     ops = json.loads(pending_path.read_text(encoding="utf-8"))
-    assert ops["uninstall"] == ["olddep"]
+    assert ops["uninstall"] == []
     assert ops["install"] == ["newdep==1.0"]
     assert not cache_dir.exists()
 

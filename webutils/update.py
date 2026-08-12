@@ -3,8 +3,9 @@ import re
 import tempfile
 import zipfile
 import shutil
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from contextlib import suppress
 import webFunc.GithubDownload as GithubDownload
 from webFunc.GithubDownload import ReleaseInfo, ReleaseAsset, GitHubReleaseFetcher
@@ -18,11 +19,23 @@ from globalManagers.pending_pip_ops import (
     _parse_requirements,
     _pending_ops_default_path,
     _run_pip_install,
+    _TSINGHUA_PYPI_INDEX,
 )
 _log_manager = LogManager()
 from .utils.net import download_with_github
 
 APPLICATION_PATH = Path(__file__).parent.parent
+
+
+@dataclass
+class RequirementsInstallResult:
+    success: bool
+    pending_specs: List[str] = field(default_factory=list)
+    network_blocked: bool = False
+    message: str = ""
+
+    def __bool__(self) -> bool:
+        return self.success
 
 # ---------------------------------------------------------------------------
 # requirements 解析与延迟依赖操作（pending）实现在
@@ -33,17 +46,16 @@ APPLICATION_PATH = Path(__file__).parent.parent
 
 class Updater:
     def __init__(self, repo_owner: str, repo_name: str,
-                 delete_old_files: bool = True,
                  use_proxy: bool = True,
                  only_stable: bool = True,
                  modal_id: str = ''):
         self.repo_owner = repo_owner
         self.repo_name = repo_name
         self.repo_config = [repo_owner, repo_name]
-        self.delete_old_files = delete_old_files
         self.use_proxy = use_proxy
         self.only_stable = only_stable
         self.modal_id = modal_id
+        self.last_error_message = ""
 
     def fetcher(self) -> GitHubReleaseFetcher:
         GithubDownload.GithubRequester.update_config(self.use_proxy)
@@ -122,20 +134,20 @@ class Updater:
         zip_assets = release_info.get_asset_by_name('LCTA-update.zip')
         return zip_assets
     
-    def install_requirements(self, source_dir: str) -> bool:
+    def install_requirements(self, source_dir: str) -> RequirementsInstallResult:
         """准备依赖更新（按包名比对当前与新 requirements.txt）。
 
-        - 涉及依赖移除或版本变动（升级）：将整个依赖修改（卸载+升级+全新安装）
-          写入 pending，延迟到下次启动、加载扩展包 DLL 之前统一执行（先卸载后安装）。
-          当前进程内已加载 DLL 的扩展包（pythonnet/clr_loader 等）在此窗口前
-          无法被卸载/替换，延迟机制从根上规避该问题。
-        - 仅全新依赖：立即安装；失败仅记日志并跳过该依赖，不中断更新流程。
+        - 永久保留新版本不再声明的旧依赖，不执行 pip uninstall。
+        - 新增或版本变化的依赖先在 GUI 更新流程中使用默认源安装。
+        - 默认源因网络问题失败时，使用清华 PyPI 镜像重试一次。
+        - 两个源均因网络问题失败时中止更新并提示关闭代理，不写 pending。
+        - 最终为非网络失败时，才将该安装项写入 pending，供下次冷启动重试。
         """
         requirements_path = Path(source_dir) / "requirements.txt"
         if not os.path.exists(requirements_path):
             _log_manager.log("未找到requirements.txt文件")
             _log_manager.log_modal_process("未找到requirements.txt文件", self.modal_id)
-            return False
+            return RequirementsInstallResult(False, message="更新包缺少 requirements.txt")
         try:
             with open(APPLICATION_PATH / "requirements.txt", 'r', encoding='utf-8') as file:
                 requirements_old = _parse_requirements(file.read())
@@ -146,10 +158,13 @@ class Updater:
             old_names = set(requirements_old)
             new_names = set(requirements_new)
 
-            # 被移除的依赖（delete_old_files=False 时保留旧依赖，不卸载）
-            uninstall_names = sorted(old_names - new_names)
-            if not self.delete_old_files:
-                uninstall_names = []
+            removed_names = sorted(old_names - new_names)
+            if removed_names:
+                _log_manager.log(f"保留新版本不再声明的旧依赖: {removed_names}")
+                _log_manager.log_modal_process(
+                    f"为避免依赖缺失，将保留旧依赖: {', '.join(removed_names)}",
+                    self.modal_id,
+                )
 
             # 版本变动：同名但 spec 行不同（含 pin 变更；比较前归一化
             # 包名大小写与行首尾空白，避免仅格式差异误触发延迟）
@@ -162,40 +177,82 @@ class Updater:
             # 全新添加的依赖
             fresh_specs = sorted(requirements_new[n] for n in (new_names - old_names))
 
-            if uninstall_names or upgrade_specs:
-                pending = {
-                    "uninstall": uninstall_names,
-                    "install": sorted(set(upgrade_specs + fresh_specs)),
-                }
-                if save_pending_ops(pending, _pending_ops_default_path()):
-                    _log_manager.log("依赖库存在移除/升级项，将延迟到下次启动时统一处理")
-                    _log_manager.log_modal_process("依赖库存在移除/升级项，将延迟到下次启动时统一处理", self.modal_id)
-                    _log_manager.log_modal_status(
-                        "依赖变更（卸载/升级）将在下次启动时自动完成，请重启程序",
-                        self.modal_id,
-                    )
-                else:
-                    _log_manager.log("记录待执行依赖操作失败，请手动检查依赖")
-                    _log_manager.log_modal_process("记录待执行依赖操作失败，请手动检查依赖", self.modal_id)
-                return True
-
-            if not fresh_specs:
+            install_specs = sorted(set(upgrade_specs + fresh_specs))
+            if not install_specs:
                 _log_manager.log("依赖无变化")
                 _log_manager.log_modal_process("依赖无变化", self.modal_id)
-                return True
+                return RequirementsInstallResult(True)
 
-            for spec in fresh_specs:
+            pending_specs = []
+            for spec in install_specs:
                 _log_manager.log(f"执行安装 {spec}")
                 _log_manager.log_modal_process(f"执行安装 {spec}", self.modal_id)
-                if not _run_pip_install(spec):
-                    _log_manager.log(f"安装依赖失败: {spec}，跳过该依赖继续更新")
-                    _log_manager.log_modal_process(f"安装依赖失败: {spec}，跳过该依赖继续更新", self.modal_id)
-            return True
+                result = _run_pip_install(spec)
+                if result:
+                    continue
+                if result.network_error:
+                    _log_manager.log(f"默认源安装 {spec} 网络失败，切换清华源重试")
+                    _log_manager.log_modal_process(
+                        f"默认源连接失败，正在通过清华源重试: {spec}",
+                        self.modal_id,
+                    )
+                    result = _run_pip_install(spec, _TSINGHUA_PYPI_INDEX)
+                    if result:
+                        continue
+                    message = (
+                        f"依赖 {spec} 通过默认源和清华源安装均失败。"
+                        "请关闭系统代理、加速器或其他网络代理后重试更新。"
+                    )
+                    self.last_error_message = message
+                    _log_manager.log(message)
+                    _log_manager.log_modal_process(message, self.modal_id)
+                    _log_manager.log_modal_status("依赖安装失败，请关闭代理后重试", self.modal_id)
+                    return RequirementsInstallResult(
+                        False,
+                        network_blocked=True,
+                        message=message,
+                    )
+
+                pending_specs.append(spec)
+                _log_manager.log(f"安装依赖 {spec} 因非网络原因失败，将延迟到下次启动")
+                _log_manager.log_modal_process(
+                    f"安装依赖 {spec} 因非网络原因失败，将在重启时重试",
+                    self.modal_id,
+                )
+
+            if pending_specs:
+                if not self.modal_id:
+                    message = (
+                        "依赖安装因非网络原因失败，但当前不在 GUI 更新流程中，"
+                        "已停止更新且不会创建 pending 任务"
+                    )
+                    self.last_error_message = message
+                    _log_manager.log(message)
+                    return RequirementsInstallResult(False, message=message)
+                pending_path = _pending_ops_default_path()
+                existing = load_pending_ops(pending_path)
+                pending = {
+                    "uninstall": [],
+                    "install": existing["install"] + pending_specs,
+                }
+                if not save_pending_ops(pending, pending_path):
+                    message = "记录待执行依赖安装失败，已停止更新以避免依赖缺失"
+                    self.last_error_message = message
+                    _log_manager.log(message)
+                    _log_manager.log_modal_process(message, self.modal_id)
+                    return RequirementsInstallResult(False, message=message)
+                _log_manager.log_modal_status(
+                    "部分依赖将在下次启动时自动重试，请重启程序",
+                    self.modal_id,
+                )
+
+            return RequirementsInstallResult(True, pending_specs=pending_specs)
         except Exception as e:
             _log_manager.log(f"准备依赖更新失败: {e}")
             _log_manager.log_modal_process(f"准备依赖更新失败: {e}", self.modal_id)
             _log_manager.log_error(e)
-            return False
+            self.last_error_message = str(e)
+            return RequirementsInstallResult(False, message=str(e))
     
     def update_files(self, source_dir: Path) -> bool:
         """更新项目文件"""
@@ -293,14 +350,17 @@ class Updater:
             _log_manager.log("正在检查依赖更新...")
             _log_manager.log_modal_process("正在检查依赖更新...", self.modal_id)
             _log_manager.log_modal_status("正在准备依赖...", self.modal_id)
-            # 记录 pending 的原始状态：install_requirements 会先写入新依赖操作，
-            # 若 update_files 失败需还原，避免下次启动按新版本依赖卸载旧代码
+            # 记录 pending 的原始状态：install_requirements 可能写入 GUI 中因
+            # 非网络原因失败的安装项；若文件替换失败则必须还原。
             pending_path = _pending_ops_default_path()
             pending_before = load_pending_ops(pending_path)
-            if not self.install_requirements(extract_to):
+            install_result = self.install_requirements(extract_to)
+            if not install_result:
                 _log_manager.log("准备新依赖失败")
                 _log_manager.log_modal_process("准备新依赖失败", self.modal_id)
-                # 继续执行，依赖更新不是致命错误
+                self.last_error_message = getattr(
+                    install_result, "message", "") or "准备新依赖失败"
+                return False
             
             # 更新文件
             _log_manager.log("正在更新文件...")
@@ -318,7 +378,7 @@ class Updater:
             _log_manager.log_modal_process("更新完成！", self.modal_id)
             pending_ops = load_pending_ops(pending_path)
             if pending_ops["uninstall"] or pending_ops["install"]:
-                tip = "检测到待执行的依赖变更（卸载/升级），将在下次启动时自动完成，请重启程序"
+                tip = "检测到待执行的依赖安装，将在下次启动时自动重试，请重启程序"
                 _log_manager.log(tip)
                 _log_manager.log_modal_process(tip, self.modal_id)
                 _log_manager.log_modal_status(tip, self.modal_id)

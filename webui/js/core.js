@@ -195,7 +195,6 @@ class ConfigManager {
             'game-path': 'game_path',
             'debug-mode': 'debug',
             'auto-check-update': 'auto_check_update',
-            'delete-updating': 'delete_updating',
             'update-use-proxy': 'update_use_proxy',
             'github-max-workers': 'github_max_workers',
             'github-timeout': 'github_timeout',

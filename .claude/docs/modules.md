@@ -202,7 +202,7 @@ Standalone library with own `__init__.py` public API.
 |------|---------|
 | `ConfigManager.py` | Singleton config: dotted-path access (`ui_default.translator.enable_proper`), JSON validation via `config_check.json`, auto-save on mutation, thread-safe。`get()` 对 dict/list 返回内部活引用（调用方不应在锁外修改/跨线程共享）；`raw` 属性返回深拷贝；`save()`/`reset()` 带 `_generation` 守卫，旧实例（如 reset 后残留引用）不得再写盘 |
 | `LogManager.py` | Singleton logger: file rotation, console output, webview modal callbacks via thread pool for async UI updates; also configures `fancy`/`rule_editor` child loggers with the same handlers so their INFO/DEBUG output lands in `app.log` |
-| `pending_pip_ops.py` | 延迟依赖操作（pending pip ops）——**纯标准库模块**（imports 仅 json/os/re/subprocess/sys/tempfile/pathlib/typing + LogManager）。`load/save_pending_ops`、`_parse_requirements`/`_normalize_pkg_name`/`_normalize_spec`（PEP 503 归一化 + spec 行等价比较）、`_run_pip*`（pip 子进程注入 `PYTHONIOENCODING=utf-8`，stderr 解码 UTF-8 失败回退 GBK 防乱码）、`apply_pending_pip_ops(path, progress_callback=...)`（先卸载后安装，成功清记录，部分失败保留下次重试；progress_callback 供启动提示窗口实时刷新）。**start_webui.py init_env() 在任何第三方库导入之前直接导入本模块执行 pending**——导入链不触发 webutils/__init__.py（requests/openspeedy/UnityPy 等），即使上次更新残留"库缺失"也不会阻断执行；webutils/update.py re-export 同名符号保持兼容 |
+| `pending_pip_ops.py` | 延迟依赖安装（pending pip ops）——**纯标准库模块**（imports 仅标准库 + LogManager）。`PipOperationResult` 对 pip 失败区分网络/非网络；GUI 默认源网络失败后使用清华 PyPI 源单次回退；只有 GUI 中最终为非网络失败的安装项可写入 pending。`load/save_pending_ops` 会忽略并清除旧格式卸载项，废弃依赖永久保留；`apply_pending_pip_ops(path, progress_callback=...)` 仅重试安装，成功清记录，部分失败保留下次重试。**start_webui.py init_env() 在任何第三方库导入之前直接导入本模块执行 pending**，webutils/update.py re-export 同名符号保持兼容 |
 
 ## launcher/ — Standalone Launcher (GPL-3.0)
 

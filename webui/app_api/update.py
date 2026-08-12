@@ -5,7 +5,11 @@ import shutil
 from pathlib import Path
 
 from globalManagers.ConfigManager import ConfigManager
-from globalManagers.pending_pip_ops import load_pending_ops
+from globalManagers.pending_pip_ops import (
+    load_pending_ops,
+    save_pending_ops,
+    _pending_ops_default_path,
+)
 from webutils.update import Updater, get_app_version
 from webui.app_api.exceptions import CancelRunning
 
@@ -31,8 +35,7 @@ class UpdateMixin:
             updater = Updater(
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
-                delete_old_files=ConfigManager().get("delete_updating", True),
-                                use_proxy=ConfigManager().get("update_use_proxy", True),
+                use_proxy=ConfigManager().get("update_use_proxy", True),
                 only_stable=ConfigManager().get("update_only_stable", False)
             )
         
@@ -54,8 +57,7 @@ class UpdateMixin:
             updater = Updater(
                 "HZBHZB1234", 
                 "LCTA-Limbus-company-transfer-auto",
-                delete_old_files=ConfigManager().get("delete_updating", True),
-                                use_proxy=ConfigManager().get("update_use_proxy", True),
+                use_proxy=ConfigManager().get("update_use_proxy", True),
                 only_stable=ConfigManager().get("update_only_stable", False)
             )
         
@@ -76,7 +78,6 @@ class UpdateMixin:
             updater = Updater(
                 "HZBHZB1234",
                 "LCTA-Limbus-company-transfer-auto",
-                delete_old_files=ConfigManager().get("delete_updating", True),
                 use_proxy=ConfigManager().get("update_use_proxy", True),
                 only_stable=ConfigManager().get("update_only_stable", False),
                 modal_id=modal_id
@@ -86,11 +87,14 @@ class UpdateMixin:
             result = updater.check_and_update(getattr(self, 'current_version', ''))
             if result:
                 if self._has_pending_ops():
-                    msg = "更新完成，依赖变更将在下次启动时自动执行，请重启程序"
+                    msg = "更新完成，部分依赖安装将在下次启动时自动重试，请重启程序"
                     self.add_modal_log(msg, modal_id)
                     return {"success": True, "message": msg}
                 return {"success": True, "message": "更新完成"}
-            return {"success": False, "message": "更新失败"}
+            return {
+                "success": False,
+                "message": updater.last_error_message or "更新失败",
+            }
         except CancelRunning:
             self.log('更新任务已取消')
             self.del_modal_list(modal_id)
@@ -142,22 +146,35 @@ class UpdateMixin:
                 cfg = ConfigManager()
                 updater = Updater(
                     "HZBHZB1234", "LCTA-Limbus-company-transfer-auto",
-                    delete_old_files=cfg.get("delete_updating", True),
                     use_proxy=cfg.get("update_use_proxy", True),
                     only_stable=cfg.get("update_only_stable", False),
                     modal_id=modal_id
                 )
             
                 self.add_modal_log("正在安装依赖...", modal_id)
-                updater.install_requirements(source_dir)
-                self.check_modal_running(modal_id)
-            
-                self.add_modal_log("正在替换文件...", modal_id)
-                if not updater.update_files(source_dir):
-                    return {"success": False, "message": "更新文件失败"}
+                pending_path = _pending_ops_default_path()
+                pending_before = load_pending_ops(pending_path)
+                files_updated = False
+                try:
+                    install_result = updater.install_requirements(source_dir)
+                    if not install_result:
+                        return {
+                            "success": False,
+                            "message": install_result.message or "依赖安装失败",
+                        }
+                    self.check_modal_running(modal_id)
+
+                    self.add_modal_log("正在替换文件...", modal_id)
+                    if not updater.update_files(source_dir):
+                        return {"success": False, "message": "更新文件失败"}
+                    files_updated = True
+                finally:
+                    if (not files_updated and
+                            load_pending_ops(pending_path) != pending_before):
+                        save_pending_ops(pending_before, pending_path)
 
                 if self._has_pending_ops():
-                    msg = "更新完成，依赖变更将在下次启动时自动执行，请重启程序"
+                    msg = "更新完成，部分依赖安装将在下次启动时自动重试，请重启程序"
                     self.add_modal_log(msg, modal_id)
                     return {"success": True, "message": msg}
                 return {"success": True, "message": "更新完成，请手动重启程序"}

@@ -116,8 +116,8 @@ def _run_pending_pip_ops_with_prompt():
     """启动早期执行待处理的依赖操作，并以原生消息框展示进度。
 
     - 导入链必须是纯标准库：globalManagers.pending_pip_ops 不依赖任何第三方
-      库，即使上次更新残留"库缺失"状态也不会导入失败，保证 pending 一定能
-      执行到（否则将进不去更新流程）。
+      库，即使上次更新残留"库缺失"状态也不会导入失败，保证 pending 安装
+      可以在 GUI 依赖加载前重试。
     - 打包版（CREATE_NO_WINDOW 无控制台）下 print/日志均不可见，pip 操作
       可能耗时数分钟而无任何界面反馈；此处用 ctypes MessageBoxW 弹出原生
       提示窗，后台线程逐项执行并在消息框内实时更新文本，全部完成后自动
@@ -194,7 +194,7 @@ def init_env():
     if not is_frozen:
         os.environ['PATH'] += os.pathsep + str(project_root / 'code' / 'venv' / 'Scripts')
 
-    # 在加载任何第三方库之前执行待处理的依赖操作（更新延迟的卸载/升级）。
+    # 在加载任何第三方库之前重试 GUI 更新阶段因非网络原因失败的依赖安装。
     # globalManagers.pending_pip_ops 为纯标准库模块，导入链不触发
     # webutils/__init__.py（requests/openspeedy/UnityPy 等），
     # 即使上次更新残留库缺失也不会阻断 pending 执行。

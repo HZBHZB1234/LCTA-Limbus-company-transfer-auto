@@ -980,7 +980,7 @@ Files: `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `
   bundle: %LOCALAPPDATA%\..\LocalLow\Unity\ProjectMoon_LimbusCompany\<h1>\<h2>\__data（unity_version 被抹除为 0.0.0，须 FALLBACK_UNITY_VERSION=6000.3.12f1）
 
 锁定/取消锁定（即时写入，无备份）:
-  JS: sections/cg.html + js/cg.js（CgPage，RiskGate.gatePage('cg') 门控）
+  JS: sections/cg.html + js/cg.js（CgPage，无风险门）
     -> api.cg_read(save_path) / cg_apply(save_path, forced_ids)
   -> webui/app_api/cg.py（CgMixin，写操作前 is_game_running() 拒绝）
   -> webutils/cg/save.py（注册表取 key/iv -> AES 解密 -> 改 _forcedCharacterCgIdList -> 加密写回）
@@ -991,7 +991,7 @@ Files: `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `
      替换 = set_image(原 format/mipcount) -> tex.save() -> bundle.save(packer="original") + version_player="limbus_modded"；
      原贴图字节留存 cache_path/cg/originals/ 供还原）
 
-Files: `webui/sections/cg.html`, `webui/js/cg.js`, `webui/js/risk-gate.js`（RISK_SERVICES.cg）, `webui/app_api/cg.py`,
+Files: `webui/sections/cg.html`, `webui/js/cg.js`, `webui/app_api/cg.py`,
       `webui/app.py`, `webutils/cg/save.py`, `webutils/cg/bundle.py`, `webutils/cg/__init__.py`, `webutils/__init__.py`,
       `webui/index.html`, `webui/sections/preload.js`, `webui/js/utils.js`, `webui/guide/cg.md`,
       `webui/css/components.css`（cg-chip/cg-list）, `.github/InitCode.py`（js_files）, `tests/test_cg_save.py`

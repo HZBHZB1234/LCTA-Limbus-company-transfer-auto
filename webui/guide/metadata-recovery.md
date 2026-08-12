@@ -12,7 +12,7 @@
 - 文件内有 7 个「受保护 section」单独加密，其余 24 个 section 明文存储。
 - 解密算法：`xorshift64(13,7,17)` 伪随机流 + 256 字节替换表逐字节 XOR，每个区域使用独立 seed。
 
-> 旧版定位方法（`metadata_trace.py`）用「首个字符串引用 → 首个调用者」推断解密入口，依赖枚举顺序，游戏更新后非常脆弱。本工具改用**证据驱动候选评分**：直接扫描 `shl r64,0Dh / shr r64,07h / shl r64,11h` 的 xorshift64(13,7,17) 指令模式，再对候选函数反编译打分（xorshift 循环数、memmove/malloc、64 位立即数、_OWORD 拷贝、全局扇出），跨版本稳定。
+> 旧版定位方法用「首个字符串引用 → 首个调用者」推断解密入口，依赖枚举顺序，游戏更新后非常脆弱。本工具改用**证据驱动候选评分**：直接扫描 `shl r64,0Dh / shr r64,07h / shl r64,11h` 的 xorshift64(13,7,17) 指令模式，再对候选函数反编译打分（xorshift 循环数、memmove/malloc、64 位立即数、_OWORD 拷贝、全局扇出），跨版本稳定。
 
 ## 二、流水线总览（五阶段）
 
@@ -140,7 +140,7 @@
 
 ## 九、阶段 4：正式 profile 提升（本页）
 
-把候选参数 + 31 段映射提升为正式 profile JSON（与 `metadata_probe.py` 直接消费的格式一致）：
+把候选参数 + 31 段映射提升为正式 profile JSON（与旧版恢复脚本直接消费的格式一致）：
 
 - `header`：size/seed/entry_layout
 - `substitution_table_hex`：替换表 256 字节
@@ -206,5 +206,5 @@ A: 期望值填写错误（大小写不敏感，应为 64 位 hex）；或映射
 
 - **修复版 Il2CppDumper**（配合本工具输出 profile 使用）：https://github.com/HZBHZB1234/Il2CppDumper
 - **LimbusMetadataRecovery Releases**（标准版本 metadata 文件下载，作参考标准文件）：https://github.com/HZBHZB1234/LimbusMetadataRecovery/releases
-- 本功能移植自私有仓库 HZBHZB1234/LimbusMetadataRecovery（证据驱动定位器、参数提取、验证闭环、31 段求解器的完整设计与回归记录见该仓库文档）。
+- 本功能移植自开源仓库 HZBHZB1234/LimbusMetadataRecovery（证据驱动定位器、参数提取、验证闭环、31 段求解器的完整设计与回归记录见该仓库文档）。
 - 参考基线：08-06 构建真值 init `sub_18069C5E0`、map `sub_180693580`；07-30 夹具覆盖两代构建的提取回归。

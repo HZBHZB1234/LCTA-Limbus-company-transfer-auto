@@ -1,6 +1,6 @@
 ## 加载页 CG 替换
 
-锁定游戏加载页背景图（存档注入，零 hook），并可进一步替换缓存 bundle 中的贴图（方案 A）。原理与逆向细节见《LOADING_CG_INJECT.md》：存档 `save_slot_<id>.json` 为 `Base64(AES-256-CBC+PKCS7(JSON))`，密钥明文存放于注册表 PlayerPrefs；加载页选图优先级为「锁定列表 `_forcedCharacterCgIdList` > 解锁池 `_cgIdList` > 默认」。
+锁定游戏加载页背景图（存档注入，零 hook），并可进一步替换缓存 bundle 中的贴图（方案 A）。原理：存档 `save_slot_<id>.json` 为 `Base64(AES-256-CBC+PKCS7(JSON))`，密钥明文存放于注册表 PlayerPrefs；加载页选图优先级为「锁定列表 `_forcedCharacterCgIdList` > 解锁池 `_cgIdList` > 默认」。
 
 > **CG ID 三态模型**（上游 2026-08-12 确认）：
 > - **键形式**（页面列表展示）：`Story_CG/10101_normal` / `Unit_CG/10101_normal`（catalog 注册的 Addressable key）

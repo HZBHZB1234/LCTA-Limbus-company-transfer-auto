@@ -14,16 +14,14 @@ class CgPage {
         this._renderedCount = 0;   // 已渲染行数
         this._filterTimer = null;  // 过滤输入防抖定时器
         this._modded = [];         // 已替换贴图的 CG ID 列表
+        this._indexCount = 0;      // 缓存索引中的 CG 数量（决定替换前是否需先扫描）
         this._initDomRefs();
     }
 
     init() {
         this._initDomRefs();
         this._bindEvents();
-        RiskGate.gatePage('cg', {
-            onAccepted: () => this._showMain(),
-            onRejected: () => this._hideMain(),
-        });
+        this._showMain();
     }
 
     stop() {}
@@ -92,12 +90,9 @@ class CgPage {
         if (this.replaceIdInput) {
             this.replaceIdInput.addEventListener('input', () => this._updateRestoreButton());
         }
-    }
-
-    // ---- 风险门 ----
-
-    _hideMain() {
-        if (this.mainContent) this.mainContent.style.display = 'none';
+        if (this.replaceImgInput) {
+            this.replaceImgInput.addEventListener('change', () => this._validateImageInput());
+        }
     }
 
     _showMain() {
@@ -145,20 +140,25 @@ class CgPage {
                     ? '<i class="fas fa-check" style="color:#27ae60;"></i> 加密密钥可用（注册表 PlayerPrefs）'
                     : `<i class="fas fa-times" style="color:#e74c3c;"></i> 密钥不可用：${escapeHtml(d.key_error || '未找到注册表密钥')}`;
             }
+            this._modded = (d.bundle && d.bundle.modded) || [];
+
             if (this.cacheStatusEl) {
                 const b = d.bundle || {};
+                this._indexCount = b.index_count || 0;
                 const idxInfo = b.index_count
                     ? `，缓存索引 ${b.index_count} 个 CG / ${b.cached_bundles || 0} 个 bundle（${new Date(b.index_time * 1000).toLocaleString()}）`
                     : '';
+                const moddedInfo = this._modded.length
+                    ? `，<span style="color:#e67e22;">已替换贴图 ${this._modded.length} 个</span>`
+                    : '';
                 this.cacheStatusEl.innerHTML = b.cache_count
-                    ? `<i class="fas fa-check" style="color:#27ae60;"></i> 缓存 bundle：${b.cache_count} 个${idxInfo}`
+                    ? `<i class="fas fa-check" style="color:#27ae60;"></i> 缓存 bundle：${b.cache_count} 个${idxInfo}${moddedInfo}`
                     : '<i class="fas fa-times" style="color:#e74c3c;"></i> 未找到 Unity 缓存目录（游戏未下载过资源？）';
             }
             if (this.saveDirEl) {
                 this.saveDirEl.innerHTML = `存档目录：<code>${escapeHtml(d.save_dir)}</code>`;
             }
 
-            this._modded = (d.bundle && d.bundle.modded) || [];
             this._updateRestoreButton();
 
             this.refreshModel();
@@ -387,9 +387,11 @@ class CgPage {
                 if (this.scanInfoEl) {
                     const uncached = (result.data.uncached || []).length;
                     const lockable = (result.data.lockable || []).length;
+                    const moddedCount = this._modded.filter(id => this._scanItems.includes(id)).length;
                     this.scanInfoEl.innerHTML = `<i class="fas fa-check" style="color:#27ae60;"></i> `
                         + `已发现 ${this._scanItems.length} 个可用 CG（点击条目选用；`
-                        + `${lockable} 个可锁定·方案A，${uncached} 个未下载缓存，其余仅可注入解锁池·方案B）`;
+                        + `${lockable} 个可锁定·方案A，${uncached} 个未下载缓存，`
+                        + `${moddedCount} 个已替换贴图，其余仅可注入解锁池·方案B）`;
                 }
             })
             .catch((error) => {
@@ -407,6 +409,8 @@ class CgPage {
             items = items.filter(i => !(this._scanUncached && this._scanUncached.has(i)));
         } else if (mode === 'uncached') {
             items = items.filter(i => this._scanUncached && this._scanUncached.has(i));
+        } else if (mode === 'modded') {
+            items = items.filter(i => this._modded && this._modded.includes(i));
         }
         // 仅可锁定（人格 CG，方案 A）
         if (this.lockableFilter && this.lockableFilter.checked) {
@@ -445,13 +449,17 @@ class CgPage {
             const lockable = this._lockableIds && this._lockableIds.has(id);
             const row = document.createElement('div');
             row.className = 'cg-list-item';
+            const modded = this._modded && this._modded.includes(id);
             let tags = '';
+            if (modded) tags += ' <span class="cg-list-tag cg-list-tag-modded">已替换</span>';
             if (uncached) tags += ' <span class="cg-list-tag">未缓存</span>';
             if (!lockable) tags += ' <span class="cg-list-tag">仅解锁池·方案B</span>';
             row.innerHTML = `<i class="fas fa-image"></i> ${escapeHtml(id)}${tags}`;
-            row.title = lockable
-                ? (uncached ? '未下载缓存，可锁定（方案 A）' : '点击选用并预览（人格 CG，可锁定）')
-                : '非人格资源，仅可注入解锁池（方案 B，游戏保存后可能被重建）';
+            row.title = modded
+                ? '已替换贴图：点击选用并可「还原原图」'
+                : (lockable
+                    ? (uncached ? '未下载缓存，可锁定（方案 A）' : '点击选用并预览（人格 CG，可锁定）')
+                    : '非人格资源，仅可注入解锁池（方案 B，游戏保存后可能被重建）');
             row.addEventListener('click', () => this._selectCg(id));
             frag.appendChild(row);
         }
@@ -489,6 +497,21 @@ class CgPage {
     }
 
     // ---- 预览 ----
+
+    // 防呆：替换图片扩展名校验（png/jpg/jpeg/webp），结果写入状态行
+    _validateImageInput() {
+        if (!this.replaceStatusEl) return;
+        const path = this.replaceImgInput ? this.replaceImgInput.value.trim() : '';
+        if (!path) {
+            this.replaceStatusEl.textContent = '';
+            return;
+        }
+        if (/\.(png|jpe?g|webp)$/i.test(path)) {
+            this.replaceStatusEl.innerHTML = '<i class="fas fa-check" style="color:#27ae60;"></i> 图片格式有效（png/jpg/webp）';
+        } else {
+            this.replaceStatusEl.innerHTML = '<span style="color:#e74c3c;">不支持的图片格式：仅支持 png / jpg / webp</span>';
+        }
+    }
 
     previewSelected() {
         const id = this.replaceIdInput ? this.replaceIdInput.value.trim() : '';
@@ -542,9 +565,23 @@ class CgPage {
             showMessage('提示', '请先选择替换图片');
             return;
         }
+        if (!/\.(png|jpe?g|webp)$/i.test(imgPath)) {
+            showMessage('提示', '不支持的图片格式：仅支持 png / jpg / webp');
+            return;
+        }
+        // 防呆：索引不存在时替换必然失败，引导先扫描
+        if (!this._indexCount && !this._scanItems.length) {
+            showConfirm('尚未扫描缓存',
+                '本地还没有 CG 索引（未扫描过缓存 bundle），替换将失败。是否先执行「扫描可用 CG」？',
+                () => this.scanCgIds());
+            return;
+        }
         showConfirm('替换贴图',
-            `将把缓存 bundle 中「${cgId}」的贴图替换为所选图片（保留原尺寸/格式）。`
-            + '游戏更新重新下载缓存后会还原；原始贴图数据将留存用于「还原原图」。继续？',
+            `将把缓存 bundle 中「${cgId}」的贴图替换为所选图片（保留原尺寸/格式）。\n\n`
+            + '<b style="color:#e67e22;">⚠ 共享贴图影响：</b>该 CG 与游戏中其他位置（人格立绘/剧情/战斗等）'
+            + '共用同一张贴图，替换后<b>所有引用原图的地方都会一并显示替换后的图片</b>，不只是加载页。\n\n'
+            + '游戏更新重新下载缓存后会还原；原始贴图数据已留存，可随时「还原原图」。\n'
+            + '另建议先在卡片 3 锁定该 CG，否则加载页仍会随机显示其他 CG。继续？',
             () => {
                 const modal = new ProgressModal('替换贴图');
                 modal.addLog(`开始替换 ${cgId} ...`);
@@ -558,8 +595,16 @@ class CgPage {
                             modal.complete(true, result.message || '替换完成');
                             this._modded.push(result.key || cgId);
                             this._updateRestoreButton();
+                            this._renderScanList();
                             if (this.replaceStatusEl) {
                                 this.replaceStatusEl.innerHTML = `<i class="fas fa-check" style="color:#27ae60;"></i> ${escapeHtml(result.message)}`;
+                            }
+                            // 防呆：已替换但未锁定 → 提示到卡片 3 锁定，否则加载页不显示
+                            const forced = (this._model && this._model.forced_ids) || [];
+                            const norm = cgId.replace(/^Story_CG\//, 'CG/').replace(/^Unit_CG\//, 'CG/');
+                            if (!forced.includes(cgId) && !forced.includes(norm)) {
+                                showMessage('提示',
+                                    `贴图已替换，但「${cgId}」尚未锁定：请到「锁定 CG」卡片添加锁定，否则加载页不会稳定显示该 CG。`);
                             }
                         } else {
                             modal.complete(false, '替换失败：' + (result.message || '未知错误'));
@@ -577,27 +622,33 @@ class CgPage {
     restoreTexture() {
         const cgId = this.replaceIdInput ? this.replaceIdInput.value.trim() : '';
         if (!cgId) return;
-        const modal = new ProgressModal('还原贴图');
-        modal.addLog(`开始还原 ${cgId} 原始贴图...`);
-        pywebview.api.cg_restore(cgId, modal.id)
-            .then((result) => {
-                if (!result) {
-                    modal.complete(false, '还原失败：无返回结果');
-                    return;
-                }
-                if (result.success) {
-                    modal.complete(true, result.message || '还原完成');
-                    this._modded = this._modded.filter(i => i !== (result.key || cgId));
-                    this._updateRestoreButton();
-                    if (this.replaceStatusEl) {
-                        this.replaceStatusEl.innerHTML = `<i class="fas fa-check" style="color:#27ae60;"></i> ${escapeHtml(result.message)}`;
-                    }
-                } else {
-                    modal.complete(false, '还原失败：' + (result.message || '未知错误'));
-                }
-            })
-            .catch((error) => {
-                modal.complete(false, '还原失败：' + error);
+        showConfirm('还原原图',
+            `将把「${cgId}」恢复为原始贴图（覆盖当前替换）。\n`
+            + '游戏内所有引用该贴图的位置（人格立绘/剧情/战斗等）将一并恢复原图。继续？',
+            () => {
+                const modal = new ProgressModal('还原贴图');
+                modal.addLog(`开始还原 ${cgId} 原始贴图...`);
+                pywebview.api.cg_restore(cgId, modal.id)
+                    .then((result) => {
+                        if (!result) {
+                            modal.complete(false, '还原失败：无返回结果');
+                            return;
+                        }
+                        if (result.success) {
+                            modal.complete(true, result.message || '还原完成');
+                            this._modded = this._modded.filter(i => i !== (result.key || cgId));
+                            this._updateRestoreButton();
+                            this._renderScanList();
+                            if (this.replaceStatusEl) {
+                                this.replaceStatusEl.innerHTML = `<i class="fas fa-check" style="color:#27ae60;"></i> ${escapeHtml(result.message)}`;
+                            }
+                        } else {
+                            modal.complete(false, '还原失败：' + (result.message || '未知错误'));
+                        }
+                    })
+                    .catch((error) => {
+                        modal.complete(false, '还原失败：' + error);
+                    });
             });
     }
 }

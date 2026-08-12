@@ -15,10 +15,10 @@
 
 用法示例：
 python tools/apply_profile.py \
-  --metadata E:\\desktop\\work\\LimbusDecompile\\samples\\steam-2026-08-06\\global-metadata.dat \
+  --metadata samples\\steam-2026-08-06\\global-metadata.dat \
   --candidate out\\candidate_profile_08_06.json \
   --section-map out\\solve-08-06-section-map.json \
-  --reference E:\\desktop\\work\\LimbusDecompile\\analysis\\global-metadata-standard-steam-2026-08-06.dat \
+  --reference samples\\global-metadata-standard-steam-2026-08-06.dat \
   --profile-id steam-2026-08-06 \
   --expect-sha256 73194A637E4BEF48F5D0396158F2CFEEAC484EFF4864AE01F6CDAE603057A2E7 \
   --output out\\steam-2026-08-06.generated.json

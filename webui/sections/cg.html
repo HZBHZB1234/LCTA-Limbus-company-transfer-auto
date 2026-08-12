@@ -1,5 +1,3 @@
-<div class="disclaimer-overlay" data-risk-overlay="cg" style="display:none;"></div>
-
 <div id="cg-main-content" style="display:none;">
     <div class="section-header">
         <h2 class="section-title">
@@ -7,9 +5,18 @@
             加载页 CG 替换
         </h2>
         <p class="section-subtitle">锁定游戏加载页背景图（存档注入）与替换缓存贴图（方案 A）— 零 hook，纯文件层操作</p>
-        <a href="javascript:void(0)" class="risk-reread-link" onclick="RiskGate.showNoticeModal('cg')">
-            <i class="fas fa-exclamation-triangle"></i> 查看风险须知
-        </a>
+    </div>
+
+    <div class="cg-guide-box">
+        <i class="fas fa-bullseye"></i>
+        <div>
+            <strong>快速上手 · 自定义加载页 CG</strong>
+            <ol>
+                <li>在「锁定 CG」点「扫描可用 CG」，在结果列表中点击目标 CG 自动选用。</li>
+                <li>人格 CG（如 <code>10101_normal</code>）点「添加锁定」走方案 A（稳定）；其他资源按提示走方案 B 解锁池注入（游戏保存后可能被重建）。</li>
+                <li>想用自定义图片：在「贴图替换」填目标 CG ID → 选图片 → 「开始替换」。<b>替换影响所有引用原图的位置</b>，详见卡片 4 警告。</li>
+            </ol>
+        </div>
     </div>
 
     <div id="cg-game-warning" style="display:none; background:#e74c3c; color:#fff; padding:10px 14px; border-radius:8px; margin-bottom:1rem;">
@@ -64,7 +71,7 @@
         <!-- 卡片 3：锁定管理 -->
         <div class="setting-card">
             <h3 class="setting-title">
-                <i class="fas fa-lock"></i> 锁定加载页 CG
+                <i class="fas fa-lock"></i> 锁定 CG
             </h3>
             <p class="form-hint">CG ID 形如 <code>CG/10101_normal</code>（存档形式）或 <code>Story_CG/10101_normal</code>（键形式，自动转换），可只输名字。<b>人格 CG</b>（<code>&lt;人格ID&gt;_normal/_gacksung</code>）走<b>方案 A</b>锁定列表（稳定）；<b>非人格资源</b>（Dummy、BG/ 自定义等）走<b>方案 B</b>解锁池注入（游戏保存后可能被重建）。添加/移除均为<u>即时写入</u>存档，不做备份。</p>
             <div class="form-group">
@@ -93,6 +100,7 @@
                         <option value="all">全部 CG</option>
                         <option value="cached">仅已缓存</option>
                         <option value="uncached">仅未缓存</option>
+                        <option value="modded">仅已替换</option>
                     </select>
                     <label class="cg-scan-force" title="只显示人格 CG（方案 A 可锁定）">
                         <input type="checkbox" id="cg-lockable-filter"> 仅可锁定
@@ -105,9 +113,18 @@
         <!-- 卡片 4：贴图替换（方案 A） -->
         <div class="setting-card">
             <h3 class="setting-title">
-                <i class="fas fa-palette"></i> 贴图替换（方案 A）
+                <i class="fas fa-palette"></i> 贴图替换
             </h3>
-            <p class="form-hint">替换缓存 bundle 中该 CG 对应的贴图（保留原尺寸/格式/细节层次，自动缩放）。<b>游戏更新重新下载缓存后会还原</b>；部分压缩格式无法重编码，仅可锁定。</p>
+            <div class="cg-share-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div><b>注意：替换的是共享贴图，原图在游戏内其他引用处会一并改变。</b>
+                加载页 CG 与游戏中其他位置（人格立绘、剧情演出、战斗等）共用同一张 <code>Texture2D</code>；
+                替换后<b>所有引用原图的地方都会显示替换后的图片</b>（原图引用处随之变化），不仅是加载页。
+                可随时「还原原图」恢复；</div>
+            </div>
+            <p class="form-hint">替换缓存 bundle 中该 CG 对应的贴图（保留原尺寸/格式/细节层次，自动缩放）。
+                <b>游戏更新重新下载缓存后会还原</b>；部分压缩格式无法重编码，仅可锁定。<b>替换前请先在卡片 3 锁定该 CG</b>，
+                否则加载页仍会随机显示其他 CG。</p>
             <div class="form-group">
                 <label for="cg-replace-id">目标 CG ID</label>
                 <div class="speed-input-group">

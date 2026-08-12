@@ -63,6 +63,12 @@ const RISK_SERVICES = {
             },
         ],
     },
+    cg: {
+        id: 'cg',
+        name: '加载页 CG 替换',
+        consentKey: 'cg.disclaimer_accepted',
+        specific: '加载页 CG 替换会直接修改游戏存档文件（锁定加载页背景图）并改写 Unity 缓存 bundle 中的贴图数据，操作需在游戏完全退出时进行。',
+    },
 };
 
 const RiskGate = {

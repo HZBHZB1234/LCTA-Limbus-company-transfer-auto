@@ -19,3 +19,4 @@ openspeedy
 keyboard
 urllib3==1.25.11
 vdf
+pycryptodome

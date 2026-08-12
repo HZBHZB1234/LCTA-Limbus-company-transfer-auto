@@ -160,6 +160,12 @@ async function onSectionLoaded(name) {
                 metadataRecoveryPage.init();
             }
             break;
+        case 'cg':
+            console.log('[LCTA] Init section: cg');
+            if (typeof cgPage !== 'undefined' && cgPage) {
+                cgPage.init();
+            }
+            break;
     }
 
     // 先回填当前 section 内已保存的配置，再执行依赖回填值的显隐联动

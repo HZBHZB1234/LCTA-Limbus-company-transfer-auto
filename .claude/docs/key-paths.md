@@ -963,3 +963,29 @@ Files: `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `
       `webutils/utils/shell.py`（get_downloads_dir）, `webutils/__init__.py`,
       `webui/app.py`（atexit 清理）, `config_default.json`, `config_check.json`, `.github/InitCode.py`（HTML 本地化）, `tests/test_aria2_downloader.py`
 
+
+
+## 19. 加载页 CG 替换（锁定 + 贴图替换）
+
+原理（逆向自 GameAssembly.dll，详见 LimbusDecompile/docs/LOADING_CG_INJECT.md）:
+  存档 save_slot_<id>.json = Base64(AES-256-CBC+PKCS7(JsonUtility JSON))
+  密钥明文: HKCU\Software\ProjectMoon\LimbusCompany\LocalSave.LocalGameOptionData_*
+  选图优先级: _forcedCharacterCgIdList > _cgIdList > 默认；ID 三态模型（2026-08-12 确认）：存档字符串 ID = "CG/<名>"(官方)/"BG/<名>"(自定义)，游戏 isFullPath = !StartsWith(ID,"CG/") && !StartsWith(ID,"BG/")，key = "Story_" + ID + ".png"（失败兜底 "Unit_" + ID + ".png"）；forced = List<LocalCharacterCGData>[{"id":N,"gacksung":bool}]（仅人格 CG，GetText="CG/{0}{1}"）；键形式 Story_CG/Unit_CG 为 catalog 索引/展示用（key_to_save_id 转换）；方案 A = forced 对象锁定（稳定，已验证）；方案 B = 注入 _cgIdList（不稳定，保存时被重建）
+  bundle: %LOCALAPPDATA%\..\LocalLow\Unity\ProjectMoon_LimbusCompany\<h1>\<h2>\__data（unity_version 被抹除为 0.0.0，须 FALLBACK_UNITY_VERSION=6000.3.12f1）
+
+锁定/取消锁定（即时写入，无备份）:
+  JS: sections/cg.html + js/cg.js（CgPage，RiskGate.gatePage('cg') 门控）
+    -> api.cg_read(save_path) / cg_apply(save_path, forced_ids)
+  -> webui/app_api/cg.py（CgMixin，写操作前 is_game_running() 拒绝）
+  -> webutils/cg/save.py（注册表取 key/iv -> AES 解密 -> 改 _forcedCharacterCgIdList -> 加密写回）
+
+扫描/预览/替换（方案 A）:
+  JS: api.cg_scan_ids(modal.id, force)（ProgressModal 进度 + 取消；「强制全量重扫」复选框；返回 uncached/lockable 列表）；api.cg_apply（方案 A forced 对象）/ cg_inject_pool / cg_remove_pool（方案 B 解锁池）/ cg_preview(cg_id) / cg_replace(cg_id, img, modal.id) / cg_restore(cg_id)
+  -> webutils/cg/bundle.py（ThreadPoolExecutor 增量扫 __data——v3 缓存按 bundle 路径键控（{version:3, scanned_at, bundles:{path:{size,hits}}, catalog:[...]}），同路径 bundle 不可变前提：路径存在+size 一致即跳过（零 UnityPy 打开），失效路径驱逐并清理 originals 还原数据，force=True 全量重扫，v1/v2 旧缓存（BG/ 错误 ID）作废重建，replace/restore 后同步 bundle size 防误重扫；ID = Story_CG/<名>/Unit_CG/<名>（container Story/CG/、Unit/CG/ 决定前缀）；catalog_S1.json 正则提取全量 ID 并入（未缓存仅可锁定）；Sprite 贴图引用取 typetree m_RD.texture（Unity 6 无 m_RenderDataKey PPtr）；
+     替换 = set_image(原 format/mipcount) -> tex.save() -> bundle.save(packer="original") + version_player="limbus_modded"；
+     原贴图字节留存 cache_path/cg/originals/ 供还原）
+
+Files: `webui/sections/cg.html`, `webui/js/cg.js`, `webui/js/risk-gate.js`（RISK_SERVICES.cg）, `webui/app_api/cg.py`,
+      `webui/app.py`, `webutils/cg/save.py`, `webutils/cg/bundle.py`, `webutils/cg/__init__.py`, `webutils/__init__.py`,
+      `webui/index.html`, `webui/sections/preload.js`, `webui/js/utils.js`, `webui/guide/cg.md`,
+      `webui/css/components.css`（cg-chip/cg-list）, `.github/InitCode.py`（js_files）, `tests/test_cg_save.py`

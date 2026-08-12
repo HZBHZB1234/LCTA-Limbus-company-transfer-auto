@@ -1,0 +1,140 @@
+<div class="disclaimer-overlay" data-risk-overlay="cg" style="display:none;"></div>
+
+<div id="cg-main-content" style="display:none;">
+    <div class="section-header">
+        <h2 class="section-title">
+            <i class="fas fa-image"></i>
+            加载页 CG 替换
+        </h2>
+        <p class="section-subtitle">锁定游戏加载页背景图（存档注入）与替换缓存贴图（方案 A）— 零 hook，纯文件层操作</p>
+        <a href="javascript:void(0)" class="risk-reread-link" onclick="RiskGate.showNoticeModal('cg')">
+            <i class="fas fa-exclamation-triangle"></i> 查看风险须知
+        </a>
+    </div>
+
+    <div id="cg-game-warning" style="display:none; background:#e74c3c; color:#fff; padding:10px 14px; border-radius:8px; margin-bottom:1rem;">
+        <i class="fas fa-exclamation-triangle"></i>
+        <b>游戏正在运行：</b>存档写入与贴图替换会被游戏退出时的存档覆写还原，请先完全退出游戏再操作。
+    </div>
+
+    <div class="settings-grid">
+
+        <!-- 卡片 1：状态总览 -->
+        <div class="setting-card">
+            <h3 class="setting-title">
+                <i class="fas fa-info-circle"></i> 状态总览
+            </h3>
+            <div class="form-group">
+                <label for="cg-slot-select">存档槽（切换后自动读取 CG 状态）</label>
+                <div class="select-wrapper">
+                    <select id="cg-slot-select"></select>
+                    <i class="fas fa-chevron-down"></i>
+                </div>
+            </div>
+            <small class="form-hint" id="cg-key-status">正在检测加密密钥...</small>
+            <small class="form-hint" id="cg-cache-status"></small>
+            <small class="form-hint" id="cg-save-dir"></small>
+        </div>
+
+        <!-- 卡片 2：当前 CG 状态 -->
+        <div class="setting-card">
+            <h3 class="setting-title">
+                <i class="fas fa-list"></i> 当前 CG 状态
+            </h3>
+            <p class="form-hint">锁定列表（<b style="color:#f39c12;">琥珀色</b>）中的 CG 将固定显示在加载页（方案 A，仅人格 CG）；解锁池为随机候选，可注入任意资源（方案 B，游戏保存后可能被重建）。</p>
+            <div class="form-group">
+                <label>解锁池 <code>_cgIdList</code>（点 × 移除）</label>
+                <div id="cg-unlocked-list" class="cg-chip-list"><span class="form-hint">—</span></div>
+            </div>
+            <div class="form-group">
+                <label>锁定列表 <code>_forcedCharacterCgIdList</code>（点 × 移除）</label>
+                <div id="cg-forced-list" class="cg-chip-list"><span class="form-hint">—</span></div>
+            </div>
+            <div class="form-group">
+                <label>上次显示 <code>_latestCg</code></label>
+                <small id="cg-latest" class="form-hint">—</small>
+            </div>
+            <div style="margin-top: 0.6rem;">
+                <button id="cg-btn-clear" class="action-btn danger">
+                    <i class="fas fa-eraser"></i> 清除全部锁定
+                </button>
+            </div>
+        </div>
+
+        <!-- 卡片 3：锁定管理 -->
+        <div class="setting-card">
+            <h3 class="setting-title">
+                <i class="fas fa-lock"></i> 锁定加载页 CG
+            </h3>
+            <p class="form-hint">CG ID 形如 <code>CG/10101_normal</code>（存档形式）或 <code>Story_CG/10101_normal</code>（键形式，自动转换），可只输名字。<b>人格 CG</b>（<code>&lt;人格ID&gt;_normal/_gacksung</code>）走<b>方案 A</b>锁定列表（稳定）；<b>非人格资源</b>（Dummy、BG/ 自定义等）走<b>方案 B</b>解锁池注入（游戏保存后可能被重建）。添加/移除均为<u>即时写入</u>存档，不做备份。</p>
+            <div class="form-group">
+                <label for="cg-input">CG ID</label>
+                <div class="speed-input-group">
+                    <input type="text" id="cg-input" placeholder="如 10101_normal、CG/Dummy 或 Story_CG/10101_normal">
+                    <button id="cg-btn-add" class="action-btn primary">
+                        <i class="fas fa-plus"></i> 添加锁定
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>可用 CG（bundle 扫描 + catalog 全量 ID；同路径缓存自动命中，仅扫新增/变动）</label>
+                <div style="margin-top: 0.4rem; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <button id="cg-btn-scan" class="action-btn secondary">
+                        <i class="fas fa-search"></i> 扫描可用 CG
+                    </button>
+                    <label class="cg-scan-force" title="忽略缓存，重新打开全部缓存 bundle（较慢）">
+                        <input type="checkbox" id="cg-scan-force"> 强制全量重扫
+                    </label>
+                    <span id="cg-scan-info" class="form-hint"></span>
+                </div>
+                <div class="cg-scan-filter" style="display:none; margin-top: 0.5rem;">
+                    <input type="text" id="cg-list-filter" placeholder="过滤 CG 名称...">
+                    <select id="cg-cache-filter" class="cg-cache-select" title="按缓存状态筛选">
+                        <option value="all">全部 CG</option>
+                        <option value="cached">仅已缓存</option>
+                        <option value="uncached">仅未缓存</option>
+                    </select>
+                    <label class="cg-scan-force" title="只显示人格 CG（方案 A 可锁定）">
+                        <input type="checkbox" id="cg-lockable-filter"> 仅可锁定
+                    </label>
+                </div>
+                <div id="cg-list" class="cg-list" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- 卡片 4：贴图替换（方案 A） -->
+        <div class="setting-card">
+            <h3 class="setting-title">
+                <i class="fas fa-palette"></i> 贴图替换（方案 A）
+            </h3>
+            <p class="form-hint">替换缓存 bundle 中该 CG 对应的贴图（保留原尺寸/格式/细节层次，自动缩放）。<b>游戏更新重新下载缓存后会还原</b>；部分压缩格式无法重编码，仅可锁定。</p>
+            <div class="form-group">
+                <label for="cg-replace-id">目标 CG ID</label>
+                <div class="speed-input-group">
+                    <input type="text" id="cg-replace-id" placeholder="同卡片 3 输入框联动">
+                    <button id="cg-btn-preview" class="action-btn secondary">
+                        <i class="fas fa-eye"></i> 预览
+                    </button>
+                </div>
+                <img id="cg-preview-img" style="display:none; max-width:100%; margin-top:0.5rem; border-radius:6px;" alt="CG 预览">
+            </div>
+            <div class="form-group">
+                <label for="cg-replace-img">替换图片</label>
+                <div class="speed-input-group">
+                    <input type="text" id="cg-replace-img" placeholder="选择 png/jpg/webp 图片">
+                    <button class="action-btn secondary" onclick="pywebview.api.browse_file('cg-replace-img')">选择图片</button>
+                </div>
+            </div>
+            <div style="margin-top: 0.6rem; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <button id="cg-btn-replace" class="primary-btn">
+                    <i class="fas fa-exchange-alt"></i> 开始替换
+                </button>
+                <button id="cg-btn-restore" class="action-btn secondary" style="display:none;">
+                    <i class="fas fa-undo"></i> 还原原图
+                </button>
+                <span id="cg-replace-status" class="form-hint"></span>
+            </div>
+        </div>
+
+    </div>
+</div>

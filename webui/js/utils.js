@@ -136,6 +136,11 @@ function initNavigation() {
                         metadataRecoveryPage.init();
                     }
 
+                    // 加载页 CG 页：每次进入重刷游戏运行态/存档槽（无轮询）
+                    if (sectionId === 'cg-section' && typeof cgPage !== 'undefined') {
+                        cgPage.init();
+                    }
+
                     // Launcher 配置页每次进入时按同意态刷新风险选项可见性
                     // （section 只加载一次，同意态变化必须按导航生命周期重查）
                     if (sectionId === 'launcher-config-section') {

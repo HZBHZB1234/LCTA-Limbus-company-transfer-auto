@@ -57,6 +57,11 @@ from .function_steam_launcher import (
     clear_steam_launch_options,
     read_current_launch_options,
 )
+from webutils.function_bank import (
+    bank_dll_status, bank_set_dll_dir, bank_get_game_banks, bank_info,
+    bank_extract, bank_rebuild, bank_export_rebank, bank_convert_mod,
+    bank_patch_full, bank_rebank_info,
+)
 
 __all__ = [
     'function_llc_main',
@@ -124,4 +129,14 @@ __all__ = [
     'set_steam_launch_options',
     'clear_steam_launch_options',
     'read_current_launch_options',
+    'bank_dll_status',
+    'bank_set_dll_dir',
+    'bank_get_game_banks',
+    'bank_info',
+    'bank_extract',
+    'bank_rebuild',
+    'bank_export_rebank',
+    'bank_convert_mod',
+    'bank_patch_full',
+    'bank_rebank_info',
 ]

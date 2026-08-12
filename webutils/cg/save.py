@@ -19,19 +19,6 @@ from ctypes import wintypes
 from datetime import datetime
 from pathlib import Path
 
-try:
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    from cryptography.hazmat.primitives import padding as crypto_padding
-    _CRYPTO = "cryptography"
-except ImportError:
-    try:
-        from Crypto.Cipher import AES as _PyCryptoAES
-        from Crypto.Util.Padding import pad as _pycrypto_pad
-        from Crypto.Util.Padding import unpad as _pycrypto_unpad
-        _CRYPTO = "pycryptodome"
-    except ImportError:
-        raise ImportError("需要 cryptography 或 pycryptodome：pip install pycryptodome")
-
 REG_PATH = r"Software\ProjectMoon\LimbusCompany"
 GAME_EXE = "LimbusCompany.exe"
 CG_KEY = "UserLocalStoryCGSaveModel"
@@ -129,23 +116,41 @@ def get_credential() -> tuple:
     return base64.b64decode(data["key"]), base64.b64decode(data["iv"])
 
 
-# ---------------- 加解密（AES-256-CBC + PKCS7 + Base64） ----------------
+# ---------------- 加解密（.NET Aes：AES-256-CBC + PKCS7 + Base64） ----------------
+
+_net_crypto = None
+
+
+def _get_net_crypto():
+    """惰性加载 .NET System.Security.Cryptography（首次调用时经 clr_bootstrap 初始化 CLR）。
+
+    存档加密与游戏 Unity 的 C# Aes 实现同源，直接调用参考实现保证字节级兼容；
+    pythonnet 为本程序硬依赖（WebUI/Launcher 启动必经 ensure_clr），无需额外加密库。
+    """
+    global _net_crypto
+    if _net_crypto is None:
+        from webutils.clr_bootstrap import ensure_clr
+        clr = ensure_clr()
+        from System import Array, Byte
+        import System.Security.Cryptography as crypto
+        _net_crypto = (crypto, Array, Byte)
+    return _net_crypto
+
 
 def aes_crypt(data: bytes, key: bytes, iv: bytes, encrypt: bool) -> bytes:
-    if _CRYPTO == "cryptography":
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-        if encrypt:
-            padder = crypto_padding.PKCS7(128).padder()
-            padded = padder.update(data) + padder.finalize()
-            enc = cipher.encryptor()
-            return enc.update(padded) + enc.finalize()
-        dec = cipher.decryptor()
-        padded = dec.update(data) + dec.finalize()
-        unpadder = crypto_padding.PKCS7(128).unpadder()
-        return unpadder.update(padded) + unpadder.finalize()
+    """AES-256-CBC + PKCS7（.NET Aes）；encrypt=True 返回密文，否则返回去填充明文。"""
+    crypto, Array, Byte = _get_net_crypto()
+    aes = crypto.Aes.Create()
+    aes.KeySize = 256
+    aes.Mode = crypto.CipherMode.CBC
+    aes.Padding = crypto.PaddingMode.PKCS7
+    aes.Key = Array[Byte](list(key))
+    aes.IV = Array[Byte](list(iv))
     if encrypt:
-        return _PyCryptoAES.new(key, _PyCryptoAES.MODE_CBC, iv).encrypt(_pycrypto_pad(data, 16))
-    return _pycrypto_unpad(_PyCryptoAES.new(key, _PyCryptoAES.MODE_CBC, iv).decrypt(data), 16)
+        enc = aes.CreateEncryptor()
+        return bytes(enc.TransformFinalBlock(bytearray(data), 0, len(data)))
+    dec = aes.CreateDecryptor()
+    return bytes(dec.TransformFinalBlock(bytearray(data), 0, len(data)))
 
 
 def decrypt_save(save_path: str, key: bytes, iv: bytes) -> str:

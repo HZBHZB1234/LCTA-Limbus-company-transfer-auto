@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-08-11 -->
+<!-- Last updated: 2026-08-12 -->
 
 ## Project Purpose
 
@@ -36,6 +36,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │  webutils/update.py      self-update via GitHub API;   │
 │                          dep changes deferred to next  │
 │                          startup pre-import hook       │
+│                          (globalManagers/pending_pip_ops│
+│                          .py 纯 stdlib，零第三方导入)   │
 │  webutils/load.py        config loading/validation   │
 ├─────────────────────────────────────────────────────┤
 │                DOMAIN ENGINES                        │
@@ -55,7 +57,8 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 │                INFRASTRUCTURE                        │
 │  webFunc/                 GitHub API, file upload,   │
 │                           Lanzou downloads, web notes│
-│  globalManagers/          ConfigManager, LogManager  │
+│  globalManagers/          ConfigManager, LogManager,    │
+│                           pending_pip_ops (纯 stdlib)    │
 │  tools/cfst/            CloudflareSpeedTest binary │
 ├─────────────────────────────────────────────────────┤
 │               EXTERNAL TOOLS                         │
@@ -71,7 +74,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `webutils/` | Business logic: one `function_*.py` per feature, all exported via `__init__.py` |
 | `webFunc/` | Infrastructure: GitHub downloads, file transfer, Lanzou parsing, web notes |
 | `translateFunc/` | Translation engine: multi-stage LLM pipeline with proper noun matching |
-| `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py` |
+| `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py`；`pending_pip_ops.py` — 延迟依赖操作（纯标准库模块，启动早期钩子在导入任何第三方库之前执行待处理 pip 卸载/升级） |
 | `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey, and an optional WinForms launch center with configuration summary, vertical phase tracking, overall/stage progress, expandable logs, runtime PID/uptime, and cancellation controls |
 | `resource_updater/` | Official game resource updater: CDN token extraction, localize ZIP deployment, Unity Bundle cache population, aria2 RPC, Launcher fingerprint state, and the main-window page API |
 

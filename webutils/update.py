@@ -1,166 +1,35 @@
-import json
 import os
 import re
 import tempfile
 import zipfile
 import shutil
-import subprocess
-import sys
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any, List
+from typing import Optional, Dict, Any
 from contextlib import suppress
 import webFunc.GithubDownload as GithubDownload
 from webFunc.GithubDownload import ReleaseInfo, ReleaseAsset, GitHubReleaseFetcher
 from globalManagers.LogManager import LogManager
+from globalManagers.pending_pip_ops import (
+    apply_pending_pip_ops,
+    load_pending_ops,
+    save_pending_ops,
+    _normalize_pkg_name,
+    _normalize_spec,
+    _parse_requirements,
+    _pending_ops_default_path,
+    _run_pip_install,
+)
 _log_manager = LogManager()
 from .utils.net import download_with_github
 
 APPLICATION_PATH = Path(__file__).parent.parent
 
 # ---------------------------------------------------------------------------
-# requirements 解析与延迟依赖操作（pending）
-#
-# 更新涉及依赖卸载/版本变动时，立即执行 pip 操作会在 Windows 上失败：
-# pythonnet/clr_loader/pywebview 等扩展包 DLL 已被当前进程加载，文件无法
-# 删除或替换。因此此类依赖修改统一写入 pending 文件，延迟到下一次启动、
-# 加载任何扩展包 DLL 之前由 apply_pending_pip_ops() 执行（start_webui.py
-# init_env() 启动早期钩子，此时进程尚未加载扩展包 DLL，卸载/升级均可成功）。
+# requirements 解析与延迟依赖操作（pending）实现在
+# globalManagers/pending_pip_ops.py（纯标准库模块，供 start_webui.py 启动
+# 早期钩子在加载任何第三方库之前直接导入）。本模块 re-export 同名符号，
+# 保持既有调用方与测试兼容。
 # ---------------------------------------------------------------------------
-
-_PENDING_OPS_FILENAME = "pending_pip_ops.json"
-
-_REQUIREMENT_PACKAGE_RE = re.compile(r"^\s*([A-Za-z0-9._-]+)")
-_REQUIREMENT_NORMALIZE_RE = re.compile(r"[-_.]+")
-
-
-def _normalize_pkg_name(name: str) -> str:
-    """PEP 503 归一化：小写、-_. 视为等价"""
-    return _REQUIREMENT_NORMALIZE_RE.sub("-", name).lower()
-
-
-def _parse_requirements(text: str) -> Dict[str, str]:
-    """解析 requirements 文本为 {归一化包名: 清理后的 spec 行}。
-
-    跳过空行、`#` 行内注释（spec 以去注释后的内容为准）、
-    选项行（-r/-e/--…）与裸 URL 行。
-    """
-    result: Dict[str, str] = {}
-    for raw_line in text.splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if not line or line.startswith("-"):
-            continue
-        if line.startswith(("http://", "https://", "git+")):
-            continue
-        m = _REQUIREMENT_PACKAGE_RE.match(line)
-        if not m:
-            continue
-        result[_normalize_pkg_name(m.group(1))] = line
-    return result
-
-
-def _pending_ops_default_path() -> Path:
-    """pending 记录存放于 %LOCALAPPDATA%/LCTA/ 下。
-
-    不能放在应用目录：更新文件替换（update_files）会清空应用目录。
-    """
-    base = os.environ.get("LOCALAPPDATA")
-    if base:
-        return Path(base) / "LCTA" / _PENDING_OPS_FILENAME
-    return Path(tempfile.gettempdir()) / "LCTA" / _PENDING_OPS_FILENAME
-
-
-def load_pending_ops(path: Optional[Path] = None) -> Dict[str, List[str]]:
-    """读取待执行的依赖操作记录，异常或结构不符时返回空结构。"""
-    p = path or _pending_ops_default_path()
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        uninstall = data.get("uninstall", [])
-        install = data.get("install", [])
-        return {
-            "uninstall": list(uninstall) if isinstance(uninstall, list) else [],
-            "install": list(install) if isinstance(install, list) else [],
-        }
-    except Exception:
-        return {"uninstall": [], "install": []}
-
-
-def save_pending_ops(ops: Dict[str, List[str]], path: Optional[Path] = None) -> bool:
-    """写入待执行的依赖操作记录（有序去重）。
-
-    列表均为空时删除记录文件（而非写空文件）。失败返回 False 并记日志。
-    """
-    p = path or _pending_ops_default_path()
-    clean = {
-        "uninstall": list(dict.fromkeys(ops.get("uninstall", []))),
-        "install": list(dict.fromkeys(ops.get("install", []))),
-    }
-    try:
-        if not clean["uninstall"] and not clean["install"]:
-            if p.exists():
-                p.unlink()
-            return True
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(clean, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        _log_manager.log(f"保存待执行依赖操作失败: {e}")
-        return False
-
-
-def _run_pip(args: List[str]) -> bool:
-    """执行 pip 子命令，失败记日志并返回 False。"""
-    try:
-        subprocess.check_call(
-            [sys.executable, "-m", "pip"] + args, capture_output=True)
-        return True
-    except subprocess.CalledProcessError as e:
-        _log_manager.log(f"pip {' '.join(args)} 失败: {e}")
-        err = (e.stderr or b"").decode("utf-8", errors="replace").strip()
-        _log_manager.log(f"退出码: {e.returncode}，错误输出: {err or '无'}")
-        return False
-
-
-def _run_pip_install(spec: str) -> bool:
-    return _run_pip(["install", spec])
-
-
-def _run_pip_uninstall(name: str) -> bool:
-    # 不带版本号：兼容旧版 pip（pip uninstall 不接受版本 specifier）
-    return _run_pip(["uninstall", name, "-y"])
-
-
-def apply_pending_pip_ops(path: Optional[Path] = None) -> bool:
-    """启动早期执行待处理的依赖操作（先卸载后安装）。
-
-    必须在加载任何扩展包 DLL 之前调用（start_webui.py init_env() 启动钩子）：
-    此时进程尚未加载扩展模块 DLL，被锁定而无法在更新会话中卸载/替换的包
-    （pythonnet/clr_loader 等）可以正常处理。全部成功后删除记录；部分失败
-    保留剩余项，记日志并在下次启动时重试。异常不外抛，不阻塞启动。
-    """
-    ops = load_pending_ops(path)
-    if not ops["uninstall"] and not ops["install"]:
-        return True
-    for name in list(ops["uninstall"]):
-        if _run_pip_uninstall(name):
-            ops["uninstall"].remove(name)
-    for spec in list(ops["install"]):
-        if _run_pip_install(spec):
-            ops["install"].remove(spec)
-    if not ops["uninstall"] and not ops["install"]:
-        try:
-            (path or _pending_ops_default_path()).unlink(missing_ok=True)
-            return True
-        except Exception as e:
-            _log_manager.log(f"删除待执行依赖操作记录失败: {e}")
-            return False
-    save_pending_ops(ops, path)
-    _log_manager.log(
-        f"仍有依赖操作未完成，将在下次启动时重试: "
-        f"卸载 {ops['uninstall']}，安装 {ops['install']}"
-    )
-    return False
 
 class Updater:
     def __init__(self, repo_owner: str, repo_name: str,
@@ -282,11 +151,12 @@ class Updater:
             if not self.delete_old_files:
                 uninstall_names = []
 
-            # 版本变动：同名但 spec 行不同（含 pin 变更）
+            # 版本变动：同名但 spec 行不同（含 pin 变更；比较前归一化
+            # 包名大小写与行首尾空白，避免仅格式差异误触发延迟）
             upgrade_specs = sorted(
                 requirements_new[n]
                 for n in (old_names & new_names)
-                if requirements_old[n] != requirements_new[n]
+                if _normalize_spec(requirements_old[n]) != _normalize_spec(requirements_new[n])
             )
 
             # 全新添加的依赖
@@ -297,9 +167,13 @@ class Updater:
                     "uninstall": uninstall_names,
                     "install": sorted(set(upgrade_specs + fresh_specs)),
                 }
-                if save_pending_ops(pending):
+                if save_pending_ops(pending, _pending_ops_default_path()):
                     _log_manager.log("依赖库存在移除/升级项，将延迟到下次启动时统一处理")
                     _log_manager.log_modal_process("依赖库存在移除/升级项，将延迟到下次启动时统一处理", self.modal_id)
+                    _log_manager.log_modal_status(
+                        "依赖变更（卸载/升级）将在下次启动时自动完成，请重启程序",
+                        self.modal_id,
+                    )
                 else:
                     _log_manager.log("记录待执行依赖操作失败，请手动检查依赖")
                     _log_manager.log_modal_process("记录待执行依赖操作失败，请手动检查依赖", self.modal_id)
@@ -442,7 +316,14 @@ class Updater:
             
             _log_manager.log("更新完成！")
             _log_manager.log_modal_process("更新完成！", self.modal_id)
-            _log_manager.log_modal_status("更新完成！", self.modal_id)
+            pending_ops = load_pending_ops(pending_path)
+            if pending_ops["uninstall"] or pending_ops["install"]:
+                tip = "检测到待执行的依赖变更（卸载/升级），将在下次启动时自动完成，请重启程序"
+                _log_manager.log(tip)
+                _log_manager.log_modal_process(tip, self.modal_id)
+                _log_manager.log_modal_status(tip, self.modal_id)
+            else:
+                _log_manager.log_modal_status("更新完成！", self.modal_id)
             
             return True
         finally:

@@ -832,8 +832,9 @@ function manualUpdateFromLocalZip() {
                             return;
                         }
                         if (result && result.success) {
-                            progressModal.addLog('更新完成，请手动重启程序。');
-                            progressModal.complete(true, '更新完成');
+                            const doneMsg = result.message || '更新完成，请手动重启程序。';
+                            progressModal.addLog(doneMsg);
+                            progressModal.complete(true, doneMsg);
                         } else {
                             var msg = result && result.message ? result.message : '更新失败';
                             progressModal.addLog(msg);
@@ -941,8 +942,9 @@ async function doUpdate() {
                         progressModal.complete(false, '更新失败');
                         return;
                     }
-                    progressModal.addLog('更新完成，请手动重启程序。');
-                    progressModal.complete(true, '更新完成');
+                    const doneMsg = result.message || '更新完成，请手动重启程序。';
+                    progressModal.addLog(doneMsg);
+                    progressModal.complete(true, doneMsg);
                 })
                 .catch(function(error) {
                     progressModal.addLog('更新失败: ' + error);

@@ -51,8 +51,12 @@ class LogManager:
         )
         fh.setLevel(log_level)
 
-        # 控制台处理器
-        ch = logging.StreamHandler(sys.stdout)
+        # 控制台处理器（errors='replace'：打包模式 stdout 无效/编码不符时
+        # 避免 UnicodeEncodeError 冲击 logging 机制，只丢字符不乱码崩溃）
+        try:
+            ch = logging.StreamHandler(sys.stdout, errors="replace")
+        except TypeError:  # Python < 3.9 无 errors 参数
+            ch = logging.StreamHandler(sys.stdout)
         ch.setLevel(logging.INFO)
 
         fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")

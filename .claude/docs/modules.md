@@ -10,7 +10,7 @@
 | `webutils/` | Business logic layer (feature modules + beautification engines) | 70 Python files |
 | `webFunc/` | Infrastructure (network, downloads) | 4 |
 | `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
-| `globalManagers/` | Cross-cutting singletons | 2 |
+| `globalManagers/` | Cross-cutting singletons + 纯标准库 pending 依赖操作 | 3 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 11 |
 | `resource_updater/` | Official localize/Bundle updater and Launcher fingerprint gate | 4 |
 | `tools/cfst/` | CloudflareSpeedTest binary + IP lists（构建时由 InitCode 下载，运行时懒加载兜底） | 3 |
@@ -100,7 +100,7 @@
 | `windows.py` | `WindowMixin` | 辅助窗口：`open_quick_editor`/`open_llm_fancy`/`open_translation_log_viewer`/`open_aria2_downloader`（泛用高速下载器，窗口关闭时 `aria2_manager.stop()` 释放 aria2c 进程）+ 其余 `sync_theme_to_*`、Nexus 测试窗口 `startTest`/`eval_skip`/`sign_eval_js` |
 | `cdn.py` | `CdnMixin` | `cdn_*` 全部（Cloudflare/CloudFront 优选、hosts 写入/移除） |
 | `speed.py` | `SpeedMixin` | `speed_*` 全部（DLL 注入/弹出/倍率） |
-| `update.py` | `UpdateMixin` | `auto_check_update`/`manual_check_update`/`perform_update_in_modal`/`perform_update_from_file`。两个 perform_* 均已接线 modal_id（**下载阶段可取消**；安装/替换文件阶段不可取消为预期设计）、取消返回 `已取消` + `del_modal_list`；`perform_update_in_modal` 返回 `{"success": bool, "message": str}` |
+| `update.py` | `UpdateMixin` | `auto_check_update`/`manual_check_update`/`perform_update_in_modal`/`perform_update_from_file`。两个 perform_* 均已接线 modal_id（**下载阶段可取消**；安装/替换文件阶段不可取消为预期设计）、取消返回 `已取消` + `del_modal_list`；`perform_update_in_modal` 返回 `{"success": bool, "message": str}`；成功后经 `load_pending_ops()` 检测存在待执行依赖变更时，message 返回"更新完成，依赖变更将在下次启动时自动执行，请重启程序"（前端完成弹窗直接展示后端 message） |
 | `input_bypass.py` | `InputBypassMixin` | `input_bypass_*` 全部（get_status/apply/inject/eject，转发到 `webutils.function_input_bypass.InputBypassManager`） |
 | `cheat_core.py` | `CheatCoreMixin` | `cheat_core_*` 全部（status/unlock/lock/get_section_html/get_script_js）+ 插件通用分发 `cheat_plugins_list`/`cheat_plugin_invoke(action,args)`，转发到 `webutils.cheat_core` / `webutils.cheat_plugins`（密钥门前端入口；具体工具 API 不再有硬编码 mixin） |
 | `drops.py` | `DropMixin` | `handle_dropped_files`/`on_drop`/`eval_dropped_files` |
@@ -121,7 +121,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `clr_bootstrap.py` | pythonnet/clr_loader 引导 | `ensure_clr()` 强制 netfx 并导入 clr:预检 `Python.Runtime.dll` 存在性、clr_loader 版本(<0.2.8 警告)、.NET Framework >=4.7.2;失败时用 PowerShell 反射探针暴露 clr_loader 吞掉的真实异常并给出修复指引,不再自动回退 coreclr/mono。被 `start_webui.py`、`launcher/gui_progress.py`、`launcher/speed_hotkey.py` 共用 |
 | `utils/` | Shared utility package | `io.py` zip/unzip, hashing, 7z integration（环境无 7z 时自动从官网下载 7zr.exe 到 `tools/7z/`）; `net.py` downloads（`download_with`/`download_with_github` 透传 `CancelRunning`，不再吞成失败）；`shell.py` Windows Shell API（`_move_folders` 移动、`get_downloads_dir` 经 SHGetKnownFolderPath 解析真实「下载」已知文件夹，支持用户迁移重定向，失败回退 `Path.home()/Downloads`）; `font.py` font caching（`get_cache_font` 缓存优先回退链 + `save_cache_font` 上传/拖入本地字体替换 `cache_path/ChineseFont.ttf`）; `misc.py` steam command/icon; facade re-exported via `utils/__init__.py`。`zip_folder` 支持可选 `modal_id`（打包循环内逐文件 `check_running`，取消透传） |
 | `load.py` | Config & game detection | Config loading/validation, Steam registry game path detection |
-| `update.py` | Self-updater | GitHub Releases-based auto-update. `install_requirements` 按**包名**比对 requirements（去行内注释/空行/选项行，PEP 503 归一化）：涉及依赖移除或版本变动时，将整个依赖修改写入 pending 文件（`%LOCALAPPDATA%/LCTA/pending_pip_ops.json`），延迟到下次启动、加载任何扩展包 DLL 之前由 `apply_pending_pip_ops()` 统一执行（先卸载后安装）——规避 pythonnet/clr_loader 等已加载 DLL 包在更新会话中无法卸载/替换的问题；仅全新依赖立即安装，失败跳过继续。`check_and_update` 缓存下载/解压置于 `tempfile.mkdtemp` 临时目录（不再用应用目录内 `updateCache`，否则 update_files 清空应用目录时销毁解压源导致复制必然失败），finally 清理（仅清理本函数自建的临时目录，调用方传入的缓存目录保留）；`update_files` 失败时还原 `install_requirements` 写入的 pending 操作记录（避免下次启动按新版本依赖卸载旧代码） |
+| `update.py` | Self-updater | GitHub Releases-based auto-update. `install_requirements` 按**包名**比对 requirements（去行内注释/空行/选项行，PEP 503 归一化；spec 比较前经 `_normalize_spec` 归一化包名大小写/空白，避免仅格式差异误触发延迟）：涉及依赖移除或版本变动时，将整个依赖修改写入 pending 文件（`%LOCALAPPDATA%/LCTA/pending_pip_ops.json`），延迟到下次启动、加载任何第三方库之前由 `globalManagers/pending_pip_ops.py apply_pending_pip_ops()` 统一执行（先卸载后安装；**纯标准库模块**，导入链不触发 webutils 包）——规避 pythonnet/clr_loader 等已加载 DLL 包在更新会话中无法卸载/替换的问题，且"库缺失"状态不阻断执行；仅全新依赖立即安装，失败跳过继续。pending 写入时补模态状态提示"依赖变更将在下次启动时自动完成"；`check_and_update` 成功后若 pending 存在，最终状态提示重启。`check_and_update` 缓存下载/解压置于 `tempfile.mkdtemp` 临时目录（不再用应用目录内 `updateCache`，否则 update_files 清空应用目录时销毁解压源导致复制必然失败），finally 清理（仅清理本函数自建的临时目录，调用方传入的缓存目录保留）；`update_files` 失败时还原 `install_requirements` 写入的 pending 操作记录（避免下次启动按新版本依赖卸载旧代码）。启动执行 pending 时经 ctypes MessageBoxW 弹原生进度窗（后台线程逐项执行、文本实时更新、完成自动关闭），打包版无控制台也可见 |
 | `translator_constants.py` | API provider configs | TranslateKit provider definitions (Baidu, Google, DeepL, etc.) |
 | `function_llc.py` | LLC/零协会 install | Download & install Zero Association translation packs |
 | `function_ourplay_pc.py` | OurPlay PC install | Download OurPlay PC translation packs |
@@ -202,6 +202,7 @@ Standalone library with own `__init__.py` public API.
 |------|---------|
 | `ConfigManager.py` | Singleton config: dotted-path access (`ui_default.translator.enable_proper`), JSON validation via `config_check.json`, auto-save on mutation, thread-safe。`get()` 对 dict/list 返回内部活引用（调用方不应在锁外修改/跨线程共享）；`raw` 属性返回深拷贝；`save()`/`reset()` 带 `_generation` 守卫，旧实例（如 reset 后残留引用）不得再写盘 |
 | `LogManager.py` | Singleton logger: file rotation, console output, webview modal callbacks via thread pool for async UI updates; also configures `fancy`/`rule_editor` child loggers with the same handlers so their INFO/DEBUG output lands in `app.log` |
+| `pending_pip_ops.py` | 延迟依赖操作（pending pip ops）——**纯标准库模块**（imports 仅 json/os/re/subprocess/sys/tempfile/pathlib/typing + LogManager）。`load/save_pending_ops`、`_parse_requirements`/`_normalize_pkg_name`/`_normalize_spec`（PEP 503 归一化 + spec 行等价比较）、`_run_pip*`（pip 子进程注入 `PYTHONIOENCODING=utf-8`，stderr 解码 UTF-8 失败回退 GBK 防乱码）、`apply_pending_pip_ops(path, progress_callback=...)`（先卸载后安装，成功清记录，部分失败保留下次重试；progress_callback 供启动提示窗口实时刷新）。**start_webui.py init_env() 在任何第三方库导入之前直接导入本模块执行 pending**——导入链不触发 webutils/__init__.py（requests/openspeedy/UnityPy 等），即使上次更新残留"库缺失"也不会阻断执行；webutils/update.py re-export 同名符号保持兼容 |
 
 ## launcher/ — Standalone Launcher (GPL-3.0)
 

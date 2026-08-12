@@ -5,10 +5,17 @@ import shutil
 from pathlib import Path
 
 from globalManagers.ConfigManager import ConfigManager
+from globalManagers.pending_pip_ops import load_pending_ops
 from webutils.update import Updater, get_app_version
 from webui.app_api.exceptions import CancelRunning
 
 class UpdateMixin:
+
+    @staticmethod
+    def _has_pending_ops() -> bool:
+        """是否存在待执行的延迟依赖操作（下次启动时统一处理）。"""
+        ops = load_pending_ops()
+        return bool(ops["uninstall"] or ops["install"])
 
     def auto_check_update(self):
         """自动检查更新"""
@@ -78,6 +85,10 @@ class UpdateMixin:
             # 执行更新
             result = updater.check_and_update(getattr(self, 'current_version', ''))
             if result:
+                if self._has_pending_ops():
+                    msg = "更新完成，依赖变更将在下次启动时自动执行，请重启程序"
+                    self.add_modal_log(msg, modal_id)
+                    return {"success": True, "message": msg}
                 return {"success": True, "message": "更新完成"}
             return {"success": False, "message": "更新失败"}
         except CancelRunning:
@@ -144,7 +155,11 @@ class UpdateMixin:
                 self.add_modal_log("正在替换文件...", modal_id)
                 if not updater.update_files(source_dir):
                     return {"success": False, "message": "更新文件失败"}
-            
+
+                if self._has_pending_ops():
+                    msg = "更新完成，依赖变更将在下次启动时自动执行，请重启程序"
+                    self.add_modal_log(msg, modal_id)
+                    return {"success": True, "message": msg}
                 return {"success": True, "message": "更新完成，请手动重启程序"}
             finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)

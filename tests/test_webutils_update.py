@@ -6,7 +6,10 @@ webutils.update 修复回归测试。
 - v 前缀与非数字段容错
 - install_requirements 按包名比对：涉及移除/版本变动 → 整个依赖修改延迟到下次启动
   （写入 pending，本次不执行任何 pip 操作）；仅全新依赖 → 立即安装，失败跳过继续
-- pending 持久化与 apply_pending_pip_ops 启动钩子（先卸载后安装、成功清空、失败保留）
+- spec 归一化比较：包名大小写等纯格式差异不误判为版本变动
+- pending 持久化与 apply_pending_pip_ops 启动钩子（先卸载后安装、成功清空、失败保留、
+  pip 子进程 UTF-8 环境、stderr GBK 回退解码）
+- globalManagers.pending_pip_ops 导入链纯标准库（不触发 webutils 等第三方导入）
 - check_and_update 缓存迁移到应用目录外的临时目录并在 finally 中清理
 - check_and_update 事务性：update_files 失败时还原 install_requirements 写入的 pending
 """
@@ -18,6 +21,7 @@ import zipfile
 import pytest
 
 import webutils.update as update_mod
+import globalManagers.pending_pip_ops as ppo
 from webutils.update import Updater
 
 
@@ -26,9 +30,15 @@ class _LogStub:
         return lambda *args, **kwargs: None
 
 
+def _repo_root():
+    import pathlib
+    return pathlib.Path(__file__).resolve().parent.parent
+
+
 @pytest.fixture
 def updater(monkeypatch):
     monkeypatch.setattr(update_mod, "_log_manager", _LogStub())
+    monkeypatch.setattr(ppo, "_log_manager", _LogStub())
     return Updater("owner", "repo")
 
 
@@ -319,6 +329,119 @@ def test_apply_pending_pip_ops_empty_pending_is_noop(monkeypatch, tmp_path, pend
     monkeypatch.setattr(subprocess, "check_call", lambda cmd, **kw: calls.append(cmd))
     assert update_mod.apply_pending_pip_ops(pending_path) is True
     assert calls == []
+
+
+def test_install_requirements_spec_case_only_diff_is_not_a_bump(
+        monkeypatch, updater, tmp_path, pending_path):
+    # spec 行仅包名大小写差异（PEP 503 等价）不构成版本变动 → 不触发延迟、
+    # 无 pip 操作（避免仅格式差异误入 pending）
+    app_dir = tmp_path / "app"
+    source_dir = tmp_path / "src"
+    calls = _setup(monkeypatch, updater, app_dir, "Foo_Bar.1==2.0\n",
+                   source_dir, "foo-bar-1==2.0\n", pending_path)
+
+    result = updater.install_requirements(source_dir)
+
+    assert result is True
+    assert calls == []
+    assert not pending_path.exists()
+
+
+def test_install_requirements_spec_whitespace_diff_is_not_a_bump(
+        monkeypatch, updater, tmp_path, pending_path):
+    # 行首尾空白差异不构成版本变动（解析阶段已 strip，此处兜底）
+    app_dir = tmp_path / "app"
+    source_dir = tmp_path / "src"
+    calls = _setup(monkeypatch, updater, app_dir, "  pillow==10.4.0\n",
+                   source_dir, "pillow==10.4.0\n", pending_path)
+
+    result = updater.install_requirements(source_dir)
+
+    assert result is True
+    assert calls == []
+    assert not pending_path.exists()
+
+
+# ========== spec 归一化辅助 ==========
+
+def test_normalize_spec_normalizes_name_case():
+    assert ppo._normalize_spec("Foo_Bar.1==2.0") == "foo-bar-1==2.0"
+    assert ppo._normalize_spec("  PyWebView==6.2.1  ") == "pywebview==6.2.1"
+    assert ppo._normalize_spec("requests") == "requests"
+    # 版本约束与其余字符保持原样
+    assert ppo._normalize_spec("pywebview==6.2.1") == "pywebview==6.2.1"
+
+
+# ========== pip 子进程健壮性 ==========
+
+def test_run_pip_utf8_env_and_gbk_stderr_fallback(monkeypatch):
+    # pip 子进程应注入 PYTHONIOENCODING=utf-8；GBK 编码的 stderr
+    # 应回退解码成功，不产生异常、不抛出 UnicodeDecodeError
+    calls = []
+
+    def fake_check_call(cmd, **kw):
+        calls.append((cmd, kw.get("env", {})))
+        err = "错误：找不到包".encode("gbk")
+        raise subprocess.CalledProcessError(1, cmd, stderr=err)
+
+    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(ppo, "_log_manager", _LogStub())
+
+    assert ppo._run_pip(["install", "nope"]) is False
+    cmd, env = calls[0]
+    assert cmd[:3] == [sys.executable, "-m", "pip"]
+    assert env.get("PYTHONIOENCODING") == "utf-8"
+
+
+def test_run_pip_utf8_stderr_passthrough(monkeypatch):
+    # UTF-8 stderr 按原样解码，不回退到 GBK 导致二次乱码
+    messages = []
+
+    class _Log:
+        def log(self, msg):
+            messages.append(msg)
+
+    def fake_check_call(cmd, **kw):
+        raise subprocess.CalledProcessError(
+            1, cmd, stderr="distutils 被移除".encode("utf-8"))
+
+    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(ppo, "_log_manager", _Log())
+
+    assert ppo._run_pip(["install", "x"]) is False
+    assert any("distutils 被移除" in m for m in messages)
+
+
+# ========== 启动钩子导入链纯标准库 ==========
+
+def test_pending_pip_ops_import_chain_is_stdlib_only():
+    # start_webui.py init_env() 在加载任何第三方库之前导入本模块执行 pending；
+    # 一旦导入链引入第三方包（或 webutils 包），"库缺失"状态会阻断执行
+    code = (
+        "import globalManagers.pending_pip_ops\n"
+        "import sys\n"
+        "banned = {'requests', 'UnityPy', 'pywebview', 'openspeedy', "
+        "'translatekit', 'webutils', 'webui', 'webFunc'}\n"
+        "tops = {m.split('.')[0] for m in sys.modules}\n"
+        "assert not (tops & banned), sorted(tops & banned)\n"
+    )
+    root = _repo_root()
+    subprocess.check_call([sys.executable, "-c", code], cwd=str(root))
+
+
+def test_update_module_re_exports_pending_api():
+    # webutils.update 迁移后 re-export 同名符号，保持既有调用方/测试兼容
+    from webutils.update import (
+        apply_pending_pip_ops,
+        load_pending_ops,
+        save_pending_ops,
+        _pending_ops_default_path,
+        _parse_requirements,
+    )
+    assert callable(apply_pending_pip_ops)
+    assert callable(load_pending_ops)
+    assert callable(save_pending_ops)
+    assert callable(_parse_requirements)
 
 
 # ========== check_and_update：缓存目录迁移 ==========

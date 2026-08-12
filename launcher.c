@@ -51,6 +51,11 @@ int main(int argc, char* argv[]) {
         freopen("CONOUT$", "w", stdout);
         freopen("CONOUT$", "w", stderr);
         freopen("CONIN$", "r", stdin);
+        // 将控制台代码页切换为 UTF-8，与下方 PYTHONIOENCODING=utf-8 保持一致：
+        // 否则 Python 子进程以 UTF-8 编码输出的中文日志会在 GBK 控制台上
+        // 显示为乱码（乱码与否取决于控制台代码页，故日志有几率乱码）。
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
     }
 
     printf("Starting LCTA Launcher...\n");

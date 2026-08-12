@@ -112,6 +112,77 @@ def get_resource_path():
     
     return base_path
 
+def _run_pending_pip_ops_with_prompt():
+    """启动早期执行待处理的依赖操作，并以原生消息框展示进度。
+
+    - 导入链必须是纯标准库：globalManagers.pending_pip_ops 不依赖任何第三方
+      库，即使上次更新残留"库缺失"状态也不会导入失败，保证 pending 一定能
+      执行到（否则将进不去更新流程）。
+    - 打包版（CREATE_NO_WINDOW 无控制台）下 print/日志均不可见，pip 操作
+      可能耗时数分钟而无任何界面反馈；此处用 ctypes MessageBoxW 弹出原生
+      提示窗，后台线程逐项执行并在消息框内实时更新文本，全部完成后自动
+      关闭（PostMessage WM_CLOSE）。
+    """
+    from globalManagers.pending_pip_ops import (
+        apply_pending_pip_ops,
+        load_pending_ops,
+        _pending_ops_default_path,
+    )
+    pending_path = _pending_ops_default_path()
+    ops = load_pending_ops(pending_path)
+    if not ops["uninstall"] and not ops["install"]:
+        return
+
+    import ctypes
+    import threading
+
+    user32 = ctypes.windll.user32
+    title = "LCTA 依赖更新"
+    state = {
+        "text": "正在准备依赖更新…",
+        "done": False,
+        "ok": None,
+    }
+
+    def _refresh_window():
+        hwnd = user32.FindWindowW(None, title)
+        if hwnd:
+            user32.SetWindowTextW(hwnd, state["text"])
+            if state["done"]:
+                user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE 自动关闭
+
+    def _worker():
+        def on_progress(text):
+            state["text"] = text
+            _refresh_window()
+        state["ok"] = apply_pending_pip_ops(pending_path, progress_callback=on_progress)
+        if state["ok"]:
+            state["text"] = "依赖更新完成"
+        else:
+            state["text"] = "部分依赖更新未完成，将在下次启动时重试（详情见 logs/app.log）"
+        state["done"] = True
+        _refresh_window()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    while not state["done"]:
+        # 模态循环：等待消息框关闭（用户点击或完成后自动关闭）；
+        # 用户提前点击时若操作尚未完成则重新弹出
+        user32.MessageBoxW(
+            None,
+            state["text"],
+            title,
+            0x40 | 0x10000  # MB_ICONINFORMATION | MB_SETFOREGROUND
+        )
+    if state["ok"] is False:
+        user32.MessageBoxW(
+            None,
+            "部分依赖更新未完成，将在下次启动时自动重试。\n\n"
+            "详细日志见 logs/app.log。",
+            title,
+            0x10 | 0x10000  # MB_ICONERROR | MB_SETFOREGROUND
+        )
+
+
 def init_env():
     """初始化环境变量"""
     os.environ['path_'] = str(get_resource_path())
@@ -123,13 +194,12 @@ def init_env():
     if not is_frozen:
         os.environ['PATH'] += os.pathsep + str(project_root / 'code' / 'venv' / 'Scripts')
 
-    # 在加载任何扩展包 DLL（pythonnet/clr_loader/pywebview 等）之前执行待处理的
-    # 依赖操作（更新延迟的卸载/升级）。此时扩展包尚未加载进进程，
-    # Windows 下可正常卸载/替换。注：导入 webutils 包会带入其他第三方库，
-    # 但关键约束是扩展包 DLL 未加载，而非无任何第三方库被导入。
+    # 在加载任何第三方库之前执行待处理的依赖操作（更新延迟的卸载/升级）。
+    # globalManagers.pending_pip_ops 为纯标准库模块，导入链不触发
+    # webutils/__init__.py（requests/openspeedy/UnityPy 等），
+    # 即使上次更新残留库缺失也不会阻断 pending 执行。
     try:
-        from webutils.update import apply_pending_pip_ops
-        apply_pending_pip_ops()
+        _run_pending_pip_ops_with_prompt()
     except Exception as e:
         print(f"执行待处理依赖操作失败，将在下次启动时重试: {e}")
 
@@ -162,7 +232,9 @@ def start_webui():
         _log = Path(os.getcwd()) / 'logs'
         _log.mkdir(exist_ok=True)
         _log = _log / 'app.log'
-        with open(_log, '+a' if _log.exists() else '+w') as f:
+        # 与 LogManager 文件 handler 保持一致用 UTF-8，避免 GBK 字节混入
+        # UTF-8 日志文件导致乱码
+        with open(_log, '+a' if _log.exists() else '+w', encoding='utf-8') as f:
             f.write(exc)
         print(os.getenv('__debug_exe__', 'false'))
         if os.getenv('__debug_exe__', 'false') == 'true':

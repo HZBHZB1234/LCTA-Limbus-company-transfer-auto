@@ -23,9 +23,9 @@ CACHE_SUBDIR = "bank-cache"
 
 
 def rebank_files_in(mod_root: str):
-    """启用的 .rebank 列表（glob 精确匹配后缀，天然排除 *_disable）。"""
+    """启用的 .rebank 列表（递归 rglob，精确匹配后缀，天然排除 *_disable）。"""
     files = []
-    for p in sorted(Path(mod_root).glob("*" + _REBANK_EXT)):
+    for p in sorted(Path(mod_root).rglob("*" + _REBANK_EXT)):
         files.append(str(p))
     return files
 
@@ -98,6 +98,10 @@ def apply_rebanks(mod_root: str) -> dict:
         if not os.path.isfile(target):
             skipped.append((base, "目标 bank 不存在"))
             continue
+        if os.path.isfile(target + ".bak"):
+            # 存在 .bak 说明本次会话整包 .bank 模组已替换该 bank（整包 .bank 优先）
+            skipped.append((base, "已被整包 .bank 模组覆盖，跳过"))
+            continue
         orig_path = target + ".bak" if os.path.isfile(target + ".bak") else target
         orig_hash = sha256_file(orig_path)
         digest = hashlib.sha256((orig_hash + "|" + mod_digest(mods)).encode("utf-8")).hexdigest()
@@ -121,7 +125,8 @@ def apply_rebanks(mod_root: str) -> dict:
         try:
             if not os.path.isfile(target + ".bak"):
                 os.replace(target, target + ".bak")
-            _patch_into(target, mods)
+            source = target + ".bak" if os.path.isfile(target + ".bak") else target
+            _patch_into(source, target, mods)
             meta = {"orig_sha256": orig_hash, "mod_digest": mod_digest(mods),
                     "created": datetime.datetime.now().isoformat(timespec="seconds")}
             with open(meta_file, "w", encoding="utf-8") as fh:
@@ -140,8 +145,8 @@ def apply_rebanks(mod_root: str) -> dict:
             "cache_miss": cache_miss}
 
 
-def _patch_into(target_bank: str, rebanks, log=None) -> None:
-    """解包 target → 应用模组 wav → 重打包（写回 target）。"""
+def _patch_into(original_path: str, target_path: str, rebanks, log=None) -> None:
+    """解包 original_path（原版字节）→ 应用模组 wav → 重打包 → 写 target_path。"""
     work = tempfile.mkdtemp(prefix="bankmod_")
     try:
         from webutils.bank.dlls import FmodDlls
@@ -156,7 +161,7 @@ def _patch_into(target_bank: str, rebanks, log=None) -> None:
 
         wav_dir = os.path.join(work, "wav"); fsb_dir = os.path.join(work, "fsb")
         dlls = FmodDlls()
-        extract_bank(dlls, target_bank, wav_dir, fsb_dir, None, _log)
+        extract_bank(dlls, original_path, wav_dir, fsb_dir, None, _log)
         T = collect_wavs(wav_dir)
         replaced = 0
         for rp in rebanks:
@@ -172,8 +177,8 @@ def _patch_into(target_bank: str, rebanks, log=None) -> None:
         out_dir = os.path.join(work, "out")
         options = {"format": 5, "quality": 92, "threads": default_threads(),
                    "cache_dir": os.path.join(work, "cache"), "password": None}
-        patched = rebuild_bank(dlls, target_bank, wav_dir, fsb_dir, out_dir, options, _log)
-        os.replace(patched, target_bank)
+        patched = rebuild_bank(dlls, original_path, wav_dir, fsb_dir, out_dir, options, _log)
+        os.replace(patched, target_path)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

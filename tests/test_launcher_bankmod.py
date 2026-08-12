@@ -63,9 +63,10 @@ def test_apply_rebanks_cache_hit(tmp_path, monkeypatch):
     def fake_cache_dir():
         return str(cache)
 
-    def fake_patch_into(target_bank, rebanks, log=None):
+    def fake_patch_into(original_path, target_path, rebanks, log=None):
         calls["patch"] += 1
-        with open(target_bank, "wb") as fh:
+        assert os.path.isfile(original_path), "补丁源（原版 bank）必须存在"
+        with open(target_path, "wb") as fh:
             fh.write(b"patched")
 
     monkeypatch.setattr(bankmod, "cache_dir", fake_cache_dir)
@@ -78,8 +79,10 @@ def test_apply_rebanks_cache_hit(tmp_path, monkeypatch):
     assert r["patched"] == ["Weapon.bank"]
     assert r["cache_miss"] == 1
 
-    # 第二次运行：缓存命中，不再补丁
+    # 第二次运行（模拟新会话：restore_sound/_do_cleanup_assets 已还原并清除 .bak）：
+    # 缓存命中，不再补丁
     (sound_dir / "Weapon.bank").write_bytes(b"original")
+    (sound_dir / "Weapon.bank.bak").unlink()
     r2 = bankmod.apply_rebanks(str(tmp_path))
     assert calls["patch"] == 1
     assert r2["cache_hit"] == 1
@@ -94,7 +97,7 @@ def test_apply_rebanks_rollback_on_failure(tmp_path, monkeypatch):
     cache = tmp_path / "cache"
     cache.mkdir()
 
-    def fake_patch_into(target_bank, rebanks, log=None):
+    def fake_patch_into(original_path, target_path, rebanks, log=None):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(bankmod, "cache_dir", lambda: str(cache))
@@ -106,6 +109,34 @@ def test_apply_rebanks_rollback_on_failure(tmp_path, monkeypatch):
     assert r["skipped"] == [("Weapon.bank", "boom")]
     assert (sound_dir / "Weapon.bank").read_bytes() == b"original"
     assert not (sound_dir / "Weapon.bank.bak").exists()
+    assert list(cache.iterdir()) == []
+
+
+def test_apply_rebanks_whole_bank_override_skips(tmp_path, monkeypatch):
+    """存在 .bak（整包 .bank 模组已替换）时跳过补丁，避免覆盖整包模组。"""
+    _make_rebank(tmp_path, "a.rebank")
+    sound_dir = tmp_path / "sound"
+    sound_dir.mkdir()
+    (sound_dir / "Weapon.bank").write_bytes(b"whole-bank-replaced")
+    (sound_dir / "Weapon.bank.bak").write_bytes(b"original")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+
+    calls = {"patch": 0}
+
+    def fake_patch_into(original_path, target_path, rebanks, log=None):
+        calls["patch"] += 1
+
+    monkeypatch.setattr(bankmod, "cache_dir", lambda: str(cache))
+    monkeypatch.setattr(bankmod, "_patch_into", fake_patch_into)
+    monkeypatch.setattr("launcher.sound.sound_folder", lambda: str(sound_dir))
+
+    r = bankmod.apply_rebanks(str(tmp_path))
+    assert calls["patch"] == 0
+    assert r["patched"] == []
+    assert r["skipped"] == [("Weapon.bank", "已被整包 .bank 模组覆盖，跳过")]
+    assert (sound_dir / "Weapon.bank").read_bytes() == b"whole-bank-replaced"
+    assert (sound_dir / "Weapon.bank.bak").read_bytes() == b"original"
     assert list(cache.iterdir()) == []
 
 

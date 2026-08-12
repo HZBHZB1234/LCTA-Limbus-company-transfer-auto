@@ -166,6 +166,12 @@ async function onSectionLoaded(name) {
                 cgPage.init();
             }
             break;
+        case 'bank':
+            console.log('[LCTA] Init section: bank');
+            if (typeof initBankSection === 'function') {
+                initBankSection();
+            }
+            break;
     }
 
     // 先回填当前 section 内已保存的配置，再执行依赖回填值的显隐联动

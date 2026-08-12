@@ -1,0 +1,200 @@
+<div class="section-header">
+    <h2 class="section-title"><i class="fas fa-music"></i> 音频工具</h2>
+    <p class="section-subtitle">FMOD bank 解包/重打包、fsb 补丁模组（.rebank）导出与转换</p>
+</div>
+<div class="settings-grid">
+  <!-- 卡片 1: FMOD DLL 状态 -->
+  <div class="setting-card">
+    <h3 class="setting-title"><i class="fas fa-cogs"></i> FMOD 工具 DLL</h3>
+    <p class="form-hint" id="bank-dll-status">正在检测...</p>
+    <div class="form-group">
+      <label for="bank-dll-dir">DLL 目录:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper">
+          <input type="text" id="bank-dll-dir" placeholder="留空则自动检测（LCTA_FMOD_DLL_DIR / 程序目录）">
+          <button type="button" class="input-clear" onclick="clearBankDllDir()" title="清空目录设置"><i class="fas fa-times"></i></button>
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankDllDir()"><i class="fas fa-folder-open"></i> 浏览</button>
+        <button type="button" class="action-btn" onclick="saveBankDllDir()"><i class="fas fa-save"></i> 保存</button>
+      </div>
+    </div>
+    <small class="form-hint">缺少 fmod64.dll / fsbank64.dll / libfsbvorbis64.dll 时，可把「工具.zip」直接拖入窗口一键导入（也可手动选择解压目录）。</small>
+  </div>
+
+  <!-- 卡片 2: 游戏 bank 列表 + 解包 -->
+  <div class="setting-card">
+    <h3 class="setting-title"><i class="fas fa-file-export"></i> 解包（bank → wav）</h3>
+    <div class="form-group">
+      <label for="bank-extract-select">游戏 bank（或选择任意 .bank 文件）:</label>
+      <div class="file-input-group">
+        <div class="select-wrapper" style="flex:1;">
+          <select id="bank-extract-select"></select>
+          <i class="fas fa-chevron-down"></i>
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankExtractFile()"><i class="fas fa-folder-open"></i> 选择文件</button>
+      </div>
+      <input type="text" id="bank-extract-file" style="display:none;">
+    </div>
+    <div class="form-group">
+      <label for="bank-extract-dir">输出目录:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper" style="flex:1;">
+          <input type="text" id="bank-extract-dir" placeholder="留空则输出到 模组目录/BankExtract">
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankExtractDir()"><i class="fas fa-folder-open"></i> 浏览</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="bank-extract-password">加密密码（可选）:</label>
+      <input type="password" id="bank-extract-password" placeholder="普通 bank 无需填写">
+    </div>
+    <div class="button-group">
+      <button type="button" class="action-btn success" onclick="runBankExtract()"><i class="fas fa-file-export"></i> 解包</button>
+    </div>
+  </div>
+
+  <!-- 卡片 3: 重打包（wav → bank） -->
+  <div class="setting-card">
+    <h3 class="setting-title"><i class="fas fa-file-import"></i> 重打包（wav → bank）</h3>
+    <p class="form-hint">解包产物（含 <code>&lt;bank&gt;[i]</code> 子目录与 .txt 清单）可重新编码打包回 .bank，用于制作整包模组。</p>
+    <div class="form-group">
+      <label for="bank-rebuild-bank">原版 bank:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper" style="flex:1;">
+          <input type="text" id="bank-rebuild-bank" placeholder="游戏目录中的原版 bank 文件">
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankRebuildBank()"><i class="fas fa-folder-open"></i> 浏览</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="bank-rebuild-wav">wav 目录（含 <code>&lt;bank&gt;[i]</code> 子目录与 .txt 清单）:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper" style="flex:1;">
+          <input type="text" id="bank-rebuild-wav">
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankRebuildWav()"><i class="fas fa-folder-open"></i> 浏览</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="bank-rebuild-out">输出目录:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper" style="flex:1;">
+          <input type="text" id="bank-rebuild-out">
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankRebuildOut()"><i class="fas fa-folder-open"></i> 浏览</button>
+      </div>
+    </div>
+    <div class="button-group">
+      <button type="button" class="action-btn success" onclick="runBankRebuild()"><i class="fas fa-file-import"></i> 重打包</button>
+    </div>
+  </div>
+
+  <!-- 卡片 4: 导出 .rebank 补丁模组 -->
+  <div class="setting-card">
+    <h3 class="setting-title"><i class="fas fa-archive"></i> 导出 fsb 补丁模组（.rebank）</h3>
+    <p class="form-hint">选择「原版 bank」与「模组版 bank」，对比后只打包改动的音频为差分包；直接存入模组目录即被启动器加载。</p>
+    <div class="form-group">
+      <label for="bank-export-original">原版 bank:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper" style="flex:1;">
+          <input type="text" id="bank-export-original">
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankExportOriginal()"><i class="fas fa-folder-open"></i> 浏览</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="bank-export-modded">模组版 bank:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper" style="flex:1;">
+          <input type="text" id="bank-export-modded">
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankExportModded()"><i class="fas fa-folder-open"></i> 浏览</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="bank-export-name">模组名:</label>
+      <input type="text" id="bank-export-name" placeholder="留空使用模组 bank 文件名">
+    </div>
+    <div class="form-group">
+      <label for="bank-export-version">版本:</label>
+      <input type="text" id="bank-export-version" value="1.0">
+    </div>
+    <div class="form-group">
+      <label for="bank-export-author">作者:</label>
+      <input type="text" id="bank-export-author">
+    </div>
+    <div class="form-group">
+      <label for="bank-export-desc">描述:</label>
+      <textarea id="bank-export-desc" rows="2"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="checkbox-container">
+        <input type="checkbox" id="bank-export-into-mod" checked>
+        <span class="checkmark"></span> 导出到模组目录（立即生效于下次启动）
+      </label>
+    </div>
+    <div class="button-group">
+      <button type="button" class="action-btn success" onclick="runBankExport()"><i class="fas fa-archive"></i> 导出</button>
+    </div>
+  </div>
+
+  <!-- 卡片 5: 转换整包模组 -->
+  <div class="setting-card">
+    <h3 class="setting-title"><i class="fas fa-exchange-alt"></i> 转换整包 bank 模组 → .rebank</h3>
+    <p class="form-hint">把模组目录中的整包 .bank 与游戏原版对比，转换为 .rebank 差分包（更小、更新更稳）。</p>
+    <div class="form-group">
+      <label for="bank-convert-list">模组目录中的整包 bank 模组:</label>
+      <div class="list-container">
+        <div class="list-header"><span>模组名称</span><span>操作</span></div>
+        <div class="list-content" id="bank-convert-list"><div class="list-empty"><p>暂无整包 bank 模组</p></div></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="checkbox-container">
+        <input type="checkbox" id="bank-convert-keep" checked>
+        <span class="checkmark"></span> 转换后保留原 .bank（不勾选则禁用为 _disable）
+      </label>
+    </div>
+    <div class="button-group">
+      <button type="button" class="action-btn" onclick="refreshBankConvertList()"><i class="fas fa-sync-alt"></i> 刷新</button>
+      <button type="button" class="action-btn success" onclick="runBankConvert()"><i class="fas fa-exchange-alt"></i> 转换选中</button>
+    </div>
+  </div>
+
+  <!-- 卡片 6: 补丁预览（.rebank → 完整 bank） -->
+  <div class="setting-card">
+    <h3 class="setting-title"><i class="fas fa-hammer"></i> 补丁预览 / 生成完整 bank</h3>
+    <p class="form-hint">把 .rebank 差分包合并进目标 bank，输出完整 .bank（用于预览效果或转交他人）。</p>
+    <div class="form-group">
+      <label for="bank-patch-rebank">.rebank 模组:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper" style="flex:1;">
+          <input type="text" id="bank-patch-rebank">
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankPatchRebank()"><i class="fas fa-folder-open"></i> 浏览</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="bank-patch-bank">目标 bank（默认游戏当前对应 bank）:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper" style="flex:1;">
+          <input type="text" id="bank-patch-bank" placeholder="留空则自动取 rebank 对应的游戏原版 bank">
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankPatchBank()"><i class="fas fa-folder-open"></i> 浏览</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="bank-patch-out">输出目录:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper" style="flex:1;">
+          <input type="text" id="bank-patch-out">
+        </div>
+        <button type="button" class="action-btn secondary" onclick="browseBankPatchOut()"><i class="fas fa-folder-open"></i> 浏览</button>
+      </div>
+    </div>
+    <div class="button-group">
+      <button type="button" class="action-btn success" onclick="runBankPatchFull()"><i class="fas fa-hammer"></i> 生成</button>
+      <button type="button" class="action-btn" onclick="showBankRebankInfo()"><i class="fas fa-info-circle"></i> 查看模组信息</button>
+    </div>
+  </div>
+</div>

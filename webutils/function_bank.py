@@ -151,9 +151,13 @@ def bank_export_rebank(original_path: str, modded_path: str, out_path: str,
                          password=None, log=lambda msg: _log_manager.log(msg))
         if into_mod_folder:
             dst = os.path.join(get_mod_path(), os.path.basename(out_path))
-            import shutil
-            shutil.copy2(out_path, dst)
-            r["out"] = dst
+            if os.path.abspath(dst) != os.path.abspath(out_path):
+                import shutil
+                shutil.copy2(out_path, dst)
+                r["out"] = dst
+            else:
+                # out_path 已在模组目录（模组版 bank 取自模组目录的常见流程），视为已入模组
+                r["out"] = out_path
             r["into_mod_folder"] = True
         return _ok(**r)
     except Exception as e:

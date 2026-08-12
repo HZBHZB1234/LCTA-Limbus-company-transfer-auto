@@ -246,6 +246,7 @@ js_files = [
     'js/cheat-shell.js',
     'js/metadata-recovery.js',
     'js/cg.js',
+    'js/bank.js',
 ]
 js_content = ''
 for f in js_files:

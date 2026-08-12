@@ -69,3 +69,21 @@ def test_bank_export_rebank_missing_file(tmp_path):
     r = fb.bank_export_rebank(str(tmp_path / "no.bank"), str(tmp_path / "no2.bank"),
                               str(tmp_path / "x.rebank"), "n", "1", "", "", False)
     assert r["success"] is False
+
+
+def test_bank_export_rebank_into_mod_same_path(tmp_path, monkeypatch):
+    """out_path 已在模组目录（模组版 bank 取自模组目录的常见流程）时不应 SameFileError。"""
+    mod_dir = tmp_path / "mods"
+    mod_dir.mkdir()
+    orig, modded = tmp_path / "a.bank", mod_dir / "b.bank"
+    orig.write_bytes(b"a"); modded.write_bytes(b"b")
+    monkeypatch.setattr(fb, "FmodDlls", lambda d=None: object())
+    monkeypatch.setattr(fb, "build_rebank", lambda dlls, o, m, out, meta, work_dir=None,
+                        password=None, log=None: {"modified": [], "added": [(0, "a.wav")],
+                                                  "count": 1, "out": out})
+    monkeypatch.setattr(fb, "get_mod_path", lambda: str(mod_dir))
+    out = str(mod_dir / "b.rebank")
+    r = fb.bank_export_rebank(str(orig), str(modded), out, "n", "1.0", "", "", True)
+    assert r["success"] is True
+    assert r["into_mod_folder"] is True
+    assert r["out"] == out

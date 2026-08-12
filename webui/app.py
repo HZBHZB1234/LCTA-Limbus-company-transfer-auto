@@ -34,6 +34,7 @@ from webui.app_api.drops import DropMixin
 from webui.app_api.resources import ResourceMixin
 from webui.app_api.metadata_recovery import MetadataRecoveryMixin
 from webui.app_api.cg import CgMixin
+from webui.app_api.bank import BankMixin
 from webui.rule_editor_api import RuleEditorAPI
 from webui.quick_editor_api import QuickEditorAPI
 from webui.llm_fancy_api import LLMFancyAPI
@@ -44,7 +45,7 @@ from webui.aria2_downloader_api import Aria2DownloaderAPI
 class LCTA_API(CoreMixin, TranslatorMixin, PackagesMixin, DownloadMixin, FancyMixin,
                WindowMixin, CdnMixin, SpeedMixin, UpdateMixin, DropMixin,
                ResourceMixin, ConfigMixin, InputBypassMixin, CheatCoreMixin,
-               MetadataRecoveryMixin, CgMixin):
+               MetadataRecoveryMixin, CgMixin, BankMixin):
     """API 桥接类。方法按功能域拆分至 webui/app_api/"""
     pass
 

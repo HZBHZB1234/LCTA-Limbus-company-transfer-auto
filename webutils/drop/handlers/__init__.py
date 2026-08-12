@@ -1,7 +1,7 @@
 """拖放文件分支处理器注册表：每个 NAMEREFER 类别对应一个处理器类。
 
 检测顺序按容器类型分组（zip / folder / json / path），与重构前行为严格一致：
-- zip: full → nofont → FLmod → update → jsononly（update 必须优先于 jsononly）
+- zip: fmod_dlls → full → nofont → FLmod → update → jsononly（update 必须优先于 jsononly）
 - folder: full → nofont → FLmod → jsononly
 - json: busimport → textFile → LCTAchange → FLchange
 - path: carra → bank → font

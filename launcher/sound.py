@@ -99,6 +99,15 @@ def sound_replace_thread(mod_folder: str):
 
         shutil.copyfile(sound_file, target)
 
+    # 应用 .rebank fsb 补丁模组（哈希缓存，命中免重编码）
+    try:
+        from launcher.bankmod import apply_rebanks
+        result = apply_rebanks(mod_folder)
+        _log_manager.log("Rebank mods applied: patched=%s cache_hit=%d cache_miss=%d"
+                         % (result["patched"], result["cache_hit"], result["cache_miss"]))
+    except Exception as e:
+        _log_manager.log_error(e)
+
     # Wait for game to start (up to 30 seconds)
     for _ in range(30):
         if is_game_running():
@@ -143,7 +152,10 @@ def replace_sound(mod_folder: str, game_path: str = None):
     if game_path is not None:
         global _game_path
         _game_path = extract_exe_path(game_path)
-    if any(p.is_file() for p in Path(mod_zips_root_path).rglob("*.bank")):
+    from launcher.bankmod import rebank_files_in
+    has_bank = any(p.is_file() for p in Path(mod_zips_root_path).rglob("*.bank"))
+    has_rebank = bool(rebank_files_in(mod_zips_root_path))
+    if has_bank or has_rebank:
         Thread(target=sound_replace_thread, args=(mod_folder,), daemon=True).start()
     else:
-        _log_manager.log("No .bank found, skip sound replacing process.")
+        _log_manager.log("No .bank/.rebank found, skip sound replacing process.")

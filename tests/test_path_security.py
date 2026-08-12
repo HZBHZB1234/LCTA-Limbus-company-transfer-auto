@@ -152,6 +152,18 @@ class TestModManage:
         assert function_manage.delete_mod('m.json', False) is True
         assert not (mod_path / 'm.json_disable').exists()
 
+    def test_toggle_delete_rebank(self, tmp_path, monkeypatch):
+        mod = tmp_path / "mods"
+        mod.mkdir()
+        monkeypatch.setattr(function_manage, "get_mod_path", lambda: mod)
+        (mod / "m.rebank").write_bytes(b"x")
+        r, rd = function_manage.fing_mod()
+        assert r == ["m.rebank"]
+        assert function_manage.toggle_mod("m.rebank", False) is True
+        assert function_manage.toggle_mod("m.rebank", True) is True
+        assert function_manage.delete_mod("m.rebank", True) is True
+        assert not (mod / "m.rebank").exists()
+
     def test_delete_mod_reject_traversal(self, mod_path, tmp_path):
         outside = tmp_path / 'evil_mod2'
         outside.mkdir(exist_ok=True)

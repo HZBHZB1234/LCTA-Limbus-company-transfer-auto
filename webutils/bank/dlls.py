@@ -17,7 +17,6 @@ FMOD_OPENONLY = 0x00002000
 FMOD_INIT_NORMAL = 0x00000000
 FMOD_TIMEUNIT_PCMBYTES = 0x00000004
 
-FSBANK_FSBVERSION_FSB5 = 0
 FSBANK_INIT_GENERATEPROGRESSITEMS = 0x00000010
 FSBANK_FORMAT_PCM = 0
 FSBANK_FORMAT_VORBIS = 5
@@ -107,12 +106,12 @@ def find_dll_dir(candidates: Sequence[str]) -> Optional[str]:
 
 def default_dll_candidates() -> List[str]:
     cands = []
-    env_dir = os.environ.get("LCTA_FMOD_DLL_DIR", "")
-    if env_dir:
-        cands.append(env_dir)
     cfg_dir = ConfigManager().get("ui_default.bank.dll_dir", "")
     if cfg_dir:
         cands.append(cfg_dir)
+    env_dir = os.environ.get("LCTA_FMOD_DLL_DIR", "")
+    if env_dir:
+        cands.append(env_dir)
     app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 仓库根
     cands.append(app_root)
     cands.append(os.path.join(app_root, "tools", "fmod"))
@@ -233,7 +232,10 @@ class FmodDlls:
                     priority = ctypes.c_int(0)
                     self._check(self._fmod.FMOD_Sound_GetDefaults(sub, ctypes.byref(freq),
                                                                   ctypes.byref(priority)), "FMOD_Sound_GetDefaults")
-                    stype = sformat = channels = bits = ctypes.c_int(0)
+                    stype = ctypes.c_int(0)
+                    sformat = ctypes.c_int(0)
+                    channels = ctypes.c_int(0)
+                    bits = ctypes.c_int(0)
                     self._check(self._fmod.FMOD_Sound_GetFormat(sub, ctypes.byref(stype),
                                                                 ctypes.byref(sformat),
                                                                 ctypes.byref(channels),
@@ -290,8 +292,8 @@ class FmodDlls:
     def encode_wavs_to_fsb(self, wav_files, out_fsb, format_id, quality, threads, cache_dir,
                            encrypt_key=None, log=None) -> None:
         os.makedirs(cache_dir, exist_ok=True)
-        rc = self._fsbank.FSBank_Init(FSBANK_FSBVERSION_FSB5, FSBANK_INIT_GENERATEPROGRESSITEMS,
-                                      threads, cache_dir.encode("utf-8"))
+        rc = self._fsbank.FSBank_Init(FSBANK_INIT_GENERATEPROGRESSITEMS, threads, 0,
+                                      cache_dir.encode("utf-8"))
         if rc != FMOD_OK:
             raise BankToolError(_make_error_text("FSBank_Init", rc))
         try:

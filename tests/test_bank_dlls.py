@@ -6,6 +6,7 @@ from webutils.bank.dlls import (
     DLL_NAMES, FmodDlls, default_dll_candidates, find_dll_dir, missing_dlls,
 )
 from webutils.bank.errors import BankDllMissingError
+from globalManagers.ConfigManager import ConfigManager
 
 
 def _fake_dir(tmp_path, names=DLL_NAMES):
@@ -36,10 +37,14 @@ def test_find_dll_dir(tmp_path):
 
 
 def test_default_dll_candidates_uses_env_and_config(tmp_path, monkeypatch):
-    good = _fake_dir(tmp_path)
-    monkeypatch.setenv("LCTA_FMOD_DLL_DIR", good)
+    cfg_dir = _fake_dir(tmp_path)
+    env_dir = str(tmp_path / "env_dir")
+    os.makedirs(env_dir)
+    monkeypatch.setenv("LCTA_FMOD_DLL_DIR", env_dir)
+    monkeypatch.setattr(ConfigManager, "get", lambda self, key, default=None: cfg_dir)
     cands = default_dll_candidates()
-    assert cands[0] == good
+    assert cands[0] == cfg_dir
+    assert cands[1] == env_dir
 
 
 def test_fmod_dlls_init_raises_when_missing(tmp_path):

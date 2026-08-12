@@ -21,6 +21,7 @@ from .font import FontHandler
 from .bus_import import BusImportHandler
 from .update import UpdatePackageHandler
 from .invalid import InvalidHandler
+from .fmod_dlls import FmodDllZipHandler
 
 FULL = FullHandler()
 NOFONT = NoFontHandler()
@@ -35,6 +36,7 @@ LCTA_CHANGE = LCTAChangeHandler()
 FL_CHANGE = FLChangeHandler()
 BUS_IMPORT = BusImportHandler()
 INVALID = InvalidHandler()
+FMOD_DLLS = FmodDllZipHandler()
 
 HANDLERS = [
     FULL,
@@ -49,13 +51,14 @@ HANDLERS = [
     LCTA_CHANGE,
     FL_CHANGE,
     BUS_IMPORT,
+    FMOD_DLLS,
     INVALID,
 ]
 
 REGISTRY = DropFileHandlerRegistry(
     HANDLERS,
     detect_order={
-        'zip': [FULL, NOFONT, FLMOD, UPDATE, JSONONLY],
+        'zip': [FMOD_DLLS, FULL, NOFONT, FLMOD, UPDATE, JSONONLY],
         'folder': [FULL, NOFONT, FLMOD, JSONONLY],
         'json': [BUS_IMPORT, TEXT_FILE, LCTA_CHANGE, FL_CHANGE],
         'path': [CARRA, BANK, FONT],

@@ -1,4 +1,5 @@
 ## v5.0.3版本更新内容
+- Launcher（GUI 模式）CLR 初始化失败时新增日志落盘：ensure_clr 失败会把真实异常、反射探针输出与修复指引写入 logs/app.log（此前仅输出到控制台，控制台隐藏时信息丢失），便于定位 pythonnet/.NET Framework 环境问题
 - Metadata 恢复页升级为 v2 全自动流水线（同步上游 metadata-recovery universal 管线）：不再需要 IDA、参考标准文件与反编译文本，只需 GameAssembly.dll + 加密的 global-metadata.dat 即可自动完成 定位→提取→验证→31 节映射求解→标准文件重建 五阶段，自动适配 08-13 新版布局（三元组字段序漂移 count_offset_size、分配调用强转形态）
 - Metadata 恢复页新增 capstone 环境检测与一键安装按钮（首次使用需装反汇编库），页面简化为三步流程：环境检查 → 输入文件（游戏目录自动推导）→ 运行与结果判读
 - Metadata 恢复产物改为：★ 标准重建文件 standard-rebuilt.dat（直接交给 Il2CppDumper）+ profile.json（含 31 节映射）+ run-report.json/md 分阶段报告

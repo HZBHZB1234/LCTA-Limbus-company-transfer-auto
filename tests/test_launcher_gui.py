@@ -550,6 +550,46 @@ class TestSafeInvokeEdgeCases:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# _ensure_clr_with_log 测试
+# ═══════════════════════════════════════════════════════════════════
+
+class TestEnsureClrWithLog:
+    def test_success_returns_clr(self):
+        from launcher.gui_progress import _ensure_clr_with_log
+
+        fake_clr = MagicMock()
+        with patch("launcher.gui_progress.ensure_clr", return_value=fake_clr) as m:
+            result = _ensure_clr_with_log()
+
+        assert result is fake_clr
+        m.assert_called_once()
+
+    def test_failure_logs_and_reraises(self):
+        from launcher.gui_progress import _ensure_clr_with_log
+
+        exc = RuntimeError("clr 加载失败: 详情与修复指引")
+        with patch("launcher.gui_progress.ensure_clr", side_effect=exc), \
+             patch("globalManagers.LogManager.LogManager") as mock_cls:
+            with pytest.raises(RuntimeError) as ei:
+                _ensure_clr_with_log()
+
+        assert ei.value is exc
+        mock_cls.return_value.log_error.assert_called_once_with(exc)
+
+    def test_logging_failure_does_not_mask_original(self):
+        from launcher.gui_progress import _ensure_clr_with_log
+
+        exc = RuntimeError("原始 clr 错误")
+        with patch("launcher.gui_progress.ensure_clr", side_effect=exc), \
+             patch("globalManagers.LogManager.LogManager",
+                   side_effect=RuntimeError("日志写入失败")):
+            with pytest.raises(RuntimeError) as ei:
+                _ensure_clr_with_log()
+
+        assert ei.value is exc
+
+
+# ═══════════════════════════════════════════════════════════════════
 # VisiblePhaseFiltering 测试
 # ═══════════════════════════════════════════════════════════════════
 

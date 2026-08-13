@@ -7,7 +7,25 @@ from typing import Dict, Optional
 
 from webutils.clr_bootstrap import ensure_clr
 
-clr = ensure_clr()
+
+def _ensure_clr_with_log():
+    """初始化 CLR(netfx);失败时把真实异常与修复指引写入 logs/app.log 后继续抛出。
+
+    LogManager 的实例化在本模块中位于 ensure_clr 之后,失败时不可用,
+    因此这里局部导入并兜底,保证日志写入失败也不会掩盖原始异常。
+    """
+    try:
+        return ensure_clr()
+    except Exception as exc:
+        try:
+            from globalManagers.LogManager import LogManager
+            LogManager().log_error(exc)
+        except Exception:
+            pass
+        raise
+
+
+clr = _ensure_clr_with_log()
 
 clr.AddReference('System.Windows.Forms')
 clr.AddReference('System.Drawing')

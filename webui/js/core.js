@@ -321,6 +321,7 @@ class ConfigManager {
 
             // 音频工具
             'bank-dll-dir': 'ui_default.bank.dll_dir',
+            'bank-dll-url': 'ui_default.bank.dll_url',
             'bank-extract-dir': 'ui_default.bank.extract_dir'
         };
         

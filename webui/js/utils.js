@@ -510,6 +510,7 @@ const TOOLTIP_DATA = {
 
     // ===== 音频工具 =====
     'bank-dll-dir': 'FMOD 工具 DLL 目录（fmod64.dll / fsbank64.dll / libfsbvorbis64.dll）。留空自动检测（LCTA_FMOD_DLL_DIR 环境变量 / 程序目录），缺失时可在本页一键从 GitHub 下载。',
+    'bank-dll-url': 'FMOD 工具 DLL 下载源（可选）。留空使用官方 GitHub release（Fmod-Bank-Tools），填写后优先使用该直链 zip。',
     'bank-extract-dir': 'bank 解包输出目录。留空则输出到 模组目录/BankExtract。',
 };
 

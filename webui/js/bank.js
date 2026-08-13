@@ -43,6 +43,36 @@ async function initBankSection() {
     loadBankConfig();
 }
 
+// ---- 卡片 1: DLL 下载 ----
+async function downloadBankDlls() {
+    if (!pywebview || !pywebview.api || !pywebview.api.bank_download_dlls) return;
+    const btn = _bankEl('bank-download-dlls');
+    if (!btn) return;
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 下载中...';
+    try {
+        const result = await pywebview.api.bank_download_dlls(false);
+        showMessage(result.success ? '下载完成' : '下载失败', result.message || '');
+        await refreshBankDllStatus();
+    } catch (error) {
+        addLogMessage(error);
+        showMessage('下载失败', String(error));
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
+async function requireBankDlls() {
+    // 操作前检查：DLL 缺失时提示去下载，返回 false
+    if (!pywebview || !pywebview.api || !pywebview.api.bank_dll_status) return true;
+    const result = await pywebview.api.bank_dll_status();
+    if (result && result.success && result.ok) return true;
+    showMessage('缺少 FMOD 工具 DLL', '请先在「FMOD 工具 DLL」卡片点击「一键下载 FMOD DLL」自动获取，或手动选择包含 fmod64.dll / fsbank64.dll / libfsbvorbis64.dll 的目录。');
+    return false;
+}
+
 // ---- 卡片 1: FMOD DLL 状态 ----
 
 async function refreshBankDllStatus() {
@@ -67,7 +97,7 @@ async function refreshBankDllStatus() {
             const missing = (result.missing || []).join(', ');
             if (statusEl) {
                 statusEl.innerHTML = '<span style="color:#e74c3c;"><i class="fas fa-times"></i> '
-                    + '缺少: ' + escapeHtml(missing) + '</span>';
+                    + '缺少: ' + escapeHtml(missing) + '（可点击下方按钮一键下载）</span>';
             }
         }
         // 回填检测/配置的目录（已有保存值时不覆盖，保存值优先）
@@ -182,6 +212,7 @@ function _bankResolveExtractPath() {
 }
 
 async function runBankExtract() {
+    if (!(await requireBankDlls())) return;
     await _bankWithBusy(async () => {
         const bankPath = _bankResolveExtractPath();
         if (!bankPath) {
@@ -239,6 +270,7 @@ function browseBankRebuildOut() {
 }
 
 async function runBankRebuild() {
+    if (!(await requireBankDlls())) return;
     await _bankWithBusy(async () => {
         const bankPath = _bankPathInput('bank-rebuild-bank');
         const wavDir = _bankPathInput('bank-rebuild-wav');
@@ -281,6 +313,7 @@ function browseBankExportModded() {
 }
 
 async function runBankExport() {
+    if (!(await requireBankDlls())) return;
     await _bankWithBusy(async () => {
         const originalPath = _bankPathInput('bank-export-original');
         const moddedPath = _bankPathInput('bank-export-modded');
@@ -355,6 +388,7 @@ async function refreshBankConvertList() {
 }
 
 async function runBankConvert() {
+    if (!(await requireBankDlls())) return;
     await _bankWithBusy(async () => {
         const checks = document.querySelectorAll('#bank-convert-list .bank-convert-check:checked');
         const names = [];
@@ -415,6 +449,7 @@ function browseBankPatchOut() {
 }
 
 async function runBankPatchFull() {
+    if (!(await requireBankDlls())) return;
     await _bankWithBusy(async () => {
         const rebankPath = _bankPathInput('bank-patch-rebank');
         if (!rebankPath) {

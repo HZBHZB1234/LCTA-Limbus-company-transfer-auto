@@ -7,6 +7,23 @@
   <div class="setting-card">
     <h3 class="setting-title"><i class="fas fa-cogs"></i> FMOD 工具 DLL</h3>
     <p class="form-hint" id="bank-dll-status">正在检测...</p>
+    <div class="button-group">
+      <button type="button" class="action-btn primary" id="bank-download-dlls" onclick="downloadBankDlls()">
+        <i class="fas fa-download"></i> 一键下载 FMOD DLL
+      </button>
+    </div>
+    <div class="form-group">
+      <label for="bank-dll-url">下载源 URL（可选，留空使用官方 GitHub release）:</label>
+      <div class="file-input-group">
+        <div class="input-wrapper">
+          <input type="text" id="bank-dll-url" placeholder="https://.../fmod-dlls.zip">
+          <button type="button" class="input-clear" onclick="document.getElementById('bank-dll-url').value=''" title="清空">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      <small class="form-hint">仅当官方源不可用时填写；点击「一键下载」后自动下载并解压 3 个 DLL。</small>
+    </div>
     <div class="form-group">
       <label for="bank-dll-dir">DLL 目录:</label>
       <div class="file-input-group">
@@ -18,7 +35,7 @@
         <button type="button" class="action-btn" onclick="saveBankDllDir()"><i class="fas fa-save"></i> 保存</button>
       </div>
     </div>
-    <small class="form-hint">缺少 fmod64.dll / fsbank64.dll / libfsbvorbis64.dll 时，可把「工具.zip」直接拖入窗口一键导入（也可手动选择解压目录）。</small>
+    <small class="form-hint">缺少 fmod64.dll / fsbank64.dll / libfsbvorbis64.dll 时，点击「一键下载 FMOD DLL」自动从 GitHub 获取（官方 Fmod-Bank-Tools release）；也可手动选择包含 DLL 的目录。</small>
   </div>
 
   <!-- 卡片 2: 游戏 bank 列表 + 解包 -->

@@ -88,6 +88,13 @@
             "jobs": "int",
             "connection_limit": "int",
             "seed_time": "int"
+        },
+        "bank": {
+            "dll_dir": "str",
+            "dll_url": "str",
+            "extract_dir": "str",
+            "quality": "int",
+            "threads": "int"
         }
     },
     "api_config": "str",

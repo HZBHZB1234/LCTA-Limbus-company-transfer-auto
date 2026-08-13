@@ -1,6 +1,49 @@
 # -*- coding: utf-8 -*-
 """LCTA_API 配置读写：单键/批量读写、保存、重置。"""
 from globalManagers.ConfigManager import ConfigManager
+from webutils.load import load_config_types
+
+_TRUE_STRS = {"true", "1", "on", "yes"}
+_FALSE_STRS = {"false", "0", "off", "no"}
+
+
+def _lookup_schema_type(key_path: str, schema) -> object:
+    """按点号路径在 config_check.json 类型表中查找期望类型；未声明返回 None。"""
+    current = schema
+    for key in key_path.split("."):
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current if isinstance(current, str) else None
+
+
+def _coerce_config_value(key_path: str, value):
+    """按 config_check.json 声明的类型转换前端提交的值（str→int/bool）。
+
+    - 期望 int：可转数字的 str 转 int；转换失败保留原值（不静默破坏，交给 fix() 处理）
+    - 期望 bool：仅兜底处理字符串 "true/false/1/0"（checkbox 本已传 bool）
+    - 期望 str / 枚举 / 未声明键：原样返回（cheat 插件动态键等不受影响）
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        schema = load_config_types()
+    except Exception:
+        return value
+    expected = _lookup_schema_type(key_path, schema)
+    if expected == "int":
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return value
+    if expected == "bool":
+        lowered = value.strip().lower()
+        if lowered in _TRUE_STRS:
+            return True
+        if lowered in _FALSE_STRS:
+            return False
+    return value
+
 
 class ConfigMixin:
 
@@ -22,7 +65,7 @@ class ConfigMixin:
         :return: 更新是否成功
         """
         try:
-            ConfigManager().set(key_path, value)
+            ConfigManager().set(key_path, _coerce_config_value(key_path, value))
             return True
         except Exception as e:
             self.log(f"更新配置值时出错: {key_path} = {value}, 错误: {e}")
@@ -38,7 +81,8 @@ class ConfigMixin:
         try:
             if not config_updates:
                 return {"success": True, "updated": 0, "total": 0}
-            updated = ConfigManager().set_batch(config_updates)
+            coerced = {k: _coerce_config_value(k, v) for k, v in config_updates.items()}
+            updated = ConfigManager().set_batch(coerced)
             total_count = len(config_updates)
 
             self.log(f"批量更新配置: 成功 {updated}/{total_count} 项")

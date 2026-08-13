@@ -1,11 +1,11 @@
 ## v5.0.3版本更新内容
 - 添加音频工具功能：FMOD bank 解包/重打包、.rebank 差分模组导出与转换、补丁预览生成完整 bank（新增「音频工具」页面，FMOD DLL 缺失时一键从 GitHub 自动下载）
-- 新增音频工具页：FMOD bank 解包/重打包、fsb 补丁模组（.rebank）导出与转换
 - 启动器新增 .rebank 模组支持：只包含改动音频的差分包，启动时自动补丁（哈希缓存，未变更直接复用）
 - FMOD 工具 DLL 支持一键自动下载（官方 Fmod-Bank-Tools release，可在音频工具页配置自定义下载源覆盖）
 - 修复音频工具页 bank 扫描音频数显示异常：改为统计 FSB 内实际子音总数（分离式 bank 结构：事件 bank 显示无音频，.assets.bank 显示真实音频数）
 - 修复 LCTA-AU 汉化包无字体的问题：下载完成后自动注入中文字体（优先使用缓存字体，缺失时自动下载 LLC 官方字体），下载页与 Launcher 自动更新安装的 LCTA-AU 包均自带 Font 文件夹
 - 新增游戏异常退出日志导出：Launcher（GUI 模式）检测到游戏非正常退出时弹窗提示，可一键将 Player.log、Player-prev.log 及崩溃报告打包导出到下载文件夹（可在 Launcher 配置页关闭）
+- 修复配置同步：前端提交的数字配置按 config_check.json 声明自动转换类型（int/bool），避免数字被存成字符串导致启动时配置校验失败、设置被重置
 
 ## v5.0.2版本更新内容
 - 添加cg自定义功能

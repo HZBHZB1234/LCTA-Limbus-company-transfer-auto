@@ -163,8 +163,16 @@ async function refreshBankGameBanks() {
             bankGameBanks.forEach(function (b) {
                 const opt = document.createElement('option');
                 opt.value = b.path;
-                opt.textContent = b.name + '（' + b.fsb_count + ' 个音频'
-                    + (b.encrypted ? '·加密' : '') + '）';
+                let audioText;
+                if (b.encrypted) {
+                    audioText = '（加密，音频数未知）';
+                } else if (b.subsound_count > 0) {
+                    audioText = '（' + b.subsound_count + ' 个音频'
+                        + (b.fsb_count > 1 ? '，FSB ' + b.fsb_count : '') + '）';
+                } else {
+                    audioText = '（无音频）';
+                }
+                opt.textContent = b.name + audioText;
                 select.appendChild(opt);
             });
         }
@@ -236,7 +244,7 @@ async function runBankExtract() {
                 const count = result.fsb_count || 0;
                 addLogMessage('解包完成: ' + bankPath + ' → ' + outDir
                     + (result.encrypted ? '（加密 bank，已用密码解密）' : ''));
-                showMessage('解包完成', '已解包 ' + count + ' 个音频到：\n' + outDir
+                showMessage('解包完成', '已解包 ' + count + ' 个 FSB 音频组到：\n' + outDir
                     + '\n\n每个子目录 bank[序号] 对应一个 FSB 音频组，可直接替换 wav 后「重打包」。');
             } else {
                 addLogMessage('解包失败: ' + bankPath + (result ? '：' + result.message : ''));

@@ -3,8 +3,14 @@ import struct
 
 from webutils.bank.format import (
     assemble_bank, bank_base, bank_is_encrypted, extract_fsb_bytes,
-    parse_bank, parse_bank_for_rebuild,
+    parse_bank, parse_bank_for_rebuild, parse_fsb5_header,
 )
+
+
+def build_fsb5_payload(num_samples=7, data_len=0):
+    """构造 FSB5 头部（36 字节）+ 占位数据。"""
+    return (b"FSB5" + struct.pack("<6I", 1, num_samples, 0, 0, data_len, 0)
+            + b"\0" * 8 + b"D" * 16)
 
 
 def build_test_bank(fsb_payloads, pad_len=4, version=0x59):
@@ -107,3 +113,27 @@ def test_bank_base():
     assert bank_base("Weapon.bank") == "Weapon"
     assert bank_base("C:/x/Weapon.bank") == "Weapon"
     assert bank_base("Master.strings.bank") == "Master.strings"
+
+
+def test_parse_fsb5_header():
+    payload = build_fsb5_payload(num_samples=31, data_len=1024)
+    h = parse_fsb5_header(payload)
+    assert h is not None
+    assert h["version"] == 1
+    assert h["num_samples"] == 31
+    assert h["data_size"] == 1024
+
+
+def test_parse_fsb5_header_offsets_inside_bank():
+    data = build_test_bank([build_fsb5_payload(num_samples=5)])
+    info = parse_bank(data)
+    off = info["fsb_offset"][0]
+    h = parse_fsb5_header(data, off)
+    assert h is not None and h["num_samples"] == 5
+
+
+def test_parse_fsb5_header_invalid():
+    assert parse_fsb5_header(b"") is None
+    assert parse_fsb5_header(b"ABCD" + b"\0" * 32) is None           # 非 FSB5 魔数
+    assert parse_fsb5_header(b"FSB5" + b"\0" * 8) is None            # 截断
+    assert parse_fsb5_header(b"FSB5" + b"\0" * 40, offset=100) is None  # 越界

@@ -38,6 +38,51 @@ def test_bank_info_invalid(tmp_path):
     assert "无法解析" in r["message"]
 
 
+def _make_sound_dir(tmp_path):
+    from tests.test_bank_format import build_fsb5_payload, build_test_bank
+    sd = tmp_path / "sound"
+    sd.mkdir()
+    (sd / "SFX_1.assets.bank").write_bytes(
+        build_test_bank([build_fsb5_payload(num_samples=31, data_len=1024),
+                         build_fsb5_payload(num_samples=7, data_len=64)]))
+    (sd / "SFX_1.bank").write_bytes(b"RIFF" + b"\0" * 4 + b"FEV " + b"\0" * 36)  # 事件 bank
+    return sd
+
+
+def test_bank_get_game_banks_subsound_counts(tmp_path, monkeypatch):
+    sd = _make_sound_dir(tmp_path)
+    monkeypatch.setattr(fb, "_game_sound_dir", lambda game_path: str(sd))
+    monkeypatch.setattr(fb.ConfigManager, "get",
+                        lambda self, k, d=None: str(tmp_path) if k == "game_path" else d)
+    r = fb.bank_get_game_banks()
+    assert r["success"] is True
+    by_name = {b["name"]: b for b in r["banks"]}
+    assert by_name["SFX_1.assets.bank"]["fsb_count"] == 2
+    assert by_name["SFX_1.assets.bank"]["subsound_count"] == 38   # 31 + 7
+    assert by_name["SFX_1.bank"]["fsb_count"] == 0
+    assert by_name["SFX_1.bank"]["subsound_count"] == 0
+
+
+def test_bank_info_event_bank_no_audio(tmp_path):
+    p = tmp_path / "SFX_1.bank"
+    p.write_bytes(b"RIFF" + b"\0" * 4 + b"FEV " + b"\0" * 36)
+    r = fb.bank_info(str(p))
+    assert r["success"] is True
+    assert r["fsb_count"] == 0 and r["subsound_count"] == 0
+    assert "无音频" in r.get("note", "")
+
+
+def test_bank_info_with_audio(tmp_path):
+    from tests.test_bank_format import build_fsb5_payload, build_test_bank
+    p = tmp_path / "Weapon.assets.bank"
+    p.write_bytes(build_test_bank([build_fsb5_payload(num_samples=5)]))
+    r = fb.bank_info(str(p))
+    assert r["success"] is True
+    assert r["fsb_count"] == 1
+    assert r["subsound_count"] == 5
+    assert r["audio_size"] > 0
+
+
 def test_bank_extract_ok(tmp_path, monkeypatch):
     p = tmp_path / "Weapon.bank"
     p.write_bytes(b"x" * 100)

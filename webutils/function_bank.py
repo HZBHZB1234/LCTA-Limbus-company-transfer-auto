@@ -12,7 +12,7 @@ from webutils.bank.dlls import (
     FmodDlls, default_dll_candidates, default_download_dir, find_dll_dir, missing_dlls,
 )
 from webutils.bank.fmod import FORMAT_IDS, default_threads, extract_bank, rebuild_bank
-from webutils.bank.format import bank_base, bank_is_encrypted, parse_bank
+from webutils.bank.format import bank_base, bank_is_encrypted, parse_bank, parse_fsb5_header
 from webutils.bank.rebank import build_rebank, patch_banks, read_rebank_info
 from webutils.bank.errors import BankToolError
 from webutils.packages.manage import get_mod_path
@@ -144,6 +144,18 @@ def bank_set_dll_dir(dll_dir: str):
         return _err(e)
 
 
+def _fsb_sub_counts(data: bytes, info: dict) -> tuple:
+    """统计 FSB 数量与子音总数（FSB5 头 numSamples 求和）。
+
+    加密或无法解析的 FSB 子音数计 0；返回 (fsb_count, subsound_total)。
+    """
+    total = 0
+    for off, size in zip(info["fsb_offset"], info["fsb_size"]):
+        h = parse_fsb5_header(data, off)
+        total += h["num_samples"] if h else 0
+    return info["fsb_count"], total
+
+
 # -- bank 信息 --------------------------------------------------------
 def bank_get_game_banks():
     try:
@@ -159,10 +171,16 @@ def bank_get_game_banks():
                     with open(path, "rb") as fh:
                         data = fh.read()
                     info = parse_bank(data)
+                    fsb_count = subsound_count = 0
+                    encrypted = False
+                    if info:
+                        fsb_count, subsound_count = _fsb_sub_counts(data, info)
+                        encrypted = bank_is_encrypted(data, info)
                     banks.append({
                         "name": name, "path": path, "size": os.path.getsize(path),
-                        "fsb_count": info["fsb_count"] if info else 0,
-                        "encrypted": bool(info and bank_is_encrypted(data, info)),
+                        "fsb_count": fsb_count,
+                        "subsound_count": subsound_count,
+                        "encrypted": encrypted,
                     })
                 except OSError:
                     continue
@@ -179,9 +197,16 @@ def bank_info(path: str):
             data = fh.read()
         info = parse_bank(data)
         if info is None:
+            # 合法 FEV 但无音频（如 Limbus 的分离式事件 bank）→ 返回 0 音频信息
+            if len(data) >= 12 and data[0:4] == b"RIFF" and data[0x08:0x0C] == b"FEV ":
+                return _ok(name=bank_base(path), fsb_count=0, subsound_count=0,
+                           size=os.path.getsize(path), audio_size=0,
+                           encrypted=False, note="该 bank 无音频数据（事件定义 bank）")
             return _err("无法解析 bank 文件: %s" % os.path.basename(path))
+        fsb_count, subsound_count = _fsb_sub_counts(data, info)
         total = sum(info["fsb_size"])
-        return _ok(name=bank_base(path), fsb_count=info["fsb_count"],
+        return _ok(name=bank_base(path), fsb_count=fsb_count,
+                   subsound_count=subsound_count,
                    size=os.path.getsize(path), audio_size=total,
                    encrypted=bank_is_encrypted(data, info))
     except Exception as e:

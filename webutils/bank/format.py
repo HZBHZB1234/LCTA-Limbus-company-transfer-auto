@@ -124,6 +124,31 @@ def bank_is_encrypted(data: bytes, info: dict) -> bool:
     return off + 4 <= len(data) and data[off:off + 4] != b"FSB5"
 
 
+FSB5_HEADER_SIZE = 0x24  # 36 字节：魔数 + 6 个 u32
+
+
+def parse_fsb5_header(data: bytes, offset: int = 0) -> Optional[dict]:
+    """解析 FSB5 头部，返回子音数等元数据；非 FSB5 / 截断返回 None。
+
+    字段布局取自 FSB5 公开格式：magic(4) + version(4) + numSamples(4)
+    + sampleHeaderSize(4) + nameSize(4) + dataSize(4) + subHeaderSize(4)。
+    """
+    if offset < 0 or offset + FSB5_HEADER_SIZE > len(data):
+        return None
+    if data[offset:offset + 4] != b"FSB5":
+        return None
+    (version, num_samples, sample_header_size, name_size,
+     data_size, sub_header_size) = struct.unpack_from("<6I", data, offset + 4)
+    return {
+        "version": version,
+        "num_samples": num_samples,
+        "sample_header_size": sample_header_size,
+        "name_size": name_size,
+        "data_size": data_size,
+        "sub_header_size": sub_header_size,
+    }
+
+
 def assemble_bank(original: bytes, info: dict, fsb_data: List[bytes], out_path: str) -> int:
     """把新 FSB 数据拼回原 bank 布局（重写 SNDH 表与 SND 块、修正 RIFF size）。"""
     n = info["fsb_count"]

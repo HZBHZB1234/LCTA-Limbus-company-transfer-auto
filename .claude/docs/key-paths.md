@@ -376,16 +376,17 @@ Launcher startup:
   → CheatPluginHost → 私有仓库 cheat_damage_hook.py start_launcher()（注册表 on_start）
       决策点日志（INFO，供 launcher 日志面板/日志页排查）：
       未启用 enabled_key →「未启用（key），跳过注入」；未同意风险 →「未同意风险须知」
-      后台线程启动时预解析偏移（预热缓存/填充状态，缓存命中零成本；不可用则
-      log「偏移不可用（reason），跳过注入」提前返回）→
+      后台线程启动时预解析偏移（预热缓存/填充状态，缓存命中零成本；不可用或
+      偏移未更新（stale_offsets）则 log「偏移不可用（reason），跳过注入」提前返回）→
       等 LimbusCompany.exe（180s，检测到进程 log PID）→ apply()（缓存快路径）
-      → inject(pid)（成功 log 偏移来源/版本/过期标记）
+      → inject(pid)（成功 log 偏移来源/版本）
   → 私有仓库 cheatcore/cheat_damage_hook.py
       resolve_offsets()                             GameAssembly.dll SHA-256 版本锚定
         - 缓存命中（hash 一致）→ 直接用缓存
         - hash 变化（游戏更新）→ 拉 API (web.lcta.top/cheat_damage.json)
           · API 已发布新版 → 更新 %LOCALAPPDATA%/LCTA/cheat-damage/offsets-cache.json
-          · API 未发布 / 网络失败 → 旧缓存降级 + stale 标记
+          · API 未发布 / 网络失败 → 旧缓存仅作状态展示（stale 标记「已过期」），
+            success=False + reason=stale_offsets 放弃注入（不降级注入）
       apply()                                       writes 16584-byte DHConfig to shared map
                                                       (Local\LCTA_CheatDamage_Config)
       inject(pid)                                   remote-thread LoadLibraryW cheat_damage.dll
@@ -412,6 +413,9 @@ Runtime update recovery (game hot-updates, manual trigger):
   → user triggers via WebUI「立即刷新偏移」(refresh_offsets force) or relaunch
   → refresh_offsets() (force) → apply() with retry_requested=1
   → DLL MH_DisableHook → re-verify → re-install with new offsets (no restart)
+  → 偏移未更新（游戏更新后 API 未发布新版）→ resolve 返回 reason=stale_offsets
+    success=False，Launcher 跳过注入；WebUI 手动「注入」按钮经 inject() 的
+    stale 守卫（_offsets.stale）抛「偏移未更新，已放弃注入」兜底拒绝
 Status query (WebUI):
   → get_status()                                    running / pid / injected / gameassembly_found /
                                                     verified / installed / last_error_text /

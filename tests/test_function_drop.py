@@ -34,6 +34,7 @@ if "openspeedy" not in sys.modules:
     sys.modules["openspeedy"] = openspeedy
 
 from webutils.drop import detect, eval_files, handlers, inspect
+from webutils.drop.context import FileExecutionContext
 
 
 FOLDERLIST_DIRS = [
@@ -444,3 +445,22 @@ class TestCacheFontHandler:
         assert result['errors'] == 0
         assert Path(saved['target']).name == 'ChineseFont.ttf'
         assert Path(saved['target']).read_bytes() == b'fontdata'
+
+
+# ========== evalFile / evalFiles：.rebank 拖放安装 ==========
+
+class TestRebankHandler:
+    def test_rebank_detect_and_execute(self, tmp_path):
+        assert handlers.REBANK.detect('a.rebank') == 'rebank'
+        assert handlers.REBANK.detect('a.REBANK') == 'rebank'
+        assert handlers.REBANK.detect('a.bank') is None
+        assert handlers.REGISTRY.detect('path', 'a.rebank') == 'rebank'
+
+        mod_path = tmp_path / 'mods'
+        mod_path.mkdir()
+        src = tmp_path / 'mod.rebank'
+        src.write_bytes(b'rebankdata')
+        ctx = FileExecutionContext(file_path=str(src), file_type='rebank', modal_id='0',
+                                   index=0, total=1, game_path='', mod_path=str(mod_path))
+        assert handlers.REBANK.execute(ctx) == 'modded'
+        assert (mod_path / 'mod.rebank').read_bytes() == b'rebankdata'

@@ -1,7 +1,7 @@
 """拖放文件分支处理器注册表：每个 NAMEREFER 类别对应一个处理器类。
 
 检测顺序按容器类型分组（zip / folder / json / path），与重构前行为严格一致：
-- zip: fmod_dlls → full → nofont → FLmod → update → jsononly（update 必须优先于 jsononly）
+- zip: full → nofont → FLmod → update → jsononly（update 必须优先于 jsononly）
 - folder: full → nofont → FLmod → jsononly
 - json: busimport → textFile → LCTAchange → FLchange
 - path: carra → rebank → bank → font
@@ -22,7 +22,6 @@ from .font import FontHandler
 from .bus_import import BusImportHandler
 from .update import UpdatePackageHandler
 from .invalid import InvalidHandler
-from .fmod_dlls import FmodDllZipHandler
 
 FULL = FullHandler()
 NOFONT = NoFontHandler()
@@ -38,7 +37,7 @@ LCTA_CHANGE = LCTAChangeHandler()
 FL_CHANGE = FLChangeHandler()
 BUS_IMPORT = BusImportHandler()
 INVALID = InvalidHandler()
-FMOD_DLLS = FmodDllZipHandler()
+
 
 HANDLERS = [
     FULL,
@@ -54,14 +53,13 @@ HANDLERS = [
     LCTA_CHANGE,
     FL_CHANGE,
     BUS_IMPORT,
-    FMOD_DLLS,
     INVALID,
 ]
 
 REGISTRY = DropFileHandlerRegistry(
     HANDLERS,
     detect_order={
-        'zip': [FMOD_DLLS, FULL, NOFONT, FLMOD, UPDATE, JSONONLY],
+        'zip': [FULL, NOFONT, FLMOD, UPDATE, JSONONLY],
         'folder': [FULL, NOFONT, FLMOD, JSONONLY],
         'json': [BUS_IMPORT, TEXT_FILE, LCTA_CHANGE, FL_CHANGE],
         'path': [CARRA, REBANK, BANK, FONT],

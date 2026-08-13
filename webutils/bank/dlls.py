@@ -133,8 +133,8 @@ class FmodDlls:
         miss = missing_dlls(dll_dir)
         if miss:
             raise BankDllMissingError(
-                "缺少 FMOD 工具 DLL: %s。请在「音频工具」页选择包含全部 3 个 DLL 的目录，"
-                "或拖入 工具.zip 一键导入。" % ", ".join(miss))
+                "缺少 FMOD 工具 DLL: %s。可在「音频工具」页一键下载，"
+                "或手动选择包含全部 3 个 DLL 的目录。" % ", ".join(miss))
         self._dir = os.path.abspath(dll_dir)
         self._fmod = ctypes.CDLL(os.path.join(self._dir, "fmod64.dll"))
         self._fsbank = ctypes.CDLL(os.path.join(self._dir, "fsbank64.dll"))

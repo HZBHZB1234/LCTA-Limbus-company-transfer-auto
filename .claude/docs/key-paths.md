@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-12 -->
+<!-- Last updated: 2026-08-13 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -678,7 +678,7 @@ JS: user drags files onto window
     → handler lookup:             REGISTRY.handler_for(file_type) → 对应分支处理器类
     → full/nofont:                handlers/translation.py install_translation_package() (7z support)
     → FLmod/jsononly:             handlers/archive_mod.py extract_zip_smartly() or copytree to mod_path
-    → carra/bank/textFile/...:    handlers/copy_mod.py copy to mod_path
+    → carra/rebank/bank/textFile/...:    handlers/copy_mod.py copy to mod_path
     → font:                       handlers/font.py save_cache_font() replace cache ChineseFont.ttf
     → busimport:                  handlers/bus_import.py import_bus_rules_file() to fancy/
     → update:                     handlers/update.py Updater() via webutils/update.py
@@ -1018,16 +1018,20 @@ JS: sections/bank.html + js/bank.js（initBankSection；bankBusy 互斥防并发
 
 ```
 launcher: game_launch.prepare_mod()
-  → sound.replace_sound(mod_folder, steam_argv)（扫模组目录 .bank/.rebank 存在性，命中才起线程）
+  → sound.replace_sound(mod_folder, game_path)（扫模组目录 .bank/.rebank 存在性，命中才起线程）
     → sound.sound_replace_thread()
         → wait_for_validation()（删最小 .bank 等游戏校验回滚，超时恢复备份）
         → .bank 模组备份为 .bak 后拷贝进 FMODBuilds/Desktop
         → launcher/bankmod.py apply_rebanks(mod_folder)
-            → rebank_files_in 递归收集 .rebank；mod_digest（SHA-256 + 修改时间）
-            → 缓存 cache_path/bankmod/<digest>.bank 命中直接复用（prune_cache(20) 淘汰）
-            → 未命中：rebank.json base_bank 匹配游戏原版 bank
-              → webutils/bank/rebank.py patch_banks()（配置 ui_default.bank.{quality,threads}，
-                threads=0 → default_threads()=cpu/2）→ fmod.rebuild_bank（WAV→FSB vorbis）
+            → rebank_files_in 递归收集 .rebank；mod_digest（内容哈希：仅拼接
+              basename + 各文件 sha256，不含修改时间）
+            → 缓存 %LOCALAPPDATA%\LCTA\bank-cache/<digest>.bank 命中直接复用（prune_cache(20) 淘汰）
+            → 未命中：rebank.json base_bank 匹配游戏原版 bank（非法 base_bank 名——绝对路径或
+              .. 穿越——记入 skipped 跳过）
+              → launcher/bankmod._patch_into（bankmod 自建的提取/替换/重打包临时目录循环，
+                与 webutils/bank/rebank.py patch_banks 为平行实现；编码硬编码
+                vorbis/q92/default_threads()，不读 ui_default.bank.{quality,threads}——
+                该配置仅 rebank.patch_banks 读取）→ fmod.rebuild_bank（WAV→FSB vorbis）
               → 原子替换目标 bank
         → 游戏退出 → restore_sound()（.bak 还原）
 ```

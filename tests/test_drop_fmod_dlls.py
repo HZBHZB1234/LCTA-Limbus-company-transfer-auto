@@ -40,3 +40,22 @@ def test_execute(tmp_path, monkeypatch):
     assert writes == [("ui_default.bank.dll_dir", str(dest))]
     for dll in ("fmod64.dll", "fsbank64.dll", "libfsbvorbis64.dll"):
         assert (dest / dll).read_bytes() == b"dll"
+
+
+def test_rebank_detect_and_execute(tmp_path):
+    from webutils.drop.handlers.copy_mod import RebankHandler
+
+    h = RebankHandler()
+    assert h.detect("a.rebank") == "rebank"
+    assert h.detect("a.REBANK") == "rebank"
+    assert h.detect("a.bank") is None
+    assert REGISTRY.detect("path", "a.rebank") == "rebank"
+
+    mod_path = tmp_path / "mods"
+    mod_path.mkdir()
+    src = tmp_path / "mod.rebank"
+    src.write_bytes(b"rebankdata")
+    ctx = FileExecutionContext(file_path=str(src), file_type="rebank", modal_id="0",
+                               index=0, total=1, game_path="", mod_path=str(mod_path))
+    assert h.execute(ctx) == "modded"
+    assert (mod_path / "mod.rebank").read_bytes() == b"rebankdata"

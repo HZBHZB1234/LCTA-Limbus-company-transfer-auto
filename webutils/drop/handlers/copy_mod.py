@@ -41,6 +41,18 @@ class CarraHandler(CopyToModsBase):
         return None
 
 
+class RebankHandler(CopyToModsBase):
+    """音频补丁模组。"""
+
+    file_type = 'rebank'
+    label = '音频补丁模组'
+
+    def detect(self, item):
+        if isinstance(item, str) and os.path.splitext(item)[1].lower() == '.rebank':
+            return self.file_type
+        return None
+
+
 class BankHandler(CopyToModsBase):
     """音效模组。"""
 

@@ -85,13 +85,19 @@ def apply_rebanks(mod_root: str) -> dict:
 
     # 按目标 bank 分组（同 bank 的多个模组按文件名排序依次应用）
     by_target = {}
+    patched, skipped = [], []
     for rp in rebanks:
         base = _base_bank_of(rp) or (os.path.basename(rp)[:-len(_REBANK_EXT)] + ".bank")
+        # base_bank 来自 zip 内 rebank.json（潜在恶意），只允许纯文件名，
+        # 拒绝绝对路径 / .. 穿越，防止 os.path.join(sound_dir, base) 逃出音频目录
+        if not base or os.path.basename(base) != base or "/" in base or "\\" in base:
+            _log_manager.log("* 非法 base_bank 名称，跳过: %s" % base)
+            skipped.append((base, "非法 base_bank 名称，跳过"))
+            continue
         by_target.setdefault(base, []).append(rp)
     for base in by_target:
         by_target[base].sort()
 
-    patched, skipped = [], []
     cache_hit = cache_miss = 0
     for base, mods in sorted(by_target.items()):
         target = os.path.join(sound_dir, base)

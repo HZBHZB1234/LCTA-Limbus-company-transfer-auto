@@ -4,7 +4,7 @@
 - zip: fmod_dlls → full → nofont → FLmod → update → jsononly（update 必须优先于 jsononly）
 - folder: full → nofont → FLmod → jsononly
 - json: busimport → textFile → LCTAchange → FLchange
-- path: carra → bank → font
+- path: carra → rebank → bank → font
 """
 
 from ..handler import DropFileHandlerRegistry
@@ -12,6 +12,7 @@ from .translation import FullHandler, NoFontHandler
 from .archive_mod import FLModHandler, JsonOnlyHandler
 from .copy_mod import (
     CarraHandler,
+    RebankHandler,
     BankHandler,
     TextFileHandler,
     LCTAChangeHandler,
@@ -29,6 +30,7 @@ FLMOD = FLModHandler()
 JSONONLY = JsonOnlyHandler()
 UPDATE = UpdatePackageHandler()
 CARRA = CarraHandler()
+REBANK = RebankHandler()
 BANK = BankHandler()
 FONT = FontHandler()
 TEXT_FILE = TextFileHandler()
@@ -45,6 +47,7 @@ HANDLERS = [
     JSONONLY,
     UPDATE,
     CARRA,
+    REBANK,
     BANK,
     FONT,
     TEXT_FILE,
@@ -61,6 +64,6 @@ REGISTRY = DropFileHandlerRegistry(
         'zip': [FMOD_DLLS, FULL, NOFONT, FLMOD, UPDATE, JSONONLY],
         'folder': [FULL, NOFONT, FLMOD, JSONONLY],
         'json': [BUS_IMPORT, TEXT_FILE, LCTA_CHANGE, FL_CHANGE],
-        'path': [CARRA, BANK, FONT],
+        'path': [CARRA, REBANK, BANK, FONT],
     },
 )

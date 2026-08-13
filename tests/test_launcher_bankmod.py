@@ -140,6 +140,40 @@ def test_apply_rebanks_whole_bank_override_skips(tmp_path, monkeypatch):
     assert list(cache.iterdir()) == []
 
 
+def test_apply_rebanks_rejects_path_traversal_base_bank(tmp_path, monkeypatch):
+    """rebank.json 的 base_bank 含 .. 穿越/绝对路径时跳过，禁止逃出 sound_dir。"""
+    for name, base in (("evil1.rebank", "../evil"),
+                       ("evil2.rebank", "C:/evil.bank"),
+                       ("evil3.rebank", "/tmp/evil.bank")):
+        p = tmp_path / name
+        with zipfile.ZipFile(p, "w") as z:
+            z.writestr("rebank.json", json.dumps({"format": "rebank", "base_bank": base}))
+    sound_dir = tmp_path / "sound"
+    sound_dir.mkdir()
+    (sound_dir / "Weapon.bank").write_bytes(b"original")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+
+    calls = {"patch": 0}
+
+    def fake_patch_into(original_path, target_path, rebanks, log=None):
+        calls["patch"] += 1
+
+    monkeypatch.setattr(bankmod, "cache_dir", lambda: str(cache))
+    monkeypatch.setattr(bankmod, "_patch_into", fake_patch_into)
+    monkeypatch.setattr("launcher.sound.sound_folder", lambda: str(sound_dir))
+
+    r = bankmod.apply_rebanks(str(tmp_path))
+    assert calls["patch"] == 0
+    assert r["patched"] == []
+    assert len(r["skipped"]) == 3
+    assert all(msg == "非法 base_bank 名称，跳过" for _, msg in r["skipped"])
+    assert (sound_dir / "Weapon.bank").read_bytes() == b"original"
+    assert not (sound_dir / "evil.bank").exists()
+    assert not (tmp_path / "evil.bank").exists()
+    assert list(cache.iterdir()) == []
+
+
 def test_prune_cache(tmp_path, monkeypatch):
     cache = tmp_path / "cache"
     cache.mkdir()

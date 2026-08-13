@@ -79,7 +79,11 @@ def rebuild_bank(dlls: FmodDlls, bank_path: str, wav_dir: str, fsb_dir: str, bui
     if info is None:
         raise BankToolError("无法解析 bank 头部: %s" % os.path.basename(bank_path))
     base = bank_base(bank_path)
-    password = bank_password(bank_path, options.get("password"))
+    # 仅当 bank 确实加密时才派生密码：避免未加密 bank 旁偶存的 password.txt
+    # 把重打包产物误加密（游戏读不进去）
+    password = None
+    if bank_is_encrypted(bank_data, parse_bank(bank_data)):
+        password = bank_password(bank_path, options.get("password"))
 
     fsb_paths = []
     for j in range(info["fsb_count"]):

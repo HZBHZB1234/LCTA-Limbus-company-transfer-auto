@@ -17,6 +17,7 @@ FMOD_OPENONLY = 0x00002000
 FMOD_INIT_NORMAL = 0x00000000
 FMOD_TIMEUNIT_PCMBYTES = 0x00000004
 
+FSBANK_FSBVERSION_FSB5 = 0
 FSBANK_INIT_GENERATEPROGRESSITEMS = 0x00000010
 FSBANK_FORMAT_PCM = 0
 FSBANK_FORMAT_VORBIS = 5
@@ -292,8 +293,10 @@ class FmodDlls:
     def encode_wavs_to_fsb(self, wav_files, out_fsb, format_id, quality, threads, cache_dir,
                            encrypt_key=None, log=None) -> None:
         os.makedirs(cache_dir, exist_ok=True)
-        rc = self._fsbank.FSBank_Init(FSBANK_INIT_GENERATEPROGRESSITEMS, threads, 0,
-                                      cache_dir.encode("utf-8"))
+        # FSBANK 1.x 签名 (version, initFlags, numThreads, tempdir)，与 Fmod-Bank-Tools 的
+        # include/fsbank.h 一致（捆绑的 fsbank64.dll 即该版本），勿按 2.x 顺序改动
+        rc = self._fsbank.FSBank_Init(FSBANK_FSBVERSION_FSB5, FSBANK_INIT_GENERATEPROGRESSITEMS,
+                                      threads, cache_dir.encode("utf-8"))
         if rc != FMOD_OK:
             raise BankToolError(_make_error_text("FSBank_Init", rc))
         try:

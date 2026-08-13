@@ -1,5 +1,7 @@
 ## v5.0.3版本更新内容
-- 添加音频工具功能：FMOD bank 解包/重打包、.rebank 差分模组导出与转换、补丁预览生成完整 bank（新增「音频工具」页面，FMOD DLL 缺失时一键从 GitHub 自动下载）
+- Metadata 恢复页升级为 v2 全自动流水线（同步上游 metadata-recovery universal 管线）：不再需要 IDA、参考标准文件与反编译文本，只需 GameAssembly.dll + 加密的 global-metadata.dat 即可自动完成 定位→提取→验证→31 节映射求解→标准文件重建 五阶段，自动适配 08-13 新版布局（三元组字段序漂移 count_offset_size、分配调用强转形态）
+- Metadata 恢复页新增 capstone 环境检测与一键安装按钮（首次使用需装反汇编库），页面简化为三步流程：环境检查 → 输入文件（游戏目录自动推导）→ 运行与结果判读
+- Metadata 恢复产物改为：★ 标准重建文件 standard-rebuilt.dat（直接交给 Il2CppDumper）+ profile.json（含 31 节映射）+ run-report.json/md 分阶段报告
 - 启动器新增 .rebank 模组支持：只包含改动音频的差分包，启动时自动补丁（哈希缓存，未变更直接复用）
 - FMOD 工具 DLL 支持一键自动下载（官方 Fmod-Bank-Tools release，可在音频工具页配置自定义下载源覆盖）
 - 修复音频工具页 bank 扫描音频数显示异常：改为统计 FSB 内实际子音总数（分离式 bank 结构：事件 bank 显示无音频，.assets.bank 显示真实音频数）

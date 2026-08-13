@@ -866,50 +866,38 @@ Build path: `build.ps1` and `.github/workflows/release.yml` pin aria2 1.37.0, re
 
 Files: `resource_updater/core.py`, `resource_updater/service.py`, `resource_updater/web_api.py`, `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `webui/css/layout-extras.css`, `webui/app.py`, `webui/sections/launcher-config.html`, `launcher/main.py`, `config_default.json`, `config_check.json`, `build.ps1`, `.github/workflows/release.yml`
 
-## 17. Metadata 恢复（IL2CPP metadata 解密参数恢复，结构化流程）
+## 17. Metadata 恢复（IL2CPP metadata 解密恢复，v2 全自动管线）
 
 ```
 JS: user opens 侧边栏「Metadata 恢复」页（首次导航懒加载）
   -> webui/sections/preload.js        loadSection('metadata-recovery') -> onSectionLoaded
-  -> webui/js/metadata-recovery.js    MetadataRecoveryPage.init() 刷新插件/输出目录/游戏推导状态
+  -> webui/js/metadata-recovery.js    MetadataRecoveryPage.init() 刷新环境/输出目录/游戏推导状态
       (utils.js initNavigation 每次进入页面时再次 init)
 
-步骤 1-2（IDA 侧）：user clicks「安装定位器插件」
-  -> pywebview.api.metadata_recovery_install_ida_plugin(dir)
-  -> webui/app_api/metadata_recovery.py  MetadataRecoveryMixin
-  -> webutils/metadata_recovery/__init__.py  find_ida_plugins_dir()（注册表+常见路径）
-      install_ida_plugin() 写 <plugins>/metadata_locator_plugin.py（热键 Ctrl-Alt-Shift-M）
-      + <plugins>/metadata_recovery_tools/{locate_metadata_init,report}.py
-  IDA 内 Ctrl-Alt-Shift-M -> locator.py（插件/MCP 双入口）
-     单遍 .text 扫描 xorshift64(13,7,17) 指令 + 字符串引用 -> 候选池
-     -> 反编译级评分 -> <IDB>/locator_out/locate_candidates.json + decompile_rank*.c
-
-步骤 3（导入导出）：user picks 导出（locate_candidates.json 或目录）+ 候选 rank，clicks「载入导出」
-  -> pywebview.api.metadata_recovery_load_export(path, rank)
-  -> webui/app_api/metadata_recovery.py  转发 load_locator_export()
-  -> webutils/metadata_recovery/__init__.py  load_locator_export()
-      解析 verdict + 全候选（探测 decompile_rank{n}_{name}.c），按 rank 返回
-      table_hex + decompile_text/decompile_file
-  -> JS renderExport()：候选下拉 + 信息区（verdict/hex/文本就绪），自动回填 textarea/hex
-
-步骤 4（输入文件，自动推导）：JS refreshStatus() -> metadata_recovery_status()
+步骤 1（环境检查）：JS refreshStatus() -> metadata_recovery_status()
+  -> capstone_available() 探测；缺失时显示「一键安装 capstone」
+  -> pywebview.api.metadata_recovery_install_capstone(modal.id)
+  -> webui/app_api/metadata_recovery.py  -> webutils.metadata_recovery.install_capstone()
+      当前解释器 subprocess pip install capstone，逐行日志进模态窗口
   -> derive_game_files(ConfigManager().get('game_path')) 推导
      <游戏>/LimbusCompany_Data/il2cpp_data/Metadata/global-metadata.dat 与
-     <游戏>/GameAssembly.dll，输入框为空时自动回填；参考标准文件手动选择
+     <游戏>/GameAssembly.dll，输入框为空时自动回填（可手动覆盖）
 
-步骤 6（运行）：user clicks「开始完整恢复」-> ProgressModal
-  -> pywebview.api.metadata_recovery_run(config, modal.id)
+步骤 3（运行）：user clicks「开始恢复」-> ProgressModal
+  -> pywebview.api.metadata_recovery_run(config, modal.id)   config={metadata_path, game_dll, expect_sha256}
   -> webui/app_api/metadata_recovery.py  后台线程 + add_modal_log / check_modal_running（取消）
   -> webutils/metadata_recovery/pipeline.py  run_recovery()
-      阶段0 resolve_table_hex：导出已载入 hex；或反编译文本 byte_XXXX VA + read_rva_data(GameAssembly.dll)
-      阶段1 extractor.extract_from_text()（或加载既有 candidate_profile.json）
-      阶段2 verify.verify_profile()：header 解密 + 布局判定 + 节段结构门
-      阶段3 solver.solve()：C1 记录大小 / C5 内容指纹 / C3 链装配 / 相4 重建 SHA-256
-      阶段4 profile.build_profile()：正式 profile + 自检重建
-      阶段边界 + 各 _run_* 内重操作前后均有 cancel_check() 取消点；
-      取消 -> 返回 "已取消" + del_modal_list（modal_id 仅由前端注册，后端不再重复 add_modal_id）
-      每阶段 report.json/md 落盘 <path_>/metadata_recovery/run_<时间戳>/
-  -> 页面渲染 verdicts 徽标 + 输出文件列表
+      capstone 检查 -> universal.pipeline.run()（on_log/cancel_check 贯穿）
+      阶段1 locate   pe_loader.load_pe -> xorshift_scan.scan_pe 字节模板
+                    + init_locator.locate 反扫函数起点 + 特征评分（无 IDA）
+      阶段2 extract  extract_disasm.extract_from_disasm 指令级参数提取
+      阶段3 verify   verify_structural.verify 布局自动判定 + 节段结构门
+      阶段4 solve    solve_versioned.solve 锚点间隙链拼装（无参考文件）
+      阶段5 rebuild  rebuild_validate.rebuild_standard + validate_standard 四重自验证
+      -> 产物规范化：standard-rebuilt.dat + profile.json + run-report.json/md
+      （可选）期望 SHA-256 自检门 -> verdicts.expect_sha
+      阶段边界 cancel_check() 取消点；取消 -> 返回 "已取消" + del_modal_list
+  -> 页面渲染 verdicts 徽标（locate/extract/verify/solve/rebuild/expect_sha）+ 输出文件列表
 
 文件：webui/sections/metadata-recovery.html, webui/js/metadata-recovery.js,
       webui/app_api/metadata_recovery.py, webui/app.py, webutils/metadata_recovery/,

@@ -1058,6 +1058,6 @@ launcher: game_launch.prepare_mod()
 
 Files: `webui/sections/bank.html`, `webui/js/bank.js`, `webui/app_api/bank.py`,
       `webui/app.py`, `webutils/function_bank.py`, `webutils/bank/`（dlls/format/fmod/wav/rebank/errors）,
-      `launcher/sound.py`, `launcher/bankmod.py`, `webui/drop/`（工具.zip 拖入导入 DLL 已移除，A0）,
+      `launcher/sound.py`, `launcher/bankmod.py`,
       `config_default.json`（ui_default.bank.dll_dir / dll_url）, `tests/test_bank_rebank.py`,
       `tests/test_bank_fmod.py`, `tests/test_bank_dll_download.py`

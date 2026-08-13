@@ -60,7 +60,7 @@ from .function_steam_launcher import (
 from webutils.function_bank import (
     bank_dll_status, bank_set_dll_dir, bank_get_game_banks, bank_info,
     bank_extract, bank_rebuild, bank_export_rebank, bank_convert_mod,
-    bank_patch_full, bank_rebank_info,
+    bank_patch_full, bank_rebank_info, bank_download_dlls,
 )
 
 __all__ = [
@@ -139,4 +139,5 @@ __all__ = [
     'bank_convert_mod',
     'bank_patch_full',
     'bank_rebank_info',
+    'bank_download_dlls',
 ]

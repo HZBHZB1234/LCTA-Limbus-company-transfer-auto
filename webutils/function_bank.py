@@ -5,8 +5,11 @@ import os
 from globalManagers.ConfigManager import ConfigManager
 from globalManagers.LogManager import LogManager
 
+from webFunc import GithubDownload
+from webutils.utils.net import download_with, download_with_github
+
 from webutils.bank.dlls import (
-    FmodDlls, default_dll_candidates, find_dll_dir, missing_dlls,
+    FmodDlls, default_dll_candidates, default_download_dir, find_dll_dir, missing_dlls,
 )
 from webutils.bank.fmod import FORMAT_IDS, default_threads, extract_bank, rebuild_bank
 from webutils.bank.format import bank_base, bank_is_encrypted, parse_bank
@@ -33,6 +36,77 @@ def _err(message):
 
 def _dlls():
     return FmodDlls()  # 自动按 default_dll_candidates 定位
+
+
+DLL_NAMES = ("fmod64.dll", "fsbank64.dll", "libfsbvorbis64.dll")
+_REPO = ("Wouldubeinta", "Fmod-Bank-Tools")
+_ASSET = "Fmod_Bank_Tools.zip"
+
+
+def get_latest_release(owner, repo):
+    GithubDownload.GithubRequester.update_config(ConfigManager().get("update_use_proxy", True))
+    return GithubDownload.GithubRequester.get_latest_release(owner, repo)
+
+
+def _extract_dlls_from_zip(zip_path: str, dest: str) -> list:
+    import zipfile
+    missing = []
+    with zipfile.ZipFile(zip_path) as z:
+        names = set(z.namelist())
+        for dll in DLL_NAMES:
+            if dll not in names:
+                missing.append(dll)
+    if missing:
+        raise BankToolError("下载的包缺少 DLL: %s（官方资产结构可能已变化）" % ", ".join(missing))
+    os.makedirs(dest, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as z:
+        for dll in DLL_NAMES:
+            with open(os.path.join(dest, dll), "wb") as fh:
+                fh.write(z.read(dll))
+    return list(DLL_NAMES)
+
+
+def bank_download_dlls(force: bool = False):
+    """自动下载 FMOD/FSBANK DLL：默认官方 GitHub release，dll_url 可覆盖。"""
+    tmp_zip = None
+    try:
+        target = ConfigManager().get("ui_default.bank.dll_dir", "") or None
+        if not force and not missing_dlls(target or None):
+            return _ok(message="DLL 已就绪，无需下载", dir=target, source="already_present")
+        dest = target if (target and not missing_dlls(target)) else default_download_dir()
+        import tempfile
+        fd, tmp_zip = tempfile.mkstemp(suffix=".zip", prefix="fmod_dlls_")
+        os.close(fd)
+
+        url = (ConfigManager().get("ui_default.bank.dll_url", "") or "").strip()
+        source = "configured_url" if url else "github_release"
+        if url:
+            ok = download_with(url, tmp_zip)
+            if not ok:
+                return _err("下载失败: %s" % url)
+        else:
+            release = get_latest_release(*_REPO)
+            if release is None:
+                return _err("无法获取 Fmod-Bank-Tools 最新 release（网络或代理问题）")
+            asset = release.get_asset_by_name(_ASSET)
+            if asset is None:
+                return _err("官方 release 缺少资产 %s" % _ASSET)
+            ok = download_with_github(asset, tmp_zip)
+            if not ok:
+                return _err("下载 %s 失败（已尝试全部代理）" % _ASSET)
+
+        _extract_dlls_from_zip(tmp_zip, dest)
+        ConfigManager().set("ui_default.bank.dll_dir", dest)
+        _log_manager.log("FMOD 工具 DLL 已下载并安装: %s（%s）" % (dest, source))
+        return _ok(message="FMOD 工具 DLL 已就绪", dir=dest, source=source)
+    except Exception as e:
+        return _err(e)
+    finally:
+        if tmp_zip and os.path.isfile(tmp_zip):
+            try:
+                os.remove(tmp_zip)
+            except OSError:
+                pass
 
 
 # -- DLL ------------------------------------------------------------

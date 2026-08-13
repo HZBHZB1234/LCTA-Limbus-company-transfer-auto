@@ -105,6 +105,11 @@ def find_dll_dir(candidates: Sequence[str]) -> Optional[str]:
     return None
 
 
+def default_download_dir() -> str:
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(base, "LCTA", "fmod-dlls")
+
+
 def default_dll_candidates() -> List[str]:
     cands = []
     cfg_dir = ConfigManager().get("ui_default.bank.dll_dir", "")
@@ -113,6 +118,7 @@ def default_dll_candidates() -> List[str]:
     env_dir = os.environ.get("LCTA_FMOD_DLL_DIR", "")
     if env_dir:
         cands.append(env_dir)
+    cands.append(default_download_dir())
     app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 仓库根
     cands.append(app_root)
     cands.append(os.path.join(app_root, "tools", "fmod"))

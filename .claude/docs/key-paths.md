@@ -1000,6 +1000,25 @@ Files: `webui/sections/cg.html`, `webui/js/cg.js`, `webui/app_api/cg.py`,
 
 ## 20. 音频工具 / fsb 补丁模组（.rebank）
 
+DLL 一键自动下载（DLL 缺失时的兜底路径）:
+
+```
+JS: sections/bank.html + js/bank.js（Task B 接入，当前后端就绪）
+  → pywebview.api.bank_download_dlls(force=False)
+  → webui/app_api/bank.py（BankMixin 转发）
+  → webutils/function_bank.py bank_download_dlls()
+      已就绪（!force 且 missing_dlls 为空）→ source="already_present" 直接返回
+      ui_default.bank.dll_url 配置 → download_with(url, tmp_zip)（source="configured_url"）
+      否则官方 release → get_latest_release(*_REPO)（包装 GithubDownload.GithubRequester：
+        先 update_config(ConfigManager().get("update_use_proxy", True)) 同步代理，
+        GithubRequester 为惰性单例，启动期 webui/app_api/core.py init_request() 初始化）
+        → release.get_asset_by_name("Fmod_Bank_Tools.zip")
+        → download_with_github(asset, tmp_zip)（代理轮换 + modal 进度）
+      → _extract_dlls_from_zip（校验 3 个 DLL 齐全，缺则抛 BankToolError 并清理半成品）
+      → 解压到 default_download_dir()（%LOCALAPPDATA%/LCTA/fmod-dlls）→ 写回 ui_default.bank.dll_dir
+      返回 {success, message, dir, source}（source ∈ configured_url | github_release | already_present）
+```
+
 音频工具页导出 .rebank 差分包（只含改动的 wav，rebank.json 记录 base_bank/format 等元信息）:
 
 ```
@@ -1010,7 +1029,8 @@ JS: sections/bank.html + js/bank.js（initBankSection；bankBusy 互斥防并发
   → webutils/bank/rebank.py build_rebank()
       → fmod.extract_bank(FmodDlls, 原版 bank) 与 (模组版 bank) 各一次（FSB→WAV 解码）
         → dlls.py FmodDlls（FMOD/FSBANK ctypes 封装；DLL 定位 default_dll_candidates():
-          配置 ui_default.bank.dll_dir → 环境变量 LCTA_FMOD_DLL_DIR → 仓库根 → tools/fmod → cwd）
+          配置 ui_default.bank.dll_dir → 环境变量 LCTA_FMOD_DLL_DIR → default_download_dir()
+          → 仓库根 → tools/fmod → cwd）
       → 时长对比（wav_duration_file 3 位小数）→ modified/added → make_rebank() 打包 .rebank
 ```
 
@@ -1038,5 +1058,6 @@ launcher: game_launch.prepare_mod()
 
 Files: `webui/sections/bank.html`, `webui/js/bank.js`, `webui/app_api/bank.py`,
       `webui/app.py`, `webutils/function_bank.py`, `webutils/bank/`（dlls/format/fmod/wav/rebank/errors）,
-      `launcher/sound.py`, `launcher/bankmod.py`, `webui/drop/`（工具.zip 拖入导入 DLL）,
-      `config_default.json`（ui_default.bank）, `tests/test_bank_rebank.py`, `tests/test_bank_fmod.py`
+      `launcher/sound.py`, `launcher/bankmod.py`, `webui/drop/`（工具.zip 拖入导入 DLL 已移除，A0）,
+      `config_default.json`（ui_default.bank.dll_dir / dll_url）, `tests/test_bank_rebank.py`,
+      `tests/test_bank_fmod.py`, `tests/test_bank_dll_download.py`

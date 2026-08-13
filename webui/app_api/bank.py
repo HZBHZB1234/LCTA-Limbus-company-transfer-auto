@@ -3,7 +3,7 @@
 from webutils import (
     bank_dll_status, bank_set_dll_dir, bank_get_game_banks, bank_info,
     bank_extract, bank_rebuild, bank_export_rebank, bank_convert_mod,
-    bank_patch_full, bank_rebank_info,
+    bank_patch_full, bank_rebank_info, bank_download_dlls,
 )
 
 
@@ -40,3 +40,6 @@ class BankMixin:
 
     def bank_rebank_info(self, path):
         return bank_rebank_info(path)
+
+    def bank_download_dlls(self, force=False):
+        return bank_download_dlls(force)

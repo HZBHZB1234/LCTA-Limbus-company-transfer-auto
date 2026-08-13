@@ -316,6 +316,7 @@ class ConfigManager {
 
             // GUI进度窗口
             'launcher-work-gui-mode': 'launcher.work.gui_mode',
+            'launcher-work-crash-popup': 'launcher.work.crash_popup',
             // 游戏官方资源预下载（仅开关，详细配置在游戏资源更新页面）
             'launcher-resource-update-enabled': 'launcher.resource_update.enabled',
 

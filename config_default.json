@@ -116,6 +116,7 @@
             "speed": false,
             "speed_factor": "2.0",
             "gui_mode": true,
+            "crash_popup": true,
             "input_bypass": false,
             "input_bypass_mode": "manual",
             "input_bypass_mouse_real": "200",

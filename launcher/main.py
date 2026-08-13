@@ -370,6 +370,20 @@ def main():
         except Exception:
             pass
 
+    if (
+        progress is not None
+        and progress.is_alive()
+        and ConfigManager().get("launcher.work.crash_popup", True)
+    ):
+        try:
+            from launcher.crash_export import is_abnormal_exit
+            if is_abnormal_exit(
+                exit_code, game_process, pipeline.cancel_event
+            ):
+                progress.prompt_crash_export(exit_code)
+        except Exception as e:
+            _log_manager.log_error(e)
+
     _close_progress_window(progress, game_process, exit_code, pipeline.cancel_event)
 
 

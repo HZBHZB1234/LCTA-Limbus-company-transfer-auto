@@ -43,6 +43,15 @@
             <small class="form-hint">在Launcher模式下显示图形化进度窗口，展示启动过程中的状态和日志信息</small>
         </div>
 
+        <div class="form-group">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-crash-popup">
+                <span class="checkmark"></span>
+                游戏异常退出时提示导出日志
+            </label>
+            <small class="form-hint">游戏进程非正常退出（退出码非0）时弹窗提示，可一键导出 Player.log 与崩溃报告到下载文件夹</small>
+        </div>
+
         <div class="form-group" id="steam-command">
             <label for="steam-command">steam命令</label>
             <div class="steam-command-group" style="display: flex; align-items: center; gap: 8px;">

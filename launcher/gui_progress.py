@@ -21,12 +21,15 @@ from System.Windows.Forms import (
 )
 
 from globalManagers.ConfigManager import ConfigManager
+from globalManagers.LogManager import LogManager
 from launcher.pipeline import (
     PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN,
     PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
 )
 
 _window: Optional["LauncherProgressWindow"] = None
+
+_log_manager = LogManager()
 
 _PHASE_LABELS = {
     PHASE_INIT: "初始化",
@@ -728,6 +731,131 @@ class LauncherProgressWindow:
                 self._action_btn.BackColor = _COLOR_CARD_ALT
 
         self._safe_invoke(_do)
+
+    def prompt_crash_export(self, exit_code: int) -> None:
+        """游戏异常退出时弹窗询问是否导出日志（同步阻塞直到用户响应）。
+
+        在主线程调用；经 form.Invoke 切到 GUI 线程以模态对话框呈现，
+        保证弹窗在进程退出前完成交互（GUI 线程为后台线程，main() 返回即进程结束）。
+        """
+        if self._form is None or self._form.IsDisposed or not self._form.IsHandleCreated:
+            return
+        try:
+            self._form.Invoke(
+                WinForms.MethodInvoker(lambda: self._run_crash_export_dialog(exit_code))
+            )
+        except Exception as e:
+            _log_manager.log(f"显示游戏异常退出弹窗失败: {e}")
+
+    def _run_crash_export_dialog(self, exit_code: int) -> None:
+        try:
+            dlg = self._build_crash_export_dialog(exit_code)
+            dlg.ShowDialog(self._form)
+            dlg.Dispose()
+        except Exception as e:
+            _log_manager.log(f"显示游戏异常退出弹窗失败: {e}")
+
+    def _build_crash_export_dialog(self, exit_code: int):
+        dlg = WinForms.Form()
+        dlg.Text = "游戏异常退出"
+        dlg.FormBorderStyle = WinForms.FormBorderStyle.FixedDialog
+        dlg.StartPosition = WinForms.FormStartPosition.CenterParent
+        dlg.Size = Size(440, 208)
+        dlg.MaximizeBox = False
+        dlg.MinimizeBox = False
+        dlg.ShowInTaskbar = False
+        dlg.BackColor = _COLOR_BG_FORM
+        dlg.Font = Font("Microsoft YaHei UI", 9)
+        dlg.AutoScaleMode = WinForms.AutoScaleMode.Dpi
+
+        title = WinForms.Label()
+        title.Text = "游戏异常退出"
+        title.Location = Point(20, 14)
+        title.Size = Size(400, 26)
+        title.Font = Font("Microsoft YaHei UI", 13, FontStyle.Bold)
+        title.ForeColor = Color.FromArgb(239, 83, 80)
+        dlg.Controls.Add(title)
+
+        desc = WinForms.Label()
+        desc.Text = (
+            f"游戏进程非正常退出（退出码: {exit_code}）。\n"
+            "可导出游戏日志与崩溃报告，便于排查问题。"
+        )
+        desc.Location = Point(20, 50)
+        desc.Size = Size(400, 44)
+        desc.Font = Font("Microsoft YaHei UI", 9)
+        desc.ForeColor = _COLOR_FG_LIGHT
+        dlg.Controls.Add(desc)
+
+        hint = WinForms.Label()
+        hint.Text = "导出内容：Player.log、Player-prev.log 及崩溃报告（如有）"
+        hint.Location = Point(20, 96)
+        hint.Size = Size(400, 20)
+        hint.Font = Font("Microsoft YaHei UI", 8)
+        hint.ForeColor = _COLOR_FG_MUTED
+        dlg.Controls.Add(hint)
+
+        export_btn = WinForms.Button()
+        export_btn.Text = "导出日志"
+        export_btn.Location = Point(130, 132)
+        export_btn.Size = Size(120, 36)
+        export_btn.FlatStyle = FlatStyle.Flat
+        export_btn.BackColor = Color.FromArgb(56, 94, 128)
+        export_btn.ForeColor = Color.White
+        export_btn.Font = Font("Microsoft YaHei UI", 9, FontStyle.Bold)
+        export_btn.FlatAppearance.BorderSize = 0
+        export_btn.add_Click(EventHandler(lambda s, e: self._on_crash_export_click(dlg)))
+        dlg.Controls.Add(export_btn)
+        dlg.AcceptButton = export_btn
+
+        ignore_btn = WinForms.Button()
+        ignore_btn.Text = "忽略"
+        ignore_btn.Location = Point(268, 132)
+        ignore_btn.Size = Size(90, 36)
+        ignore_btn.FlatStyle = FlatStyle.Flat
+        ignore_btn.BackColor = _COLOR_CARD_ALT
+        ignore_btn.ForeColor = _COLOR_FG_LIGHT
+        ignore_btn.Font = Font("Microsoft YaHei UI", 9)
+        ignore_btn.FlatAppearance.BorderColor = _COLOR_BORDER
+        ignore_btn.FlatAppearance.BorderSize = 1
+        ignore_btn.add_Click(EventHandler(lambda s, e: dlg.Close()))
+        dlg.Controls.Add(ignore_btn)
+        dlg.CancelButton = ignore_btn
+
+        return dlg
+
+    def _on_crash_export_click(self, dlg) -> None:
+        dlg.Cursor = WinForms.Cursors.WaitCursor
+        try:
+            from launcher.crash_export import export_game_logs
+            result = export_game_logs()
+            if result:
+                WinForms.MessageBox.Show(
+                    dlg,
+                    f"日志已导出到：\n{result}\n\n已自动打开所在文件夹。",
+                    "导出完成",
+                    WinForms.MessageBoxButtons.OK,
+                    WinForms.MessageBoxIcon.Information,
+                )
+                dlg.Close()
+            else:
+                WinForms.MessageBox.Show(
+                    dlg,
+                    "导出失败：未找到可导出的日志文件，或打包过程中发生错误（详情见 Launcher 日志）。",
+                    "导出失败",
+                    WinForms.MessageBoxButtons.OK,
+                    WinForms.MessageBoxIcon.Warning,
+                )
+        except Exception as e:
+            WinForms.MessageBox.Show(
+                dlg,
+                f"导出日志失败：{e}",
+                "导出失败",
+                WinForms.MessageBoxButtons.OK,
+                WinForms.MessageBoxIcon.Error,
+            )
+        finally:
+            dlg.Cursor = WinForms.Cursors.Default
 
     def _start_uptime_timer(self):
         try:

@@ -1003,19 +1003,21 @@ Files: `webui/sections/cg.html`, `webui/js/cg.js`, `webui/app_api/cg.py`,
 DLL 一键自动下载（DLL 缺失时的兜底路径）:
 
 ```
-JS: sections/bank.html + js/bank.js（Task B 接入，当前后端就绪）
+JS: sections/bank.html + js/bank.js（前端已接入）
   → pywebview.api.bank_download_dlls(force=False)
   → webui/app_api/bank.py（BankMixin 转发）
   → webutils/function_bank.py bank_download_dlls()
-      已就绪（!force 且 missing_dlls 为空）→ source="already_present" 直接返回
+      已就绪（!force 且 find_dll_dir(default_dll_candidates()) 命中，source="already_present"）直接返回
       ui_default.bank.dll_url 配置 → download_with(url, tmp_zip)（source="configured_url"）
       否则官方 release → get_latest_release(*_REPO)（包装 GithubDownload.GithubRequester：
         先 update_config(ConfigManager().get("update_use_proxy", True)) 同步代理，
         GithubRequester 为惰性单例，启动期 webui/app_api/core.py init_request() 初始化）
         → release.get_asset_by_name("Fmod_Bank_Tools.zip")
         → download_with_github(asset, tmp_zip)（代理轮换 + modal 进度）
-      → _extract_dlls_from_zip（校验 3 个 DLL 齐全，缺则抛 BankToolError 并清理半成品）
-      → 解压到 default_download_dir()（%LOCALAPPDATA%/LCTA/fmod-dlls）→ 写回 ui_default.bank.dll_dir
+      → _extract_dlls_from_zip（校验 3 个 DLL 齐全，缺则抛 BankToolError 并清理半成品；
+         写入中途失败时逐个删除已写文件防残留）
+      → dest = 配置目录 ui_default.bank.dll_dir（补缺/force 覆盖场景优先）或
+        default_download_dir()（%LOCALAPPDATA%/LCTA/fmod-dlls）→ 写回 ui_default.bank.dll_dir
       返回 {success, message, dir, source}（source ∈ configured_url | github_release | already_present）
 ```
 

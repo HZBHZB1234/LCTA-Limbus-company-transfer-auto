@@ -14,13 +14,20 @@ def _dll_zip(tmp_path, names=("fmod64.dll", "fsbank64.dll", "libfsbvorbis64.dll"
     return str(p)
 
 
+class _FakeRelease:
+    def get_asset_by_name(self, name):
+        return object()
+
+
 def _no_dlls(monkeypatch, tmp_path):
     fake = tmp_path / "empty"
     fake.mkdir()
     monkeypatch.setattr(fb, "missing_dlls", lambda d: ["fmod64.dll", "fsbank64.dll", "libfsbvorbis64.dll"])
     monkeypatch.setattr(fb, "default_download_dir", lambda: str(fake))
-    monkeypatch.setattr(fb.ConfigManager, "set", lambda self, k, v: None)
-    return fake
+    set_calls = []
+    monkeypatch.setattr(fb.ConfigManager, "set",
+                        lambda self, k, v: set_calls.append((k, v)))
+    return fake, set_calls
 
 
 def test_already_present_skips_download(monkeypatch, tmp_path):
@@ -34,7 +41,7 @@ def test_already_present_skips_download(monkeypatch, tmp_path):
 
 
 def test_download_from_github_release(monkeypatch, tmp_path):
-    dest = _no_dlls(monkeypatch, tmp_path)
+    dest, set_calls = _no_dlls(monkeypatch, tmp_path)
     zip_path = _dll_zip(tmp_path)
 
     class FakeAsset:
@@ -60,10 +67,34 @@ def test_download_from_github_release(monkeypatch, tmp_path):
     for n in ("fmod64.dll", "fsbank64.dll", "libfsbvorbis64.dll"):
         assert (dest / n).read_bytes() == b"dll-content"
     assert r["dir"] == str(dest)
+    assert ("ui_default.bank.dll_dir", str(dest)) in set_calls
+
+
+def test_force_redownloads_into_configured_dir(monkeypatch, tmp_path):
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    for n in ("fmod64.dll", "fsbank64.dll", "libfsbvorbis64.dll"):
+        (cfg_dir / n).write_bytes(b"old-content")
+    set_calls = []
+    monkeypatch.setattr(fb.ConfigManager, "get",
+                        lambda self, k, d=None: str(cfg_dir) if k == "ui_default.bank.dll_dir" else d)
+    monkeypatch.setattr(fb.ConfigManager, "set",
+                        lambda self, k, v: set_calls.append((k, v)))
+    zip_path = _dll_zip(tmp_path)
+    monkeypatch.setattr(fb, "get_latest_release", lambda *a: _FakeRelease())
+    monkeypatch.setattr(fb, "download_with_github",
+                        lambda asset, save_path, **k: (open(save_path, "wb").write(open(zip_path, "rb").read()) or True))
+    r = fb.bank_download_dlls(force=True)
+    assert r["success"] is True
+    assert r["source"] == "github_release"
+    assert r["dir"] == str(cfg_dir)
+    for n in ("fmod64.dll", "fsbank64.dll", "libfsbvorbis64.dll"):
+        assert (cfg_dir / n).read_bytes() == b"dll-content"
+    assert ("ui_default.bank.dll_dir", str(cfg_dir)) in set_calls
 
 
 def test_configured_url_takes_priority(monkeypatch, tmp_path):
-    dest = _no_dlls(monkeypatch, tmp_path)
+    dest, _ = _no_dlls(monkeypatch, tmp_path)
     zip_path = _dll_zip(tmp_path)
     monkeypatch.setattr(fb.ConfigManager, "get",
                         lambda self, k, d=None: "https://example.com/fmod.zip" if k == "ui_default.bank.dll_url" else d)
@@ -75,7 +106,7 @@ def test_configured_url_takes_priority(monkeypatch, tmp_path):
 
 
 def test_zip_missing_dll_fails_and_cleans(monkeypatch, tmp_path):
-    dest = _no_dlls(monkeypatch, tmp_path)
+    dest, _ = _no_dlls(monkeypatch, tmp_path)
     zip_path = _dll_zip(tmp_path, names=("fmod64.dll", "fsbank64.dll"))
 
     class FakeRelease:
@@ -89,3 +120,23 @@ def test_zip_missing_dll_fails_and_cleans(monkeypatch, tmp_path):
     assert r["success"] is False
     assert "libfsbvorbis64.dll" in r["message"]
     assert list(dest.iterdir()) == []  # 半成品已清理
+
+
+def test_mid_extract_failure_cleans_partial_dlls(monkeypatch, tmp_path):
+    dest, _ = _no_dlls(monkeypatch, tmp_path)
+    zip_path = _dll_zip(tmp_path)
+    real_read = zipfile.ZipFile.read
+
+    def failing_read(self, name, *args, **kwargs):
+        if name == "fsbank64.dll":
+            raise zipfile.BadZipFile("crc mismatch")
+        return real_read(self, name, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, "read", failing_read)
+    monkeypatch.setattr(fb, "get_latest_release", lambda *a: _FakeRelease())
+    monkeypatch.setattr(fb, "download_with_github",
+                        lambda asset, save_path, **k: (open(save_path, "wb").write(open(zip_path, "rb").read()) or True))
+    r = fb.bank_download_dlls()
+    assert r["success"] is False
+    assert "crc mismatch" in r["message"]
+    assert list(dest.iterdir()) == []  # 已写入的 fmod64.dll 也被清理

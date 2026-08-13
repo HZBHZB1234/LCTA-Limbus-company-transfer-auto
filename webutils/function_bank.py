@@ -59,10 +59,21 @@ def _extract_dlls_from_zip(zip_path: str, dest: str) -> list:
     if missing:
         raise BankToolError("下载的包缺少 DLL: %s（官方资产结构可能已变化）" % ", ".join(missing))
     os.makedirs(dest, exist_ok=True)
-    with zipfile.ZipFile(zip_path) as z:
-        for dll in DLL_NAMES:
-            with open(os.path.join(dest, dll), "wb") as fh:
-                fh.write(z.read(dll))
+    written = []
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            for dll in DLL_NAMES:
+                path = os.path.join(dest, dll)
+                written.append(path)
+                with open(path, "wb") as fh:
+                    fh.write(z.read(dll))
+    except Exception:
+        for p in written:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        raise
     return list(DLL_NAMES)
 
 
@@ -71,9 +82,10 @@ def bank_download_dlls(force: bool = False):
     tmp_zip = None
     try:
         target = ConfigManager().get("ui_default.bank.dll_dir", "") or None
-        if not force and not missing_dlls(target or None):
-            return _ok(message="DLL 已就绪，无需下载", dir=target, source="already_present")
-        dest = target if (target and not missing_dlls(target)) else default_download_dir()
+        present_dir = find_dll_dir(default_dll_candidates())
+        if not force and not missing_dlls(present_dir):
+            return _ok(message="DLL 已就绪，无需下载", dir=present_dir, source="already_present")
+        dest = target or default_download_dir()
         import tempfile
         fd, tmp_zip = tempfile.mkstemp(suffix=".zip", prefix="fmod_dlls_")
         os.close(fd)
@@ -83,7 +95,7 @@ def bank_download_dlls(force: bool = False):
         if url:
             ok = download_with(url, tmp_zip)
             if not ok:
-                return _err("下载失败: %s" % url)
+                return _err("下载失败（请检查下载源 URL）")
         else:
             release = get_latest_release(*_REPO)
             if release is None:

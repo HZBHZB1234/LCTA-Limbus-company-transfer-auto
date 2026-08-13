@@ -2,7 +2,7 @@
 - 添加音频工具功能：FMOD bank 解包/重打包、.rebank 差分模组导出与转换、补丁预览生成完整 bank（新增「音频工具」页面，FMOD DLL 缺失时一键从 GitHub 自动下载）
 - 新增音频工具页：FMOD bank 解包/重打包、fsb 补丁模组（.rebank）导出与转换
 - 启动器新增 .rebank 模组支持：只包含改动音频的差分包，启动时自动补丁（哈希缓存，未变更直接复用）
-- FMOD 工具 DLL 支持一键自动下载（官方 Fmod-Bank-Tools release，可在设置中配置自定义下载源覆盖）
+- FMOD 工具 DLL 支持一键自动下载（官方 Fmod-Bank-Tools release，可在音频工具页配置自定义下载源覆盖）
 
 ## v5.0.2版本更新内容
 - 添加cg自定义功能

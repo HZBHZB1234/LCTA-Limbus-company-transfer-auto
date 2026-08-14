@@ -74,6 +74,15 @@
             "min_length": "0",
             "output_type": "json"
         },
+        "llm_fancy": {
+            "rules": "{\"name\": \"LLM 文本美化\", \"files\": [\"*.json\"], \"rules\": []}",
+            "exclusions": "[]",
+            "prompt": "",
+            "prompt_enabled": false,
+            "max_length": "20000",
+            "max_workers": "4",
+            "dedup_enabled": true
+        },
         "aria2_dl": {
             "save_dir": "",
             "jobs": 8,

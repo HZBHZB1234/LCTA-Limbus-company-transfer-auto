@@ -218,6 +218,13 @@ def start_webui():
             print('clr导入成功，使用netfx')
         except Exception as e:
             print(f'clr导入失败: {e}')
+            # ensure_clr 的异常已包含真实异常、PowerShell 反射探针输出与修复指引，
+            # 完整落盘 logs/app.log（与 Launcher GUI 模式行为一致），
+            # 避免控制台隐藏/未捕获时日志里只剩 webview 层的无信息量报错。
+            _log = Path(os.getcwd()) / 'logs' / 'app.log'
+            _log.parent.mkdir(exist_ok=True)
+            with open(_log, '+a' if _log.exists() else '+w', encoding='utf-8') as f:
+                f.write(f"clr 初始化失败: {e}\n")
         
         from webui.app import main
         print("正在启动LCTA WebUI...")

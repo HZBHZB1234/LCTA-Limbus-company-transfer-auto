@@ -78,13 +78,14 @@ function initNavigation() {
                         return;
                     }
 
-                    if (sectionId === 'elder-section' && typeof quickStartManager !== 'undefined') {
-                        quickStartManager.initPage();
-                    }
-
                     section.classList.add('active');
                     AnimationManager.fadeIn(section, 150);
-                    
+
+                    // 首页（侧边栏直达）时刷新状态总览与快捷入口
+                    if (sectionId === 'dashboard-section' && typeof refreshDashboard === 'function') {
+                        refreshDashboard();
+                    }
+
                     if (sectionId === 'install-section') {
                         refreshInstallPackageList();
                     }

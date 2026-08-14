@@ -229,7 +229,11 @@ function deleteSelectedPackage() {
                     if (result.success) {
                         // 从管理器中移除该项，自动更新列表并清空选中状态
                         packageItemManager.removeItem(packageName);
-                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
+                        if (typeof showToast === 'function') {
+                            showToast(`汉化包 "${packageName}" 已删除`, 'success');
+                        } else {
+                            showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
+                        }
                     } else {
                         showMessage('删除失败', `删除汉化包失败: ${result.message}`);
                     }
@@ -557,7 +561,11 @@ function deleteInstalledPackage() {
                     if (result.success) {
                         // 从管理器中移除该项，自动更新列表并清空选中状态
                         installedPackageItemManager.removeItem(packageName);
-                        showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
+                        if (typeof showToast === 'function') {
+                            showToast(`汉化包 "${packageName}" 已删除`, 'success');
+                        } else {
+                            showMessage('删除成功', `汉化包 "${packageName}" 已被删除`);
+                        }
                     } else {
                         showMessage('删除失败', `删除汉化包失败: ${result.message}`);
                     }

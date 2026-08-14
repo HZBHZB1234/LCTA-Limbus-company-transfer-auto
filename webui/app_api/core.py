@@ -172,6 +172,7 @@ class CoreMixin:
             'config_ok': config_ok,
             'config_error': getattr(self, 'config_error', []) if not config_ok else [],
             'config': config,
+            'version': os.environ.get('__version__', ''),
         }
 
     def get_attr(self, attr_name):

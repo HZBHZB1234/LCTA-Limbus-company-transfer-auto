@@ -31,9 +31,6 @@
     transform: translateY(0);
 }
 
-/* ============================================
-   快速上手引导 — 响应式适配
-   ============================================ */
 @media (max-width: 768px) {
     .question-container .about-card {
         padding: var(--spacing-md);
@@ -45,54 +42,6 @@
 
     .question-container .about-card h2 {
         font-size: 18px;
-    }
-
-    .quick-start-stage {
-        padding: 22px;
-    }
-
-    .quick-start-goal-grid,
-    .quick-start-explain-grid,
-    .quick-start-destination-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-@media (max-width: 600px) {
-    .elder-feature-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .elder-path-input {
-        flex-direction: column;
-    }
-
-    .quick-start-progress-item {
-        flex-direction: column;
-        gap: 5px;
-        padding: 12px 6px;
-        font-size: 11px;
-    }
-
-    .quick-start-stage {
-        padding: 18px;
-    }
-
-    .quick-start-heading h3 {
-        font-size: 20px;
-    }
-
-    .quick-start-path-row,
-    .quick-start-actions,
-    .quick-start-actions > div {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .quick-start-actions .action-btn,
-    .quick-start-actions .primary-btn {
-        width: 100%;
-        justify-content: center;
     }
 }
 

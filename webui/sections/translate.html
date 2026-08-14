@@ -25,7 +25,7 @@
             <label class="checkbox-container">
                 <input type="checkbox" id="llm-options-toggle" onchange="toggleLLMOptions()" checked>
                 <span class="checkmark"></span>
-                LLM 专属选项（使用在线翻译服务时无需设置）
+                显示 LLM 翻译选项（使用免费在线翻译服务时无需设置）
             </label>
         </div>
 
@@ -79,7 +79,7 @@
                 <label class="checkbox-container">
                     <input type="checkbox" id="fallback" checked>
                     <span class="checkmark"></span>
-                    失败时进行相反重试
+                    解析失败时自动切换格式重试
                 </label>
             </div>
         </div>
@@ -150,7 +150,7 @@
             <label class="checkbox-container">
                 <input type="checkbox" id="dump-translation">
                 <span class="checkmark"></span>
-                转储过程内容以供分析
+                记录翻译过程详情（诊断用）
             </label>
         </div>
     </div>

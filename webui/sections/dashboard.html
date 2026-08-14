@@ -6,44 +6,67 @@
     <p class="section-subtitle">LCTA 工具箱状态总览</p>
 </div>
 
+<div class="dashboard-quick-actions">
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('download')">
+        <i class="fas fa-cloud-download-alt"></i>
+        <span><strong>下载汉化包</strong><small>LLC / LCTA-AU / OurPlay / 调爪</small></span>
+    </button>
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('install')">
+        <i class="fas fa-download"></i>
+        <span><strong>安装已有汉化</strong><small>安装本地或已下载的汉化包</small></span>
+    </button>
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('config')">
+        <i class="fas fa-cog"></i>
+        <span><strong>配置翻译 API</strong><small>配置翻译服务与密钥</small></span>
+    </button>
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('launcher-config')">
+        <i class="fas fa-rocket"></i>
+        <span><strong>Launcher 配置</strong><small>自动更新、MOD、集成开关</small></span>
+    </button>
+</div>
+
 <div class="dashboard-grid">
-    <div class="dashboard-card status-card" id="dash-translation-status">
+    <div class="dashboard-card status-card clickable" id="dash-translation-status" title="点击前往「安装已有汉化」" onclick="goAndShow('install')">
         <div class="dash-card-icon">
             <i class="fas fa-language"></i>
         </div>
         <div class="dash-card-content">
             <div class="dash-card-label">汉化包状态</div>
             <div class="dash-card-value" id="dash-package-value">检测中...</div>
+            <div class="dash-card-go"><i class="fas fa-arrow-right"></i> 前往安装页</div>
         </div>
     </div>
 
-    <div class="dashboard-card status-card" id="dash-launcher-status">
+    <div class="dashboard-card status-card clickable" id="dash-launcher-status" title="点击前往「Launcher配置」" onclick="goAndShow('launcher-config')">
         <div class="dash-card-icon">
             <i class="fas fa-rocket"></i>
         </div>
         <div class="dash-card-content">
             <div class="dash-card-label">启动器配置</div>
             <div class="dash-card-value" id="dash-launcher-value">检测中...</div>
+            <div class="dash-card-go"><i class="fas fa-arrow-right"></i> 前往 Launcher 配置</div>
         </div>
     </div>
 
-    <div class="dashboard-card status-card" id="dash-update-status">
+    <div class="dashboard-card status-card clickable" id="dash-update-status" title="点击前往「设置」" onclick="goAndShow('settings')">
         <div class="dash-card-icon">
             <i class="fas fa-sync-alt"></i>
         </div>
         <div class="dash-card-content">
             <div class="dash-card-label">LCTA-AU 更新</div>
             <div class="dash-card-value" id="dash-update-value">检测中...</div>
+            <div class="dash-card-go"><i class="fas fa-arrow-right"></i> 前往设置</div>
         </div>
     </div>
 
-    <div class="dashboard-card status-card" id="dash-api-status">
+    <div class="dashboard-card status-card clickable" id="dash-api-status" title="点击前往「配置汉化API」" onclick="goAndShow('config')">
         <div class="dash-card-icon">
             <i class="fas fa-key"></i>
         </div>
         <div class="dash-card-content">
             <div class="dash-card-label">API 配置</div>
             <div class="dash-card-value" id="dash-api-value">检测中...</div>
+            <div class="dash-card-go"><i class="fas fa-arrow-right"></i> 前往配置</div>
         </div>
     </div>
 </div>

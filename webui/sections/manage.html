@@ -12,8 +12,9 @@
             <label class="checkbox-container">
                 <input type="checkbox" id="enable-lang" onchange="toggleCustomLang()" checked>
                 <span class="checkmark"></span>
-                启用客制化翻译
+                启用自定义汉化
             </label>
+            <small class="form-hint">启用后使用下面列表中选中的汉化包覆盖游戏语言文件</small>
         </div>
         
         <div id="installed-package-group">
@@ -42,6 +43,9 @@
                 </button>
                 <button type="button" class="action-btn danger" onclick="deleteInstalledPackage()">
                     <i class="fas fa-trash"></i> 删除选中汉化包
+                </button>
+                <button type="button" class="action-btn secondary" onclick="goAndShow('install')">
+                    <i class="fas fa-download"></i> 安装新汉化包
                 </button>
             </div>
         </div>

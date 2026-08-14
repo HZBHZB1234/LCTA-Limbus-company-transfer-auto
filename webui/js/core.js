@@ -8,7 +8,6 @@ let modalWindows = [];
 let apiConfigManager;
 let fancyManager;
 let themeManager;
-let quickStartManager;
 let dragDropManager;
 let first_use;
 

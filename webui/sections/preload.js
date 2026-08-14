@@ -95,6 +95,7 @@ async function onSectionLoaded(name) {
         case 'about':
             console.log('[LCTA] Init section: about');
             loadAndRenderMarkdown();
+            if (typeof applyVersionBadges === 'function') applyVersionBadges();
             break;
         case 'config':
             console.log('[LCTA] Init section: config');
@@ -117,12 +118,6 @@ async function onSectionLoaded(name) {
                 }
             }
             break;
-        case 'elder':
-            console.log('[LCTA] Init section: elder');
-            if (typeof quickStartManager !== 'undefined') {
-                quickStartManager.targetDiv = document.querySelector('.quick-start-content');
-            }
-            break;
         case 'welcome':
             console.log('[LCTA] Init section: welcome');
             if (window._pendingWelcomeContent) {
@@ -135,6 +130,7 @@ async function onSectionLoaded(name) {
                 }
                 window._pendingWelcomeContent = null;
             }
+            if (typeof applyVersionBadges === 'function') applyVersionBadges();
             break;
         case 'speed':
             console.log('[LCTA] Init section: speed');

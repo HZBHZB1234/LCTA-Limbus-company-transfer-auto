@@ -76,7 +76,7 @@ LCTA-Limbus-company-transfer-auto/
 │   ├── app.py                  # LCTA_API 核心桥接类 (~1450 行)
 │   ├── index.html              # SPA 外壳 (103KB)
 │   ├── css/                    # 样式表 (3 文件)
-│   ├── js/                     # JS 模块（含独立 quick-start 三步引导）
+│   ├── js/                     # JS 模块（懒加载 section 控制器）
 │   ├── guide/                  # 应用内用户指南 (16 md 页面)
 │
 ├── webutils/                   # 业务逻辑层

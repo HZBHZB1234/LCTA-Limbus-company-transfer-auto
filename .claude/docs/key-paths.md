@@ -732,7 +732,7 @@ start_webui.py main()
       → _pendingWelcomeContent                 deferred rendering for welcome section
       → configManager.applyConfigToUI()        null-guarded, skips unloaded sections
       → toggle functions                       all null-guarded
-      → fancyManager.init() / quickStartManager.init()  null-guarded DOM access
+      → fancyManager.init()                    null-guarded DOM access
       → check_show() / init_github() / init_log()
       → fire-and-forget:                       change_icon, init_cache, set_attr(http_port)
 
@@ -795,28 +795,7 @@ User clicks 「下载并应用所选调爪替换文本包」(download.html)  或
 
 Files: `webutils/function_lanzou_tiaozhua.py`, `webui/app_api/download.py`, `webui/sections/launcher-config.html`, `webui/sections/download.html`, `webui/js/core.js`, `webui/js/features.js`, `webui/js/utils.js`, `launcher/updates.py`, `config_check.json`
 
-## 15. Three-Step Quick Start
-
-```
-User opens 「快速上手」
-  → webui/js/utils.js                    lazy-load elder section route
-  → webui/sections/elder.html            lightweight quick-start mount point
-  → webui/js/quick-start.js              QuickStartManager.initPage()
-    Step 1: choose one primary goal       package / launcher / translate / customize
-    Step 2: render goal-only checks       game path, Launcher mode/options,
-                                          API status, or customization destinations
-      → ConfigManager.updateConfigValues() save ordinary config only when required
-      → pywebview.api.browse_folder('')   optional game-folder selection
-    Step 3: render action summary
-      → goAndShow(target)                 download/install/launcher-config/config/
-                                          translate/manage/fancy destination
-```
-
-No Markdown page parser, version tracking, dependency graph, reset API, or wizard-only config is involved.
-
-Files: `webui/js/quick-start.js`, `webui/sections/elder.html`, `webui/js/utils.js`, `webui/sections/preload.js`, `webui/js/core.js`, `webui/assets/firstUse.md`, `webui/guide/elder.md`
-
-## 16. Official Resource Update — Manual and Launcher Paths
+## 15. Official Resource Update — Manual and Launcher Paths
 
 ```
 Manual path:
@@ -866,7 +845,7 @@ Build path: `build.ps1` and `.github/workflows/release.yml` pin aria2 1.37.0, re
 
 Files: `resource_updater/core.py`, `resource_updater/service.py`, `resource_updater/web_api.py`, `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `webui/css/layout-extras.css`, `webui/app.py`, `webui/sections/launcher-config.html`, `launcher/main.py`, `config_default.json`, `config_check.json`, `build.ps1`, `.github/workflows/release.yml`
 
-## 17. Metadata 恢复（IL2CPP metadata 解密恢复，v2 全自动管线）
+## 16. Metadata 恢复（IL2CPP metadata 解密恢复，v2 全自动管线）
 
 ```
 JS: user opens 侧边栏「Metadata 恢复」页（首次导航懒加载）
@@ -904,7 +883,7 @@ JS: user opens 侧边栏「Metadata 恢复」页（首次导航懒加载）
       webui/guide/metadata-recovery.md, .github/InitCode.py(js_files), tests/test_metadata_recovery.py
 ```
 
-## 18. 泛用高速下载器（aria2c 独立窗口）
+## 17. 泛用高速下载器（aria2c 独立窗口）
 
 ```
 JS: 游戏资源更新页「打开高速下载器」按钮（resource-updater.js bindEvents）
@@ -965,7 +944,7 @@ Files: `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `
 
 
 
-## 19. 加载页 CG 替换（锁定 + 贴图替换）
+## 18. 加载页 CG 替换（锁定 + 贴图替换）
 
 原理（逆向自 GameAssembly.dll，详见 LimbusDecompile/docs/LOADING_CG_INJECT.md）:
   存档 save_slot_<id>.json = Base64(AES-256-CBC+PKCS7(JsonUtility JSON))
@@ -990,7 +969,7 @@ Files: `webui/sections/cg.html`, `webui/js/cg.js`, `webui/app_api/cg.py`,
       `webui/index.html`, `webui/sections/preload.js`, `webui/js/utils.js`, `webui/guide/cg.md`,
       `webui/css/components.css`（cg-chip/cg-list）, `.github/InitCode.py`（js_files）, `tests/test_cg_save.py`
 
-## 20. 音频工具 / fsb 补丁模组（.rebank）
+## 19. 音频工具 / fsb 补丁模组（.rebank）
 
 DLL 一键自动下载（DLL 缺失时的兜底路径）:
 

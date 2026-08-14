@@ -2,6 +2,25 @@
 // 应用引导与初始化
 // ============================
 
+// 用真实版本号填充界面上的版本展示（侧边栏 / 欢迎页 / 关于页）。
+// 后端 get_startup_data 返回 data.version 后写入 window._appVersion；
+// 懒加载的 section 在加载完成时（preload.js onSectionLoaded）调用本函数补填。
+function applyVersionBadges() {
+    const version = window._appVersion;
+    if (!version) return;
+    const bare = String(version).replace(/^v/i, '');
+    document.querySelectorAll('.version').forEach(function(el) {
+        if (el && el.textContent.trim().match(/^v?\d/)) {
+            el.textContent = 'v' + bare;
+        }
+    });
+    document.querySelectorAll('.version-badge').forEach(function(el) {
+        if (el && /v?\d+\.\d+/.test(el.textContent)) {
+            el.textContent = '版本 ' + bare;
+        }
+    });
+}
+
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
     init();
@@ -49,6 +68,8 @@ window.addEventListener('pywebviewready', function() {
             }
 
             first_use = data.first_use;
+            window._appVersion = data.version || '';
+            applyVersionBadges();
             if (data.first_use) {
                 window._pendingWelcomeContent = { type: 'markdown', url: 'assets/firstUse.md' };
                 goAndShow('welcome');
@@ -109,8 +130,6 @@ window.addEventListener('pywebviewready', function() {
 
                 fancyManager = new FancyManager();
                 fancyManager.init();
-                
-                quickStartManager.init();
 
             }
             if (configManager) checkGamePath();

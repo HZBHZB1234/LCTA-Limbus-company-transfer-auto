@@ -474,6 +474,13 @@ function onOurplaySourceChange() {
     if (androidOptions) androidOptions.style.display = isAndroid ? '' : 'none';
 }
 
+// 下载完成后的轻量引导提示：告诉用户下一步去哪安装
+function notifyDownloadDone() {
+    if (typeof showToast === 'function') {
+        showToast('下载完成，可前往「安装已有汉化」页安装到游戏', 'success', 4000);
+    }
+}
+
 function downloadOurplay() {
     const fontOption = document.getElementById('ourplay-font-option').value;
     const checkHash = document.getElementById('ourplay-check-hash').checked;
@@ -508,6 +515,7 @@ function downloadOurplay() {
             pywebview.api.download_ourplay_translation(modal.id).then(function(result) {
                 if (result.success) {
                     modal.complete(true, 'OurPlay汉化包下载成功');
+                    notifyDownloadDone();
                 } else {
                     if (result.message === "已取消") {
                         modal.cancel();
@@ -541,6 +549,7 @@ async function downloadTiaozhua() {
             modal.cancel();
         } else if (result.success) {
             modal.complete(true, '下载任务已完成');
+            notifyDownloadDone();
         } else {
             modal.complete(false, '下载失败: ' + result.message);
         }
@@ -566,6 +575,7 @@ async function downloadTiaozhuaReplace() {
             modal.cancel();
         } else if (result.success) {
             modal.complete(true, '下载任务已完成');
+            notifyDownloadDone();
         } else {
             modal.complete(false, '下载失败: ' + result.message);
         }
@@ -768,6 +778,7 @@ function downloadLLC() {
             pywebview.api.download_llc_translation(modal.id).then(function(result) {
                 if (result.success) {
                     modal.complete(true, '零协汉化包下载成功');
+                    notifyDownloadDone();
                 } else {
                     if (result.message === "已取消") {
                         modal.cancel();
@@ -800,6 +811,7 @@ async function downloadMachine() {
             modal.cancel();
         } else if (result.success) {
             modal.complete(true, '下载任务已完成');
+            notifyDownloadDone();
         } else {
             modal.complete(false, '下载失败: ' + result.message);
         }
@@ -1375,13 +1387,13 @@ async function refreshDashboard() {
             if (packageResult && packageResult.success && packageResult.enable) {
                 const count = (packageResult.packages && packageResult.packages.length) || 0;
                 packageEl.textContent = count > 0 ? `已安装 ${count} 个汉化包` : '未安装汉化包';
-                packageCard.className = 'dashboard-card status-card ' + (count > 0 ? 'success' : 'warning');
+                packageCard.className = 'dashboard-card status-card clickable ' + (count > 0 ? 'success' : 'warning');
             } else if (packageResult && packageResult.success && !packageResult.enable) {
                 packageEl.textContent = '未启用';
-                packageCard.className = 'dashboard-card status-card warning';
+                packageCard.className = 'dashboard-card status-card clickable warning';
             } else {
                 packageEl.textContent = '无法检测';
-                packageCard.className = 'dashboard-card status-card';
+                packageCard.className = 'dashboard-card status-card clickable';
             }
         }
 
@@ -1392,13 +1404,13 @@ async function refreshDashboard() {
             const gamePath = configValues['game_path'];
             if (launcherMode && launcherMode !== 'no') {
                 launcherEl.textContent = '已配置（' + launcherMode + '）';
-                launcherCard.className = 'dashboard-card status-card success';
+                launcherCard.className = 'dashboard-card status-card clickable success';
             } else if (gamePath) {
                 launcherEl.textContent = '游戏已设置，未配置启动器';
-                launcherCard.className = 'dashboard-card status-card';
+                launcherCard.className = 'dashboard-card status-card clickable';
             } else {
                 launcherEl.textContent = '未配置';
-                launcherCard.className = 'dashboard-card status-card warning';
+                launcherCard.className = 'dashboard-card status-card clickable warning';
             }
         }
 
@@ -1408,13 +1420,13 @@ async function refreshDashboard() {
             const autoUpdate = configValues['auto_check_update'];
             if (autoUpdate === true || autoUpdate === 'true') {
                 updateEl.textContent = '自动更新已开启';
-                updateCard.className = 'dashboard-card status-card success';
+                updateCard.className = 'dashboard-card status-card clickable success';
             } else if (autoUpdate !== undefined && autoUpdate !== null) {
                 updateEl.textContent = '自动更新未开启';
-                updateCard.className = 'dashboard-card status-card';
+                updateCard.className = 'dashboard-card status-card clickable';
             } else {
                 updateEl.textContent = '状态未知';
-                updateCard.className = 'dashboard-card status-card';
+                updateCard.className = 'dashboard-card status-card clickable';
             }
         }
 
@@ -1434,14 +1446,14 @@ async function refreshDashboard() {
                 }
                 if (apiCount > 0) {
                     apiEl.textContent = `已配置 ${apiCount} 个服务`;
-                    apiCard.className = 'dashboard-card status-card success';
+                    apiCard.className = 'dashboard-card status-card clickable success';
                 } else {
                     apiEl.textContent = '未配置 API';
-                    apiCard.className = 'dashboard-card status-card warning';
+                    apiCard.className = 'dashboard-card status-card clickable warning';
                 }
             } catch (e) {
                 apiEl.textContent = '点击配置';
-                apiCard.className = 'dashboard-card status-card';
+                apiCard.className = 'dashboard-card status-card clickable';
             }
         }
     } catch (e) {

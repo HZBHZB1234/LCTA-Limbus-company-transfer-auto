@@ -4,6 +4,51 @@
 
 const _loadedMarkdowns = {};
 
+// === 轻量提示 Toast ===
+// 用于无需用户确认的即时反馈（成功/失败/信息）。
+// 需要确认或展示详细错误时仍使用 showMessage / showConfirm。
+const toastContainerRef = { element: null };
+
+function getToastContainer() {
+    if (toastContainerRef.element && document.body.contains(toastContainerRef.element)) {
+        return toastContainerRef.element;
+    }
+    const container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+    toastContainerRef.element = container;
+    return container;
+}
+
+function showToast(message, type = 'info', duration = 2800) {
+    if (!message) return;
+    const container = getToastContainer();
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+    const icons = { success: 'fa-circle-check', error: 'fa-circle-exclamation', info: 'fa-circle-info' };
+    toast.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i><span></span>`;
+    toast.querySelector('span').textContent = message;
+
+    container.appendChild(toast);
+    // 强制重排后触发进场动画
+    requestAnimationFrame(() => toast.classList.add('visible'));
+
+    const hide = () => {
+        if (!toast.isConnected) return;
+        toast.classList.remove('visible');
+        toast.classList.add('hiding');
+        setTimeout(() => toast.remove(), 300);
+    };
+
+    const timer = setTimeout(hide, duration);
+    // 点击提前关闭
+    toast.addEventListener('click', () => {
+        clearTimeout(timer);
+        hide();
+    });
+    return toast;
+}
+
 async function loadMarkdownContent(url, className) {
     try {
         const response = await fetch(url);
@@ -142,7 +187,7 @@ function toggleCustomLangGui() {
             overlay.className = overlayClass;
             overlay.innerHTML = `
                 <i class="fas fa-lock"></i>
-                <p>客制化翻译已禁用</p>
+                <p>自定义汉化已禁用</p>
                 <small>勾选上方选项以启用此区域</small>
             `;
             group.appendChild(overlay);
@@ -221,7 +266,11 @@ function copySteamPath() {
     cmdElement.setSelectionRange(0, 99999); /* 为移动设备设置 */
 
     /* 复制内容到文本域 */
-    navigator.clipboard.writeText(cmdElement.value);
+    navigator.clipboard.writeText(cmdElement.value).then(function() {
+        if (typeof showToast === 'function') showToast('Steam 启动命令已复制到剪贴板', 'success');
+    }).catch(function() {
+        if (typeof showToast === 'function') showToast('复制失败，请手动复制', 'error');
+    });
 }
 
 function steamLauncherStateText(status) {

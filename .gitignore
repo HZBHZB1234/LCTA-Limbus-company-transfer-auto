@@ -10,6 +10,7 @@ fancy/
 metadata_recovery
 !webutils/metadata_recovery
 .rmv
+.agent-teams
 *.pyc
 *.pyo
 *.pyd

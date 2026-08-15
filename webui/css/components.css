@@ -1939,6 +1939,156 @@ button {
 }
 
 /* ============================
+   首页：一键配置主入口
+   ============================ */
+
+/* 主入口横幅 */
+.setup-hero {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-xl) var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 14%, var(--color-bg-card)), var(--color-bg-card));
+    border: 1px solid color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.setup-hero-icon {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+    color: var(--color-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+}
+
+.setup-hero-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.setup-hero-title {
+    font-size: 20px;
+    margin: 0 0 6px;
+    color: var(--color-text-primary);
+}
+
+.setup-hero-desc {
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 0;
+    color: var(--color-text-secondary);
+}
+
+.setup-hero-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 28px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 78%, #000));
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: transform var(--transition-speed) var(--transition-easing), box-shadow var(--transition-speed) var(--transition-easing);
+}
+
+.setup-hero-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.setup-hero-btn:active {
+    transform: translateY(0);
+}
+
+/* 可自动启用内容说明 */
+.setup-scope-card {
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+
+.setup-scope-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: 10px;
+}
+
+.setup-scope-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 8px 20px;
+}
+
+.setup-scope-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--color-text-primary);
+    line-height: 1.5;
+}
+
+.setup-scope-list li i {
+    color: var(--color-primary);
+    margin-top: 3px;
+    width: 15px;
+    flex-shrink: 0;
+}
+
+.setup-scope-list li span {
+    display: inline-block;
+}
+
+.setup-scope-list li small {
+    display: block;
+    color: var(--color-text-secondary);
+}
+
+.setup-scope-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 12px 0 0;
+    padding-top: 10px;
+    border-top: 1px dashed var(--color-border);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--color-text-secondary);
+}
+
+.setup-scope-hint i {
+    color: var(--color-warning);
+    margin-top: 2px;
+}
+
+/* 其余常用功能跳转入口 */
+.setup-links-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--spacing-md);
+}
+
+/* ============================
    加载页 CG：游戏运行警告条
    ============================ */
 

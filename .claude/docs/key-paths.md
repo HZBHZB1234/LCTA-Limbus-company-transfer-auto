@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-13 -->
+<!-- Last updated: 2026-08-14 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -692,6 +692,39 @@ JS: user drags files onto window
 > 注：`evalFiles` 中 handler 抛 `CancelRunning` 立即上抛（不再吞成 errors），`drops.py` 捕获后返回 `"已取消"`；存在错误时不推 100% 进度。前端 `setupDragDropCallback` 的 `.then` 按 success/`已取消` 分支调用 `complete()`/`cancel()`，`.catch` 兜底关闭窗口。
 
 Files: `webui/js/features.js`, `webui/app.py`, `webutils/drop/`, `webutils/function_fancy.py`, `webutils/fancy/bus.py`, `webutils/update.py`
+
+## 12.5 首页「一键配置」（自动启用可自动化功能 + 写入 Steam 启动项）
+
+```
+首页（dashboard-section）:
+  → webui/sections/dashboard.html       「一键配置」主按钮（.setup-hero-btn）
+       + 启用清单说明（setup-scope-card）+ 其余功能跳转入口（setup-links-grid）
+       （原快捷入口卡片与四个状态总览卡已移除）
+  → webui/js/features.js oneClickSetup()
+      1) oneClickGetFancyEnabledMap()                读取文本美化启用 map（后端 get_fancy_rulesets
+                                                      .data.enabled，失败回退 configCache 的 fancy_allow；
+                                                      完全失败返回 null 跳过合并）
+         → 合并后写入 fancy_allow JSON map（不覆盖用户其他勾选），启用「替换配置文件」规则集
+      2) configManager.updateConfigValues({id: value})  批量启用可自动化配置
+         （launcher-work-update=LM-G / launcher-work-mod / launcher-work-fancy /
+           launcher-work-tiaozhua / launcher-work-cdn-optimize /
+           launcher-work-cdn-auto-apply / launcher-work-crash-popup /
+           launcher-work-gui-mode / launcher-resource-update-enabled /
+           auto-check-update /
+           调爪「替换」文本包 lc-tiaozhua-replace-3/5/7=true、replace-4/8=false(气泡互斥)）
+         → pywebview.api.update_config_batch(configUpdates)  经 configKeyMap 映射持久化
+      3) 写入 Steam 启动项：
+         run_func('get_steam_launcher_status')
+           → 非 lcta_current 且定位到 localconfig → doOneClickSteamWrite()
+               → Steam 运行中就地 showConfirm（避免退出覆盖）
+               → run_func('set_steam_launch_options', command)
+                   webutils/function_steam_launcher.py set_steam_launch_options()
+                   备份 localconfig.vdf.lcta.bak → 写 LaunchOptions
+  ProgressModal 报表；风险（speed/input_bypass/cheat）与需手动选择
+  （cg CGI / config API / download 汉化来源）不在此列，仅为跳转入口
+```
+
+Files: `webui/sections/dashboard.html`, `webui/js/features.js`, `webui/js/core.js`（configKeyMap）, `webui/js/modals.js`（ProgressModal/showConfirm）, `webutils/function_steam_launcher.py`
 
 ## 13. WebUI Startup Bootstrap
 

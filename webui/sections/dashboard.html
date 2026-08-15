@@ -3,10 +3,66 @@
         <i class="fas fa-tachometer-alt"></i>
         首页
     </h2>
-    <p class="section-subtitle">LCTA 工具箱状态总览</p>
+    <p class="section-subtitle">一站式快速配置，开箱即用</p>
 </div>
 
-<div class="dashboard-quick-actions">
+<!-- 一键配置主入口 -->
+<div class="setup-hero">
+    <div class="setup-hero-icon">
+        <i class="fas fa-wand-magic-sparkles"></i>
+    </div>
+    <div class="setup-hero-body">
+        <h3 class="setup-hero-title">一键配置</h3>
+        <p class="setup-hero-desc">
+            自动启用 Launcher 启动器、写入 Steam 启动项、开启文本美化等绝大多数可自动启用的功能。
+            先体验，不满意随时可到「Launcher配置」单独关闭某项，无需逐个试错。
+        </p>
+    </div>
+    <button type="button" class="setup-hero-btn" onclick="oneClickSetup()">
+        <i class="fas fa-bolt"></i> 一键配置
+    </button>
+</div>
+
+<!-- 一键配置将自动启用内容说明 -->
+<div class="setup-scope-card">
+    <div class="setup-scope-head">
+        <i class="fas fa-cubes"></i> 点击「一键配置」将自动启用：
+    </div>
+    <ul class="setup-scope-list">
+        <li><i class="fas fa-rocket"></i><span><strong>Launcher 启动器</strong> — 启动游戏前自动更新汉化</span></li>
+        <li><i class="fas fa-download"></i><span><strong>写入 Steam 启动项</strong> — 通过启动器拉起游戏（自动备份原配置）</span></li>
+        <li><i class="fas fa-paint-brush"></i><span><strong>文本美化</strong> — 汉化更新后自动应用美化规则</span></li>
+        <li><i class="fas fa-pen-nib"></i><span><strong>调爪文本修改包</strong> — 自动下载导入调爪规则集</span></li>
+        <li><i class="fas fa-comment-dots"></i><span><strong>彩色气泡</strong> — 启用调爪「替换」文本包：彩色气泡</span></li>
+        <li><i class="fas fa-shuffle"></i><span><strong>随机加载文本</strong> — 启用调爪「替换」文本包：随机加载文本</span></li>
+        <li><i class="fas fa-person-booth"></i><span><strong>事件美化</strong> — 启用调爪「替换」文本包：事件美化</span></li>
+        <li><i class="fas fa-bolt"></i><span><strong>CDN 优选</strong> — 启动前自动测速并写入最优节点</span></li>
+        <li><i class="fas fa-cubes"></i><span><strong>游戏资源预下载</strong> — 游戏版本更新后自动预下资源</span></li>
+        <li><i class="fas fa-exclamation-circle"></i><span><strong>异常日志提示</strong> — 游戏异常退出时提示导出日志</span></li>
+        <li><i class="fas fa-sync-alt"></i><span><strong>自动更新检查</strong> — 保持工具箱最新</span></li>
+    </ul>
+    <p class="setup-scope-hint">
+        <i class="fas fa-info-circle"></i>
+        以上均可在「Launcher配置」「文本美化」「汉化包下载」页逐个关闭。彩色气泡与无色气泡/旧翻译版气泡互斥，一键配置默认启用彩色气泡。
+        「文本美化」的「替换配置文件」规则集若尚未导入过，需先在文本美化页导入后再生效。涉及风险评估与账号安全的功能
+        （游戏加速、输入反检测、作弊工具箱），及需手动选择的内容（加载页CG、汉化API、汉化包来源）不在此列，请通过下方入口单独开启。
+    </p>
+</div>
+
+<!-- 其余常用功能跳转入口 -->
+<div class="setup-links-grid">
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('launcher-config')">
+        <i class="fas fa-rocket"></i>
+        <span><strong>Launcher配置</strong><small>关闭/调整一键配置的选项</small></span>
+    </button>
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('cg')">
+        <i class="fas fa-image"></i>
+        <span><strong>自定义加载页CG</strong><small>选择或导入自己喜爱的加载图</small></span>
+    </button>
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('config')">
+        <i class="fas fa-cog"></i>
+        <span><strong>配置汉化API</strong><small>填写翻译服务与密钥</small></span>
+    </button>
     <button type="button" class="dashboard-quick-action" onclick="goAndShow('download')">
         <i class="fas fa-cloud-download-alt"></i>
         <span><strong>下载汉化包</strong><small>LLC / LCTA-AU / OurPlay / 调爪</small></span>
@@ -15,59 +71,16 @@
         <i class="fas fa-download"></i>
         <span><strong>安装已有汉化</strong><small>安装本地或已下载的汉化包</small></span>
     </button>
-    <button type="button" class="dashboard-quick-action" onclick="goAndShow('config')">
-        <i class="fas fa-cog"></i>
-        <span><strong>配置翻译 API</strong><small>配置翻译服务与密钥</small></span>
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('speed')">
+        <i class="fas fa-forward"></i>
+        <span><strong>游戏加速</strong><small>需先阅读并同意风险须知</small></span>
     </button>
-    <button type="button" class="dashboard-quick-action" onclick="goAndShow('launcher-config')">
-        <i class="fas fa-rocket"></i>
-        <span><strong>Launcher 配置</strong><small>自动更新、MOD、集成开关</small></span>
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('input-bypass')">
+        <i class="fas fa-ghost"></i>
+        <span><strong>输入反检测</strong><small>需先阅读并同意风险须知</small></span>
+    </button>
+    <button type="button" class="dashboard-quick-action" onclick="goAndShow('cheat')">
+        <i class="fas fa-toolbox"></i>
+        <span><strong>作弊工具箱</strong><small>需密钥解锁并按协议使用</small></span>
     </button>
 </div>
-
-<div class="dashboard-grid">
-    <div class="dashboard-card status-card clickable" id="dash-translation-status" title="点击前往「安装已有汉化」" onclick="goAndShow('install')">
-        <div class="dash-card-icon">
-            <i class="fas fa-language"></i>
-        </div>
-        <div class="dash-card-content">
-            <div class="dash-card-label">汉化包状态</div>
-            <div class="dash-card-value" id="dash-package-value">检测中...</div>
-            <div class="dash-card-go"><i class="fas fa-arrow-right"></i> 前往安装页</div>
-        </div>
-    </div>
-
-    <div class="dashboard-card status-card clickable" id="dash-launcher-status" title="点击前往「Launcher配置」" onclick="goAndShow('launcher-config')">
-        <div class="dash-card-icon">
-            <i class="fas fa-rocket"></i>
-        </div>
-        <div class="dash-card-content">
-            <div class="dash-card-label">启动器配置</div>
-            <div class="dash-card-value" id="dash-launcher-value">检测中...</div>
-            <div class="dash-card-go"><i class="fas fa-arrow-right"></i> 前往 Launcher 配置</div>
-        </div>
-    </div>
-
-    <div class="dashboard-card status-card clickable" id="dash-update-status" title="点击前往「设置」" onclick="goAndShow('settings')">
-        <div class="dash-card-icon">
-            <i class="fas fa-sync-alt"></i>
-        </div>
-        <div class="dash-card-content">
-            <div class="dash-card-label">LCTA-AU 更新</div>
-            <div class="dash-card-value" id="dash-update-value">检测中...</div>
-            <div class="dash-card-go"><i class="fas fa-arrow-right"></i> 前往设置</div>
-        </div>
-    </div>
-
-    <div class="dashboard-card status-card clickable" id="dash-api-status" title="点击前往「配置汉化API」" onclick="goAndShow('config')">
-        <div class="dash-card-icon">
-            <i class="fas fa-key"></i>
-        </div>
-        <div class="dash-card-content">
-            <div class="dash-card-label">API 配置</div>
-            <div class="dash-card-value" id="dash-api-value">检测中...</div>
-            <div class="dash-card-go"><i class="fas fa-arrow-right"></i> 前往配置</div>
-        </div>
-    </div>
-</div>
-

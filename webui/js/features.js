@@ -1359,107 +1359,135 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================
 
 // === 仪表盘 ===
+// 首页已改为「一键配置」主导航，不再展示状态总览卡片；
+// 保留空实现以兼容 utils.js / goAndShow 中对 refreshDashboard 的调用。
 async function refreshDashboard() {
-    if (!window.apiReady) return;
+    // 状态总览卡片已移除，此处无操作。
+}
 
-    const packageEl = document.getElementById('dash-package-value');
-    const packageCard = document.getElementById('dash-translation-status');
-    const launcherEl = document.getElementById('dash-launcher-value');
-    const launcherCard = document.getElementById('dash-launcher-status');
-    const apiEl = document.getElementById('dash-api-value');
-    const apiCard = document.getElementById('dash-api-status');
-    const updateEl = document.getElementById('dash-update-value');
-    const updateCard = document.getElementById('dash-update-status');
-
-    try {
-        // 并行获取：汉化包列表 + 批量配置值
-        const [packageResult, configBatch] = await Promise.all([
-            pywebview.api.get_installed_packages().catch(() => null),
-            pywebview.api.get_config_batch([
-                'auto_check_update',
-                'game_path',
-                'launcher.work.update'
-            ]).catch(() => null)
-        ]);
-
-        // === 汉化包状态 ===
-        if (packageEl && packageCard) {
-            if (packageResult && packageResult.success && packageResult.enable) {
-                const count = (packageResult.packages && packageResult.packages.length) || 0;
-                packageEl.textContent = count > 0 ? `已安装 ${count} 个汉化包` : '未安装汉化包';
-                packageCard.className = 'dashboard-card status-card clickable ' + (count > 0 ? 'success' : 'warning');
-            } else if (packageResult && packageResult.success && !packageResult.enable) {
-                packageEl.textContent = '未启用';
-                packageCard.className = 'dashboard-card status-card clickable warning';
-            } else {
-                packageEl.textContent = '无法检测';
-                packageCard.className = 'dashboard-card status-card clickable';
-            }
-        }
-
-        // === 启动器配置状态 ===
-        if (launcherEl && launcherCard) {
-            const configValues = configBatch && configBatch.success ? configBatch.config_values : {};
-            const launcherMode = configValues['launcher.work.update'];
-            const gamePath = configValues['game_path'];
-            if (launcherMode && launcherMode !== 'no') {
-                launcherEl.textContent = '已配置（' + launcherMode + '）';
-                launcherCard.className = 'dashboard-card status-card clickable success';
-            } else if (gamePath) {
-                launcherEl.textContent = '游戏已设置，未配置启动器';
-                launcherCard.className = 'dashboard-card status-card clickable';
-            } else {
-                launcherEl.textContent = '未配置';
-                launcherCard.className = 'dashboard-card status-card clickable warning';
-            }
-        }
-
-        // === 更新状态 ===
-        if (updateEl && updateCard) {
-            const configValues = configBatch && configBatch.success ? configBatch.config_values : {};
-            const autoUpdate = configValues['auto_check_update'];
-            if (autoUpdate === true || autoUpdate === 'true') {
-                updateEl.textContent = '自动更新已开启';
-                updateCard.className = 'dashboard-card status-card clickable success';
-            } else if (autoUpdate !== undefined && autoUpdate !== null) {
-                updateEl.textContent = '自动更新未开启';
-                updateCard.className = 'dashboard-card status-card clickable';
-            } else {
-                updateEl.textContent = '状态未知';
-                updateCard.className = 'dashboard-card status-card clickable';
-            }
-        }
-
-        // === API 配置状态 ===
-        if (apiEl && apiCard) {
-            // 通过 get_attr('config') 获取全量配置来检测 API key
-            try {
-                const fullConfig = await pywebview.api.get_attr('config');
-                let apiCount = 0;
-                if (fullConfig && typeof fullConfig === 'object') {
-                    // 遍历 api_settings 相关键统计已配置的服务
-                    for (const key of Object.keys(fullConfig)) {
-                        if (key.startsWith('api_') && key.endsWith('_key') && fullConfig[key]) {
-                            apiCount++;
-                        }
-                    }
-                }
-                if (apiCount > 0) {
-                    apiEl.textContent = `已配置 ${apiCount} 个服务`;
-                    apiCard.className = 'dashboard-card status-card clickable success';
-                } else {
-                    apiEl.textContent = '未配置 API';
-                    apiCard.className = 'dashboard-card status-card clickable warning';
-                }
-            } catch (e) {
-                apiEl.textContent = '点击配置';
-                apiCard.className = 'dashboard-card status-card clickable';
-            }
-        }
-    } catch (e) {
-        console.log('仪表盘刷新失败:', e);
+// === 一键配置（首页） ===
+// 统一启用绝大多数可自动化的 Launcher / 美化 / CDN / 资源预下载等配置，
+// 并尝试写入 Steam 启动项。涉及风险同意（加速/反检测/作弊）或需手动选择
+// （CG、API、汉化包来源）的功能不在此列，仅在首页保留跳转入口。
+async function oneClickSetup() {
+    if (!window.apiReady) {
+        showMessage('提示', '请等待界面初始化完成后再进行一键配置。');
+        return;
     }
 
+    const modal = new ProgressModal('一键配置');
+    modal.setStatus('正在启用各项功能...');
+    modal.addLog('开始一键配置');
+
+    try {
+        // 1. 批量启用可自动化的配置（id -> 由 configKeyMap 映射为配置键路径）
+        const updates = {
+            'launcher-work-update': 'LM-G',                     // Launcher 更新模式（零协 + LCTA-AU）
+            'launcher-work-mod': true,                          // MOD支持
+            'launcher-work-fancy': true,                        // 文本美化
+            'launcher-work-tiaozhua': true,                     // 调爪文本
+            'launcher-work-cdn-optimize': true,                 // CDN优选
+            'launcher-work-cdn-auto-apply': true,               // 自动写入hosts
+            'launcher-work-crash-popup': true,                  // 异常日志提示
+            'launcher-work-gui-mode': true,                     // GUI进度窗口
+            'launcher-resource-update-enabled': true,           // 游戏资源预下载
+            'auto-check-update': true,                          // 自动更新检查
+            // 调爪「替换」文本包：彩色气泡（3）/ 随机加载文本（5）/ 事件美化（7）
+            'lc-tiaozhua-replace-3': true,
+            'lc-tiaozhua-replace-5': true,
+            'lc-tiaozhua-replace-7': true,
+            // 彩色气泡(3) 与无色气泡(4)、旧翻译版气泡(8) 三者互斥，仅启用 3 时需显式关闭 4/8
+            'lc-tiaozhua-replace-4': false,
+            'lc-tiaozhua-replace-8': false
+        };
+        // fancy_allow 是整份 JSON map，需合并当前已启用项后再整体写回，避免覆盖用户其他勾选
+        const enabledMap = await oneClickGetFancyEnabledMap();
+        if (enabledMap !== null) {
+            enabledMap['替换配置文件'] = true;              // 启用文本美化「替换配置文件」规则集
+            updates['fancy-allow'] = JSON.stringify(enabledMap);
+        }
+
+        const cfgResult = await configManager.updateConfigValues(updates);
+        if (cfgResult && cfgResult.success) {
+            modal.addLog('已启用 Launcher / 文本美化 / CDN优选 / 资源预下载 / 调爪替换文本等配置');
+        } else {
+            modal.addLog('配置写入未完全成功：' + (cfgResult ? cfgResult.message : '未知错误'));
+        }
+
+        // 2. 写入 Steam 启动项（自动备份原文件；无法定位或未配置时跳过）
+        let steamStatus = null;
+        try {
+            steamStatus = await pywebview.api.run_func('get_steam_launcher_status');
+        } catch (e) {
+            steamStatus = null;
+        }
+
+        if (steamStatus && steamStatus.localconfig_path && steamStatus.state !== 'lcta_current') {
+            modal.addLog('准备写入 Steam 启动项...');
+            if (steamStatus.steam_running) {
+                // 异步门控：Steam 运行中退出时可能覆盖 localconfig.vdf
+                modal.cancel();
+                showConfirm('Steam 正在运行',
+                    '一键配置将写入 Steam 启动项，但 Steam 正在运行，其退出时可能覆盖修改。\n\n是否仍要继续写入？',
+                    function () { doOneClickSteamWrite(steamStatus); });
+                return;
+            }
+            await doOneClickSteamWrite(steamStatus, modal);
+        } else if (steamStatus && steamStatus.state === 'lcta_current') {
+            modal.addLog('Steam 启动项已为当前 LCTA 配置，无需重复写入');
+        } else {
+            modal.addLog('未定位到 Steam 配置，跳过写入启动项（可到 Launcher配置页处理）');
+        }
+
+        modal.complete(true, '一键配置完成');
+    } catch (e) {
+        modal.complete(false, '一键配置失败: ' + e);
+    }
+}
+
+// 实际写 Steam 启动项（shared 步骤，供一键配置复用）
+function doOneClickSteamWrite(status, modal) {
+    return pywebview.api.run_func('get_steam_command').then(function (command) {
+        return pywebview.api.run_func('set_steam_launch_options', command).then(function (result) {
+            if (result && result.success) {
+                if (modal) modal.addLog(result.message || 'Steam 启动项已写入');
+                return true;
+            }
+            const msg = '写入启动项失败: ' + (result ? result.message : '未知错误');
+            if (modal) modal.addLog(msg);
+            return false;
+        }).catch(function (error) {
+            if (modal) modal.addLog('写入启动项失败: ' + error);
+            return false;
+        });
+    }).catch(function (error) {
+        if (modal) modal.addLog('获取Steam命令失败: ' + error);
+        return false;
+    });
+}
+
+// 读取文本美化页面的规则集启用 map（fancy_allow 的解析结果），供一键配置合并启用。
+// 优先走后端 get_fancy_rulesets 的权威 enabled 值；失败时退回 configCache。
+// 读取成功返回启用对象（可能为空 {}）；完全无法读取时返回 null（调用方跳过合并）。
+async function oneClickGetFancyEnabledMap() {
+    try {
+        const rs = await pywebview.api.get_fancy_rulesets();
+        if (rs && rs.success && rs.data && typeof rs.data.enabled === 'object' && rs.data.enabled) {
+            return { ...rs.data.enabled };
+        }
+    } catch (e) {
+        console.log('读取 fancy_rulesets 启用状态失败:', e);
+    }
+    try {
+        const cached = configManager.getCachedValue('fancy_allow');
+        if (typeof cached === 'string' && cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && typeof parsed === 'object') {
+                return { ...parsed };
+            }
+        }
+    } catch (e) { /* 忽略解析失败 */ }
+    return null;
 }
 
 

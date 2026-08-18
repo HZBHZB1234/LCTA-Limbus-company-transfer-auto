@@ -13,6 +13,12 @@ from .io import (
     calculate_md5,
 )
 from .misc import get_steam_command, change_icon
+from .motw import (
+    has_zone_identifier,
+    remove_zone_identifier,
+    clear_motw,
+    cleanup_app_on_startup,
+)
 from .net import download_with, download_with_github
 from .shell import _move_folders, get_downloads_dir
 
@@ -30,6 +36,10 @@ __all__ = [
     'save_cache_font',
     'get_steam_command',
     'change_icon',
+    'has_zone_identifier',
+    'remove_zone_identifier',
+    'clear_motw',
+    'cleanup_app_on_startup',
     '_move_folders',
     'get_downloads_dir',
 ]

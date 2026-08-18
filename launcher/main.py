@@ -63,15 +63,44 @@ def _prepare_mod_handler(**kw):
 def _resource_update_handler(**kw):
     cancel_event = kw.get('cancel_event')
     progress = kw.get('progress')
+    # 服务器切换与资源预下载复用同一进度回调（gui_progress.update_resource_progress）
+    progress_callback = (
+        progress.update_resource_progress
+        if progress is not None and progress.is_alive()
+        else None
+    )
+
+    # 1) 开启官服前恢复官服资源（服务器切换集成，仅启用且配置了 lethe 目录时执行）
+    try:
+        from resource_updater.service import run_launcher_server_restore
+        restore_result = run_launcher_server_restore(
+            cancel_event=cancel_event,
+            progress_callback=progress_callback,
+        )
+        if restore_result.get("skipped"):
+            _log_manager.log(
+                "官服资源恢复已跳过: {}".format(
+                    restore_result.get("reason", "unknown")
+                )
+            )
+        elif not restore_result.get("success"):
+            _log_manager.log(
+                "官服资源恢复失败: {}".format(
+                    restore_result.get("message", "unknown")
+                ),
+                logging.WARNING,
+            )
+        else:
+            _log_manager.log("官服资源恢复完成: {}".format(restore_result))
+    except Exception as e:
+        _log_manager.log_error(e)
+
+    # 2) 官方资源预下载（原有逻辑）
     try:
         from resource_updater.service import run_launcher_resource_update
         resource_result = run_launcher_resource_update(
             cancel_event=cancel_event,
-            progress_callback=(
-                progress.update_resource_progress
-                if progress is not None and progress.is_alive()
-                else None
-            ),
+            progress_callback=progress_callback,
         )
         if resource_result.get("skipped"):
             _log_manager.log(

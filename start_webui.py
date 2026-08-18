@@ -183,6 +183,34 @@ def _run_pending_pip_ops_with_prompt():
         )
 
 
+def _cleanup_motw_on_startup():
+    """启动早期清除程序目录的「来自互联网」标记（MOTW）。
+
+    策略：只探测一个必然存在的探针文件；未标记则跳过（零目录遍历），
+    标记则对整个程序目录递归清除一次（下载标记必然整目录同步）。
+    经 importlib 按文件路径直接加载 motw 模块，避免触发 webutils/__init__.py
+    的重型第三方导入（init_env 阶段应只加载标准库）。
+    """
+    try:
+        import importlib.util
+        motw_path = Path(__file__).resolve().parent / 'webutils' / 'utils' / 'motw.py'
+        if not motw_path.exists():
+            return 0
+        spec = importlib.util.spec_from_file_location('_lcta_motw_cleanup', motw_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        count = module.cleanup_app_on_startup()
+        if count:
+            _log = Path(os.getcwd()) / 'logs' / 'app.log'
+            _log.parent.mkdir(exist_ok=True)
+            with open(_log, '+a' if _log.exists() else '+w', encoding='utf-8') as f:
+                f.write(f"检测到程序文件带「来自互联网」标记，已清除 {count} 个文件的标记\n")
+        return count
+    except Exception as e:
+        print(f"清除互联网标记失败: {e}")
+        return 0
+
+
 def init_env():
     """初始化环境变量"""
     os.environ['path_'] = str(get_resource_path())
@@ -202,6 +230,14 @@ def init_env():
         _run_pending_pip_ops_with_prompt()
     except Exception as e:
         print(f"执行待处理依赖操作失败，将在下次启动时重试: {e}")
+
+    # 清除程序目录的「来自互联网」标记（MOTW）：资源管理器解压下载包后
+    # 整个目录都会带标记，导致 .NET 程序集加载失败 / SmartScreen 拦截；
+    # 探测单文件命中才整目录递归清除，未命中零开销。
+    try:
+        _cleanup_motw_on_startup()
+    except Exception as e:
+        print(f"清除互联网标记失败: {e}")
 
 def start_webui():
     """启动PyWebGUI界面"""

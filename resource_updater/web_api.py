@@ -7,6 +7,13 @@ from globalManagers.ConfigManager import ConfigManager
 from globalManagers.LogManager import LogManager
 
 from .core import DownloadCancelled, GameInfo, ResourceUpdater, resolve_aria2_binary
+from .server_sync import (
+    _s_token_from_settings,
+    create_lethe_shortcut,
+    detect_lethe_dir_candidates,
+    get_server_switch_config,
+    save_server_switch_options,
+)
 from .service import (
     get_last_update_result,
     get_resource_update_config,
@@ -209,3 +216,57 @@ class ResourceUpdaterAPI:
         self.status_text = "正在取消"
         _log_manager.log("[游戏资源更新/UI] 已请求取消手动任务")
         return {"success": True, "message": "已请求取消"}
+
+
+class ServerSwitchAPI:
+    """官服 ⇄ lethe 私服资源切换的页面控制器（目录校验、选项持久化、快捷方式）。"""
+
+    def __init__(self):
+        self._window = None
+
+    def set_window(self, window) -> None:
+        self._window = window
+
+    def get_initial_state(self) -> Dict[str, Any]:
+        config = get_server_switch_config()
+        official = ConfigManager().get("game_path", "")
+        candidates = [str(path) for path in detect_lethe_dir_candidates()]
+        return {
+            "success": True,
+            "official_dir": official,
+            "config": config,
+            "lethe_candidates": candidates,
+            "aria2_available": bool(resolve_aria2_binary()),
+        }
+
+    def probe_lethe_dir(self, lethe_dir: str) -> Dict[str, Any]:
+        try:
+            path = Path(lethe_dir)
+            catalog = path / "LimbusCompany_Data" / "StreamingAssets" / "aa" / "catalog.bin"
+            settings = path / "LimbusCompany_Data" / "StreamingAssets" / "aa" / "settings.json"
+            exe = path / "LimbusCompany.exe"
+            if not catalog.is_file():
+                return {"success": False, "message": "目录缺少 catalog.bin，不是有效的 lethe 分发包: {}".format(path)}
+            if not settings.is_file():
+                return {"success": False, "message": "目录缺少 settings.json，不是有效的 lethe 分发包: {}".format(path)}
+            token = _s_token_from_settings(settings)
+            return {
+                "success": True,
+                "message": "lethe 目录有效，已识别 CDN 令牌",
+                "tokens": {"s": token},
+                "has_exe": exe.is_file(),
+                "exe_path": str(exe) if exe.is_file() else "",
+            }
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    def save_options(self, options: Dict[str, Any]) -> Dict[str, Any]:
+        result = save_server_switch_options(options)
+        _log_manager.debug("[服务器切换/UI] 已保存页面配置: {}".format(options))
+        return result
+
+    def create_shortcut(self, lethe_dir: str) -> Dict[str, Any]:
+        """创建「开启 lethe 私服」桌面快捷方式。"""
+        if not lethe_dir.strip():
+            return {"success": False, "message": "lethe 目录为空，请先选择 lethe 分发包目录"}
+        return create_lethe_shortcut(Path(lethe_dir.strip()))

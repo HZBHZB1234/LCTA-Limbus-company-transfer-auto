@@ -115,6 +115,19 @@
                 <i class="fas fa-arrow-right"></i> 前往游戏资源更新页面
             </button>
         </div>
+
+        <div class="form-group" id="lc-card-server-switch">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-server-switch-enabled">
+                <span class="checkmark"></span>
+                开启官服前自动恢复官服资源
+            </label>
+            <small class="form-hint">通过 Launcher 启动官方游戏前，先把共享缓存恢复到官服一致状态（仅在切到 lethe 后又开官服时下载差异资源，公共资源不受影响）。不会自动切到 lethe。</small>
+            <small class="form-hint">相关设置请在服务器切换页面配置</small>
+            <button type="button" class="action-btn secondary" style="margin:4px 6px 0 0; padding:4px 10px; font-size:12px;" onclick="goAndShow('server-switch')">
+                <i class="fas fa-arrow-right"></i> 前往服务器切换页面
+            </button>
+        </div>
     </div>
 
     <div class="setting-card" id="lc-card-tiaozhua-replace">

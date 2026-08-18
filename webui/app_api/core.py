@@ -21,7 +21,7 @@ from webutils import get_steam_launcher_status, set_steam_launch_options, clear_
 from webutils.translator_constants import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
 )
-from resource_updater.web_api import ResourceUpdaterAPI
+from resource_updater.web_api import ResourceUpdaterAPI, ServerSwitchAPI
 from webui.app_api.exceptions import CancelRunning
 
 _MODAL_WAIT_MAX_SECONDS = 300
@@ -36,6 +36,7 @@ class CoreMixin:
     def __init__(self):
         self._window: webview.Window = None
         self.resource_updater_api = ResourceUpdaterAPI()
+        self.server_switch_api = ServerSwitchAPI()
         # 初始化单例管理器
         self.log_manager = LogManager()
         ConfigManager()
@@ -161,6 +162,7 @@ class CoreMixin:
     def set_window(self, window):
         self._window = window
         self.resource_updater_api.set_window(window)
+        self.server_switch_api.set_window(window)
 
     def get_startup_data(self):
         """一次性返回启动所需的所有数据，减少多次 pywebview.api 桥接往返"""

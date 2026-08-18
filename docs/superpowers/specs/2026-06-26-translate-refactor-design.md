@@ -22,6 +22,7 @@
 - 兼容现有 `config.json` 配置结构，新增配置项有默认值
 - `webutils/function_translate.py` 的对外签名保持兼容
 - `proper/flat.py` 的扁平化工具函数保留不改
+- 使用中文撰写注释与回复
 
 ---
 

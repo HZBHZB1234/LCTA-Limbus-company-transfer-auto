@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -208,3 +209,72 @@ def run_launcher_resource_update(
             )
         )
     return result
+
+
+def run_launcher_server_restore(
+    game_dir: Optional[Path] = None,
+    cancel_event: Optional[threading.Event] = None,
+    progress_callback: Optional[ProgressCallback] = None,
+) -> Dict[str, Any]:
+    """Launcher 集成：开启官服前恢复官服资源（缓存同步到 official）。
+
+    仅当 `launcher.server_switch.enabled` 开启且 lethe 目录已配置时执行。
+    目的是解决「切到 lethe 后直接开官服 → 官服独有 bundle 缺失/lethe 独有
+    残留 → 游戏内重复下载」的问题：把共享 Unity 缓存恢复到官服一致状态，
+    公共 bundle 不受影响。
+    """
+    from .server_sync import (
+        ServerSync,
+        ServerSyncCancelled,
+        ServerSyncError,
+        get_server_switch_config,
+    )
+
+    config = get_server_switch_config()
+    if not config["enabled"]:
+        _log_manager.debug("[服务器切换/Launcher] 官服启动前恢复未启用")
+        return {"success": True, "skipped": True, "reason": "disabled"}
+    game_path = Path(game_dir or ConfigManager().get("game_path", ""))
+    lethe_dir = Path(config.get("lethe_dir", ""))
+    if not game_path.is_dir():
+        _log_manager.log("[服务器切换/Launcher] 官服目录无效，跳过恢复: {}".format(game_path))
+        return {"success": True, "skipped": True, "reason": "invalid_official_dir"}
+    if not lethe_dir.is_dir():
+        _log_manager.log("[服务器切换/Launcher] lethe 目录未配置或无效，跳过恢复: {}".format(lethe_dir))
+        return {"success": True, "skipped": True, "reason": "invalid_lethe_dir"}
+
+    _log_manager.log(
+        "[服务器切换/Launcher] 开启官服前恢复官服资源（缓存同步）: lethe={}, official={}".format(
+            lethe_dir, game_path
+        )
+    )
+    sync = ServerSync(
+        lethe_dir=lethe_dir,
+        official_dir=game_path,
+        jobs=config.get("jobs", 8),
+        engine=config.get("engine", "auto"),
+        keep_other=config.get("keep_other", False),
+        progress_callback=progress_callback,
+        cancel_event=cancel_event,
+        retry_max=config.get("retry_max", 2),
+        retry_delay=config.get("retry_delay", 30),
+        connection_limit=config.get("connection_limit", 8),
+    )
+    try:
+        result = sync.run("official")
+        result["success"] = result.get("failed", 0) == 0
+        if result["success"]:
+            _log_manager.log("[服务器切换/Launcher] 官服资源恢复完成: {}".format(result))
+        else:
+            _log_manager.log(
+                "[服务器切换/Launcher] 官服资源恢复存在失败项: {}".format(result),
+                logging.WARNING,
+            )
+        return result
+    except ServerSyncCancelled:
+        return {"success": False, "skipped": True, "message": "服务器切换已取消"}
+    except ServerSyncError as exc:
+        _log_manager.log(
+            "[服务器切换/Launcher] 官服资源恢复失败: {}".format(exc), logging.WARNING
+        )
+        return {"success": False, "skipped": True, "message": str(exc)}

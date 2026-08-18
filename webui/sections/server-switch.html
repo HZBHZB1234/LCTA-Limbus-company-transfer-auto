@@ -1,0 +1,102 @@
+<div id="server-switch-page" class="resource-updater-page">
+    <div class="section-header">
+        <h2 class="section-title">
+            <i class="fas fa-arrows-rotate"></i>
+            服务器切换
+        </h2>
+        <p class="section-subtitle">配置 lethe 私服路径并发送桌面快捷方式：双击快捷方式即可自动同步私服资源并启动私服，无需手动执行切换。</p>
+    </div>
+
+    <div class="resource-updater-config-column">
+        <div class="setting-card resource-updater-card">
+            <div class="resource-card-heading">
+                <div>
+                    <span class="resource-card-eyebrow">目录设置</span>
+                    <h3 class="setting-title"><i class="fas fa-folder-open"></i> 两个版本的安装目录</h3>
+                </div>
+                <span id="ss-path-chip" class="resource-state-chip neutral">等待检测</span>
+            </div>
+
+            <div class="resource-path-row">
+                <input id="ss-official-dir" type="text" readonly placeholder="未设置，请前往设置页配置游戏目录">
+                <button id="ss-go-settings" type="button" class="action-btn secondary">
+                    <i class="fas fa-gear"></i> 前往设置
+                </button>
+            </div>
+
+            <div class="resource-path-row">
+                <input id="ss-lethe-dir" type="text" placeholder="选择 lethe 分发包目录">
+                <button id="ss-browse-lethe" type="button" class="action-btn secondary">
+                    <i class="fas fa-folder-open"></i> 浏览
+                </button>
+                <button id="ss-probe-lethe" type="button" class="action-btn secondary">
+                    <i class="fas fa-magnifying-glass"></i> 检测
+                </button>
+            </div>
+            <div id="ss-lethe-candidates" class="resource-candidate-list" style="display:none;"></div>
+            <div id="ss-probe-result" class="resource-inline-notice neutral">
+                <i class="fas fa-circle-info"></i>
+                <span>官服目录与主程序共用；lethe 目录选择 lethe 私服分发包所在文件夹（包含 LimbusCompany.exe 与 LimbusCompany_Data 的目录）。</span>
+            </div>
+        </div>
+
+        <div class="setting-card resource-updater-card">
+            <div class="resource-card-heading">
+                <div>
+                    <span class="resource-card-eyebrow">快捷方式</span>
+                    <h3 class="setting-title"><i class="fas fa-desktop"></i> 开启私服快捷方式</h3>
+                </div>
+                <span id="ss-shortcut-chip" class="resource-state-chip neutral">
+                    <i class="fas fa-circle-info"></i>
+                    未创建
+                </span>
+            </div>
+            <div class="resource-integration-row">
+                <div class="resource-integration-heading">
+                    <div class="resource-integration-icon">
+                        <i class="fas fa-rocket"></i>
+                    </div>
+                    <div class="resource-integration-text">
+                        <strong>发送快捷方式到桌面</strong>
+                        <small>在桌面创建「开启 lethe 私服」快捷方式：双击后先同步 lethe 资源，再启动 lethe 私服游戏（LimbusCompany.exe）。</small>
+                    </div>
+                </div>
+                <div class="resource-integration-actions">
+                    <button id="ss-create-shortcut" type="button" class="action-btn secondary">
+                        <i class="fas fa-desktop"></i> 发送到桌面
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="setting-card resource-updater-card">
+            <div class="resource-card-heading">
+                <div>
+                    <span class="resource-card-eyebrow">Launcher 集成</span>
+                    <h3 class="setting-title"><i class="fas fa-rocket"></i> 开启官服时自动恢复</h3>
+                </div>
+                <span id="ss-integration-chip" class="resource-state-chip neutral">
+                    <i class="fas fa-circle-info"></i>
+                    未开启
+                </span>
+            </div>
+            <div class="resource-integration-row">
+                <div class="resource-integration-heading">
+                    <div class="resource-integration-icon">
+                        <i class="fas fa-rotate-left"></i>
+                    </div>
+                    <div class="resource-integration-text">
+                        <strong>已集成至 Launcher</strong>
+                        <small>开启后，通过 Launcher 启动官方游戏前会自动把共享缓存恢复到官服一致状态（仅用于恢复官服资源，不会自动切到 lethe）。开关位于 Launcher 配置页的「工作模式配置」中。</small>
+                    </div>
+                </div>
+                <div class="resource-integration-actions">
+                    <button id="ss-go-launcher" type="button" class="action-btn secondary">
+                        <i class="fas fa-arrow-right"></i> 前往 Launcher 配置
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

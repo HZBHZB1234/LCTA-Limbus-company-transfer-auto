@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-08-13 -->
+<!-- Last updated: 2026-08-18 -->
 
 ## Project Purpose
 
@@ -77,7 +77,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `translateFunc/` | Translation engine: multi-stage LLM pipeline with proper noun matching |
 | `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py`；`pending_pip_ops.py` — 延迟依赖安装（纯标准库模块，启动早期钩子在导入任何第三方库之前重试 GUI 阶段因非网络原因失败的安装；更新永久保留废弃依赖，不执行 pip uninstall） |
 | `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey, and an optional WinForms launch center with configuration summary, vertical phase tracking, overall/stage progress, expandable logs, runtime PID/uptime, and cancellation controls |
-| `resource_updater/` | Official game resource updater: CDN token extraction, localize ZIP deployment, Unity Bundle cache population, aria2 RPC, Launcher fingerprint state, and the main-window page API |
+| `resource_updater/` | Official game resource updater: CDN token extraction, localize ZIP deployment, Unity Bundle cache population, aria2 RPC, Launcher fingerprint state, and the main-window page API. 另含官服 ⇄ lethe 私服资源切换（`server_sync.py`：两服 catalog 差异 → 目标服独有 bundle 补下载 / 另一服独有条目移除，复用官服下载引擎；桌面「开启 lethe 私服」快捷方式创建） |
 
 ## Design Patterns
 
@@ -93,8 +93,10 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Observer/Callback** | `globalManagers/LogManager.py` → `webui/app.py` → JS | Real-time log/progress/status via callback chains through modal windows |
 | **Cache + Auto-Invalidation** | 私有仓库 `cheatcore/cheat_damage_hook.py` | Damage-hook offsets fetched from a JSON API are cached locally keyed by the local `GameAssembly.dll` SHA-256; a game update (hash change) invalidates the cache and auto-refetches at start/apply time. The C DLL's runtime 16-byte prologue check is the backstop: on `verified=0` the recovery is **manually** triggered (WebUI「立即刷新偏移」/ relaunch) → force refresh + `retry_requested` hot reinstall without restarting the game (auto-detection loop not implemented) |
 | **Key Gate + Plugin Auto-Register** | `webutils/cheat_core.py` + `webutils/cheat_plugins.py` + `webui/js/cheat-shell.js` | 作弊工具箱实现全部位于私有仓库，构建期加密为 `cheat_core.bin` 分发。运行期用户输入密钥 → 校验解密 → 释放到 `%LOCALAPPDATA%/LCTA/cheat-core/` → 动态导入 `cheatcore` 包；解锁后 `CheatPluginHost.reload()` 读私有仓库 `cheatcore/registry.py` 的插件描述符自动注册（api 白名单 / 配置 schema 播种 / Launcher 生命周期 / 前端文件），主仓库不感知具体工具。密钥可经已知明文碰撞恢复（门槛而非加密，见私有仓库 README）。未解锁时宿主无插件注册，invoke/生命周期安全短路。开发模式：仓库根 `LCTA_CheatingCore/` 克隆或 `LCTA_CHEAT_DEV_SRC` 环境变量免密钥直连。Launcher 集成开关由 `renderLauncherPlugins()` 动态渲染进 `#cheat-plugin-launcher`：渲染前先 `cheat_core_status()` 触发 `ensure_unlocked()`（保证持久化密钥会话无需先开作弊页插件即已注册），并把 `enabled_key` 经 `configManager.registerConfigKey()` 动态登记进前端 `configKeyMap`（见 AGENTS「作弊工具箱 Launcher 集成动态配置规范」） |
+| **MOTW 单文件探针 + 整目录清除** | `webutils/utils/motw.py` + `start_webui.py` | 资源管理器解压下载包会给整个目录的所有文件同步附加「来自互联网」标记（Zone.Identifier ADS），导致 .NET 程序集（pythonnet）被阻止加载、可执行文件被 SmartScreen 拦截。策略：每次启动（`start_webui.py init_env`，经 importlib 按文件路径直接加载 motw 模块，避免重型 `webutils/__init__.py` 导入）只探测一个必然存在的探针文件；未标记直接跳过（零遍历），标记则对整个应用根目录（打包态含 launcher.exe 的上级目录）递归清除一次。纯标准库、best-effort 不抛错 |
 | **Pipeline** | `launcher/pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline (init→check_update→resource_update→cdn→prepare_mod→launch→running→exit). Modules register callbacks per phase via `on(phase, callback)`; `cancel_event` supports GUI-initiated shutdown.
 | **Fingerprint Gate** | `resource_updater/service.py` | Local SHA-256 of `LimbusCompany.exe` gates Launcher pre-download without an online version check; successful resource scopes are persisted and merged so partial manual runs do not suppress missing work. `record_update_result()` marks only fully completed scopes — failed scopes stay unmarked and re-run on the next launch — and persists the last result (counts + failed item names/reasons) for the manual page |
+| **Diff-Only Cache Sync** | `resource_updater/server_sync.py` | 官服/lethe 共享同一 Unity Caching 目录，catalog 几乎一致（名称含内容 hash，同名即同内容）。`ServerSync` 按完整 bundle 名集合算共享/独有，只对目标服补下载缺失独有 bundle、移除另一服独有缓存条目，公共 bundle 不动 —— 替代全量清缓存（每次切服 ~14 GB 重下载）。复用 `core.py` 的下载引擎/重试/进度；`launcher.server_switch.enabled` 控制 Launcher 开启官服前自动恢复官服资源 |
 | **Registry + Interface** | `webutils/drop/` | `DropFileHandler` 接口（检测 + 执行 + 显示名收敛于单类）; `DropFileHandlerRegistry` 按容器类型（zip/folder/json/path）有序检测、按类型分派执行，兜底 `invalid` |
 
 ## Key Interfaces
@@ -107,6 +109,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `LLMFancyAPI` | `webui/llm_fancy_api.py` | Pywebview bridge for the LLM 文本美化 window: wraps `webutils/llm_fancy/` (selection scan preview, exclusion-ruleset simulation, batched LLM beautification with progress/log callbacks and cancel, ruleset build/save/auto-enable) plus config persistence (`ui_default.llm_fancy`). Instantiated as `js_api=LLMFancyAPI()` in `LCTA_API.open_llm_fancy()` |
 | `Aria2DownloaderAPI` | `webui/aria2_downloader_api.py` | Pywebview bridge for the 泛用高速下载器 window: wraps the module-level singleton `webutils/function_aria2_downloader.py aria2_manager` (aria2c server start/stop, URL/magnet batch add, .torrent add, pause/resume/remove, global pause/resume/purge, folder/torrent pickers, config persistence under `ui_default.aria2_dl`). Background 1s poll pushes task snapshots to `window.__aria2DlDispatch`. Instantiated as `js_api=Aria2DownloaderAPI()` in `LCTA_API.open_aria2_downloader()`; window close stops the aria2c child process |
 | `ResourceUpdaterAPI` | `resource_updater/web_api.py` | Resource-update controller owned by `LCTA_API`. Probes game files, persists updater options (incl. retry settings), runs/cancels the worker thread, records results, exposes the last update result (failure list for the manual retry button), and emits per-channel progress into the main SPA's `resource-updater.js` controller |
+| `ServerSwitchAPI` | `resource_updater/web_api.py` | 服务器切换页控制器 owned by `LCTA_API`（`ResourceMixin` 转发 `server_switch_*`）：初始状态（配置 + lethe 目录候选探测）、lethe 目录校验、选项持久化、桌面快捷方式创建。手动任务接口（差异分析/start/cancel/事件推送）已随页面精简移除。`ServerSync`（`resource_updater/server_sync.py`）执行两服 catalog 差异 → 同步计划 → ADD/REMOVE，仅由快捷方式 CLI（`--server lethe`）与 Launcher 恢复（`run_launcher_server_restore()`，`--server official`）驱动 |
 | `ResourceUpdater` | `resource_updater/core.py` | Extracts S/L CDN tokens, downloads token-scoped localize ZIPs, parses remote/fallback catalog data, populates Unity cache entries, and selects bundled aria2c or the built-in downloader. Transient download failures auto-retry with `retry_max`/`retry_delay` backoff; exhausted retries emit a Range probe with diagnostic headers; aria2 uses a per-file connection limit |
 | `ConfigManager` | `globalManagers/ConfigManager.py` | Singleton config with dotted-path access, validation, auto-save |
 | `TranslationPipeline` | `translateFunc/pipeline.py` | Orchestrates the 6-stage LLM translation pipeline |

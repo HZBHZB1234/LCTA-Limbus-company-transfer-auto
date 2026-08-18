@@ -318,6 +318,8 @@ class ConfigManager {
             'launcher-work-crash-popup': 'launcher.work.crash_popup',
             // 游戏官方资源预下载（仅开关，详细配置在游戏资源更新页面）
             'launcher-resource-update-enabled': 'launcher.resource_update.enabled',
+            // 开启官服前自动恢复官服资源（仅开关，详细配置在服务器切换页面）
+            'launcher-server-switch-enabled': 'launcher.server_switch.enabled',
 
             // 音频工具
             'bank-dll-dir': 'ui_default.bank.dll_dir',

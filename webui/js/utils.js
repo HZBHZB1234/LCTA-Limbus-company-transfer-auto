@@ -104,6 +104,10 @@ function initNavigation() {
                         resourceUpdaterPage.init();
                     }
 
+                    if (sectionId === 'server-switch-section' && typeof serverSwitchPage !== 'undefined') {
+                        serverSwitchPage.init();
+                    }
+
                     // 进入加速页时重新 init（恢复轮询并刷新状态缓存），
                     // 离开时停止轮询 —— 轮询生命周期绑定到导航而非 section 首次加载
                     if (typeof speedPage !== 'undefined') {
@@ -484,6 +488,11 @@ const TOOLTIP_DATA = {
     'ru-retry-delay': '每轮自动重试前的等待时间（秒）。等待窗口覆盖 CDN 资源传播时间，推荐 30 秒。',
     'ru-connection-limit': 'aria2 每个文件的并发下载连接数。数值过高会瞬间打出大量连接，可能触发源站拒绝；网络不稳定时可适当调低。',
     'launcher-work-speed': '通过 Launcher 启动游戏时自动启用游戏加速并注册全局热键。首次勾选需阅读并同意风险须知（未同意时就地弹出）。相关设置请在"游戏加速"页面配置。',
+
+    // ===== 服务器切换 =====
+    'ss-official-dir': '官服游戏安装目录，与主程序设置页的"游戏路径"共用。',
+    'ss-lethe-dir': 'lethe 私服分发包所在目录（包含 LimbusCompany.exe 与 LimbusCompany_Data 的文件夹）。',
+    'ss-create-shortcut': '在桌面创建「开启 lethe 私服」快捷方式：双击后先同步 lethe 资源，再启动 lethe 私服游戏。',
 
     // ===== 游戏资源更新 =====
     'ru-localize': '下载游戏官方各语言文本到游戏目录，汉化依赖这些文本。',

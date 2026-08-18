@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-08-14 -->
+<!-- Last updated: 2026-08-18 -->
 
 ## Directory Overview
 
@@ -12,7 +12,7 @@
 | `translateFunc/` | Translation engine (LLM pipeline) | 13+ |
 | `globalManagers/` | Cross-cutting singletons + 纯标准库 pending 依赖操作 | 3 |
 | `launcher/` | Standalone game launcher (GPL-3.0) | 13 |
-| `resource_updater/` | Official localize/Bundle updater and Launcher fingerprint gate | 4 |
+| `resource_updater/` | Official localize/Bundle updater, Launcher fingerprint gate, and 官服/lethe 资源切换 | 5 |
 | `tools/cfst/` | CloudflareSpeedTest binary + IP lists（构建时由 InitCode 下载，运行时懒加载兜底） | 3 |
 | `hooks/` | C source for native DLLs | `rawinput_hook.c` (input bypass), compiled to `rawinput_hook.dll` by build.ps1 / CI; 作弊工具箱的 hook DLL 源码已迁往私有仓库 LCTA_CheatingCore（`hooks/*.c` 扫描编译，见 `cheat_core/`） |
 | `vendor/minhook/` | 空（MinHook 已随作弊工具箱功能迁往私有仓库） | — |
@@ -62,6 +62,7 @@
 | `css/translation-log-viewer.css` | Three-column diagnostic viewer layout, filters, record table, collapsible detail cards, responsive detail panel, and theme-aware status styling |
 | `js/core.js` | Core framework: API binding, event system, navigation; `applyConfigToSection(容器)` 限定容器回填已渲染表单（跳过 pendingUpdates 待保存键），供懒加载 section 回填配置用；`ConfigManager.registerConfigKey(id, keyPath)` 动态登记配置键（作弊工具箱插件 Launcher 集成开关按注册表调用） |
 | `js/resource-updater.js` | In-app resource updater page controller: refreshes persisted state on navigation, shows the shared game directory (read-only, linked to the main program's `game_path` setting), probes the game directory, starts/cancels work, and renders channel progress/log events from `ResourceUpdaterAPI`. 游戏目录为空时禁用「开始更新」并显示前往设置页提示（`updatePathMissingState`）；失败时「开始更新」按钮变「重试更新」、失败文案含日志路径；任务卡顶部有总进度行（manifest 10% / Localize 45% / Bundle 45% 加权，`updateTotalProgress`）。The Launcher auto-download switch (`launcher.resource_update.enabled`) lives only on the Launcher config page and is read here from the config cache (source page shows integration intro + jump button with anchor `lc-card-resource-update`) |
+| `js/server-switch.js` | 服务器切换页控制器（`ServerSwitchPage`，nav `server-switch`）：纯配置页——回填官服目录（读 `game_path`）与 lethe 目录、lethe 目录候选按钮与检测、配置持久化（`launcher.server_switch.lethe_dir`，保存时回传 `enabled` 防止覆盖 Launcher 集成开关）、桌面快捷方式创建（toast 反馈）；手动切换控件（目标单选/引擎/并发/保留另一服/分析/开始切换/取消/进度事件）已移除，对应后端 `ServerSwitchAPI` 手动任务接口一并清理；Launcher 集成开关仅存在于 Launcher 配置页（本页展示集成介绍 + 跳转按钮，锚点 `lc-card-server-switch`） |
 | `js/features.js` | Feature-specific UI logic, drag-drop manager, manual update from local zip, FancyManager (saveAll now persists to `fancy/` folder via `pywebview.api.save_ruleset()`), `openRuleEditor()` global function, `toggleLLMOptions()`（翻译页 LLM 专属选项折叠组）。首页「一键配置」`oneClickSetup()`（启用 Launcher/文本美化/CDN/资源预下载等可自动化配置 + 写入 Steam 启动项，风险与需手动选择功能仅保留跳转）；`refreshDashboard()` 已改为空实现（首页不再展示状态卡，仅保留兼容导航调用）。汉化包下载成功经 `notifyDownloadDone()` 弹 toast 引导前往安装页。FancyManager 支持列表项 `itemBadge` 回调（v2/bus 格式徽标）、`markRulesetDirty`（勾选变化 → 「保存全部」按钮红点未保存标记）、`applyFancy` 空启用前置确认、`deleteSelected` 拦截 `_quick_edits`、模态日志改为列出启用规则集名称 |
 | `js/init.js` | Initialization and bootstrap: uses single `get_startup_data()` call; welcome content deferred via `_pendingWelcomeContent` for lazy section loading compatibility。定义 **`applyVersionBadges()`**：把 `data.version`（后端 `get_startup_data` 新增返回）写入侧边栏 `.version` 与欢迎/关于页 `.version-badge`（懒加载 section 加载后由 preload.js 补填），版本号不再写死 |
 | `js/utils.js` | Navigation, encryption, and sidebar search; all ordinary tools, including 游戏资源更新, use lazy SPA sections through `await loadSection()`. 侧边栏直达「首页」时也会调用 `refreshDashboard()` 刷新状态总览（此前仅 `goAndShow('dashboard')` 刷新）。`goAndShow(name, anchorId)` 支持第二参数锚点：等待目标 section 懒加载+淡入完成后 `scrollIntoView` 定位并给目标元素加 `.target-flash` 高亮 2 秒（跨页集成开关跳转直达卡片）；TOOLTIP_DATA 覆盖 launcher/download/resource-updater（`ru-*`）/launcher-config 配置项，`initTooltips` 对复选框目标增加 `closest('label')` 回退（支持 `ru-lang-*` 裸复选框场景） |
@@ -120,7 +121,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 |------|---------|------------|
 | `__init__.py` | Public API surface | Re-exports all feature functions consumed by `webui/app.py` |
 | `clr_bootstrap.py` | pythonnet/clr_loader 引导 | `ensure_clr()` 强制 netfx 并导入 clr:预检 `Python.Runtime.dll` 存在性、clr_loader 版本(<0.2.8 警告)、.NET Framework >=4.7.2;失败时用 PowerShell 反射探针暴露 clr_loader 吞掉的真实异常并给出修复指引,不再自动回退 coreclr/mono。被 `start_webui.py`、`launcher/gui_progress.py`、`launcher/speed_hotkey.py` 共用 |
-| `utils/` | Shared utility package | `io.py` zip/unzip, hashing, 7z integration（环境无 7z 时自动从官网下载 7zr.exe 到 `tools/7z/`）; `net.py` downloads（`download_with`/`download_with_github` 透传 `CancelRunning`，不再吞成失败）；`shell.py` Windows Shell API（`_move_folders` 移动、`get_downloads_dir` 经 SHGetKnownFolderPath 解析真实「下载」已知文件夹，支持用户迁移重定向，失败回退 `Path.home()/Downloads`）; `font.py` font caching（`get_cache_font` 缓存优先回退链 + `save_cache_font` 上传/拖入本地字体替换 `cache_path/ChineseFont.ttf`）; `misc.py` steam command/icon; facade re-exported via `utils/__init__.py`。`zip_folder` 支持可选 `modal_id`（打包循环内逐文件 `check_running`，取消透传） |
+| `utils/` | Shared utility package | `io.py` zip/unzip, hashing, 7z integration（环境无 7z 时自动从官网下载 7zr.exe 到 `tools/7z/`）; `net.py` downloads（`download_with`/`download_with_github` 透传 `CancelRunning`，不再吞成失败）；`shell.py` Windows Shell API（`_move_folders` 移动、`get_downloads_dir` 经 SHGetKnownFolderPath 解析真实「下载」已知文件夹，支持用户迁移重定向，失败回退 `Path.home()/Downloads`）; `font.py` font caching（`get_cache_font` 缓存优先回退链 + `save_cache_font` 上传/拖入本地字体替换 `cache_path/ChineseFont.ttf`）; `misc.py` steam command/icon; `motw.py` **Windows「来自互联网」标记（Zone.Identifier ADS）检测与清除**（`has_zone_identifier`/`remove_zone_identifier`/`clear_motw`/`cleanup_app_on_startup`，纯标准库零第三方依赖，可经 importlib 按文件路径在启动早期加载）; facade re-exported via `utils/__init__.py`。`zip_folder` 支持可选 `modal_id`（打包循环内逐文件 `check_running`，取消透传） |
 | `load.py` | Config & game detection | Config loading/validation, Steam registry game path detection |
 | `update.py` | Self-updater | GitHub Releases-based auto-update. `install_requirements` 按**包名**比对 requirements（去行内注释/空行/选项行，PEP 503 归一化；spec 比较前经 `_normalize_spec` 归一化包名大小写/空白，避免仅格式差异误触发延迟）：涉及依赖移除或版本变动时，将整个依赖修改写入 pending 文件（`%LOCALAPPDATA%/LCTA/pending_pip_ops.json`），延迟到下次启动、加载任何第三方库之前由 `globalManagers/pending_pip_ops.py apply_pending_pip_ops()` 统一执行（先卸载后安装；**纯标准库模块**，导入链不触发 webutils 包）——规避 pythonnet/clr_loader 等已加载 DLL 包在更新会话中无法卸载/替换的问题，且"库缺失"状态不阻断执行；仅全新依赖立即安装，失败跳过继续。pending 写入时补模态状态提示"依赖变更将在下次启动时自动完成"；`check_and_update` 成功后若 pending 存在，最终状态提示重启。`check_and_update` 缓存下载/解压置于 `tempfile.mkdtemp` 临时目录（不再用应用目录内 `updateCache`，否则 update_files 清空应用目录时销毁解压源导致复制必然失败），finally 清理（仅清理本函数自建的临时目录，调用方传入的缓存目录保留）；`update_files` 失败时还原 `install_requirements` 写入的 pending 操作记录（避免下次启动按新版本依赖卸载旧代码）。启动执行 pending 时经 ctypes MessageBoxW 弹原生进度窗（后台线程逐项执行、文本实时更新、完成自动关闭），打包版无控制台也可见 |
 | `translator_constants.py` | API provider configs | TranslateKit provider definitions (Baidu, Google, DeepL, etc.) |
@@ -226,14 +227,15 @@ Standalone library with own `__init__.py` public API.
 | `crash_export.py` | 游戏异常退出日志导出：`is_abnormal_exit(exit_code, game_process, cancel_event)`（退出码非 0 且非用户取消且游戏进程已创建）；`collect_log_sources()` 收集 `%USERPROFILE%/AppData/LocalLow/ProjectMoon/LimbusCompany/` 下 `Player.log`/`Player-prev.log` 与 `%LOCALAPPDATA%/Temp/ProjectMoon/LimbusCompany/Crashes/` 递归文件（存在才收）；`export_game_logs(output_dir=...)` 打包 zip（`LCTA_游戏日志导出_<时间戳>.zip`）到系统「下载」文件夹（`get_downloads_dir()`），单文件读写失败跳过不中断，完成后 `explorer /select` 定位；无可导出内容返回 None |
 | `pipeline.py` | `LaunchPipeline` — phase-based event-driven pipeline: `on(phase, callback)` for module registration, `emit(phase, **kwargs)` to trigger all callbacks. Defines 8 phases (`PHASE_INIT` through `PHASE_EXIT`, including `PHASE_RESOURCE_UPDATE` between check_update and cdn). `cancel_event` (threading.Event) supports GUI-initiated abort. `context` dict shares state (steam_argv, game_process, game_pid) across phases |
 
-## resource_updater/ — Official Game Resource Updater
+## resource_updater/ — Official Game Resource Updater & Server Switch
 
 | File | Purpose |
 |------|---------|
 | `core.py` | Core updater: validates game files, extracts S/L CDN tokens and the real remote catalog URL, uses the game-compatible Unity request headers, hashes `LimbusCompany.exe`, parses Bundle names/cache keys, downloads token-scoped localize ZIPs, safely deploys localize files, populates Unity cache entries, removes failed Bundle entry directories, logs through `LogManager`, and manages bundled aria2c JSON-RPC with urllib fallback. Download failures are reported at WARNING level with file name + error code and collected into `failed_items` in the run result; aria2 polling progress logs are throttled to count changes (progress callbacks still fire each poll). Transient failures (aria2 error state, builtin downloader exceptions, remote catalog fetch) are automatically retried with a configurable `retry_max`/`retry_delay` backoff (0 = disabled, keeps legacy behavior); exhausted retries run a Range probe (`_probe_failure`) that captures status code + diagnostic response headers into `failed_items[].diagnostics`, and the run result aggregates a `retried` counter |
-| `service.py` | Shared configuration/state service. Stores Launcher state under `%LOCALAPPDATA%/LCTA/resource-updater/launcher-state.json`, compares the local `LimbusCompany.exe` SHA-256 fingerprint, checks whether prior partial runs cover current configured scopes, and records update results (success or failure) via `record_update_result` — only fully completed scopes are marked so failed scopes are retried on the next launch. Also persists the last result (success/failed/retried counts + failed item names/reasons) under `last_result` and exposes retry defaults (`retry_max=2`, `retry_delay=30`, `connection_limit=8`) from config |
-| `web_api.py` | Main-window resource updater controller. `LCTA_API` delegates prefixed bridge methods to it; it probes the shared game directory (read from main config `game_path`), persists updater options (including retry settings), runs/cancels the worker, records results, exposes the last update result to the page, and logs lifecycle/errors through `LogManager` |
-| `__init__.py` | Public resource updater exports used by Launcher and tests |
+| `service.py` | Shared configuration/state service. Stores Launcher state under `%LOCALAPPDATA%/LCTA/resource-updater/launcher-state.json`, compares the local `LimbusCompany.exe` SHA-256 fingerprint, checks whether prior partial runs cover current configured scopes, and records update results (success or failure) via `record_update_result` — only fully completed scopes are marked so failed scopes are retried on the next launch. Also persists the last result (success/failed/retried counts + failed item names/reasons) under `last_result` and exposes retry defaults (`retry_max=2`, `retry_delay=30`, `connection_limit=8`) from config. `run_launcher_server_restore()` is the Launcher server-switch hook: when `launcher.server_switch.enabled` is on and both dirs are valid, it syncs the shared Unity cache back to official before the official resource pre-download |
+| `server_sync.py` | 官服 ⇄ lethe 私服资源切换（移植自 LimbusDecompile 工作区 `docs/LETHE_BUNDLE_SYNC.md` 与 `tools/sync_server_bundles.py` 的思路）。`ServerSync` 复用 `core.py` 的 `parse_catalog`/下载引擎/`_write_bundle_info`：加载两服 catalog（lethe 目录 + 官服目录）、按完整 bundle 名集合算共享/lethe 独有/官服独有、对目标服生成 ADD（缺失的目标服独有 bundle 从对应 CDN 补下载进 Unity 缓存）与 REMOVE（另一服独有缓存条目移除，`keep_other` 可保留共存）计划并执行，支持 dry-run/取消/进度/重试。配置键 `launcher.server_switch.*`（enabled/server/lethe_dir/keep_other/jobs/engine/retry）。`create_lethe_shortcut()` 在桌面创建「开启 lethe 私服」快捷方式：指向生成的 `launch_lethe.cmd`（先 `-m resource_updater.server_sync --server lethe` 同步资源，再启动 lethe 分发包 `LimbusCompany.exe`）。`run_server_sync()` 为 CLI/Launcher 通用入口 |
+| `web_api.py` | Main-window resource updater controller. `LCTA_API` delegates prefixed bridge methods to it; it probes the shared game directory (read from main config `game_path`), persists updater options (including retry settings), runs/cancels the worker, records results, exposes the last update result to the page, and logs lifecycle/errors through `LogManager`. `ServerSwitchAPI` is the 服务器切换页 controller: initial state (config + lethe 目录候选探测), lethe 目录校验, options persistence, and 桌面快捷方式创建（手动任务接口已随页面精简移除） |
+| `__init__.py` | Public resource updater exports used by Launcher and tests (now includes `ServerSync`/`run_server_sync`/`create_lethe_shortcut`/server-switch config helpers) |
 
 ## Import Dependency Graph
 
@@ -277,7 +279,8 @@ launcher/main.py
   → launcher/updates.py (reuses shared webutils/webFunc install, download and beautification helpers)
   → launcher/game_launch.py
   → launcher/cdn.py
-  → resource_updater/service.py (fingerprint-gated official localize/Bundle pre-download)
+  → resource_updater/service.py (fingerprint-gated official localize/Bundle pre-download;
+     PHASE_RESOURCE_UPDATE 前先 run_launcher_server_restore() 恢复官服资源)
 
 launcher/sound.py
   → launcher/bankmod.py (apply_rebanks: .rebank fsb 补丁模组 + 哈希缓存)
@@ -286,6 +289,7 @@ launcher/sound.py
 
 resource_updater/web_api.py
   → resource_updater/core.py (manual update worker with retry)
+  → resource_updater/server_sync.py (ServerSwitchAPI → ServerSync / create_lethe_shortcut / config)
   → resource_updater/service.py (config, retry defaults, and last-result state)
   → globalManagers/ConfigManager.py
 

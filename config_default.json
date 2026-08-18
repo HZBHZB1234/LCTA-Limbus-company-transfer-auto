@@ -147,6 +147,17 @@
             "retry_delay": 30,
             "connection_limit": 16
         },
+        "server_switch": {
+            "enabled": false,
+            "server": "official",
+            "lethe_dir": "",
+            "keep_other": false,
+            "jobs": 8,
+            "engine": "auto",
+            "retry_max": 2,
+            "retry_delay": 30,
+            "connection_limit": 8
+        },
         "last_install": {
             "llc": "0",
             "ourplay": "0",

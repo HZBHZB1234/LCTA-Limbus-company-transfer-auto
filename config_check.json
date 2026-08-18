@@ -151,6 +151,24 @@
             "retry_delay": "int",
             "connection_limit": "int"
         },
+        "server_switch": {
+            "enabled": "bool",
+            "server": [
+                "official",
+                "lethe"
+            ],
+            "lethe_dir": "str",
+            "keep_other": "bool",
+            "jobs": "int",
+            "engine": [
+                "auto",
+                "aria2",
+                "builtin"
+            ],
+            "retry_max": "int",
+            "retry_delay": "int",
+            "connection_limit": "int"
+        },
         "last_install": {
             "llc": "str",
             "ourplay": "str",

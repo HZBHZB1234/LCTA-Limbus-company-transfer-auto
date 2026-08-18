@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-14 -->
+<!-- Last updated: 2026-08-18 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -763,6 +763,7 @@ start_webui.py main()
     → pywebviewready event fires               JS ↔ Python bridge active
       → pywebview.api.get_startup_data()       single call returns full startup bundle
       → _pendingWelcomeContent                 deferred rendering for welcome section
+      → 非首启默认 goAndShow('dashboard')     跳转「首页」（一键配置）；首启 goAndShow('welcome')
       → configManager.applyConfigToUI()        null-guarded, skips unloaded sections
       → toggle functions                       all null-guarded
       → fancyManager.init()                    null-guarded DOM access
@@ -877,6 +878,33 @@ Launcher path:
 Build path: `build.ps1` and `.github/workflows/release.yml` pin aria2 1.37.0, retry/validate the official release download, and copy `aria2c.exe` plus `COPYING` when available to `tools/aria2/` in full, compatible, and update artifacts.
 
 Files: `resource_updater/core.py`, `resource_updater/service.py`, `resource_updater/web_api.py`, `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `webui/css/layout-extras.css`, `webui/app.py`, `webui/sections/launcher-config.html`, `launcher/main.py`, `config_default.json`, `config_check.json`, `build.ps1`, `.github/workflows/release.yml`
+
+## 15A. 官服 ⇄ lethe 服务器切换
+
+```
+配置页（纯配置，无手动切换控件）:
+  Sidebar 「服务器切换」页（lethe 路径浏览/检测/候选、发送快捷方式；
+  Launcher 集成开关位于 Launcher 配置页「更新集成」的「开启官服前自动恢复
+  官服资源」，锚点 goAndShow('launcher-config', 'lc-card-server-switch')）
+    → webui/sections/server-switch.html + js/server-switch.js
+    → webui/app.py LCTA_API.server_switch_*()
+    → resource_updater/web_api.py ServerSwitchAPI
+      → probe_lethe_dir(): resource_updater/server_sync.py _s_token_from_settings
+      → save_options(): save_server_switch_options()
+      → create_shortcut(lethe_dir): create_lethe_shortcut()
+          生成 %LOCALAPPDATA%/LCTA/resource-updater/server_switch/launch_lethe.cmd
+          （先 `-m resource_updater.server_sync --server lethe ...` 同步，再启动
+          lethe 分发包 LimbusCompany.exe）+ PowerShell WScript.Shell 建桌面 .lnk
+
+Launcher path（仅用于开启官服时恢复官服资源）:
+  launcher/main.py _resource_update_handler
+    → resource_updater/service.py run_launcher_server_restore()
+      当 launcher.server_switch.enabled 且两目录有效：
+      ServerSync.run('official') 把共享缓存恢复到官服一致状态（官服独有补下载、
+      lethe 独有移除），再执行原有 run_launcher_resource_update() 预下载
+```
+
+Files: `resource_updater/server_sync.py`, `resource_updater/service.py`, `resource_updater/web_api.py`, `webui/sections/server-switch.html`, `webui/js/server-switch.js`, `webui/guide/server-switch.md`, `webui/index.html`, `webui/sections/preload.js`, `webui/sections/launcher-config.html`, `webui/js/core.js`, `webui/js/utils.js`, `launcher/main.py`, `config_default.json`, `config_check.json`, `.github/InitCode.py`
 
 ## 16. Metadata 恢复（IL2CPP metadata 解密恢复，v2 全自动管线）
 
@@ -1067,3 +1095,34 @@ Files: `webui/sections/bank.html`, `webui/js/bank.js`, `webui/app_api/bank.py`,
       `launcher/sound.py`, `launcher/bankmod.py`,
       `config_default.json`（ui_default.bank.dll_dir / dll_url）, `tests/test_bank_rebank.py`,
       `tests/test_bank_fmod.py`, `tests/test_bank_dll_download.py`
+
+## 15. 启动时清除「来自互联网」标记（MOTW 兼容性修复）
+
+> 背景：资源管理器解压下载包会给整个目录的所有文件**同步**附加 `Zone.Identifier`
+> ADS（要么全有、要么全无）。该标记导致 .NET 程序集（pythonnet/Python.Runtime.dll）
+> 被系统阻止加载（「来自其他计算机的文件被阻止」）、可执行文件被 SmartScreen 拦截，
+> 表现为「部分资源加载失败」。策略：启动时只探测**一个**探针文件，未标记零开销跳过，
+> 标记则对应用根目录递归清除一次。
+
+```
+每次启动（WebUI 与 Launcher 两种模式均经此入口）:
+  → start_webui.py init_env()                设置 path_（打包态 = <app>/code/）
+      → _cleanup_motw_on_startup()           经 importlib.util 按文件路径直接加载
+                                              webutils/utils/motw.py（避免触发
+                                              webutils/__init__.py 重型第三方导入，
+                                              init_env 阶段只加载标准库）
+      → webutils/utils/motw.py cleanup_app_on_startup()
+          → _app_code_root()                 path_ 环境变量；未设置时按 __file__ 推导
+          → _probe_file()                    优先 code_root/start_webui.py，回退 motw.py 自身
+          → has_zone_identifier(probe)       探测单个文件是否带 Zone.Identifier ADS
+              · False → return 0（快路径，不遍历目录）
+              · True  → _app_root()          打包态 = launcher.exe/launcher_debug.exe 所在
+                                             上级目录（含 exe 本体），开发态 = code 根
+              → clear_motw(app_root, recursive=True)   os.walk 递归删除每个文件的
+                                              :Zone.Identifier ADS（\\?\ 长路径回退），
+                                              返回清理文件数，best-effort 不抛错
+          → 清理数 > 0 时追加写入 logs/app.log
+```
+
+Files: `start_webui.py`（`_cleanup_motw_on_startup`，init_env 内调用）, `webutils/utils/motw.py`,
+      `webutils/utils/__init__.py`（导出）, `tests/test_motw.py`

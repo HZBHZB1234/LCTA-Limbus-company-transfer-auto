@@ -95,6 +95,10 @@
             "extract_dir": "",
             "quality": 92,
             "threads": 0
+        },
+        "mod_mirror": {
+            "base_url": "https://mods.lcta.top",
+            "auth": ""
         }
     },
     "api_config": "",

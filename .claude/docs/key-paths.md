@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-18 -->
+<!-- Last updated: 2026-08-19 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1095,6 +1095,40 @@ Files: `webui/sections/bank.html`, `webui/js/bank.js`, `webui/app_api/bank.py`,
       `launcher/sound.py`, `launcher/bankmod.py`,
       `config_default.json`（ui_default.bank.dll_dir / dll_url）, `tests/test_bank_rebank.py`,
       `tests/test_bank_fmod.py`, `tests/test_bank_dll_download.py`
+
+## 20. Mod 镜像站集成（内置站点 / aria2 下载 / 登录态持久化）
+
+侧边栏「常用工具」组 → `#mod-mirror-btn`（`openModMirror()`）
+  → `pywebview.api.open_mod_mirror()`
+  → `webui/app_api/mod_mirror.py`（ModMirrorMixin：`webview.create_window`，url = `base_url()/?embed=lcta`，1280x860，`js_api=ModMirrorWindowAPI`，单引用去重，关闭清理引用）
+
+站点页面 → 登录（嵌入模式，embed.js 拦截 localStorage 3 键）
+  → `window.pywebview.api.modMirrorBridge('save-auth', {access_token, refresh_token, user})`
+  → `webui/mod_mirror_api.py`（ModMirrorWindowAPI）
+  → `webutils/function_mod_mirror.py mod_mirror_save_auth`（写 `ui_default.mod_mirror.auth` JSON）
+  → 下次打开窗口页面加载时 get-auth 恢复 → 登录状态跨会话持久化
+
+站点详情页「下载标准版/下载」按钮（embed 模式，ModDetailView.vue）
+  → `window.pywebview.api.modMirrorRequest({source:'lcta-mod-mirror', payload})`
+  → ModMirrorWindowAPI 校验 source → 主窗口 `evaluate_js` 派发 `lcta-mod-download` CustomEvent
+  → `webui/js/mod-mirror.js`（ProgressModal 进度 + 取消）
+  → `pywebview.api.mod_mirror_request(payload, modal.id)`
+  → `webui/app_api/mod_mirror.py`（ModMirrorMixin 转发，CancelRunning → 已取消 + del_modal_list）
+  → `webutils/function_mod_mirror.py mod_mirror_request`：
+      standard → `_download_aria2`（`_resolve_direct_url` 先用 requests 解析 API 域 302
+        → 预签名 CDN 直链（dl.mods.lcta.top，不拦 aria2c TLS 指纹）→ `Aria2DlClient` 多连接，
+        进度 5-85，`check_running` 取消；aria2c 缺失/启动失败/任务 error（403 等）→ 降级
+        `_download_fallback`=`download_with`）
+      → `_verify_expected`（size + SHA256）→ `_install_standard`（删旧同名/_disable → `_extract_zip_safe`
+        解压到 `get_mod_path()/<name>`，下次启动游戏 launcher rglob 生效；进度 92→100）
+      file → 下载到 `get_downloads_dir()` 不安装
+
+Files: `webui/index.html`（#mod-mirror-btn）, `webui/js/mod-mirror.js`,
+      `webui/app_api/mod_mirror.py`, `webui/mod_mirror_api.py`, `webui/app.py`,
+      `webutils/function_mod_mirror.py`, `config_default.json` / `config_check.json`
+      （ui_default.mod_mirror.base_url/auth）, `.github/InitCode.py`（js_files）,
+      `tests/test_mod_mirror.py`, `webui/assets/update.md`；
+      站点侧：LimbusAssetsUpload `frontend/src/embed.js` / `main.js` / `views/ModDetailView.vue`
 
 ## 15. 启动时清除「来自互联网」标记（MOTW 兼容性修复）
 

@@ -247,6 +247,7 @@ js_files = [
     'js/metadata-recovery.js',
     'js/cg.js',
     'js/bank.js',
+    'js/mod-mirror.js',
 ]
 js_content = ''
 for f in js_files:

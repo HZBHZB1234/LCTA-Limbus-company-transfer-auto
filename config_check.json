@@ -95,6 +95,10 @@
             "extract_dir": "str",
             "quality": "int",
             "threads": "int"
+        },
+        "mod_mirror": {
+            "base_url": "str",
+            "auth": "str"
         }
     },
     "api_config": "str",

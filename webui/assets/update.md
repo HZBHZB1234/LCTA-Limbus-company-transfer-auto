@@ -32,6 +32,9 @@
 - 修复启动配置校验误报：`config_default.json` 补齐缺失的 `ui_default.llm_fancy` 段（与 `config_check.json` 类型声明对齐，默认值取自 LLM 文本美化配置逻辑），消除每次启动日志中的「配置文件格式错误 / Missing key: ui_default.llm_fancy」
 - 修复 WebUI（`start_webui.py`）启动路径 CLR 初始化失败时探针诊断不落盘：ensure_clr 失败会把真实异常、PowerShell 反射探针输出与修复指引写入 `logs/app.log`（此前仅输出到控制台，日志里只剩 webview 层的无信息量报错），与 Launcher（GUI 模式）行为保持一致
 - 启动后默认进入「首页」（一键配置页），不再默认停留在「翻译工具」页；首次使用仍显示「欢迎」页引导
+- 新增「Mod 镜像站」功能：侧边栏「常用工具」组新增入口，独立窗口内嵌国内 Mod 镜像站（默认 https://mods.lcta.top，可在配置中修改 base_url），支持中文搜索/浏览/详情/图集/评论；站点详情页「下载标准版」与「下载」按钮在嵌入模式下不再触发浏览器下载，而是交给 LCTA 用 aria2c 高速下载（多连接并发、断点续传；aria2c 不可用时自动降级内置下载器），标准版包下载后自动校验大小与 SHA256 并解压安装到模组目录（下次启动游戏时生效，安装目录与「已安装数据管理」页一致），普通文件下载到系统「下载」目录；下载进度与取消在 LCTA 进度模态窗中展示
+- 「Mod 镜像站」登录状态持久化：站点页面在嵌入模式下将登录令牌（access/refresh/user）经 pywebview 桥同步存储到 LCTA 配置（ui_default.mod_mirror.auth），关闭窗口或重启程序后再次打开仍保持登录态；页面加载时自动从宿主恢复
+- 修复「Mod 镜像站」aria2c 下载被 CDN 拦截的问题：站点 API 域名（mods.lcta.top）按 TLS 客户端指纹拦截 aria2c（403/连接重置），而 302 重定向后的 CDN 直链域名（dl.mods.lcta.top）不拦截。下载前先用内置网络栈解析 302 拿到预签名直链再交给 aria2c 多连接下载，既保留 aria2c 的高速分段下载能力，又绕过 API 域的指纹拦截；若 aria2c 仍失败（直链 403 等）自动降级内置下载器完成下载
 
 ## v5.0.2版本更新内容
 - 添加cg自定义功能

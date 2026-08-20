@@ -152,8 +152,8 @@ def solve(metadata: bytes, profile: dict, version: int = 39) -> dict:
             continue
         if e["offset"] < 0:
             continue
-        if e["offset"] + e["size"] > len(metadata) + 4:
-            continue          # 越界辅助表（幻影）
+        if e["offset"] + e["size"] > len(metadata) + MAX_ADJ:
+            continue          # 越界辅助表（幻影；容忍 header offset 漂移 ≤ MAX_ADJ）
         if e["index"] in prot_entries:
             continue
         pool.append(e)

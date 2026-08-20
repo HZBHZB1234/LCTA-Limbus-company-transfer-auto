@@ -53,6 +53,10 @@ class RuleBasedValidator:
     # 匹配 Effect ID 内组模式（不含括号），用于区分 ID 与中文内容
     _ID_LIKE_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
 
+    # 匹配括号内含有中文（CJK）内容的形式，如 [出血]、[震颤 ]，
+    # 这类是英文ID被误译为中文后塞回括号，需还原为 [EnglishId]。
+    _BRACKETED_CN_RE = re.compile(r'\[([^\]]*[一-鿿][^\]]*)\]')
+
     # 匹配被编码（HTML 实体 / URL 编码）的游戏富文本标签，如
     # &lt;color=#ff6000&gt; / %3Ccolor=%23ff6000%3E 及其闭合标签。
     # 仅当标签被编码时才匹配，避免误伤正文中的裸 < > 字面量。
@@ -74,6 +78,9 @@ class RuleBasedValidator:
         self._affect_cn_names: set[str] = set()
         self._affect_id_to_cn: dict[str, str] = {}
         self._affect_kr_to_cn: dict[str, str] = {}
+        # 反向映射：中文显示名（含尾随空格变体）→ 引擎代码ID，
+        # 用于将错误放入括号的中文名还原为 [EnglishId]。
+        self._cn_to_id: dict[str, str] = {}
 
         for a in affects_data:
             cn = a.get("cn", "")
@@ -81,6 +88,8 @@ class RuleBasedValidator:
             kr = a.get("kr", "")
             if cn:
                 self._affect_cn_names.add(cn)
+                if aid:
+                    self._cn_to_id[cn.strip()] = aid
             if aid and cn:
                 self._affect_id_to_cn[aid] = cn
             if kr and cn:
@@ -105,6 +114,9 @@ class RuleBasedValidator:
         )
         report.violations.extend(
             self.validate_effect_refs(text_blocks, translations)
+        )
+        report.violations.extend(
+            self.validate_bracketed_cn_buffs(translations)
         )
 
         report.warnings_remaining = sum(
@@ -204,8 +216,11 @@ class RuleBasedValidator:
                     continue  # 空括号 []，跳过
 
                 # 构建修正后的版本：ID 类保留括号，中文类去掉括号
-                if self._ID_LIKE_RE.match(stripped) or stripped in self._affect_id_to_cn:
+                if self._ID_LIKE_RE.match(stripped):
                     fixed = f"[{stripped}]"
+                elif stripped in self._cn_to_id:
+                    # 中文显示名被错误放入括号 → 还原为引擎代码 [EnglishId]
+                    fixed = f"[{self._cn_to_id[stripped]}]"
                 else:
                     fixed = f"{stripped} "
                 abs_pos = m.start()
@@ -345,6 +360,80 @@ class RuleBasedValidator:
                     rule="effect_ref",
                     severity="warning",
                     message=message,
+                    auto_fixable=False,
+                    fix_fn=None,
+                    fix_params=None,
+                ))
+
+        return violations
+
+    def validate_bracketed_cn_buffs(
+        self, translations: list[str],
+    ) -> list[ValidationViolation]:
+        """校验译文中是否出现 [中文名] 形式的错误括号内容。
+
+        方括号内的中文（如 [出血]、[震颤 ]）是英文引擎ID被误译为中文后
+        塞回括号导致的，游戏无法识别。已知中文名可确定性还原为 [EnglishId]；
+        未知中文名无法可靠映射，标记为 warning 交人工复核（避免误改如 [目标]）。
+
+        仅当存在状态效果数据（self._cn_to_id 非空，即技能文件）时执行，
+        避免非技能文件中偶发的合法中文方括号被误报。
+
+        Returns:
+            违规列表；已知中文名 → auto_fixable=True（还原为 [EnglishId]），
+            未知中文名 → auto_fixable=False（warning）。
+        """
+        violations: list[ValidationViolation] = []
+
+        # 仅在技能文件（有状态效果数据）时检查，避免误报
+        if not self._cn_to_id:
+            return violations
+
+        for block_idx, cn_text in enumerate(translations):
+            if not cn_text:
+                continue
+
+            for m in self._BRACKETED_CN_RE.finditer(cn_text):
+                inner = m.group(1)
+                full = m.group(0)  # 含括号的完整匹配
+                candidate = inner.strip()
+
+                # 已知中文名 → 还原为引擎代码 [EnglishId]
+                aff_id = self._cn_to_id.get(candidate)
+                if aff_id:
+                    fixed = f"[{aff_id}]"
+                    abs_pos = m.start()
+                    snippet = cn_text[max(0, abs_pos - 5):min(len(cn_text), m.end() + 5)]
+                    violations.append(ValidationViolation(
+                        block_id=block_idx + 1,
+                        rule="bracketed_cn_buff",
+                        severity="error",
+                        message=(
+                            f"方括号内出现中文名（引擎ID被误译）：'{full}' "
+                            f"应还原为 '{fixed}'（上下文: ...{snippet}...）"
+                        ),
+                        auto_fixable=True,
+                        fix_fn="replace",
+                        fix_params={
+                            "position": abs_pos,
+                            "radius": max(len(full) + 10, 20),
+                            "old": full,
+                            "new": fixed,
+                        },
+                    ))
+                    continue
+
+                # 未知中文名：无法可靠映射，标记 warning 交人工复核
+                abs_pos = m.start()
+                snippet = cn_text[max(0, abs_pos - 5):min(len(cn_text), m.end() + 5)]
+                violations.append(ValidationViolation(
+                    block_id=block_idx + 1,
+                    rule="bracketed_cn_buff",
+                    severity="warning",
+                    message=(
+                        f"方括号内出现无法识别的中文内容：'{full}'"
+                        f"（上下文: ...{snippet}...），请人工确认是否为合法标签"
+                    ),
                     auto_fixable=False,
                     fix_fn=None,
                     fix_params=None,

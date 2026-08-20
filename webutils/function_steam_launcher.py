@@ -7,11 +7,15 @@
 
 import io
 import os
+import sys
 import shutil
 import subprocess
 from typing import Optional, Tuple
 
+from globalManagers.ConfigManager import ConfigManager
 from globalManagers.LogManager import LogManager
+from webutils.load import check_game_path
+from webutils.utils.misc import get_steam_command
 
 GAME_ID = '1973530'
 
@@ -341,3 +345,36 @@ def clear_steam_launch_options() -> dict:
         'account_id': account_id,
         'old': old,
     }
+
+
+def start_game() -> dict:
+    """通过 LCTA Launcher 全流程启动游戏（自动更新汉化、CDN 优选、模组准备后拉起游戏）。
+
+    复用 Steam 启动命令模板构造 launcher 进程参数，经子进程独立拉起 Launcher 全流程，
+    返回 {'success': bool, 'message': str}。
+    """
+    game_path = ConfigManager().get('game_path', '')
+    if not game_path:
+        return {'success': False, 'message': '未配置游戏路径，请先在「设置」页填写游戏路径。'}
+    if not check_game_path(game_path):
+        return {'success': False, 'message': f'游戏路径无效，未在 {game_path} 下找到 LimbusCompany.exe。'}
+
+    game_exe = os.path.join(game_path, 'LimbusCompany.exe')
+
+    # 复用 Steam 启动命令模板（已覆盖打包 / 调试 / 开发三种环境）：
+    # 将 %command% 占位符替换为实际游戏 exe 路径后，以子进程方式拉起 Launcher 全流程。
+    try:
+        template = get_steam_command()
+    except Exception as e:
+        # 开发环境未编译 launcher.exe 时的回退：直接用当前 python 走启动器流程
+        template = f'"{sys.executable}" "{os.path.join(os.getcwd(), "start_webui.py")}" -launcher %command%'
+        _log_manager.log(f"get_steam_command 失败，回退开发模式命令: {e}")
+
+    command = template.replace('%command%', f'"{game_exe}"')
+
+    try:
+        subprocess.Popen(command, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    except Exception as e:
+        return {'success': False, 'message': f'启动游戏失败：{e}'}
+
+    return {'success': True, 'message': '已通过 LCTA Launcher 启动游戏，请稍候 Launcher 进度窗…'}

@@ -1360,9 +1360,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // === 仪表盘 ===
 // 首页已改为「一键配置」主导航，不再展示状态总览卡片；
-// 保留空实现以兼容 utils.js / goAndShow 中对 refreshDashboard 的调用。
+// 仅依据 Steam 启动项状态控制「开启游戏」hero 的显隐。
 async function refreshDashboard() {
-    // 状态总览卡片已移除，此处无操作。
+    const hero = document.getElementById('start-game-hero');
+    if (!hero) return;
+    // 仅当 Steam 启动项为本工具箱当前实例（lcta_current）时展示「开启游戏」按钮
+    try {
+        const status = await pywebview.api.run_func('get_steam_launcher_status');
+        hero.style.display = (status && status.state === 'lcta_current') ? '' : 'none';
+    } catch (e) {
+        hero.style.display = 'none';
+    }
 }
 
 // === 一键配置（首页） ===
@@ -1440,8 +1448,30 @@ async function oneClickSetup() {
         }
 
         modal.complete(true, '一键配置完成');
+        // 写入 Steam 启动项后即时刷新「开启游戏」按钮显隐
+        refreshDashboard();
     } catch (e) {
         modal.complete(false, '一键配置失败: ' + e);
+    }
+}
+
+// === 开启游戏（首页） ===
+// 经后端 start_game 以 LCTA Launcher 全流程（子进程）拉起游戏。
+async function startGame() {
+    if (!window.apiReady) {
+        showToast('界面尚未就绪，请稍候…', 'info');
+        return;
+    }
+    try {
+        const result = await pywebview.api.run_func('start_game');
+        if (result && result.success) {
+            showToast(result.message || '已启动游戏', 'success');
+        } else {
+            showMessage('开启游戏', (result && result.message) || '启动失败，请检查游戏路径配置。');
+        }
+    } catch (e) {
+        console.error('开启游戏失败:', e);
+        showToast('开启游戏失败: ' + e, 'error');
     }
 }
 

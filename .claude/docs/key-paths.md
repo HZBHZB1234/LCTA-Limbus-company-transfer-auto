@@ -262,6 +262,28 @@ Launcher mode:
 
 Files: `webui/js/speed.js`, `webui/js/risk-gate.js`, `webui/app.py`, `webutils/function_speed.py`, `launcher/speed_hotkey.py`
 
+## 6.4.1 首页「开启游戏」按钮（Launcher 全流程拉起）
+
+```
+首页「开启游戏」按钮（条件显隐）：
+  → webui/sections/dashboard.html        #start-game-hero 卡片（onclick="startGame()"）
+  → webui/js/features.js                 refreshDashboard() —— 导航到首页时调用；
+                                         经 run_func('get_steam_launcher_status') 取 state，
+                                         仅当 state==='lcta_current' 时显示 #start-game-hero，否则隐藏
+  → webui/js/features.js                 startGame() —— apiReady 守卫后 run_func('start_game')
+  → webui/app_api/core.py                CoreMixin.start_game (set_function 注册 = webutils.start_game)
+  → webutils/function_steam_launcher.py  start_game()
+       • ConfigManager().get('game_path') + check_game_path() 校验（缺失/无效返回 {success:False}）
+       • get_steam_command() 取模板，%command% 替换为带引号的 game_path/LimbusCompany.exe
+         （开发态未编译 launcher.exe 时回退 python start_webui.py -launcher "<game_exe>"）
+       • subprocess.Popen(command, shell=True, CREATE_NO_WINDOW) 后台拉起独立 Launcher 进程
+  → launcher/main.py                     Launcher 全流程：更新汉化 → CDN 优选 → 模组准备 → 启动游戏
+
+可见性联动：oneClickSetup() 写入 Steam 启动项成功后调 refreshDashboard() 即时刷新按钮显隐。
+```
+
+Files: `webui/sections/dashboard.html`, `webui/js/features.js`, `webui/app_api/core.py`, `webutils/function_steam_launcher.py`, `webutils/utils/misc.py`, `launcher/main.py`
+
 ## 6.5 Input Bypass (CommonLib 输入反检测)
 
 ```

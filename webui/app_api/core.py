@@ -17,7 +17,7 @@ import webutils.load as load_util
 import webutils.function_llc as function_llc
 from webutils import open_explorer, evaluate_path, create_symlink_for, remove_symlink_for
 from webutils.utils import get_cache_font, get_steam_command, change_icon
-from webutils import get_steam_launcher_status, set_steam_launch_options, clear_steam_launch_options
+from webutils import get_steam_launcher_status, set_steam_launch_options, clear_steam_launch_options, start_game
 from webutils.translator_constants import (
     LLM_TRANSLATOR, TKIT_MACHINE, TKIT_MACHINE_OBJECT
 )
@@ -67,6 +67,7 @@ class CoreMixin:
         self.get_steam_launcher_status = get_steam_launcher_status
         self.set_steam_launch_options = set_steam_launch_options
         self.clear_steam_launch_options = clear_steam_launch_options
+        self.start_game = start_game
         self.change_icon = change_icon
         self.open_explorer = open_explorer
         self.evaluate_path = evaluate_path

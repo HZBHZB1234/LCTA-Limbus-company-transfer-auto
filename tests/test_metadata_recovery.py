@@ -324,7 +324,8 @@ class TestVerifySynthetic:
 
     def test_wrong_seed_fails(self):
         metadata, profile = self._inputs()
-        profile["sections"][0]["seed"] = "0xDEADBEEF"  # 破坏 stringLiteral 解密
+        for sec in profile["sections"]:
+            sec["seed"] = "0xDEADBEEF"  # 全部 seed 错误：无任何 text/index 节段，结构门须拦截
         res = verify(metadata, profile)
         assert res["verdict"] == VERDICT_FAIL
         assert not all(g["passed"] for g in res["gates"])
@@ -339,6 +340,7 @@ class TestVerifySynthetic:
 # ------------------------------------------------------------- 求解 + 重建
 
 @requires_capstone
+@pytest.mark.slow
 class TestSolveRebuildSynthetic:
     def _inputs(self):
         spec = _spec()

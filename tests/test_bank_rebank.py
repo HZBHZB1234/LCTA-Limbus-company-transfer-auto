@@ -40,8 +40,8 @@ class FakeDllsRecord(FakeDlls):
         super().__init__()
         self.spec_by_base = spec_by_base
 
-    def decode_fsb_to_wav(self, fsb_path, wav_dir, wav_name_base, password=None, log=None):
-        self.decoded.append((fsb_path, wav_dir, wav_name_base, password))
+    def decode_fsb_to_wav(self, fsb_path, wav_dir, wav_name_base, log=None):
+        self.decoded.append((fsb_path, wav_dir, wav_name_base))
         base = wav_name_base[:wav_name_base.rindex("[")]
         idx = int(wav_name_base[wav_name_base.rindex("[") + 1:-1])
         os.makedirs(wav_dir, exist_ok=True)

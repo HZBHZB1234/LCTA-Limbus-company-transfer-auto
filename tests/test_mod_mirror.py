@@ -51,6 +51,16 @@ def fake_config(monkeypatch):
     return data
 
 
+@pytest.fixture(autouse=True)
+def reset_aria2_pool():
+    """重置 aria2 单例池状态，避免测试间互相污染。"""
+    mm.stop_mod_mirror_aria2()
+    mm._aria2_reaper_thread = None
+    yield
+    mm.stop_mod_mirror_aria2()
+    mm._aria2_reaper_thread = None
+
+
 # ==================== 文件名清洗 ====================
 
 def test_safe_filename_cleans_windows_invalid_chars():
@@ -398,3 +408,256 @@ def test_download_aria2_error_falls_back(monkeypatch, tmp_path):
     assert mm._download_aria2("https://mods.lcta.top/api/mods/nexus/139/standard",
                               dest, "false", 0) is True
     assert fallback["called"] is True
+
+
+# ==================== staging 复用 / 单根展开 / 包内容摘要 ====================
+
+def test_standard_flow_reuses_existing_staging(monkeypatch, tmp_path, isolate_dirs):
+    """已存在同内容（sha256 一致）的 staging 包 → 跳过下载直接安装。"""
+    fake_zip = tmp_path / "fake.zip"
+    with zipfile.ZipFile(fake_zip, "w") as z:
+        z.writestr("mod.json", "{}")
+
+    dest = tmp_path / "localappdata" / "LCTA" / "mod-mirror" / "42_standard" / "42_My_Mod.zip"
+    dest.parent.mkdir(parents=True)
+    dest.write_bytes(fake_zip.read_bytes())
+
+    calls = []
+    monkeypatch.setattr(mm, "_download_aria2",
+                        lambda url, d, m, s: calls.append(url) or True)
+
+    result = mm.mod_mirror_request({
+        "target_type": "nexus", "target_id": "42", "kind": "standard",
+        "name": "My Mod", "size": fake_zip.stat().st_size,
+        "sha256": mm._sha256(fake_zip),
+    }, "false")
+    assert result["success"] is True
+    assert calls == []  # 未发起下载
+    assert (isolate_dirs["mod_root"] / "My_Mod" / "mod.json").exists()
+
+
+def test_standard_flow_redownloads_when_hash_differs(monkeypatch, tmp_path, isolate_dirs):
+    """staging 内容与 sha256 不一致 → 重新下载覆盖。"""
+    fake_zip = tmp_path / "fake.zip"
+    with zipfile.ZipFile(fake_zip, "w") as z:
+        z.writestr("mod.json", "{}")
+
+    dest = tmp_path / "localappdata" / "LCTA" / "mod-mirror" / "43_standard" / "43_My_Mod.zip"
+    dest.parent.mkdir(parents=True)
+    dest.write_bytes(b"stale-content")  # 旧版本
+
+    monkeypatch.setattr(mm, "_download_aria2",
+                        lambda url, d, m, s: d.write_bytes(fake_zip.read_bytes()) or True)
+
+    result = mm.mod_mirror_request({
+        "target_type": "nexus", "target_id": "43", "kind": "standard",
+        "name": "My Mod", "size": fake_zip.stat().st_size,
+        "sha256": mm._sha256(fake_zip),
+    }, "false")
+    assert result["success"] is True
+    assert dest.read_bytes() == fake_zip.read_bytes()
+
+
+def test_flatten_single_root_raises_contents(monkeypatch, tmp_path, isolate_dirs):
+    """单根目录包安装后内容上提一层（对齐拖放行为）。"""
+    fake_zip = tmp_path / "fake.zip"
+    with zipfile.ZipFile(fake_zip, "w") as z:
+        z.writestr("My_Mod/mod.json", "{}")
+        z.writestr("My_Mod/sound/1.rebank", "rb")
+
+    monkeypatch.setattr(mm, "_download_aria2",
+                        lambda url, d, m, s: d.write_bytes(fake_zip.read_bytes()) or True)
+
+    result = mm.mod_mirror_request({
+        "target_type": "nexus", "target_id": "44", "kind": "standard",
+        "name": "My Mod", "size": fake_zip.stat().st_size,
+    }, "false")
+    assert result["success"] is True
+    mod_dir = Path(result["mod_dir"])
+    assert (mod_dir / "mod.json").exists()
+    assert (mod_dir / "sound" / "1.rebank").exists()
+    assert not (mod_dir / "My_Mod").exists()
+
+
+def test_summarize_package_counts_kinds(tmp_path):
+    p = tmp_path / "pkg.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("a/1.carra2", "x")
+        z.writestr("b/2.bank", "y")
+        z.writestr("c/3.rebank", "z")
+        z.writestr("d/mod.json", "{}")
+    s = mm._summarize_package(p)
+    assert "1 个 carra2" in s and "1 个 bank" in s and "1 个 rebank" in s and "1 个 json" in s
+
+
+def test_summarize_package_warns_when_no_mod_content(tmp_path):
+    p = tmp_path / "pkg.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("readme.txt", "hi")
+    s = mm._summarize_package(p)
+    assert "未识别到可加载的模组文件" in s
+
+
+# ==================== aria2 单例池 ====================
+
+def test_aria2_pool_reuses_client_across_downloads(monkeypatch, tmp_path):
+    """并发下载复用同一 aria2c 实例（单例池），而非每次新建。"""
+    created = []
+    stopped = []
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            created.append(self)
+            self.gid = "g1"
+
+        def start(self):
+            pass
+
+        def add_uri(self, url, save_dir, out):
+            return self.gid
+
+        def status(self, gid):
+            return {"status": "complete", "totalLength": "1", "completedLength": "1",
+                    "downloadSpeed": "0"}
+
+        def stop(self):
+            stopped.append(self)
+
+    monkeypatch.setattr(mm, "resolve_aria2_binary", lambda: "aria2c.exe")
+    monkeypatch.setattr(mm, "_resolve_direct_url", lambda url: url)
+    monkeypatch.setattr(mm, "Aria2DlClient", FakeClient)
+
+    dest1 = tmp_path / "out" / "a.zip"
+    dest2 = tmp_path / "out" / "b.zip"
+    assert mm._download_aria2("https://x/a", dest1, "false", 0) is True
+    assert mm._download_aria2("https://x/b", dest2, "false", 0) is True
+    assert len(created) == 1  # 只创建过一个实例
+
+    # 手动触发空闲回收
+    mm._aria2_idle_at = 0
+    mm._aria2_reap_once()
+    assert len(stopped) == 1
+
+
+def test_aria2_pool_concurrent_downloads_share_client(monkeypatch, tmp_path):
+    """两个线程并发下载共享同一实例，互不阻塞。"""
+    import threading
+    created = []
+    lock = threading.Lock()
+    active = 0
+    max_active = 0
+    barrier = threading.Barrier(2)
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            created.append(self)
+            self.gid = "g1"
+
+        def start(self):
+            pass
+
+        def add_uri(self, url, save_dir, out):
+            return self.gid
+
+        def status(self, gid):
+            return {"status": "complete", "totalLength": "1", "completedLength": "1",
+                    "downloadSpeed": "0"}
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(mm, "resolve_aria2_binary", lambda: "aria2c.exe")
+    monkeypatch.setattr(mm, "_resolve_direct_url", lambda url: url)
+    monkeypatch.setattr(mm, "Aria2DlClient", FakeClient)
+
+    def do_download(name):
+        dest = tmp_path / "out" / name
+        barrier.wait()
+        assert mm._download_aria2("https://x/" + name, dest, "false", 0) is True
+
+    threads = [threading.Thread(target=do_download, args=(n,)) for n in ("a", "b")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(created) == 1  # 并发下载只创建一个实例
+
+
+def test_aria2_reaper_does_not_stop_in_use_client(monkeypatch, tmp_path):
+    """使用中的实例（引用计数 > 0）即使空闲超时也不回收（回归：锁间竞态）。"""
+    created = []
+    stopped = []
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            created.append(self)
+            self.gid = "g1"
+
+        def start(self):
+            pass
+
+        def add_uri(self, url, save_dir, out):
+            return self.gid
+
+        def status(self, gid):
+            return {"status": "complete", "totalLength": "1", "completedLength": "1",
+                    "downloadSpeed": "0"}
+
+        def stop(self):
+            stopped.append(self)
+
+    monkeypatch.setattr(mm, "resolve_aria2_binary", lambda: "aria2c.exe")
+    monkeypatch.setattr(mm, "_resolve_direct_url", lambda url: url)
+    monkeypatch.setattr(mm, "Aria2DlClient", FakeClient)
+
+    client = mm._aria2_acquire()
+    mm._aria2_idle_at = 0  # 模拟已空闲超时
+    mm._aria2_reap_once()
+    assert stopped == []  # 引用计数 > 0 → 不回收
+
+    mm._aria2_release(client)
+    mm._aria2_idle_at = 0
+    mm._aria2_reap_once()
+    assert len(stopped) == 1  # 释放后才回收
+
+    # 回收后再获取 → 新建实例
+    client2 = mm._aria2_acquire()
+    assert client2 is not client
+    assert len(created) == 2
+
+
+def test_aria2_cancel_removes_task(monkeypatch, tmp_path):
+    """取消下载时同步移除 aria2 任务，避免后台继续写目标文件（回归）。"""
+    removed = []
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            self.gid = "g1"
+
+        def start(self):
+            pass
+
+        def add_uri(self, url, save_dir, out):
+            return self.gid
+
+        def status(self, gid):
+            return {"status": "active", "totalLength": "100", "completedLength": "10",
+                    "downloadSpeed": "5"}
+
+        def remove(self, gid):
+            removed.append(gid)
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(mm, "resolve_aria2_binary", lambda: "aria2c.exe")
+    monkeypatch.setattr(mm, "_resolve_direct_url", lambda url: url)
+    monkeypatch.setattr(mm, "Aria2DlClient", FakeClient)
+    monkeypatch.setattr(mm._log_manager, "check_running",
+                        lambda modal_id=None, log=True: (_ for _ in ()).throw(mm.CancelRunning()))
+
+    dest = tmp_path / "out" / "a.zip"
+    with pytest.raises(mm.CancelRunning):
+        mm._download_aria2("https://x/a", dest, "false", 0)
+    assert removed == ["g1"]  # 取消时已移除 aria2 任务
+    assert mm._aria2_users == 0  # 引用已释放

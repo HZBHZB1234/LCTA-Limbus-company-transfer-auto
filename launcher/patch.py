@@ -1,5 +1,8 @@
+import datetime
 import glob
+import hashlib
 import io
+import json
 import xxhash
 import lzma
 import os.path
@@ -44,15 +47,38 @@ def file_digest(file_path):
         return xxdigest.hexdigest()
 
 
-def detect_lunartique_mods(mod_zips_root: str):
-    for mod_zip in Path(mod_zips_root).rglob("*.zip"):
+def detect_lunartique_mods(mod_zips_root: str) -> None:
+    """zip→carra2 转换（带内容缓存，转换后删除源 zip）。
+
+    缓存键 = 源 zip 的 sha256：同包重复安装直接命中，跳过耗时的转换。
+    转换产物复制回模组目录（<zip 名>.carra2）并删除源 zip，保持旧版数据布局
+    （carra2 常驻模组目录，供 extract_assets 按目录扫描）。
+    """
+    from launcher.modcache import (carra2_convert_dir, enabled_mod_files,
+                                   prune_lru, sha256_file)
+
+    for mod_zip in enabled_mod_files(mod_zips_root, "*.zip"):
         _log_manager.log("Compressing lunartique format mod (might take a while!): %s", mod_zip)
         try:
-            compress_lunartique_mod(mod_zip, mod_zip.with_suffix(".carra2"))
+            digest = sha256_file(mod_zip)
+            cached = carra2_convert_dir() / (digest + ".carra2")
+            if cached.is_file():
+                _log_manager.log("* 转换缓存命中（跳过转换）: %s", mod_zip.name)
+            else:
+                tmp = carra2_convert_dir() / (digest + ".carra2.tmp")
+                if tmp.exists():
+                    tmp.unlink()
+                compress_lunartique_mod(str(mod_zip), str(tmp))
+                os.replace(tmp, cached)
+                _log_manager.log("* Done")
+            dest = mod_zip.with_suffix(".carra2")
+            cached_hash = sha256_file(str(cached))
+            if not dest.is_file() or sha256_file(str(dest)) != cached_hash:
+                shutil.copyfile(cached, dest)
             os.remove(mod_zip)
-            _log_manager.log("* Done")
         except Exception as e:
             _log_manager.log("* Error: %s", e)
+    prune_lru(carra2_convert_dir(), 30)
 
 
 def mod_file_size(file):
@@ -63,19 +89,46 @@ def mod_file_size(file):
 
 
 def extract_assets(mod_asset_root: str, mod_zips_root: str):
-    for mod_zip in sorted(Path(mod_zips_root).rglob("*.carra*"), key=mod_file_size, reverse=True):
+    """解压 carra2 并展平到 mod_asset_root（带内容缓存）。
+
+    按 mod_zips_root 下启用的 *.carra* 收集（detect_lunartique_mods 转换后
+    carra2 常驻模组目录）。
+    展平语义与现网一致：3 层条目 <account>/<bundle>/<path_id>.<type_id>
+    上移一级丢弃 bundle 段（逐包执行，合并顺序与原先按体积降序一致）。
+    """
+    from launcher.modcache import (carra2_extract_dir, enabled_mod_files,
+                                   prune_lru, sha256_file)
+
+    carra_files = [str(p) for p in enabled_mod_files(mod_zips_root, "*.carra*")]
+    for mod_zip in sorted(carra_files, key=mod_file_size, reverse=True):
         mod_zip = os.path.normpath(mod_zip)
         try:
-            with ZipFile(mod_zip) as z:
-                _log_manager.log("Extracting %s", mod_zip)
-                z.extractall(mod_asset_root)
+            digest = sha256_file(mod_zip)
+            cache_dir = carra2_extract_dir() / digest
+            if cache_dir.is_dir():
+                _log_manager.log("* 解压缓存命中: %s", mod_zip)
+            else:
+                tmp = carra2_extract_dir() / ("extract-" + digest + ".tmp")
+                if tmp.exists():
+                    shutil.rmtree(tmp)
+                tmp.mkdir(parents=True)
+                with ZipFile(mod_zip) as z:
+                    _log_manager.log("Extracting %s", mod_zip)
+                    z.extractall(tmp)
+                for mod_carra in glob.glob(f"{tmp}/*/*/*"):
+                    mod_carra_path = Path(mod_carra)
+                    new_mod_carra = os.path.join(mod_carra_path.parent.parent, mod_carra_path.name)
+                    os.replace(mod_carra, new_mod_carra)
+                os.replace(tmp, cache_dir)
+            for src in cache_dir.rglob("*"):
+                if src.is_file():
+                    rel = src.relative_to(cache_dir)
+                    dst = os.path.join(mod_asset_root, rel)
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copyfile(src, dst)
         except Exception as e:
             _log_manager.log("Error processing %s: %s", mod_zip, e)
-
-    for mod_carra in glob.glob(f"{mod_asset_root}/*/*/*"):
-        mod_carra_path = Path(mod_carra)
-        new_mod_carra = os.path.join(mod_carra_path.parent.parent, mod_carra_path.name)
-        os.replace(mod_carra, new_mod_carra)
+    prune_lru(carra2_extract_dir(), 30)
 
 
 def cleanup_assets(bundle_data=bundle_data_paths):
@@ -157,7 +210,22 @@ def patch_bundle_asset(env: UnityPy.Environment, mod_path: str):
                 objects[path_id] = obj
 
 
+def _save_bundle(bundle: BundleFile) -> tuple:
+    """以游戏标准格式（UnityFS LZ4）重打包；异常时回退 original 标志。
+
+    返回 (bytes, packer)，packer 供缓存 meta 记录实际产物格式。
+    """
+    try:
+        return bundle.save(packer="lz4"), "lz4"
+    except Exception as e:
+        _log_manager.log_error("LZ4 重打包失败（%s），回退 original 标志", e)
+        return bundle.save(packer="original"), "original"
+
+
 def patch_assets(mod_asset_root: str, bundle_data=bundle_data_paths):
+    from launcher.modcache import (atomic_write, bundle_patch_dir, prune_lru,
+                                   tree_digest)
+
     for bundle_root in bundle_data():
         # Move the original data to a new location temporarily
         bundle_root_path = Path(bundle_root)
@@ -172,14 +240,29 @@ def patch_assets(mod_asset_root: str, bundle_data=bundle_data_paths):
         os.replace(bundle_path, new_path)
 
         try:
+            orig_hash = file_digest(new_path)
+            mod_hash = tree_digest(mod_path)
+            digest = hashlib.sha256(f"{orig_hash}|{mod_hash}|lz4".encode("utf-8")).hexdigest()
+            cache_root_dir = bundle_patch_dir() / digest
+            cache_file = cache_root_dir / "__data"
+            if cache_file.is_file():
+                _log_manager.log("* 重打包缓存命中 %s", digest)
+                shutil.copyfile(cache_file, bundle_path)
+                continue
             _log_manager.log("Patching %s", bundle_path)
             env = UnityPy.load(new_path)
             patch_bundle_asset(env, mod_path)
 
             bundle = get_bundle_file(env)
             bundle.version_player = "limbus_modded"
-            with open(bundle_path, "wb") as out:
-                out.write(bundle.save(packer="original"))
+            data, packer = _save_bundle(bundle)
+            atomic_write(bundle_path, data)
+            meta = {"orig_hash": orig_hash, "mod_hash": mod_hash,
+                    "packer": packer, "size": len(data),
+                    "created": datetime.datetime.now().isoformat(timespec="seconds")}
+            atomic_write(cache_root_dir / "meta.json",
+                         json.dumps(meta).encode("utf-8"))
+            atomic_write(cache_file, data)
             _log_manager.log("* Patching complete %s (%d) -> %s (%d)", file_digest(new_path), os.path.getsize(new_path),
                          file_digest(bundle_path), os.path.getsize(bundle_path))
         except Exception:
@@ -189,3 +272,4 @@ def patch_assets(mod_asset_root: str, bundle_data=bundle_data_paths):
                     os.remove(bundle_path)
                 os.replace(new_path, bundle_path)
             raise
+    prune_lru(bundle_patch_dir(), 30)

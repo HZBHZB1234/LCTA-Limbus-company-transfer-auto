@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -158,38 +159,109 @@ def _extract_zip_safe(zip_path: Path, dest_dir: Path, modal_id: str) -> None:
 # 下载（aria2c 优先，降级 requests 流式）
 # ============================================================
 
-def _resolve_direct_url(url: str) -> str:
-    """站点 API 域（mods.lcta.top）会拦截 aria2c 的 TLS 指纹（403/连接重置），
-    但 302 后的 CDN 直链域（dl.mods.lcta.top）不拦。先用 requests 解析 302
-    拿到预签名直链再交给 aria2c，保持多连接高速下载。
-    无重定向（如后端 proxy 模式直出）或解析失败时原样返回。"""
-    try:
-        r = requests.get(
-            url, timeout=15, stream=True, allow_redirects=False,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) LCTA"},
-        )
-        loc = r.headers.get("Location")
-        if r.status_code in (301, 302, 303, 307, 308) and loc:
-            return requests.compat.urljoin(url, loc)
-        return url
-    except Exception:
-        return url
+# aria2c 单例池：维护一个 aria2c 实例供并发下载复用（不做前端互斥），
+# 空闲超时后自动退出，下次下载自动重启。
+_aria2_lock = threading.Lock()
+_aria2_client = None
+_aria2_users = 0
+_aria2_idle_at = 0.0
+_aria2_idle_timeout = 30.0
+_aria2_stop_event = threading.Event()
+_aria2_reaper_thread = None
+
+
+def _aria2_acquire() -> Aria2DlClient:
+    """获取 aria2 单例（引用计数 +1；进程已死或未启动时重建）。"""
+    global _aria2_client, _aria2_users, _aria2_idle_at
+    binary = resolve_aria2_binary()
+    if binary is None:
+        raise Aria2Error("未找到 aria2c")
+    with _aria2_lock:
+        client = _aria2_client
+        proc = getattr(client, "process", None)
+        if proc is not None and proc.poll() is not None:
+            # 进程已死 → 丢弃重建
+            try:
+                client.stop()
+            except Exception:
+                pass
+            client = None
+            _aria2_client = None
+        if client is None:
+            cfg = ConfigManager().get("ui_default.aria2_dl", {}) or {}
+            client = Aria2DlClient(
+                Path(binary),
+                jobs=int(cfg.get("jobs") or 8),
+                connection_limit=int(cfg.get("connection_limit") or 16),
+            )
+            client.start()
+            _aria2_client = client
+        _aria2_users += 1
+        _aria2_idle_at = time.time()
+        _ensure_aria2_reaper()
+        return _aria2_client
+
+
+def _aria2_release(client) -> None:
+    global _aria2_users, _aria2_idle_at
+    with _aria2_lock:
+        _aria2_users = max(0, _aria2_users - 1)
+        _aria2_idle_at = time.time()
+
+
+def _ensure_aria2_reaper() -> None:
+    global _aria2_reaper_thread
+    if _aria2_reaper_thread is None or not _aria2_reaper_thread.is_alive():
+        _aria2_stop_event.clear()
+        _aria2_reaper_thread = threading.Thread(target=_aria2_reaper_loop, daemon=True)
+        _aria2_reaper_thread.start()
+
+
+def _aria2_reap_once() -> None:
+    global _aria2_client, _aria2_users, _aria2_idle_at
+    with _aria2_lock:
+        client = _aria2_client
+        idle = time.time() - _aria2_idle_at
+    if client is not None and idle >= _aria2_idle_timeout:
+        with _aria2_lock:
+            if _aria2_client is client and _aria2_users <= 0:
+                _aria2_client = None
+            else:
+                # 两次加锁之间新下载已获取该实例（引用计数 > 0）→ 本次不回收
+                client = None
+        if client is not None:
+            try:
+                client.stop()
+            except Exception:
+                pass
+            _log_manager.log("aria2 下载进程空闲超时，已自动退出")
+
+
+def _aria2_reaper_loop() -> None:
+    while not _aria2_stop_event.wait(2.0):
+        _aria2_reap_once()
+
+
+def stop_mod_mirror_aria2() -> None:
+    """程序退出时停掉单例 aria2 进程（与 aria2_manager.stop 互补）。"""
+    global _aria2_client, _aria2_users
+    _aria2_stop_event.set()
+    with _aria2_lock:
+        client, _aria2_client = _aria2_client, None
+        _aria2_users = 0
+    if client is not None:
+        try:
+            client.stop()
+        except Exception:
+            pass
 
 
 def _download_aria2(url: str, dest: Path, modal_id: str, expected_size: int) -> bool:
     client: Aria2DlClient | None = None
+    gid: str | None = None
     try:
-        binary = resolve_aria2_binary()
-        if binary is None:
-            raise Aria2Error("未找到 aria2c")
         url = _resolve_direct_url(url)
-        cfg = ConfigManager().get("ui_default.aria2_dl", {}) or {}
-        client = Aria2DlClient(
-            Path(binary),
-            jobs=int(cfg.get("jobs") or 8),
-            connection_limit=int(cfg.get("connection_limit") or 16),
-        )
-        client.start()
+        client = _aria2_acquire()
         gid = client.add_uri(url, dest.parent, dest.name)
         last_pct = -1
         while True:
@@ -221,16 +293,37 @@ def _download_aria2(url: str, dest: Path, modal_id: str, expected_size: int) -> 
                     )
             time.sleep(0.5)
     except CancelRunning:
+        # 取消时同步移除 aria2 任务，避免其后台继续写目标文件污染下次下载
+        if client is not None and gid is not None:
+            try:
+                client.remove(gid)
+            except Exception:
+                pass
         raise
     except Aria2Error as e:
         _log_manager.log_modal_process(f"aria2c 不可用（{e}），降级为内置下载器", modal_id)
         return _download_fallback(url, dest, modal_id, expected_size)
     finally:
         if client is not None:
-            try:
-                client.stop()
-            except Exception:
-                pass
+            _aria2_release(client)
+
+
+def _resolve_direct_url(url: str) -> str:
+    """站点 API 域（mods.lcta.top）会拦截 aria2c 的 TLS 指纹（403/连接重置），
+    但 302 后的 CDN 直链域（dl.mods.lcta.top）不拦。先用 requests 解析 302
+    拿到预签名直链再交给 aria2c，保持多连接高速下载。
+    无重定向（如后端 proxy 模式直出）或解析失败时原样返回。"""
+    try:
+        r = requests.get(
+            url, timeout=15, stream=True, allow_redirects=False,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) LCTA"},
+        )
+        loc = r.headers.get("Location")
+        if r.status_code in (301, 302, 303, 307, 308) and loc:
+            return requests.compat.urljoin(url, loc)
+        return url
+    except Exception:
+        return url
 
 
 def _download_fallback(url: str, dest: Path, modal_id: str, expected_size: int) -> bool:
@@ -246,6 +339,45 @@ def _download_fallback(url: str, dest: Path, modal_id: str, expected_size: int) 
 # 安装
 # ============================================================
 
+def _flatten_single_root(target: Path) -> None:
+    """若解压结果只有一个根目录，把内容上提一层（对齐拖放安装行为）。"""
+    entries = list(target.iterdir())
+    if len(entries) == 1 and entries[0].is_dir():
+        inner = entries[0]
+        for child in list(inner.iterdir()):
+            shutil.move(str(child), str(target / child.name))
+        shutil.rmtree(inner)
+
+
+def _summarize_package(zip_path: Path) -> str:
+    """扫描包内文件类型，返回人类可读摘要（供安装后提示）。"""
+    try:
+        with zipfile.ZipFile(str(zip_path)) as z:
+            names = [n for n in z.namelist() if not n.endswith("/")]
+    except zipfile.BadZipFile:
+        return ""
+    counts = {"carra2": 0, "bank": 0, "rebank": 0, "json": 0, "wav": 0, "other": 0}
+    for n in names:
+        low = n.lower()
+        if low.endswith(".carra2") or low.endswith(".carra"):
+            counts["carra2"] += 1
+        elif low.endswith(".bank"):
+            counts["bank"] += 1
+        elif low.endswith(".rebank"):
+            counts["rebank"] += 1
+        elif low.endswith(".json"):
+            counts["json"] += 1
+        elif low.endswith(".wav"):
+            counts["wav"] += 1
+        else:
+            counts["other"] += 1
+    mod_kinds = [k for k in ("carra2", "bank", "rebank", "json") if counts[k]]
+    parts = [f"{counts[k]} 个 {k}" for k in ("carra2", "bank", "rebank", "json", "wav", "other") if counts[k]]
+    if not mod_kinds:
+        return "警告：包内未识别到可加载的模组文件（carra2/bank/rebank/json）"
+    return "包内容：" + " / ".join(parts)
+
+
 def _install_standard(zip_path: Path, mod_name: str, modal_id: str) -> Path:
     mod_root = Path(get_mod_path())
     mod_root.mkdir(parents=True, exist_ok=True)
@@ -260,6 +392,7 @@ def _install_standard(zip_path: Path, mod_name: str, modal_id: str) -> Path:
                 old.unlink()
     _log_manager.update_modal_progress(92, "解压安装到模组目录...", modal_id)
     _extract_zip_safe(zip_path, target, modal_id)
+    _flatten_single_root(target)
     return target
 
 
@@ -302,26 +435,38 @@ def mod_mirror_request(payload: dict | None, modal_id: str = "false") -> dict:
             f"开始下载：{name}（{'标准版' if kind == 'standard' else '文件'}）", modal_id)
         _log_manager.update_modal_progress(2, "准备下载环境...", modal_id)
 
-        # 清理上次残留的续传状态，保证从零开始
-        for leftover in (dest.with_name(dest.name + ".aria2"), dest):
+        # 已存在且内容匹配（sha256 一致）→ 直接复用跳过下载；否则清理残留重新下载
+        reuse = False
+        if expected_sha and dest.is_file():
             try:
-                if leftover.exists():
-                    leftover.unlink()
+                reuse = _sha256(dest).lower() == str(expected_sha).lower()
             except OSError:
-                pass
-
-        if not _download_aria2(url, dest, modal_id, expected_size):
-            raise ValueError("下载失败")
+                reuse = False
+        if reuse:
+            _log_manager.log_modal_process("本地已有相同内容的包（SHA256 一致），跳过下载", modal_id)
+        else:
+            # 清理上次残留的续传状态，保证从零开始
+            for leftover in (dest.with_name(dest.name + ".aria2"), dest):
+                try:
+                    if leftover.exists():
+                        leftover.unlink()
+                except OSError:
+                    pass
+            if not _download_aria2(url, dest, modal_id, expected_size):
+                raise ValueError("下载失败")
 
         _log_manager.update_modal_progress(90, "校验文件完整性...", modal_id)
         _verify_expected(dest, expected_size, expected_sha)
 
         if kind == "standard":
             mod_dir = _install_standard(dest, name, modal_id)
+            summary = _summarize_package(dest)
+            _log_manager.log_modal_process(summary or "安装完成", modal_id)
             _log_manager.update_modal_progress(100, "安装完成", modal_id)
+            message = f"安装完成（{summary}），下次启动游戏时生效" if summary else "安装完成，下次启动游戏时生效"
             return {
                 "success": True,
-                "message": "安装完成，下次启动游戏时生效",
+                "message": message,
                 "mod_dir": str(mod_dir),
             }
         _log_manager.update_modal_progress(100, "下载完成", modal_id)

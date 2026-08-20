@@ -23,18 +23,31 @@ CACHE_SUBDIR = "bank-cache"
 
 
 def rebank_files_in(mod_root: str):
-    """启用的 .rebank 列表（递归 rglob，精确匹配后缀，天然排除 *_disable）。"""
-    files = []
-    for p in sorted(Path(mod_root).rglob("*" + _REBANK_EXT)):
-        files.append(str(p))
-    return files
+    """启用的 .rebank 列表（递归 rglob，精确匹配后缀，过滤 _disable 目录）。"""
+    from launcher.modcache import enabled_mod_files
+    return [str(p) for p in enabled_mod_files(mod_root, "*" + _REBANK_EXT)]
 
 
 def cache_dir() -> str:
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = os.path.join(base, "LCTA", CACHE_SUBDIR)
-    os.makedirs(d, exist_ok=True)
-    return d
+    from launcher.modcache import bank_cache_dir
+    return str(bank_cache_dir())
+
+
+def _patch_options() -> dict:
+    """重打包参数（与 WebUI patch_banks 一致，读 ui_default.bank.quality/threads）。"""
+    from globalManagers.ConfigManager import ConfigManager
+    from webutils.bank.fmod import default_threads
+
+    cfg = ConfigManager()
+    try:
+        quality = int(cfg.get("ui_default.bank.quality", 92))
+    except (TypeError, ValueError):
+        quality = 92
+    try:
+        threads = int(cfg.get("ui_default.bank.threads", 0) or 0) or default_threads()
+    except (TypeError, ValueError):
+        threads = default_threads()
+    return {"quality": quality, "threads": threads}
 
 
 def sha256_file(path: str) -> str:
@@ -110,7 +123,10 @@ def apply_rebanks(mod_root: str) -> dict:
             continue
         orig_path = target + ".bak" if os.path.isfile(target + ".bak") else target
         orig_hash = sha256_file(orig_path)
-        digest = hashlib.sha256((orig_hash + "|" + mod_digest(mods)).encode("utf-8")).hexdigest()
+        from webutils.bank.rebank import patch_cache_key
+        opts = _patch_options()
+        digest = patch_cache_key(orig_hash, mod_digest(mods),
+                                 opts["quality"], opts["threads"])
         cache_file = os.path.join(cache_dir(), digest + ".bank")
         meta_file = cache_file + ".json"
         if os.path.isfile(cache_file) and os.path.isfile(meta_file):
@@ -157,7 +173,7 @@ def _patch_into(original_path: str, target_path: str, rebanks, log=None) -> None
     try:
         from webutils.bank.dlls import FmodDlls
         from webutils.bank.errors import BankToolError
-        from webutils.bank.fmod import default_threads, extract_bank, rebuild_bank
+        from webutils.bank.fmod import extract_bank, rebuild_bank
         from webutils.bank.rebank import collect_wavs, iter_rebank_wavs
         from webutils.bank.wav import read_wav_info
 
@@ -167,7 +183,7 @@ def _patch_into(original_path: str, target_path: str, rebanks, log=None) -> None
 
         wav_dir = os.path.join(work, "wav"); fsb_dir = os.path.join(work, "fsb")
         dlls = FmodDlls()
-        extract_bank(dlls, original_path, wav_dir, fsb_dir, None, _log)
+        extract_bank(dlls, original_path, wav_dir, fsb_dir, _log)
         T = collect_wavs(wav_dir)
         replaced = 0
         for rp in rebanks:
@@ -181,8 +197,9 @@ def _patch_into(original_path: str, target_path: str, rebanks, log=None) -> None
         if replaced == 0:
             raise BankToolError("没有可应用的 wav")
         out_dir = os.path.join(work, "out")
-        options = {"format": 5, "quality": 92, "threads": default_threads(),
-                   "cache_dir": os.path.join(work, "cache"), "password": None}
+        opts = _patch_options()
+        options = {"format": 5, "quality": opts["quality"], "threads": opts["threads"],
+                   "cache_dir": os.path.join(work, "cache")}
         patched = rebuild_bank(dlls, original_path, wav_dir, fsb_dir, out_dir, options, _log)
         os.replace(patched, target_path)
     finally:

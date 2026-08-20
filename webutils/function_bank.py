@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 """WebUI 桥接：bank 解包/重打包/.rebank 模组导出转换（每函数返回 dict）。"""
+import datetime
+import hashlib
+import json
 import os
 
 from globalManagers.ConfigManager import ConfigManager
@@ -13,7 +16,10 @@ from webutils.bank.dlls import (
 )
 from webutils.bank.fmod import FORMAT_IDS, default_threads, extract_bank, rebuild_bank
 from webutils.bank.format import bank_base, bank_is_encrypted, parse_bank, parse_fsb5_header
-from webutils.bank.rebank import build_rebank, patch_banks, read_rebank_info
+from webutils.bank.rebank import (
+    build_rebank, patch_banks, patch_cache_key, patch_options, prune_rebank_cache,
+    read_rebank_info, rebank_cache_dir, rebank_mod_digest, sha256_file,
+)
 from webutils.bank.errors import BankToolError
 from webutils.packages.manage import get_mod_path
 
@@ -214,14 +220,14 @@ def bank_info(path: str):
 
 
 # -- 解包 / 重打包 -----------------------------------------------------
-def bank_extract(bank_path: str, out_dir: str, password: str = ""):
+def bank_extract(bank_path: str, out_dir: str):
     try:
         if not os.path.isfile(bank_path):
             return _err("bank 文件不存在: %s" % bank_path)
         os.makedirs(out_dir, exist_ok=True)
         dlls = _dlls()
         r = extract_bank(dlls, bank_path, out_dir,
-                         os.path.join(out_dir, "fsb"), password or None,
+                         os.path.join(out_dir, "fsb"),
                          lambda msg: _log_manager.log(msg))
         return _ok(wav_dir=out_dir, fsb_count=r["fsb_count"],
                    encrypted=r["encrypted"])
@@ -229,7 +235,7 @@ def bank_extract(bank_path: str, out_dir: str, password: str = ""):
         return _err(e)
 
 
-def bank_rebuild(bank_path: str, wav_dir: str, out_dir: str, password: str = "",
+def bank_rebuild(bank_path: str, wav_dir: str, out_dir: str,
                  format_id: str = "vorbis", quality: int = 92):
     try:
         if not os.path.isfile(bank_path):
@@ -239,7 +245,7 @@ def bank_rebuild(bank_path: str, wav_dir: str, out_dir: str, password: str = "",
         dlls = _dlls()
         options = {"format": FORMAT_IDS[format_id], "quality": int(quality),
                    "threads": default_threads(),
-                   "cache_dir": os.path.join(out_dir, "cache"), "password": password or None}
+                   "cache_dir": os.path.join(out_dir, "cache")}
         out_bank = rebuild_bank(dlls, bank_path, wav_dir,
                                 os.path.join(out_dir, "fsb"), out_dir, options,
                                 lambda msg: _log_manager.log(msg))
@@ -259,7 +265,7 @@ def bank_export_rebank(original_path: str, modded_path: str, out_path: str,
         dlls = _dlls()
         meta = {"name": name, "version": version, "author": author, "description": desc}
         r = build_rebank(dlls, original_path, modded_path, out_path, meta,
-                         password=None, log=lambda msg: _log_manager.log(msg))
+                         log=lambda msg: _log_manager.log(msg))
         if into_mod_folder:
             dst = os.path.join(get_mod_path(), os.path.basename(out_path))
             if os.path.abspath(dst) != os.path.abspath(out_path):
@@ -276,7 +282,10 @@ def bank_export_rebank(original_path: str, modded_path: str, out_path: str,
 
 
 def bank_convert_mod(mod_name: str, keep_original: bool = True):
-    """把模组目录里的整包 .bank 转成 .rebank（以游戏当前 bank 为原版）。"""
+    """把模组目录里的整包 .bank 转成 .rebank（以游戏当前 bank 为原版）。
+
+    带导出缓存：同「原版 bank + 模组 bank」内容直接复用上次产物，免重编码。
+    """
     try:
         game_path = ConfigManager().get("game_path", "")
         if not game_path:
@@ -290,10 +299,44 @@ def bank_convert_mod(mod_name: str, keep_original: bool = True):
         if not os.path.isfile(original):
             return _err("游戏目录没有对应的原版 bank: %s" % original)
         out_path = os.path.join(mod_path, base + ".rebank")
-        dlls = _dlls()
-        r = build_rebank(dlls, original, mod_file, out_path,
-                         {"name": base, "version": "1.0", "author": "", "description": ""},
-                         password=None, log=lambda msg: _log_manager.log(msg))
+
+        orig_hash = sha256_file(original)
+        mod_hash = sha256_file(mod_file)
+        key = hashlib.sha256(("export|%s|%s" % (orig_hash, mod_hash)).encode("utf-8")).hexdigest()
+        cache_file = os.path.join(rebank_cache_dir(), "export-" + key + ".rebank")
+        if os.path.isfile(cache_file):
+            import shutil
+            meta = None
+            try:
+                with open(cache_file + ".json", "r", encoding="utf-8") as fh:
+                    meta = json.load(fh)
+            except (OSError, ValueError):
+                meta = None
+            shutil.copyfile(cache_file, out_path)
+            r = {"modified": [], "added": [], "count": 0, "out": out_path,
+                 "base_bank": base, "cache_hit": True}
+            if meta:
+                r["count"] = int(meta.get("count") or 0)
+                r["modified"] = list(meta.get("modified") or [])
+                r["added"] = list(meta.get("added") or [])
+        else:
+            dlls = _dlls()
+            r = build_rebank(dlls, original, mod_file, out_path,
+                             {"name": base, "version": "1.0", "author": "", "description": ""},
+                             log=lambda msg: _log_manager.log(msg))
+            try:
+                import shutil
+                shutil.copyfile(out_path, cache_file)
+                meta = {"orig_sha256": orig_hash, "mod_sha256": mod_hash,
+                        "count": int(r.get("count") or 0),
+                        "modified": [list(k) for k in r.get("modified") or []],
+                        "added": [list(k) for k in r.get("added") or []],
+                        "created": datetime.datetime.now().isoformat(timespec="seconds")}
+                with open(cache_file + ".json", "w", encoding="utf-8") as fh:
+                    json.dump(meta, fh, ensure_ascii=False, indent=2)
+                prune_rebank_cache()
+            except OSError:
+                pass
         if not keep_original:
             disable_path = os.path.join(mod_path, base + ".bank_disable")
             os.replace(mod_file, disable_path)
@@ -303,15 +346,57 @@ def bank_convert_mod(mod_name: str, keep_original: bool = True):
         return _err(e)
 
 
-def bank_patch_full(rebank_path: str, bank_path: str, out_dir: str, password: str = ""):
+def bank_patch_full(rebank_path: str, bank_path: str, out_dir: str):
+    """把 .rebank 应用到目标 bank（带补丁缓存，与 launcher bankmod 同键同目录）。
+
+    缓存键 = 原版 bank sha256 + 模组摘要 + 编码参数，命中直接复制产物，免重编码。
+    """
     try:
         if not os.path.isfile(rebank_path):
             return _err("模组不存在: %s" % rebank_path)
         if not os.path.isfile(bank_path):
             return _err("目标 bank 不存在: %s" % bank_path)
+
+        orig_hash = sha256_file(bank_path)
+        opts = patch_options()
+        key = patch_cache_key(orig_hash, rebank_mod_digest([rebank_path]),
+                              opts["quality"], opts["threads"])
+        cache_file = os.path.join(rebank_cache_dir(), key + ".bank")
+        meta_file = cache_file + ".json"
+        if os.path.isfile(cache_file):
+            meta = None
+            try:
+                with open(meta_file, "r", encoding="utf-8") as fh:
+                    meta = json.load(fh)
+            except (OSError, ValueError):
+                meta = None
+            if meta and meta.get("orig_sha256") == orig_hash:
+                out_bank = os.path.join(out_dir, os.path.basename(bank_path))
+                os.makedirs(out_dir, exist_ok=True)
+                import shutil
+                shutil.copyfile(cache_file, out_bank)
+                _log_manager.log("bank 补丁缓存命中: %s" % out_bank)
+                return _ok(replaced=int(meta.get("replaced") or 0),
+                           skipped_new=int(meta.get("skipped_new") or 0),
+                           skipped_bad=int(meta.get("skipped_bad") or 0),
+                           out_bank=out_bank, cache_hit=True)
+
         dlls = _dlls()
-        r = patch_banks(dlls, bank_path, [rebank_path], out_dir, password=password or None,
+        r = patch_banks(dlls, bank_path, [rebank_path], out_dir,
                         log=lambda msg: _log_manager.log(msg))
+        try:
+            import shutil
+            meta = {"orig_sha256": orig_hash, "mod_digest": rebank_mod_digest([rebank_path]),
+                    "quality": opts["quality"], "threads": opts["threads"],
+                    "replaced": r["replaced"], "skipped_new": r["skipped_new"],
+                    "skipped_bad": r["skipped_bad"],
+                    "created": datetime.datetime.now().isoformat(timespec="seconds")}
+            with open(meta_file, "w", encoding="utf-8") as fh:
+                json.dump(meta, fh, ensure_ascii=False, indent=2)
+            shutil.copyfile(r["out_bank"], cache_file)
+            prune_rebank_cache()
+        except OSError:
+            pass
         return _ok(**r)
     except Exception as e:
         return _err(e)

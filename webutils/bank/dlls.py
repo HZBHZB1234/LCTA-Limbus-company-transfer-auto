@@ -4,6 +4,7 @@ DLL 由运行时获取（不入库不入发布包）。定位顺序见 default_d
 """
 import ctypes
 import os
+import threading
 from typing import List, Optional, Sequence
 
 from globalManagers.ConfigManager import ConfigManager
@@ -11,6 +12,30 @@ from .errors import BankDllMissingError, BankToolError
 from .wav import write_wav_header
 
 DLL_NAMES = ("fmod64.dll", "fsbank64.dll", "libfsbvorbis64.dll")
+
+_dll_download_lock = threading.Lock()
+
+
+def ensure_fmod_dlls(force: bool = False) -> str:
+    """确保 FMOD 工具 DLL 就绪：缺失时自动下载（线程安全，并发只下载一次）。
+
+    返回就绪的 DLL 目录；下载失败抛 BankDllMissingError。
+    """
+    present = find_dll_dir(default_dll_candidates())
+    if present and not missing_dlls(present) and not force:
+        return os.path.abspath(present)
+    with _dll_download_lock:
+        # 并发场景：等待锁期间其他线程可能已完成下载，重复检查
+        present = find_dll_dir(default_dll_candidates())
+        if present and not missing_dlls(present) and not force:
+            return os.path.abspath(present)
+        from webutils.function_bank import bank_download_dlls
+        result = bank_download_dlls(force=force)
+        if not result.get("success"):
+            raise BankDllMissingError(
+                "FMOD 工具 DLL 自动下载失败: %s。可稍后在「音频工具」页重试。"
+                % (result.get("message") or "未知错误"))
+        return result["dir"]
 
 FMOD_OK = 0
 FMOD_OPENONLY = 0x00002000
@@ -131,16 +156,25 @@ def _make_error_text(where, rc):
 
 
 class FmodDlls:
-    """FMOD 解码 / FSBANK 编码的 ctypes 封装（供单元测试注入替身）。"""
+    """FMOD 解码 / FSBANK 编码的 ctypes 封装（供单元测试注入替身）。
 
-    def __init__(self, dll_dir: Optional[str] = None):
+    dll_dir 缺省时按候选目录定位，仍缺失则自动下载（auto_download=False 关闭）。
+    显式传入 dll_dir 时不触发自动下载。
+    """
+
+    def __init__(self, dll_dir: Optional[str] = None, auto_download: bool = True):
         if not dll_dir:
             dll_dir = find_dll_dir(default_dll_candidates())
+            if missing_dlls(dll_dir) and auto_download:
+                try:
+                    dll_dir = ensure_fmod_dlls()
+                except BankDllMissingError:
+                    pass  # 统一走下方报错
         miss = missing_dlls(dll_dir)
         if miss:
             raise BankDllMissingError(
-                "缺少 FMOD 工具 DLL: %s。可在「音频工具」页一键下载，"
-                "或手动选择包含全部 3 个 DLL 的目录。" % ", ".join(miss))
+                "缺少 FMOD 工具 DLL: %s。首次使用时将自动下载，也可在「音频工具」页"
+                "一键下载，或手动选择包含全部 3 个 DLL 的目录。" % ", ".join(miss))
         self._dir = os.path.abspath(dll_dir)
         self._fmod = ctypes.CDLL(os.path.join(self._dir, "fmod64.dll"))
         self._fsbank = ctypes.CDLL(os.path.join(self._dir, "fsbank64.dll"))
@@ -204,12 +238,10 @@ class FmodDlls:
             raise BankToolError(_make_error_text(where, rc))
 
     # -- 解码: FSB -> WAV --------------------------------------------------
-    def decode_fsb_to_wav(self, fsb_path, wav_dir, wav_name_base, password=None, log=None) -> List[str]:
+    def decode_fsb_to_wav(self, fsb_path, wav_dir, wav_name_base, log=None) -> List[str]:
         system = ctypes.c_void_p()
         exinfo = FMOD_CREATESOUNDEXINFO()
         exinfo.cbsize = ctypes.sizeof(FMOD_CREATESOUNDEXINFO)
-        if password:
-            exinfo.encryptionkey = password.encode("utf-8")
         self._check(self._fmod.FMOD_System_Create(ctypes.byref(system)), "FMOD_System_Create")
         try:
             self._check(self._fmod.FMOD_System_Init(system, 1, FMOD_INIT_NORMAL, None), "FMOD_System_Init")
@@ -297,7 +329,7 @@ class FmodDlls:
 
     # -- 编码: WAV -> FSB --------------------------------------------------
     def encode_wavs_to_fsb(self, wav_files, out_fsb, format_id, quality, threads, cache_dir,
-                           encrypt_key=None, log=None) -> None:
+                           log=None) -> None:
         os.makedirs(cache_dir, exist_ok=True)
         # FSBANK 1.x 签名 (version, initFlags, numThreads, tempdir)，与 Fmod-Bank-Tools 的
         # include/fsbank.h 一致（捆绑的 fsbank64.dll 即该版本），勿按 2.x 顺序改动
@@ -313,8 +345,7 @@ class FmodDlls:
             for i in range(n):
                 arr[i].fileNames = ctypes.cast(ptr_arrays[i], ctypes.c_void_p)
                 arr[i].numFiles = 1
-            key_b = encrypt_key.encode("utf-8") if encrypt_key else None
-            rc = self._fsbank.FSBank_Build(arr, n, format_id, 0, quality, key_b, out_fsb.encode("utf-8"))
+            rc = self._fsbank.FSBank_Build(arr, n, format_id, 0, quality, None, out_fsb.encode("utf-8"))
             if rc != FMOD_OK:
                 raise BankToolError(_make_error_text("FSBank_Build", rc))
             while True:

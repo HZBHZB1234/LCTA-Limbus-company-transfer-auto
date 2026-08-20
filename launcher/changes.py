@@ -22,11 +22,17 @@ def extract_exe_path(cmdline: str) -> str:
     return cmdline.split(maxsplit=1)[0]
 
 def apply_patch(mod_path, _path):
+    from launcher.modcache import enabled_mod_files
+
     game_path = extract_exe_path(_path)
     lang_path = Path(game_path).parent / "LimbusCompany_Data/lang"
-    for lang_patch in Path(mod_path).rglob("*.json"):
-        with open(lang_patch, "r") as f:
-            patch_data = json.load(f)
+    for lang_patch in enabled_mod_files(mod_path, "*.json"):
+        try:
+            with open(lang_patch, "r") as f:
+                patch_data = json.load(f)
+        except (OSError, ValueError) as e:
+            _log_manager.log("跳过无效 json 补丁 %s: %s", lang_patch, e)
+            continue
         # Apply the patch to the corresponding language file
         for _lang_file in patch_data.get('patchs', {}):
             lang_file = lang_path / _lang_file
@@ -35,9 +41,13 @@ def apply_patch(mod_path, _path):
                 continue
             if not lang_file.with_suffix(".bak").exists():
                 shutil.copyfile(lang_file, lang_file.with_suffix(".bak"))
-            with open(lang_file, "r") as f:
-                lang_data = json.load(f)
-            patched_data = jsonpatch.apply_patch(lang_data, patch_data['patchs'][_lang_file])
+            try:
+                with open(lang_file, "r") as f:
+                    lang_data = json.load(f)
+                patched_data = jsonpatch.apply_patch(lang_data, patch_data['patchs'][_lang_file])
+            except Exception as e:
+                _log_manager.log("应用补丁失败 %s: %s", _lang_file, e)
+                continue
             with open(lang_file, "w") as f:
                 json.dump(patched_data, f)
 

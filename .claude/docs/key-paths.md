@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-19 -->
+<!-- Last updated: 2026-08-20 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -172,14 +172,31 @@ Launcher mode: start_webui.py -launcher
         → resource_updater/core.py      compare SHA-256 fingerprint and configured completed scopes
                                         download official localize ZIPs + populate Unity Bundle cache
                                         → progress_callback(channel, message, fraction) updates GUI stage progress
-    Phase prepare_mod (if enabled):
+Phase prepare_mod (if enabled):
       pipeline.emit(PHASE_PREPARE_MOD)  → launcher/game_launch.py prepare_mod(
                                          steam_argv, progress_callback, cancel_event)，
-                                         各步骤间 check_cancel()（cancel_event 触发即中止）
+                                          各步骤间 check_cancel()（cancel_event 触发即中止）
                                          reports stepped progress for cleanup/detection/text/assets/audio
                                         → launcher/patch.py (Unity asset patching)
+                                          1. detect_lunartique_mods   zip→carra2 转换，
+                                             缓存键=源 zip 文件 sha256（modcache.carra2_convert_dir），
+                                             转换产物复制回模组目录（<zip 名>.carra2）并删除源 zip
+                                          2. extract_assets           按模组目录 *.carra* 解压+展平，
+                                             缓存键=carra2 内容 sha256（modcache.carra2_extract_dir）
+                                          3. patch_assets             bundle 重打包缓存，键=
+                                             原版 __data xxh128 + 模组目录 tree_digest + packer(lz4)
+                                             （modcache.bundle_patch_dir/<digest>/__data + meta.json），
+                                             bundle.save(packer="lz4") 失败回退 packer="original"
                                         → launcher/sound.py (sound replacement)
+                                          enabled_mod_files() 过滤 _disable 文件/目录 →
+                                          等游戏校验后替换 .bank → bankmod.apply_rebanks(mod_folder)
+                                        → launcher/bankmod.py (.rebank fsb 补丁)
+                                          rebank.json base_bank 匹配 → patch_cache_key
+                                          (原版hash|模组摘要|质量|线程) 查 %LOCALAPPDATA%/LCTA/mod-cache/bank/
+                                          缓存（webutils/bank/rebank.py patch_banks 重打包，
+                                          patch_options() 读 ui_default.bank.quality/threads）
                                         → launcher/changes.py (text data patches)
+                                          enabled_mod_files() 过滤 _disable；单个 json 损坏仅跳过该文件
     Phase launch:
       → subprocess.Popen(steam_argv)   ← Non-blocking, stored in pipeline.context
       pipeline.emit(PHASE_LAUNCH)       → GUI shows process-creation progress
@@ -1068,26 +1085,46 @@ JS: sections/bank.html + js/bank.js（initBankSection；bankBusy 互斥防并发
       → 时长对比（wav_duration_file 3 位小数）→ modified/added → make_rebank() 打包 .rebank
 ```
 
-启动应用链（.rebank 模组启动时自动补丁，哈希缓存命中免重编码）:
+启动应用链（.rebank 模组启动时自动补丁，补丁缓存命中免重编码）:
 
 ```
 launcher: game_launch.prepare_mod()
-  → sound.replace_sound(mod_folder, game_path)（扫模组目录 .bank/.rebank 存在性，命中才起线程）
+  → sound.replace_sound(mod_folder, game_path)（enabled_mod_files 过滤 _disable；扫 .bank/.rebank 命中才起线程）
     → sound.sound_replace_thread()
         → wait_for_validation()（删最小 .bank 等游戏校验回滚，超时恢复备份）
         → .bank 模组备份为 .bak 后拷贝进 FMODBuilds/Desktop
         → launcher/bankmod.py apply_rebanks(mod_folder)
-            → rebank_files_in 递归收集 .rebank；mod_digest（内容哈希：仅拼接
-              basename + 各文件 sha256，不含修改时间）
-            → 缓存 %LOCALAPPDATA%\LCTA\bank-cache/<digest>.bank 命中直接复用（prune_cache(20) 淘汰）
-            → 未命中：rebank.json base_bank 匹配游戏原版 bank（非法 base_bank 名——绝对路径或
+            → rebank_files_in 递归收集 .rebank（enabled_mod_files 过滤 _disable）
+            → 逐模组 rebank.json base_bank 匹配游戏原版 bank（非法 base_bank 名——绝对路径或
               .. 穿越——记入 skipped 跳过）
-              → launcher/bankmod._patch_into（bankmod 自建的提取/替换/重打包临时目录循环，
-                与 webutils/bank/rebank.py patch_banks 为平行实现；编码硬编码
-                vorbis/q92/default_threads()，不读 ui_default.bank.{quality,threads}——
-                该配置仅 rebank.patch_banks 读取）→ fmod.rebuild_bank（WAV→FSB vorbis）
-              → 原子替换目标 bank
+            → 补丁缓存键 patch_cache_key(原版 bank sha256 | 模组摘要 | 质量 | 线程)，查
+              %LOCALAPPDATA%/LCTA/mod-cache/bank/（rebank_cache_dir），meta.json 记录
+              orig_sha256/replaced 等，命中直接复制产物（cache_hit），跳过重编码
+            → 未命中：webutils/bank/rebank.py patch_banks（patch_options() 读
+              ui_default.bank.quality/threads 配置，非硬编码）→ fmod.rebuild_bank（WAV→FSB）
+              → atomic_write 原子替换目标 bank + 写缓存（prune_rebank_cache 按 LRU 淘汰）
+            → 缺 DLL 时 FmodDlls 构造 auto_download=True → dlls.ensure_fmod_dlls()（锁内
+              复查，并发只下载一次；显式 dll_dir 已配置则不自动下载，抛 BankDllMissingError）
         → 游戏退出 → restore_sound()（.bak 还原）
+```
+
+首次使用自动下载（FmodDlls 构造 auto_download=True，WebUI 与 Launcher 共用）:
+
+```
+任何需要 FMOD/FSBANK DLL 的路径（bank_extract/bank_rebuild/bank_export_rebank/
+bank_convert_mod/bank_patch_full/launcher bankmod.patch_banks）:
+  → webutils/bank/fmod.py 构造 FmodDlls
+    → dlls.py FmodDlls.__init__（auto_download=True 且未显式指定 dll_dir 时）
+    → dlls.py ensure_fmod_dlls(force=False)
+        → 预先检查 find_dll_dir(default_dll_candidates()) 已就绪 → 直接返回（不下载）
+        → threading.Lock 内复查缺失 DLL（missing_dlls）→ 仍缺才下载
+          （并发调用方第二个线程在锁内复查后跳过，保证只下载一次）
+        → ui_default.bank.dll_url 配置 → download_with；否则官方 GitHub release
+          （get_latest_release + download_with_github，代理轮换）
+        → 解压到 default_download_dir()（%LOCALAPPDATA%/LCTA/fmod-dlls）并写回配置
+        → 失败抛 BankDllMissingError（调用方 UI 提示手动下载）
+WebUI bank 页: refreshBankDllStatus 显示「缺少」时 js/bank.js requireBankDlls()
+  非阻塞触发同一下载流程（toast 进度/失败提示，不锁页面）
 ```
 
 Files: `webui/sections/bank.html`, `webui/js/bank.js`, `webui/app_api/bank.py`,
@@ -1116,12 +1153,23 @@ Files: `webui/sections/bank.html`, `webui/js/bank.js`, `webui/app_api/bank.py`,
   → `webui/app_api/mod_mirror.py`（ModMirrorMixin 转发，CancelRunning → 已取消 + del_modal_list）
   → `webutils/function_mod_mirror.py mod_mirror_request`：
       standard → `_download_aria2`（`_resolve_direct_url` 先用 requests 解析 API 域 302
-        → 预签名 CDN 直链（dl.mods.lcta.top，不拦 aria2c TLS 指纹）→ `Aria2DlClient` 多连接，
-        进度 5-85，`check_running` 取消；aria2c 缺失/启动失败/任务 error（403 等）→ 降级
-        `_download_fallback`=`download_with`）
-      → `_verify_expected`（size + SHA256）→ `_install_standard`（删旧同名/_disable → `_extract_zip_safe`
-        解压到 `get_mod_path()/<name>`，下次启动游戏 launcher rglob 生效；进度 92→100）
+        → 预签名 CDN 直链（dl.mods.lcta.top，不拦 aria2c TLS 指纹）→ `_aria2_acquire()` 取
+         aria2c 单例池客户端（见下）→ 多连接下载，进度 5-85，`check_running` 取消；aria2c
+         缺失/启动失败/任务 error（403 等）→ 降级 `_download_fallback`=`download_with`）
+      → `_verify_expected`（size + SHA256）→ `_install_standard`（删旧同名/_disable →
+         `_flatten_single_root` 展开单根目录包 → `_extract_zip_safe` 解压到
+         `get_mod_path()/<name>`，下次启动游戏 launcher rglob 生效；进度 92→100；
+         `_summarize_package` 汇总包内容并入完成 message）
       file → 下载到 `get_downloads_dir()` 不安装
+      staging 复用：staging 目标已存在且内容 sha256 与期望一致 → 跳过下载直接复用
+
+aria2c 单例池（并发下载共享同一实例，空闲自动退出）:
+  → function_mod_mirror.py
+      _aria2_acquire()        全局 _aria2_client 存活（process.poll() 未结束）→ 引用计数 +1 复用；
+                               否则重建（resolve_aria2_binary + ui_default.aria2_dl 配置）
+      _aria2_release()        引用计数 -1，归零记录空闲时间
+      _aria2_reaper_loop()    守护线程，空闲 >30s → stop 置空（下个 acquire 惰性重建）
+      stop_mod_mirror_aria2() webui/app.py atexit 注册，进程退出统一清理（不残留 aria2c）
 
 Files: `webui/index.html`（#mod-mirror-btn）, `webui/js/mod-mirror.js`,
       `webui/app_api/mod_mirror.py`, `webui/mod_mirror_api.py`, `webui/app.py`,

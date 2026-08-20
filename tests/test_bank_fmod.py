@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from webutils.bank.fmod import FORMAT_IDS, bank_password, extract_bank, rebuild_bank
+from webutils.bank.fmod import FORMAT_IDS, extract_bank, rebuild_bank
 from webutils.bank.format import extract_fsb_bytes, parse_bank, parse_bank_for_rebuild
 
 from tests.test_bank_format import build_test_bank
@@ -16,8 +16,8 @@ class FakeDlls:
         self.encoded = []
         self.out_fsb = []
 
-    def decode_fsb_to_wav(self, fsb_path, wav_dir, wav_name_base, password=None, log=None):
-        self.decoded.append((fsb_path, wav_dir, wav_name_base, password))
+    def decode_fsb_to_wav(self, fsb_path, wav_dir, wav_name_base, log=None):
+        self.decoded.append((fsb_path, wav_dir, wav_name_base))
         os.makedirs(wav_dir, exist_ok=True)
         # 每个 fsb 产出 1 个 wav + 1 个清单
         (open(os.path.join(wav_dir, "s.wav"), "wb")).close()
@@ -26,8 +26,8 @@ class FakeDlls:
         return ["s.wav"]
 
     def encode_wavs_to_fsb(self, wav_files, out_fsb, format_id, quality, threads, cache_dir,
-                           encrypt_key=None, log=None):
-        self.encoded.append((wav_files, format_id, quality, threads, encrypt_key))
+                           log=None):
+        self.encoded.append((wav_files, format_id, quality, threads))
         self.out_fsb.append(out_fsb)
         with open(out_fsb, "wb") as fh:
             fh.write(b"FSB5" + b"E" * 64)
@@ -47,19 +47,20 @@ def test_extract_bank(tmp_path):
     assert r["bank_base"] == "Weapon"
     assert r["fsb_count"] == 2
     assert r["encrypted"] is False
+    assert "password_used" not in r  # 无密码逻辑
     assert len(dlls.decoded) == 2
     assert (tmp_path / "fsb" / "Weapon[0].fsb").read_bytes() == b"FSB5" + b"A" * 64
 
 
-def test_extract_bank_encrypted_password_file(tmp_path):
+def test_extract_bank_encrypted_flag_only(tmp_path):
+    """加密 bank 只保留只读标记，不再有密码派生/传递。"""
     payload = b"\x11\x22\x33\x44" + b"A" * 32
     bank = _write_bank(tmp_path, [payload])
-    (tmp_path / "Weapon.txt").write_text("mysecret\n", encoding="utf-8")
     dlls = FakeDlls()
     r = extract_bank(dlls, bank, str(tmp_path / "wav"), str(tmp_path / "fsb"))
     assert r["encrypted"] is True
-    assert r["password_used"] == "mysecret"
-    assert dlls.decoded[0][3] == "mysecret"
+    assert "password_used" not in r
+    assert len(dlls.decoded[0]) == 3  # (fsb, wav_dir, base)，无密码位
 
 
 def test_rebuild_bank(tmp_path):
@@ -70,7 +71,7 @@ def test_rebuild_bank(tmp_path):
     extract_bank(dlls, bank, wav_dir, fsb_dir)
     build_dir = str(tmp_path / "build")
     options = {"format": FORMAT_IDS["vorbis"], "quality": 92, "threads": 2,
-               "cache_dir": str(tmp_path / "cache"), "password": None}
+               "cache_dir": str(tmp_path / "cache")}
     out = rebuild_bank(dlls, bank, wav_dir, fsb_dir, build_dir, options)
     assert out == str(tmp_path / "build" / "Weapon.bank")
     assert len(dlls.encoded) == 2
@@ -80,14 +81,3 @@ def test_rebuild_bank(tmp_path):
     assert info is not None
     # 新 FSB 数据已拼入（fake 编码产物 64 字节）
     assert len(extract_fsb_bytes(rebuilt, parse_bank(rebuilt))) == 2
-
-
-def test_bank_password(tmp_path):
-    (tmp_path / "A.txt").write_text("a1\n", encoding="utf-8")
-    (tmp_path / "password.txt").write_text("pw\n", encoding="utf-8")
-    assert bank_password(str(tmp_path / "A.bank")) == "a1"
-    assert bank_password(str(tmp_path / "B.bank")) == "pw"
-    assert bank_password(str(tmp_path / "C.bank"), explicit="ex") == "ex"
-    empty_dir = tmp_path / "empty"
-    empty_dir.mkdir()
-    assert bank_password(str(empty_dir / "D.bank")) is None

@@ -16,6 +16,7 @@ from webutils import SpeedManager
 from webutils import InputBypassManager
 from webutils import CheatPluginHost
 from webutils import aria2_manager
+from webutils.function_mod_mirror import stop_mod_mirror_aria2
 
 from webui.app_api.exceptions import CancelRunning
 from webui.app_api.core import CoreMixin
@@ -79,6 +80,7 @@ def main():
     atexit.register(lambda: InputBypassManager.close())
     atexit.register(lambda: CheatPluginHost.close_all())
     atexit.register(lambda: aria2_manager.stop())
+    atexit.register(lambda: stop_mod_mirror_aria2())
     # 设置模态窗口相关的回调
     LogManager().set_modal_callbacks(
         status_callback=api.set_modal_status,

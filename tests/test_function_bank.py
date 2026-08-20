@@ -87,9 +87,9 @@ def test_bank_extract_ok(tmp_path, monkeypatch):
     p = tmp_path / "Weapon.bank"
     p.write_bytes(b"x" * 100)
     monkeypatch.setattr(fb, "FmodDlls", lambda d=None: object())
-    monkeypatch.setattr(fb, "extract_bank", lambda dlls, bank, wav, fsb, pw, log: {
-        "bank_base": "Weapon", "fsb_count": 2, "encrypted": False, "password_used": None})
-    r = fb.bank_extract(str(p), str(tmp_path / "out"), "")
+    monkeypatch.setattr(fb, "extract_bank", lambda dlls, bank, wav, fsb, log: {
+        "bank_base": "Weapon", "fsb_count": 2, "encrypted": False})
+    r = fb.bank_extract(str(p), str(tmp_path / "out"))
     assert r["success"] is True
     assert r["fsb_count"] == 2
     assert r["wav_dir"] == str(tmp_path / "out")
@@ -101,7 +101,7 @@ def test_bank_export_rebank_ok(tmp_path, monkeypatch):
     calls = {}
     monkeypatch.setattr(fb, "FmodDlls", lambda d=None: object())
     monkeypatch.setattr(fb, "build_rebank", lambda dlls, o, m, out, meta, work_dir=None,
-                        password=None, log=None: calls.update(o=o, m=m, meta=meta) or
+                        log=None: calls.update(o=o, m=m, meta=meta) or
                         {"modified": [(0, "a.wav")], "added": [], "count": 1, "out": out})
     out = str(tmp_path / "mod.rebank")
     r = fb.bank_export_rebank(str(orig), str(modded), out, "n", "1.0", "au", "de", False)
@@ -124,11 +124,129 @@ def test_bank_export_rebank_into_mod_same_path(tmp_path, monkeypatch):
     orig.write_bytes(b"a"); modded.write_bytes(b"b")
     monkeypatch.setattr(fb, "FmodDlls", lambda d=None: object())
     monkeypatch.setattr(fb, "build_rebank", lambda dlls, o, m, out, meta, work_dir=None,
-                        password=None, log=None: {"modified": [], "added": [(0, "a.wav")],
-                                                  "count": 1, "out": out})
+                        log=None: {"modified": [], "added": [(0, "a.wav")],
+                                   "count": 1, "out": out})
     monkeypatch.setattr(fb, "get_mod_path", lambda: str(mod_dir))
     out = str(mod_dir / "b.rebank")
     r = fb.bank_export_rebank(str(orig), str(modded), out, "n", "1.0", "", "", True)
     assert r["success"] is True
     assert r["into_mod_folder"] is True
     assert r["out"] == out
+
+
+# ═══════════════ 缓存（bank_patch_full / bank_convert_mod） ═══════════════
+
+def test_bank_patch_full_cache_hit(monkeypatch, tmp_path):
+    """同内容二次补丁命中缓存：不重编码、直接复制产物。"""
+    from webutils.bank.rebank import (patch_cache_key, patch_options,
+                                      rebank_mod_digest)
+
+    rebank_path = tmp_path / "mod.rebank"
+    rebank_path.write_bytes(b"rebank")
+    bank_path = tmp_path / "Weapon.bank"
+    bank_path.write_bytes(b"orig-bank")
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(fb, "rebank_cache_dir", lambda: str(cache_dir))
+
+    orig_hash = fb.sha256_file(str(bank_path))
+    opts = patch_options()
+    key = patch_cache_key(orig_hash, rebank_mod_digest([str(rebank_path)]),
+                          opts["quality"], opts["threads"])
+    (cache_dir / (key + ".bank")).write_bytes(b"cached-bank")
+    import json as _json
+    (cache_dir / (key + ".bank.json")).write_text(
+        _json.dumps({"orig_sha256": orig_hash, "replaced": 3,
+                     "skipped_new": 1, "skipped_bad": 0}), encoding="utf-8")
+
+    calls = []
+    monkeypatch.setattr(fb, "patch_banks",
+                        lambda *a, **k: calls.append(1) or {"replaced": 3, "skipped_new": 1,
+                                                            "skipped_bad": 0, "out_bank": ""})
+    monkeypatch.setattr(fb, "_dlls", lambda: object())
+
+    out_dir = tmp_path / "out"
+    r = fb.bank_patch_full(str(rebank_path), str(bank_path), str(out_dir))
+    assert r["success"] is True and r["cache_hit"] is True
+    assert (out_dir / "Weapon.bank").read_bytes() == b"cached-bank"
+    assert calls == []  # 未重编码
+
+
+def test_bank_patch_full_miss_writes_cache(monkeypatch, tmp_path):
+    """首次补丁未命中缓存 → 重编码并写缓存，二次命中。"""
+    rebank_path = tmp_path / "mod.rebank"
+    rebank_path.write_bytes(b"rebank")
+    bank_path = tmp_path / "Weapon.bank"
+    bank_path.write_bytes(b"orig-bank")
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(fb, "rebank_cache_dir", lambda: str(cache_dir))
+
+    calls = {"n": 0}
+
+    def fake_patch_banks(dlls, bank_path_, rebank_paths, out_dir, log=None):
+        calls["n"] += 1
+        os.makedirs(out_dir, exist_ok=True)
+        out = os.path.join(out_dir, os.path.basename(bank_path_))
+        with open(out, "wb") as fh:
+            fh.write(b"patched-bank")
+        return {"replaced": 2, "skipped_new": 0, "skipped_bad": 0, "out_bank": out}
+
+    monkeypatch.setattr(fb, "patch_banks", fake_patch_banks)
+    monkeypatch.setattr(fb, "_dlls", lambda: object())
+
+    out_dir = tmp_path / "out"
+    r1 = fb.bank_patch_full(str(rebank_path), str(bank_path), str(out_dir))
+    assert r1["success"] is True and r1.get("cache_hit") is None
+    assert calls["n"] == 1
+    assert len(list(cache_dir.glob("*.bank"))) == 1
+
+    out_dir2 = tmp_path / "out2"
+    r2 = fb.bank_patch_full(str(rebank_path), str(bank_path), str(out_dir2))
+    assert r2["success"] is True and r2["cache_hit"] is True
+    assert calls["n"] == 1  # 第二次命中缓存
+    assert (out_dir2 / "Weapon.bank").read_bytes() == b"patched-bank"
+
+
+def test_bank_convert_mod_export_cache(monkeypatch, tmp_path):
+    """同原版+模组内容二次导出 → 复用缓存产物，不重编码。"""
+    sound_dir = tmp_path / "sound"
+    sound_dir.mkdir()
+    (sound_dir / "Weapon.bank").write_bytes(b"orig")
+
+    mod_dir = tmp_path / "mods"
+    mod_dir.mkdir()
+    mod_file = mod_dir / "Weapon.bank"
+    mod_file.write_bytes(b"modded")
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(fb, "rebank_cache_dir", lambda: str(cache_dir))
+    monkeypatch.setattr(fb, "_game_sound_dir", lambda game_path: str(sound_dir))
+    monkeypatch.setattr(fb, "get_mod_path", lambda: str(mod_dir))
+    monkeypatch.setattr(fb.ConfigManager, "get",
+                        lambda self, k, d=None: str(tmp_path) if k == "game_path" else d)
+
+    calls = {"n": 0}
+
+    def fake_build_rebank(*a, **k):
+        calls["n"] += 1
+        out = k.get("out") if "out" in k else a[3]
+        with open(out, "wb") as fh:
+            fh.write(b"rebuilt-rebank")
+        return {"modified": [], "added": [(0, "a.wav")], "count": 1, "out": out, "base_bank": "Weapon"}
+
+    monkeypatch.setattr(fb, "build_rebank", fake_build_rebank)
+    monkeypatch.setattr(fb, "_dlls", lambda: object())
+
+    r1 = fb.bank_convert_mod("Weapon.bank", keep_original=True)
+    assert r1["success"] is True
+    assert calls["n"] == 1
+    assert (mod_dir / "Weapon.rebank").read_bytes() == b"rebuilt-rebank"
+
+    r2 = fb.bank_convert_mod("Weapon.bank", keep_original=True)
+    assert r2["success"] is True and r2.get("cache_hit") is True
+    assert r2["count"] == 1  # 缓存命中仍返回真实改动计数
+    assert calls["n"] == 1  # 二次导出未重编码

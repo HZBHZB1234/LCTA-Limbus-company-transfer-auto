@@ -87,8 +87,9 @@ def sound_replace_thread(mod_folder: str):
     wait_for_validation()
 
     _log_manager.log("Validation complete, replacing sound files")
+    from launcher.modcache import enabled_mod_files
     target_folder = sound_folder()
-    for sound_file in Path(mod_folder).rglob("*.bank"):
+    for sound_file in enabled_mod_files(mod_folder, "*.bank"):
         _log_manager.log(f"Replacing {sound_file}")
         target = os.path.join(target_folder, sound_file.name)
 
@@ -153,7 +154,8 @@ def replace_sound(mod_folder: str, game_path: str = None):
         global _game_path
         _game_path = extract_exe_path(game_path)
     from launcher.bankmod import rebank_files_in
-    has_bank = any(p.is_file() for p in Path(mod_zips_root_path).rglob("*.bank"))
+    from launcher.modcache import enabled_mod_files
+    has_bank = bool(enabled_mod_files(mod_zips_root_path, "*.bank"))
     has_rebank = bool(rebank_files_in(mod_zips_root_path))
     if has_bank or has_rebank:
         Thread(target=sound_replace_thread, args=(mod_folder,), daemon=True).start()

@@ -21,11 +21,11 @@ class BankMixin:
     def bank_info(self, path):
         return bank_info(path)
 
-    def bank_extract(self, bank_path, out_dir, password=""):
-        return bank_extract(bank_path, out_dir, password)
+    def bank_extract(self, bank_path, out_dir):
+        return bank_extract(bank_path, out_dir)
 
-    def bank_rebuild(self, bank_path, wav_dir, out_dir, password="", format_id="vorbis", quality=92):
-        return bank_rebuild(bank_path, wav_dir, out_dir, password, format_id, quality)
+    def bank_rebuild(self, bank_path, wav_dir, out_dir, format_id="vorbis", quality=92):
+        return bank_rebuild(bank_path, wav_dir, out_dir, format_id, quality)
 
     def bank_export_rebank(self, original_path, modded_path, out_path, name, version,
                            author, desc, into_mod_folder):
@@ -35,8 +35,8 @@ class BankMixin:
     def bank_convert_mod(self, mod_name, keep_original=True):
         return bank_convert_mod(mod_name, keep_original)
 
-    def bank_patch_full(self, rebank_path, bank_path, out_dir, password=""):
-        return bank_patch_full(rebank_path, bank_path, out_dir, password)
+    def bank_patch_full(self, rebank_path, bank_path, out_dir):
+        return bank_patch_full(rebank_path, bank_path, out_dir)
 
     def bank_rebank_info(self, path):
         return bank_rebank_info(path)

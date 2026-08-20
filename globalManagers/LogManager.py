@@ -5,6 +5,7 @@ Singleton log manager wrapping Python standard logging with modal-callback suppo
 import logging
 import logging.handlers
 import os
+import re
 import sys
 from typing import Callable, Optional, Any
 from concurrent.futures import ThreadPoolExecutor
@@ -108,17 +109,34 @@ class LogManager:
         self.debug_mode = enabled
 
     # ---------- 核心日志方法 ----------
-    def log(self, message: str, level: int = logging.INFO):
-        """记录普通日志"""
+    _FORMAT_RE = re.compile(r"%(?:%|\d*[diouxXeEfFgGcrsa])")
+
+    def log(self, message: str, *args, level: int = logging.INFO):
+        """记录普通日志，支持 %-格式化参数（message % args）。
+
+        兼容旧式 `log(msg, level)` 调用：仅当消息不含有效格式符且首个位置参数
+        为 int 时才按 level 处理（避免 int 格式参数被误判为 level 而吞掉）。
+        """
+        if args and type(args[0]) is int and not self._FORMAT_RE.search(message):
+            level = args[0]
+            args = args[1:]
+        if args:
+            message = message % args
         self._logger.log(level, message)
 
     def debug(self, message: str):
         """记录调试日志"""
         self.log(f"[DEBUG] {message}", logging.DEBUG)
 
-    def log_error(self, error: Any):
-        """记录错误日志，自动判断是否为 Exception 以包含 traceback"""
-        if isinstance(error, Exception):
+    def log_error(self, error: Any, *args):
+        """记录错误日志，支持 %-格式化参数；无额外参数时自动判断异常并含 traceback"""
+        if args:
+            msg = str(error) % args
+            if isinstance(error, Exception):
+                self._logger.exception(msg)
+            else:
+                self._logger.error(msg)
+        elif isinstance(error, Exception):
             self._logger.exception(str(error))
         else:
             msg = str(error) if error else "Unknown error"

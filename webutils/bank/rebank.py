@@ -6,6 +6,8 @@
 修改判定：时长（3 位小数）不同视为改动；新增只记录不删。
 """
 import datetime
+import glob
+import hashlib
 import json
 import os
 import shutil
@@ -20,6 +22,74 @@ from .format import bank_base
 from .wav import read_wav_info, wav_duration_file
 
 CONFIG_NAME = "rebank.json"
+
+
+def sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def rebank_cache_dir() -> str:
+    """rebank 补丁缓存目录（launcher bankmod 与 WebUI 共用，%LOCALAPPDATA%/LCTA/mod-cache/bank）。"""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "LCTA", "mod-cache", "bank")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def rebank_mod_digest(rebank_paths) -> str:
+    """模组内容摘要（与 launcher bankmod.mod_digest 同公式：basename + 内容 sha256）。"""
+    h = hashlib.sha256()
+    for rp in sorted(rebank_paths):
+        h.update(os.path.basename(rp).encode("utf-8"))
+        h.update(b"\0")
+        h.update(sha256_file(rp).encode("utf-8"))
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def patch_cache_key(orig_sha256: str, mod_digest: str, quality: int, threads: int) -> str:
+    """补丁缓存键：原版 bank + 模组内容 + 编码参数（质量/线程）共同决定。"""
+    return hashlib.sha256(
+        ("%s|%s|%d|%d" % (orig_sha256, mod_digest, int(quality), int(threads))).encode("utf-8")
+    ).hexdigest()
+
+
+def patch_options() -> dict:
+    """重打包参数（读 ui_default.bank.quality/threads，默认 92 / 默认线程数）。"""
+    from globalManagers.ConfigManager import ConfigManager
+    from .fmod import default_threads
+
+    cfg = ConfigManager()
+    try:
+        quality = int(cfg.get("ui_default.bank.quality", 92))
+    except (TypeError, ValueError):
+        quality = 92
+    try:
+        threads = int(cfg.get("ui_default.bank.threads", 0) or 0) or default_threads()
+    except (TypeError, ValueError):
+        threads = default_threads()
+    return {"quality": quality, "threads": threads}
+
+
+def prune_rebank_cache(max_entries: int = 20) -> int:
+    """按 mtime 保留最近 max_entries 个缓存条目（*.bank 补丁缓存 + export-*.rebank 导出缓存）。"""
+    cache_dir = rebank_cache_dir()
+    entries = sorted(
+        glob.glob(os.path.join(cache_dir, "*.bank")) + glob.glob(os.path.join(cache_dir, "export-*.rebank")),
+        key=os.path.getmtime, reverse=True)
+    removed = 0
+    for old in entries[max_entries:]:
+        try:
+            os.remove(old)
+            os.remove(old + ".json")
+            removed += 1
+        except OSError:
+            pass
+    return removed
 
 
 def collect_wavs(wav_dir: str) -> dict:
@@ -103,15 +173,14 @@ def _diff_wavs(a_wav: dict, b_wav: dict, log=None):
 
 
 def build_rebank(dlls: FmodDlls, original_path: str, modded_path: str, out_path: str,
-                 meta: dict, work_dir: Optional[str] = None, password: Optional[str] = None,
-                 log=None) -> dict:
+                 meta: dict, work_dir: Optional[str] = None, log=None) -> dict:
     """对比原版与模组 bank，生成 .rebank 差分包。"""
     work = _make_work_dir(work_dir)
     try:
         a_wav = os.path.join(work, "a_wav"); a_fsb = os.path.join(work, "a_fsb")
         b_wav = os.path.join(work, "b_wav"); b_fsb = os.path.join(work, "b_fsb")
-        a = extract_bank(dlls, original_path, a_wav, a_fsb, password, log)
-        b = extract_bank(dlls, modded_path, b_wav, b_fsb, password, log)
+        a = extract_bank(dlls, original_path, a_wav, a_fsb, log)
+        b = extract_bank(dlls, modded_path, b_wav, b_fsb, log)
         A = collect_wavs(a_wav)
         B = collect_wavs(b_wav)
         modified, added = _diff_wavs(A, B, log)
@@ -147,13 +216,12 @@ def build_rebank(dlls: FmodDlls, original_path: str, modded_path: str, out_path:
 
 
 def patch_banks(dlls: FmodDlls, bank_path: str, rebank_paths: List[str], out_dir: str,
-                work_dir: Optional[str] = None, password: Optional[str] = None,
-                log=None) -> dict:
+                work_dir: Optional[str] = None, log=None) -> dict:
     """把若干 .rebank 应用到目标 bank，输出重打包后的 bank。"""
     work = _make_work_dir(work_dir)
     try:
         wav_dir = os.path.join(work, "wav"); fsb_dir = os.path.join(work, "fsb")
-        extract_bank(dlls, bank_path, wav_dir, fsb_dir, password, log)
+        extract_bank(dlls, bank_path, wav_dir, fsb_dir, log)
         T = collect_wavs(wav_dir)
 
         replaced = skipped_new = skipped_bad = 0
@@ -181,13 +249,9 @@ def patch_banks(dlls: FmodDlls, bank_path: str, rebank_paths: List[str], out_dir
         if replaced == 0:
             raise BankToolError("没有成功替换任何文件，取消重打包。")
 
-        from globalManagers.ConfigManager import ConfigManager
-        from .fmod import default_threads
-        cfg = ConfigManager()
-        options = {"format": 5,
-                   "quality": int(cfg.get("ui_default.bank.quality", 92)),
-                   "threads": int(cfg.get("ui_default.bank.threads", 0) or 0) or default_threads(),
-                   "cache_dir": os.path.join(work, "cache"), "password": password}
+        opts = patch_options()
+        options = {"format": 5, "quality": opts["quality"], "threads": opts["threads"],
+                   "cache_dir": os.path.join(work, "cache")}
         out_bank = rebuild_bank(dlls, bank_path, wav_dir, fsb_dir, out_dir, options, log)
         return {"replaced": replaced, "skipped_new": skipped_new, "skipped_bad": skipped_bad,
                 "out_bank": out_bank}

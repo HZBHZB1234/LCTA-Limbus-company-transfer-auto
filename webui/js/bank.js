@@ -65,12 +65,12 @@ async function downloadBankDlls() {
 }
 
 async function requireBankDlls() {
-    // 操作前检查：DLL 缺失时提示去下载，返回 false
+    // 操作前检查：DLL 缺失时不再阻塞操作（后端首次使用会自动下载），仅提示
     if (!pywebview || !pywebview.api || !pywebview.api.bank_dll_status) return true;
     const result = await pywebview.api.bank_dll_status();
     if (result && result.success && result.ok) return true;
-    showMessage('缺少 FMOD 工具 DLL', '请先在「FMOD 工具 DLL」卡片点击「一键下载 FMOD DLL」自动获取，或手动选择包含 fmod64.dll / fsbank64.dll / libfsbvorbis64.dll 的目录。');
-    return false;
+    showMessage('FMOD 工具 DLL 缺失', '首次使用时将自动下载，请保持网络通畅；也可在「FMOD 工具 DLL」卡片点击「一键下载 FMOD DLL」，或手动选择包含 fmod64.dll / fsbank64.dll / libfsbvorbis64.dll 的目录。');
+    return true;
 }
 
 // ---- 卡片 1: FMOD DLL 状态 ----
@@ -235,15 +235,14 @@ async function runBankExtract() {
                 return;
             }
         }
-        const password = _bankPathInput('bank-extract-password');
         if (!pywebview || !pywebview.api || !pywebview.api.bank_extract) return;
         addLogMessage('开始解包: ' + bankPath + ' → ' + outDir);
         try {
-            const result = await pywebview.api.bank_extract(bankPath, outDir, password);
+            const result = await pywebview.api.bank_extract(bankPath, outDir);
             if (result && result.success) {
                 const count = result.fsb_count || 0;
                 addLogMessage('解包完成: ' + bankPath + ' → ' + outDir
-                    + (result.encrypted ? '（加密 bank，已用密码解密）' : ''));
+                    + (result.encrypted ? '（加密 bank）' : ''));
                 showMessage('解包完成', '已解包 ' + count + ' 个 FSB 音频组到：\n' + outDir
                     + '\n\n每个子目录 bank[序号] 对应一个 FSB 音频组，可直接替换 wav 后「重打包」。');
             } else {
@@ -290,7 +289,7 @@ async function runBankRebuild() {
         if (!pywebview || !pywebview.api || !pywebview.api.bank_rebuild) return;
         addLogMessage('开始重打包: ' + bankPath + ' → ' + outDir);
         try {
-            const result = await pywebview.api.bank_rebuild(bankPath, wavDir, outDir, '');
+            const result = await pywebview.api.bank_rebuild(bankPath, wavDir, outDir);
             if (result && result.success) {
                 addLogMessage('重打包完成: ' + (result.out_bank || outDir));
                 showMessage('重打包完成', '已生成完整 bank：\n' + (result.out_bank || outDir)
@@ -477,7 +476,7 @@ async function runBankPatchFull() {
         if (!pywebview || !pywebview.api || !pywebview.api.bank_patch_full) return;
         addLogMessage('开始生成完整 bank: ' + rebankPath + ' → ' + bankPath);
         try {
-            const result = await pywebview.api.bank_patch_full(rebankPath, bankPath, outDir, '');
+            const result = await pywebview.api.bank_patch_full(rebankPath, bankPath, outDir);
             if (result && result.success) {
                 addLogMessage('生成完成: ' + (result.out_bank || outDir));
                 showMessage('生成完成',

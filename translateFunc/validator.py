@@ -53,6 +53,17 @@ class RuleBasedValidator:
     # 匹配 Effect ID 内组模式（不含括号），用于区分 ID 与中文内容
     _ID_LIKE_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
 
+    # 匹配被编码（HTML 实体 / URL 编码）的游戏富文本标签，如
+    # &lt;color=#ff6000&gt; / %3Ccolor=%23ff6000%3E 及其闭合标签。
+    # 仅当标签被编码时才匹配，避免误伤正文中的裸 < > 字面量。
+    _RICHTEXT_ESCAPE_RE = re.compile(
+        r"(?P<open>&lt;|%3C)"
+        r"(?P<slash>/?)"
+        r"(?P<name>color|mark|b|u|i|s|noparse|size)"
+        r"(?P<attrs>(?:[^&<>]|%[0-9A-Fa-f]{2})*?)"
+        r"(?P<close>&gt;|%3E)"
+    )
+
     def __init__(self, affects_data: list[dict]):
         """初始化校验器。
 
@@ -215,6 +226,55 @@ class RuleBasedValidator:
                         "radius": max(len(full) + 10, 20),
                         "old": full,
                         "new": fixed,
+                    },
+                ))
+
+        return violations
+
+    def validate_richtext_escapes(
+        self, translations: list[str],
+    ) -> list[ValidationViolation]:
+        """校验译文中的游戏富文本标签是否被错误转义。
+
+        模型有时会把原文 `<color=…>` 等标签转义成 `&lt;…&gt;`（HTML 实体）
+        或 `%3C…%3E`（URL 编码），导致游戏无法解析。这里检测这类编码化
+        标签并自动还原为原始尖括号。
+
+        仅当标签确实被编码时才匹配，避免误伤正文中偶发的裸 `<` `>` 字面量。
+
+        Returns:
+            违规列表，均为 auto_fixable=True（可自动修复）。
+        """
+        violations: list[ValidationViolation] = []
+
+        for block_idx, cn_text in enumerate(translations):
+            if not cn_text:
+                continue
+
+            for m in self._RICHTEXT_ESCAPE_RE.finditer(cn_text):
+                encoded = m.group(0)
+                decoded = (
+                    "<" + m.group("slash")
+                    + m.group("name") + m.group("attrs") + ">"
+                )
+                abs_pos = m.start()
+                snippet = cn_text[max(0, abs_pos - 5):min(len(cn_text), m.end() + 5)]
+
+                violations.append(ValidationViolation(
+                    block_id=block_idx + 1,
+                    rule="richtext_escape",
+                    severity="error",
+                    message=(
+                        f"富文本标签被错误转义：'{encoded}' 应还原为 '{decoded}'"
+                        f"（上下文: ...{snippet}...）"
+                    ),
+                    auto_fixable=True,
+                    fix_fn="replace",
+                    fix_params={
+                        "position": abs_pos,
+                        "radius": max(len(encoded) + 10, 20),
+                        "old": encoded,
+                        "new": decoded,
                     },
                 ))
 

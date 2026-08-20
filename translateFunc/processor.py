@@ -868,6 +868,9 @@ class FileProcessor:
 
                 result.extend(part_result)
 
+            # ====== 富文本转义后处理（全文件类型） ======
+            result = self._postprocess_richtext(result)
+
             # ====== 规则化后处理校验（技能文件专用） ======
             if self.is_skill and self._config.enable_rule_validation:
                 _logger.debug(f"[{self.file_name}] 规则化后处理校验")
@@ -1038,6 +1041,43 @@ class FileProcessor:
             request_texts = simple_builder.get_request_text(from_lang=self._config.from_lang)
             result = self._translator.translate(request_texts)
             return simple_builder.deBuild(result), False
+
+    def _postprocess_richtext(self, result: list) -> list:
+        """对所有文件类型执行富文本转义后处理。
+
+        检测译文中被错误编码（HTML 实体 / URL 编码）的游戏富文本标签
+        （如 &lt;color=…&gt;、%3Ccolor=…%3E），自动还原为原始尖括号 < >。
+        该检查不依赖技能文件，故对所有文件生效。
+        """
+        try:
+            validator = RuleBasedValidator([])
+            violations = validator.validate_richtext_escapes(result)
+            fixable = [v for v in violations if v.auto_fixable and v.fix_fn]
+            if fixable:
+                result = RuleBasedValidator.apply_auto_fixes(result, fixable)
+                _logger.info(
+                    f"[{self.file_name}] 富文本转义后处理修正了 {len(fixable)} 处问题"
+                )
+                self._record_diagnostic_event(
+                    stage="richtext_postprocess",
+                    status="success",
+                    prompt_format=self._config.prompt_format,
+                    validation_errors=[
+                        {
+                            "rule": v.rule,
+                            "severity": v.severity,
+                            "message": v.message,
+                            "block_id": v.block_id,
+                            "auto_fixable": v.auto_fixable,
+                        }
+                        for v in fixable
+                    ],
+                )
+        except Exception as e:
+            _logger.exception(
+                f"[{self.file_name}] 富文本转义后处理异常 ({e})，使用未修正的翻译结果"
+            )
+        return result
 
     def _retry_missing_entries(
         self,

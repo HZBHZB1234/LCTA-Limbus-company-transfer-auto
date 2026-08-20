@@ -67,6 +67,7 @@ class PromptFactory:
         {"priority": "P2", "text": "括号选择：剧情文本使用全角括号（）；技能/UI等紧凑文本优先使用半角括号()以减少留白"},
         {"priority": "P2", "text": "JSON引号：如原文前后有成对的半角引号包裹，可能是JSON格式标记，不可将其改为全角引号"},
         {"priority": "P2", "text": "保留原文的代码格式，如富文本标签和f-string占位符"},
+        {"priority": "P1", "text": "富文本标签原样保留：原文中的游戏富文本标签（如 <color=…>、<mark=…>、<b>、<u>、<i>、<s>、<noparse>、<size=…> 及其闭合标签）必须保持原始尖括号 < 和 >。严禁将其转义为 &lt; / &gt;（HTML 实体）或 %3C / %3E（URL 编码）。"},
     ]
 
     # 格式规则 —— 按响应格式分离，避免 JSON/XML 转义指令混淆导致解析失败
@@ -80,7 +81,7 @@ class PromptFactory:
     ]
     # XML 响应格式转义规则（xml_xml 模式使用）
     _XML_FORMAT_RULES_DATA: list[dict] = [
-        {"priority": "P1", "text": "在XML输出中，文本内的双引号必须转义为 &quot;，& 写为 &amp;，< 写为 &lt;"},
+        {"priority": "P1", "text": "在XML输出中，文本内的双引号必须转义为 &quot;，& 写为 &amp;，< 写为 &lt;。此规则不对文本内富文本格式生效"},
     ]
 
     _STAGE0_RULES_DATA: list[dict] = [
@@ -96,6 +97,7 @@ class PromptFactory:
         {"priority": "P1", "text": "校验代码格式：富文本标签、f-string占位符是否完整保留且未被翻译"},
         {"priority": "P2", "text": "检查JSON格式标记（如原文有前后半角引号包裹的文本）是否保留了格式引号"},
         {"priority": "P2", "text": "发现错误时自动修正，并给出具体修正说明（改了什么、为什么）"},
+        {"priority": "P1", "text": "校验富文本标签 <…> 是否保持原始尖括号，未被转义为 &lt; / &gt; / %3C / %3E；发现编码化标签应改回原始 < >。"},
     ]
 
     # FileType 特有规则

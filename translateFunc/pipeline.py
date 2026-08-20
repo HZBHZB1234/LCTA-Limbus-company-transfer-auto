@@ -164,22 +164,33 @@ class TranslationPipeline:
         self._log_bridge.info(f"找到 {len(target_files)} 个文件")
 
         # 5. 重排序：优先文件放在前面
+        #     优先文件 = 全部 BattleKeywords* 变体（基础 + BossRaid/Mirror/Refraction/Walpurgis…）
+        #     + ScenarioModelCodes。所有 BattleKeywords 变体进入串行，翻译完成后
+        #     合并去重并一次性注册状态效果，确保下游文件（如 Passives-BossRaid）
+        #     能识别所有 [BracketedId] buff（含仅定义在变体文件中的 BattleSense 等）。
         has_prefix = self._config.has_prefix
-        model_name = "KR_ScenarioModelCodes-AutoCreated.json" if has_prefix else "ScenarioModelCodes-AutoCreated.json"
-        keyword_name = "KR_BattleKeywords.json" if has_prefix else "BattleKeywords.json"
+        prefix = "KR_" if has_prefix else ""
+        model_name = f"{prefix}ScenarioModelCodes-AutoCreated.json"
+        base_keyword_name = f"{prefix}BattleKeywords.json"
+        keyword_glob = f"{prefix}BattleKeywords*.json"
         model_file = kr_path / model_name
-        keyword_file = kr_path / keyword_name
+        base_keyword_file = kr_path / base_keyword_name
+        keyword_files = sorted(kr_path.glob(keyword_glob))
         priority_files = []
-        if keyword_file.exists():
-            target_files.remove(keyword_file)
-            priority_files.append(keyword_file)
+        if model_file.exists() and base_keyword_file.exists():
+            for kf in keyword_files:
+                if kf in target_files:
+                    target_files.remove(kf)
+            if model_file in target_files:
+                target_files.remove(model_file)
+            priority_files = [*keyword_files, model_file]
         else:
-            self._log_bridge.warning(f"未找到关键字文件 {keyword_name}，跳过优先处理")
-        if model_file.exists():
-            target_files.remove(model_file)
-            priority_files.append(model_file)
-        else:
-            self._log_bridge.warning(f"未找到模型文件 {model_name}，跳过优先处理")
+            if not model_file.exists():
+                self._log_bridge.warning(f"未找到模型文件 {model_name}，跳过优先处理")
+            if not base_keyword_file.exists():
+                self._log_bridge.warning(f"未找到基础关键字文件 {base_keyword_name}，跳过优先处理")
+            priority_files = []
+            keyword_files = []
 
         # 6. 串行处理优先文件
         self._log_bridge.info("=== 阶段 4/5: 处理优先文件 ===")
@@ -193,10 +204,13 @@ class TranslationPipeline:
                 self._record_outcome(outcome, summary)
 
                 # 处理完优先文件后更新引擎（按文件身份判断，两文件互不依赖）
-                if pf == keyword_file and self._config.enable_skill:
-                    self._update_affects(pf, base_path_config, has_prefix)
-                elif pf == model_file and self._config.enable_role:
+                if pf == model_file and self._config.enable_role:  # model 文件
                     self._update_roles(pf, base_path_config, has_prefix)
+                # 所有 keyword 文件仅做串行翻译，状态效果在循环结束后统一合并去重注册
+
+            # 所有 BattleKeywords* 变体串行翻译完成后，合并去重并一次性注册状态效果
+            if keyword_files and self._config.enable_skill:
+                self._update_affects_merged(keyword_files, base_path_config, has_prefix)
 
         # 7. 并发处理剩余文件
         self._log_bridge.info(f"=== 阶段 5/5: 并发翻译 ({len(target_files)} 个文件) ===")
@@ -300,65 +314,108 @@ class TranslationPipeline:
             _logger.exception(f"加载角色信息失败: {e}")
             self._on_log(f"加载角色信息失败: {e}")
 
+    def _gather_affects(
+        self, keyword_file: Path, base_pc: PathConfig, has_prefix: bool
+    ) -> list[dict]:
+        """从单个 KR/JP/EN/CN BattleKeywords 文件收集状态效果多语言数据。"""
+        def load_data_list(path: Path) -> list[dict]:
+            if not path.exists():
+                return []
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            if isinstance(data, dict):
+                return data.get("dataList", [])
+            return data if isinstance(data, list) else []
+
+        file_pc = FilePathConfig(
+            KR_path=keyword_file,
+            _PathConfig=base_pc,
+            has_prefix=has_prefix,
+        )
+        kr_data = json.loads(keyword_file.read_text(encoding="utf-8-sig"))
+        target = file_pc.target_file
+        cn_data = json.loads(target.read_text(encoding="utf-8-sig")) if target.exists() else kr_data
+        kr_list = kr_data.get("dataList", kr_data if isinstance(kr_data, list) else [])
+        cn_list = cn_data.get("dataList", cn_data if isinstance(cn_data, list) else [])
+        jp_list = load_data_list(file_pc.JP_path)
+        en_list = load_data_list(file_pc.EN_path)
+
+        available_lengths = [len(kr_list), len(cn_list)]
+        available_lengths.extend(
+            len(items) for items in (jp_list, en_list) if items
+        )
+        if len(set(available_lengths)) > 1:
+            _logger.warning(
+                "状态效果数据列表长度不匹配: "
+                f"KR={len(kr_list)}, JP={len(jp_list)}, "
+                f"EN={len(en_list)}, CN={len(cn_list)}，将按 ID 配对"
+            )
+
+        cn_by_id = {item.get("id", ""): item for item in cn_list}
+        jp_by_id = {item.get("id", ""): item for item in jp_list}
+        en_by_id = {item.get("id", ""): item for item in en_list}
+        affects = []
+        for kr_item in kr_list:
+            affect_id = kr_item.get("id", "")
+            if not affect_id:
+                continue
+            cn_item = cn_by_id.get(affect_id, kr_item)
+            jp_item = jp_by_id.get(affect_id, {})
+            en_item = en_by_id.get(affect_id, {})
+            affects.append({
+                "id": affect_id,
+                "kr": kr_item.get("name", ""),
+                "jp": jp_item.get("name", ""),
+                "en": en_item.get("name", ""),
+                "cn": cn_item.get("name", kr_item.get("name", "")),
+                "desc": cn_item.get("desc", ""),
+            })
+        return affects
+
     def _update_affects(self, keyword_file: Path, base_pc: PathConfig, has_prefix: bool) -> None:
-        """从 KR/JP/EN/CN BattleKeywords 更新状态效果多语言数据。"""
+        """从单个 KR/JP/EN/CN BattleKeywords 更新状态效果多语言数据。"""
         try:
-            def load_data_list(path: Path) -> list[dict]:
-                if not path.exists():
-                    return []
-                data = json.loads(path.read_text(encoding="utf-8-sig"))
-                if isinstance(data, dict):
-                    return data.get("dataList", [])
-                return data if isinstance(data, list) else []
-
-            file_pc = FilePathConfig(
-                KR_path=keyword_file,
-                _PathConfig=base_pc,
-                has_prefix=has_prefix,
-            )
-            kr_data = json.loads(keyword_file.read_text(encoding="utf-8-sig"))
-            target = file_pc.target_file
-            cn_data = json.loads(target.read_text(encoding="utf-8-sig")) if target.exists() else kr_data
-            kr_list = kr_data.get("dataList", kr_data if isinstance(kr_data, list) else [])
-            cn_list = cn_data.get("dataList", cn_data if isinstance(cn_data, list) else [])
-            jp_list = load_data_list(file_pc.JP_path)
-            en_list = load_data_list(file_pc.EN_path)
-
-            available_lengths = [len(kr_list), len(cn_list)]
-            available_lengths.extend(
-                len(items) for items in (jp_list, en_list) if items
-            )
-            if len(set(available_lengths)) > 1:
-                _logger.warning(
-                    "状态效果数据列表长度不匹配: "
-                    f"KR={len(kr_list)}, JP={len(jp_list)}, "
-                    f"EN={len(en_list)}, CN={len(cn_list)}，将按 ID 配对"
-                )
-
-            cn_by_id = {item.get("id", ""): item for item in cn_list}
-            jp_by_id = {item.get("id", ""): item for item in jp_list}
-            en_by_id = {item.get("id", ""): item for item in en_list}
-            affects = []
-            for kr_item in kr_list:
-                affect_id = kr_item.get("id", "")
-                if not affect_id:
-                    continue
-                cn_item = cn_by_id.get(affect_id, kr_item)
-                jp_item = jp_by_id.get(affect_id, {})
-                en_item = en_by_id.get(affect_id, {})
-                affects.append({
-                    "id": affect_id,
-                    "kr": kr_item.get("name", ""),
-                    "jp": jp_item.get("name", ""),
-                    "en": en_item.get("name", ""),
-                    "cn": cn_item.get("name", kr_item.get("name", "")),
-                    "desc": cn_item.get("desc", ""),
-                })
+            affects = self._gather_affects(keyword_file, base_pc, has_prefix)
+            if not affects:
+                return
             self._engine.build_affects(affects)
             self._on_log(f"已加载 {len(affects)} 个状态效果")
         except Exception as e:
             _logger.exception(f"加载状态效果失败: {e}")
             self._on_log(f"加载状态效果失败: {e}")
+
+    def _update_affects_merged(
+        self, keyword_files: list[Path], base_pc: PathConfig, has_prefix: bool
+    ) -> None:
+        """合并全部 BattleKeywords* 变体，按 id 去重后一次性注册状态效果。
+
+        多个关键字文件可能包含同一 buff id（基础文件与变体文件重叠），
+        采用先到优先策略：先出现的文件决定该 id 的取值，后续文件中仅
+        用非空字段补全缺失项。去重后一次性 build_affects，避免引擎被反复覆盖。
+        """
+        try:
+            merged: dict[str, dict] = {}
+            for kf in keyword_files:
+                for aff in self._gather_affects(kf, base_pc, has_prefix):
+                    affect_id = aff.get("id", "")
+                    if not affect_id:
+                        continue
+                    if affect_id not in merged:
+                        merged[affect_id] = dict(aff)
+                    else:
+                        # 先到优先 + 空字段补全
+                        cur = merged[affect_id]
+                        for key, val in aff.items():
+                            if val and not cur.get(key):
+                                cur[key] = val
+            affects = list(merged.values())
+            self._engine.build_affects(affects)
+            self._on_log(
+                f"已合并并去重加载 {len(affects)} 个状态效果"
+                f"（来自 {len(keyword_files)} 个关键字文件）"
+            )
+        except Exception as e:
+            _logger.exception(f"合并加载状态效果失败: {e}")
+            self._on_log(f"合并加载状态效果失败: {e}")
 
     def _build_translator(self) -> TranslatorBase:
         """根据配置创建翻译器实例。

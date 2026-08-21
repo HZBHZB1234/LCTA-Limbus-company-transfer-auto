@@ -17,7 +17,7 @@
     capstone_available()      capstone 是否可用
     install_capstone(on_log)  用当前解释器 pip 安装 capstone
     derive_game_files()       从游戏根目录推导 metadata 与 DLL 路径
-    output_dir() / new_run_dir()  运行产物目录（<path_>/metadata_recovery/）
+    output_dir() / new_run_dir()  运行产物目录（<工作目录>/metadata_recovery/）
 """
 
 from __future__ import annotations

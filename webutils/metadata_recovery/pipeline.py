@@ -7,7 +7,7 @@
 无需参考标准文件）。本模块负责：
 
 - 输入校验与 capstone 可用性检查
-- 运行产物目录（<path_>/metadata_recovery/run_<时间戳>/）
+- 运行产物目录（<工作目录>/metadata_recovery/run_<时间戳>/）
 - 期望 SHA-256 自检门（可选）
 - 汇总 run-report.json / run-report.md
 
@@ -37,8 +37,13 @@ def capstone_available() -> bool:
 # ------------------------------------------------------------- 输出目录
 
 def output_dir() -> Path:
-    """流水线输出根目录：<工作目录>/metadata_recovery/（与 fancy/ 同风格）。"""
-    return Path(os.getenv("path_", ".")) / "metadata_recovery"
+    """流水线输出根目录：<工作目录>/metadata_recovery/。
+
+    使用当前工作目录（os.getcwd()）而非 path_：path_ 在打包环境下指向
+    只读的 code 目录（或 Program Files 下的安装目录），写入产物会失败或
+    污染安装包；使用工作目录可保证产物落在用户可写位置，更适配打包分发。
+    """
+    return Path(os.getcwd()) / "metadata_recovery"
 
 
 def new_run_dir() -> Path:
@@ -67,7 +72,7 @@ def run_recovery(
     - game_dll       GameAssembly.dll（必需：定位/提取均从其反汇编）
     - expect_sha256  期望重建 SHA-256（可选，自检比对门）
     - version        IL2CPP metadata 版本（默认 39）
-    - out_dir        输出目录（默认 <path_>/metadata_recovery/run_<时间戳>）
+    - out_dir        输出目录（默认 <工作目录>/metadata_recovery/run_<时间戳>）
     - on_log(msg)    日志回调
     - cancel_check() 取消检查回调（抛异常即中止）
 

@@ -269,9 +269,15 @@ def fancy_main(
     return stats
 
 def _get_fancy_folder() -> Path:
-    """获取 fancy/ 文件夹路径（位于项目根目录）"""
-    project_root = Path(__file__).parent.parent
-    return project_root / 'fancy'
+    """获取 fancy/ 规则集文件夹路径（位于工作目录）。
+
+    使用当前工作目录（os.getcwd()）而非 project_root：打包环境下
+    project_root（__file__ 所在解压包根 / code 目录）为只读安装目录，
+    用户保存的规则集无法写入或被系统拦截；改为工作目录可保证规则集落在
+    用户可写位置，与 metadata 恢复产物输出策略一致。开发时工作目录即项目根，
+    原有 fancy/ 规则集仍可被正常读取。
+    """
+    return Path(os.getcwd()) / "fancy"
 
 def _sanitize_filename(name: str) -> str:
     """过滤文件名中的非法字符"""

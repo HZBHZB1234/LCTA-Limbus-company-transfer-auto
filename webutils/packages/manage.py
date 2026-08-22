@@ -146,12 +146,14 @@ def fing_mod():
     r.extend(list(mod_path.glob('*.rebank')))
     r.extend(list(mod_path.glob('*.zip')))
     r.extend(list(mod_path.glob('*.json')))
+    r.extend(list(mod_path.glob('*.staticmod')))
     r.extend([i for i in mod_path.glob('*') if i.is_dir() and not i.name.endswith('_disable')])
     rd = list(mod_path.glob('*.carra2_disable'))
     rd.extend(list(mod_path.glob('*.bank_disable')))
     rd.extend(list(mod_path.glob('*.rebank_disable')))
     rd.extend(list(mod_path.glob('*.zip_disable')))
     rd.extend(list(mod_path.glob('*.json_disable')))
+    rd.extend(list(mod_path.glob('*.staticmod_disable')))
     rd.extend([i for i in mod_path.glob('*') if i.is_dir() and i.name.endswith('_disable')])
     r = [i.name for i in r]
     rd = [(i.name).rstrip('_disable') for i in rd]

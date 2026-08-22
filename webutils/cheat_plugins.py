@@ -80,15 +80,28 @@ class CheatPluginHost:
         ]
 
     @classmethod
-    def _manager_module(cls, plugin):
-        """解析插件声明 entry 到 cheatcore 子模块。"""
-        pkg = cls._package or cls._package_import()
-        return __import__(f"{pkg.__name__}.{plugin['entry']}", fromlist=[plugin["manager"]])
+    def _manager_class(cls, plugin, entry=None, manager=None):
+        """解析插件声明 entry.manager 到管理器类。
+
+        默认取插件主管理器；传 entry/manager 可解析副管理器（managers[]）。
+        """
+        entry = entry or plugin["entry"]
+        manager = manager or plugin["manager"]
+        return getattr(cls._manager_module_for(plugin, entry), manager)
 
     @classmethod
-    def _manager_class(cls, plugin):
-        """解析插件声明 entry.manager 到管理器类。"""
-        return getattr(cls._manager_module(plugin), plugin["manager"])
+    def _manager_module_for(cls, plugin, entry):
+        """按 entry 解析 cheatcore 子模块（主或副管理器共用）。"""
+        pkg = cls._package or cls._package_import()
+        return __import__(f"{pkg.__name__}.{entry}", fromlist=[plugin.get("manager", "")])
+
+    @classmethod
+    def _manager_specs(cls, plugin):
+        """返回 [(entry, manager, api)]：主管理器 + 全部副管理器。"""
+        specs = [(plugin["entry"], plugin["manager"], plugin.get("api", []))]
+        for m in plugin.get("managers", []) or []:
+            specs.append((m["entry"], m["manager"], m.get("api", [])))
+        return specs
 
     @classmethod
     def _package_import(cls):
@@ -102,12 +115,13 @@ class CheatPluginHost:
         if not cls._plugins:
             raise RuntimeError(_LOCKED_MSG)
         for plugin in cls._plugins:
-            if action not in plugin.get("api", []):
-                continue
-            manager = cls._manager_class(plugin)
-            if not hasattr(manager, action):
-                raise RuntimeError(f"作弊工具箱缺少操作实现: {action}")
-            return getattr(manager, action)(*(list(args or [])))
+            for entry, manager, api in cls._manager_specs(plugin):
+                if action not in api:
+                    continue
+                mgr = cls._manager_class(plugin, entry=entry, manager=manager)
+                if not hasattr(mgr, action):
+                    raise RuntimeError(f"作弊工具箱缺少操作实现: {action}")
+                return getattr(mgr, action)(*(list(args or [])))
         raise RuntimeError(f"未知的作弊工具箱操作: {action}")
 
     # ------------------------------------------------------------------
@@ -141,7 +155,7 @@ class CheatPluginHost:
                     _log_manager.log(f"{plugin.get('name')}: 未同意风险须知，跳过注入")
                     continue
             try:
-                getattr(cls._manager_module(plugin), handler)()
+                getattr(cls._manager_module_for(plugin, plugin["entry"]), handler)()
             except Exception as e:
                 _log_manager.log_error(e)
 

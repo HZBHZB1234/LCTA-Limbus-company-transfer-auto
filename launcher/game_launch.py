@@ -25,8 +25,13 @@ def _do_cleanup_assets():
         import launcher.patch as patch
         import launcher.sound as sound
         import launcher.changes as changes
+        import launcher.staticmod as staticmod
         patch.cleanup_assets()
         sound.restore_sound()
+        try:
+            staticmod.restore_staticmods()
+        except Exception as e:
+            _log_manager.log_error(e)
         if _steam_argv is not None:
             changes.cleanup_patch(_steam_argv)
     except Exception as e:
@@ -93,6 +98,12 @@ def prepare_mod(
     check_cancel()
     patch.patch_assets(tmp_asset_root)
     patch.shutil.rmtree(tmp_asset_root)
+    report(82, "正在应用静态数据 Mod...")
+    check_cancel()
+    import launcher.staticmod as staticmod
+    static_result = staticmod.apply_staticmods(mod_zips_root_path)
+    if static_result.get("applied"):
+        _log_manager.log("staticmod: 应用 %d 个 .staticmod", static_result["applied"])
     report(90, "正在处理模组音频...")
     check_cancel()
     sound.replace_sound(mod_zips_root_path, steam_argv)

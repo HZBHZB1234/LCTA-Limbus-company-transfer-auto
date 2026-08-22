@@ -51,6 +51,14 @@ def apply_patch(mod_path, _path):
             with open(lang_file, "w") as f:
                 json.dump(patched_data, f)
 
+    # 文本补丁之外的「非预期 JSON」（bus/调爪/FL/LCJE/v2 文本美化规则集）：
+    # 识别类型后用 fancy 引擎临时应用，退出时随 .bak 回滚
+    try:
+        import launcher.modfancy as modfancy
+        modfancy.apply_fancy_patches(mod_path, lang_path)
+    except Exception as e:
+        _log_manager.log("模组美化临时应用失败: %s", e)
+
 def cleanup_patch(_path):
     game_path = extract_exe_path(_path)
     lang_path = Path(game_path).parent / "LimbusCompany_Data/lang"

@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-08-20 -->
+<!-- Last updated: 2026-08-23 -->
 
 ## Directory Overview
 
@@ -225,7 +225,8 @@ Standalone library with own `__init__.py` public API.
 | `modfolder.py` | Mod folder management and detection |
 | `sound.py` | Sound file replacement for mods. `replace_sound(mod_folder, game_path)`：扫描模组目录 `.bank`/`.rebank` 存在性（经 `enabled_mod_files` 过滤 `_disable`），命中即起 `sound_replace_thread`（先 `wait_for_validation()` 等游戏完成文件校验再替换；`.bank` 备份为 `.bak` 后拷贝进 `FMODBuilds/Desktop`；随后 `bankmod.apply_rebanks(mod_folder)` 应用 `.rebank` fsb 补丁模组；游戏退出后 `restore_sound()` 用 `.bak` 还原） |
 | `bankmod.py` | `.rebank` fsb 补丁模组启动期应用：`rebank_files_in(mod_root)`（模组目录递归收集 .rebank，经 `enabled_mod_files` 过滤）；`apply_rebanks(mod_root)`（rebank.json `base_bank` 匹配游戏原版 bank → 临时目录经 `webutils/bank/rebank.patch_banks` 重打包 → 原子替换；缓存改存 `%LOCALAPPDATA%/LCTA/mod-cache/bank/`，键=`patch_cache_key(原版hash, 模组摘要, 质量, 线程)` 命中直接复用；补丁参数经 `_patch_options()` 读 `ui_default.bank.quality`/`threads` 配置） |
-| `changes.py` | Text data patch application：`apply_patch` 经 `enabled_mod_files` 过滤 `_disable` 文件/目录，单个 json 补丁损坏（解码失败）仅跳过该文件并记录日志，其余补丁正常应用，不再中断启动 |
+| `changes.py` | Text data patch application：`apply_patch` 经 `enabled_mod_files` 过滤 `_disable` 文件/目录，单个 json 补丁损坏（解码失败）仅跳过该文件并记录日志，其余补丁正常应用，不再中断启动；文本补丁循环结束后调用 `modfancy.apply_fancy_patches`，把 mod 目录中**非预期 JSON**（无 `patchs` 键、不是标准文本补丁）交给 fancy 引擎临时识别与应用 |
+| `modfancy.py` | 模组目录「非预期 JSON」的 fancy 引擎临时应用：`detect_compiled_rulesets(mod_path)` 复用 `enabled_mod_files`（`*.json`）跳过已有 `patchs` 文本补丁，对其余文件依次用 `is_tiaozhua_config`/`is_fl_config`/`is_lcje_config`/`is_bus_ruleset`/v2 结构识别类型并编译（`compile_bus_ruleset`/`compile_rulesets`；调爪/FL/LCJE 经 `convert_*_config` 转 bus），无法识别仅记日志跳过；`apply_compiled_to_lang(lang_path, compiled)` 按包目录遍历 `lang/**/*.json`、用 `for_file` 匹配后经 `apply_bus`/`apply_rules` 应用，写回前对无 `.bak` 的文件备份（bus 排序在前以对齐 `fancy_main` 顺序），由 `cleanup_patch` 在启动/退出时回滚，达到「临时生效」；`apply_fancy_patches` 串联两者。仅复用项目自有 MIT fancy 引擎，不触碰 GPL 派生的 LimbusModLoader 代码 |
 | `compress.py` | Compression utilities |
 | `speed_hotkey.py` | Game speed hotkey (Ctrl+Shift+S) with comprehensive lifecycle logging, foreground process check, .NET STA threading for UI; 倍率窗口用 `_slider_lock` 防重复弹出，后台 STA 线程不再阻塞热键线程 |
 | `gui_progress.py` | WinForms launch center for GUI mode: dark card layout with header/status badge, configuration summary (game path/update mode/enabled integrations/launch source), vertical dynamic phase rail, separate overall and stage progress bars, detailed task text, expandable real-time log panel, explicit cancel/exit action, and running/exited views with PID, uptime, hotkey hints, runtime, and exit code. `register_to_pipeline()` wires GUI to `LaunchPipeline`; dedicated modal/resource/CDN progress adapters accept real backend progress; `FormClosing` retains the cancel/launcher-only/game-termination confirmation flow. `prompt_crash_export(exit_code)`：游戏异常退出弹窗（form.Invoke 同步切 GUI 线程，模态对话框，按钮「导出日志/忽略」；导出成功提示并自动关窗，失败保留对话框可重试），导出逻辑调 `crash_export.export_game_logs` |

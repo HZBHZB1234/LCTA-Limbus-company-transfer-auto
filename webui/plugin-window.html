@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LCTA - 插件窗口</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/layout-extras.css">
+    <link rel="stylesheet" href="css/rule-editor.css">
+    <link rel="stylesheet" href="css/editor-search-panel.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- CodeMirror 6：与 rule-editor.html / quick-editor.html 相同的导入方式，
+         打包期由 InitCode.py 将 esm.sh 链接本地化到 vendor/codemirror/ -->
+    <script type="module">
+        import {EditorView, basicSetup} from "https://esm.sh/codemirror@6.0.1";
+        import {keymap} from "https://esm.sh/@codemirror/view@6.0.1";
+        import {json} from "https://esm.sh/@codemirror/lang-json@6.0.1";
+        import {openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery, SearchQuery} from "https://esm.sh/@codemirror/search@^6.0.0?target=es2022";
+        window.CodeMirror = {EditorView, basicSetup, keymap, json, openSearchPanel, closeSearchPanel, getSearchQuery, setSearchQuery, SearchQuery};
+    </script>
+    <style>
+        /* 通用插件窗口壳样式：仅加载态 / 兜底提示卡。功能 UI 样式由解密功能 JS 自带 */
+        html, body { height: 100%; margin: 0; }
+        /* 功能容器契约：#pw-root 必须自身成为占满视口的 flex 列容器。
+           功能页（如 rule-editor.css）约定 .rule-editor-container{flex:1} 挂在
+           body 直接子级；本壳多包了一层 #pw-root，若它不是 flex 容器，内部
+           flex:1 全部失效 → 内容按 auto 高度溢出且 body overflow:hidden 截断，
+           整窗无法滚动。 */
+        body { display: flex; flex-direction: column; overflow: hidden; }
+        #pw-root {
+            flex: 1;
+            min-height: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .pw-loading {
+            height: 100%; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 12px;
+            color: var(--color-text-secondary, #888);
+            background: var(--color-bg-primary, #f5f5f5);
+        }
+        .pw-loading i { font-size: 28px; animation: pw-spin 1.2s linear infinite; }
+        @keyframes pw-spin { to { transform: rotate(360deg); } }
+        .pw-fallback {
+            max-width: 460px; margin: 15vh auto 0; padding: 24px;
+            border: 1px solid var(--color-border, #ddd); border-radius: 10px;
+            background: var(--color-bg-secondary, #fff); text-align: center;
+        }
+        .pw-fallback h3 { margin: 0 0 8px; color: var(--color-text-primary, #333); }
+        .pw-fallback p { margin: 0 0 14px; font-size: 13px; color: var(--color-text-secondary, #777); word-break: break-all; }
+    </style>
+</head>
+<body class="theme-light">
+<div id="pw-root">
+    <div class="pw-loading" id="pw-loading">
+        <i class="fas fa-circle-notch"></i>
+        <span>正在加载插件窗口...</span>
+    </div>
+</div>
+<script src="js/editor-search-panel.js"></script>
+<script src="js/plugin-window.js"></script>
+</body>
+</html>

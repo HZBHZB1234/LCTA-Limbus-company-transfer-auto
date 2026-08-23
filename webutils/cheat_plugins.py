@@ -38,13 +38,57 @@ class CheatPluginHost:
         cls._plugins = list(package.get_plugins() or [])
         for plugin in cls._plugins:
             cls._seed_config(plugin)
+        cls._warn_action_conflicts()
         logger.info("CheatCore 插件已注册: %s", [p.get("id") for p in cls._plugins])
+
+    @classmethod
+    def _warn_action_conflicts(cls) -> None:
+        """注册期防御：白名单动作名跨管理器必须全局唯一。
+
+        invoke 按声明顺序取首个命中分发，重名动作会被排在前面的管理器
+        静默截胡（如主管理器 get_status 抢走副管理器的同名查询），此处
+        在日志中显式暴露该类配置错误。
+        """
+        owners = {}
+        for plugin in cls._plugins:
+            for entry, manager, api in cls._manager_specs(plugin):
+                for action in api or []:
+                    if action in owners:
+                        logger.warning(
+                            "作弊工具箱动作名冲突: %r 同时注册于 %s 与 %s/%s，"
+                            "invoke 按首个命中仅前者生效",
+                            action, owners[action], entry, manager)
+                    else:
+                        owners[action] = f"{entry}/{manager}"
 
     @classmethod
     def clear(cls) -> None:
         """锁定/卸载时清空注册。"""
         cls._plugins = []
         cls._package = None
+
+    @classmethod
+    def is_empty(cls) -> bool:
+        """未解锁（无插件注册）时为 True，供桥接层区分锁定与非法动作。"""
+        return not cls._plugins
+
+    @classmethod
+    def find_window(cls, window_id: str) -> dict:
+        """按 id 查找插件窗口描述符（PLUGIN["windows"][]）。
+
+        返回描述符副本（补充 consent 默认值与标题兜底）；未解锁或未知 id 抛 RuntimeError。
+        """
+        if not cls._plugins:
+            raise RuntimeError(_LOCKED_MSG)
+        for plugin in cls._plugins:
+            for win in plugin.get("windows") or []:
+                if win.get("id") == window_id:
+                    desc = dict(win)
+                    launcher = plugin.get("launcher") or {}
+                    desc.setdefault("consent", launcher.get("consent"))
+                    desc.setdefault("title", plugin.get("name"))
+                    return desc
+        raise RuntimeError(f"未知插件窗口: {window_id}")
 
     @staticmethod
     def _seed_config(plugin) -> None:

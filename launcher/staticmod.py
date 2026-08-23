@@ -22,6 +22,9 @@
 
 格式：.staticmod = zip 容器
   manifest.json       必填：format/name/version/patches[]/fullFiles[]
+                      patch/full 条目可选 container 字段（bundle 内容器路径，
+                      编辑器导出时写入；应用侧优先按其精确匹配 TextAsset，
+                      消除同名不同目录文件的歧义；旧包无此字段走名字匹配）
   patches/<dc>.json   按 dataClass 的补丁（opType=jsonpatch|pathset）
   full/<dc>/<file>.json 整文件替换（首次加载 diff 成 jsonpatch 后缓存）
 """
@@ -233,24 +236,48 @@ def make_full_diff(official_json: Any, mod_json: Any) -> List[Dict[str, Any]]:
 # bundle 内 TextAsset 读取/写回
 # ---------------------------------------------------------------------------
 
-def _read_textasset_json(bundle: BundleFile, data_class: str, file_name: str) -> Tuple[ObjectReader, str, str]:
-    """按 TextAsset.m_Name 匹配 (dataClass/file 或 文件名)，返回 (obj, name, script_json_str)。"""
+def _read_textasset_json(bundle: BundleFile, data_class: str, file_name: str,
+                         container: str = "") -> Tuple[ObjectReader, str, str]:
+    """按 TextAsset 定位 (obj, name, script_json_str)。
+
+    匹配顺序：
+      1. container 非空时：bundle 内容器路径精确匹配（大小写不敏感）——
+         消除同名不同目录文件的歧义（如 event-mission/ 与 mission/ 下的
+         walpu8/9-mission）；指定了 container 却找不到 → 返回 None 三元组
+         （宁可失败也不静默补错文件）。
+      2. 兜底（container 为空，兼容旧包）：m_Name == file_name 或
+         dataClass/file。
+    """
     want_names = {file_name, "%s/%s" % (data_class, file_name)}
+    want_cont = str(container or "").replace("\\", "/").lower()
+    fallback = None
     for f in bundle.files.values():
         if not isinstance(f, SerializedFile):
             continue
         for path_id, obj in f.objects.items():
             if obj.type != ClassIDType.TextAsset:
                 continue
+            if want_cont:
+                try:
+                    c = str(obj.container or "").replace("\\", "/").lower()
+                except Exception:
+                    c = ""
+                if c and c == want_cont:
+                    try:
+                        tt = obj.read_typetree()
+                    except Exception:
+                        continue
+                    return obj, str(tt.get("m_Name", "")), tt.get("m_Script", "")
+                continue  # 指定了 container 时跳过名字兜底候选收集
             try:
                 tt = obj.read_typetree()
             except Exception:
                 continue
             name = str(tt.get("m_Name", ""))
-            if name in want_names:
+            if name in want_names and fallback is None:
                 script = tt.get("m_Script", "")
-                return obj, name, script
-    return None, None, None
+                fallback = (obj, name, script)
+    return fallback if fallback is not None else (None, None, None)
 
 
 def _build_textasset_raw(name: str, script: str) -> bytes:
@@ -503,8 +530,8 @@ def _apply_one(mod_path: Path, manifest: Dict[str, Any], entry: StaticCatalogEnt
         return False
 
     with zipfile.ZipFile(mod_path) as z:
-        # 读取补丁数据（含 full→diff 首次转换）
-        patch_ops: List[Tuple[str, str, Any]] = []  # (dataClass, fileName, patchData)
+        # 读取补丁数据（含 full→diff 首次转换）；container 为编辑器导出的精确寻址提示
+        patch_ops: List[Tuple[str, str, str, Any]] = []  # (dataClass, fileName, container, patchData)
         for p in patches:
             dc = p.get("dataClass")
             fn = p.get("file")
@@ -513,9 +540,10 @@ def _apply_one(mod_path: Path, manifest: Dict[str, Any], entry: StaticCatalogEnt
             if not (dc and fn and src):
                 raise ValueError("补丁声明缺字段: %r" % p)
             with z.open(src) as f:
-                patch_ops.append((dc, fn, (op_type, json.load(f))))
+                patch_ops.append((dc, fn, str(p.get("container") or ""),
+                                  (op_type, json.load(f))))
 
-        full_ops: List[Tuple[str, str, Dict[str, Any]]] = []
+        full_ops: List[Tuple[str, str, str, Dict[str, Any]]] = []
         for ff in full_files:
             dc = ff.get("dataClass")
             fn = ff.get("file")
@@ -523,27 +551,30 @@ def _apply_one(mod_path: Path, manifest: Dict[str, Any], entry: StaticCatalogEnt
             if not (dc and fn and src):
                 raise ValueError("full 文件声明缺字段: %r" % ff)
             with z.open(src) as f:
-                full_ops.append((dc, fn, json.load(f)))
+                full_ops.append((dc, fn, str(ff.get("container") or ""), json.load(f)))
 
     # 解包官方 bundle → 复制为可写环境
     env = UnityPy.load(io.BytesIO(official_bytes))
     bundle = get_bundle_file(env)
 
-    # 按 (dataClass, file) 定位 TextAsset，应用补丁
-    for dc, fn, (op_type, patch_data) in patch_ops:
-        obj, name, script = _read_textasset_json(bundle, dc, fn)
+    # 按 (dataClass, file[, container]) 定位 TextAsset，应用补丁
+    for dc, fn, cont, (op_type, patch_data) in patch_ops:
+        obj, name, script = _read_textasset_json(bundle, dc, fn, cont)
         if obj is None:
-            raise ValueError("官方 bundle 中未找到 TextAsset: %s/%s" % (dc, fn))
+            raise ValueError("官方 bundle 中未找到 TextAsset: %s/%s%s"
+                             % (dc, fn, (" (container=%s)" % cont) if cont else ""))
         doc = json.loads(script)
         new_doc = apply_patch_to_json(doc, patch_data, op_type)
         new_script = json.dumps(new_doc, ensure_ascii=False, separators=(",", ":"))
         obj.set_raw_data(_build_textasset_raw(name, new_script))
-        _log_manager.log("staticmod: patched %s/%s (%s)", dc, fn, op_type)
+        _log_manager.log("staticmod: patched %s/%s (%s)%s", dc, fn, op_type,
+                         (" [container]" if cont else ""))
 
-    for dc, fn, mod_json in full_ops:
-        obj, name, script = _read_textasset_json(bundle, dc, fn)
+    for dc, fn, cont, mod_json in full_ops:
+        obj, name, script = _read_textasset_json(bundle, dc, fn, cont)
         if obj is None:
-            raise ValueError("官方 bundle 中未找到 TextAsset: %s/%s" % (dc, fn))
+            raise ValueError("官方 bundle 中未找到 TextAsset: %s/%s%s"
+                             % (dc, fn, (" (container=%s)" % cont) if cont else ""))
         # full → diff（首次），缓存 diff；每次仍基于官方版本 diff（跨版本自适应）
         official_doc = json.loads(script)
         diff = make_full_diff(official_doc, mod_json)
@@ -552,7 +583,8 @@ def _apply_one(mod_path: Path, manifest: Dict[str, Any], entry: StaticCatalogEnt
         new_doc = jsonpatch.apply_patch(official_doc, diff)
         new_script = json.dumps(new_doc, ensure_ascii=False, separators=(",", ":"))
         obj.set_raw_data(_build_textasset_raw(name, new_script))
-        _log_manager.log("staticmod: full-replaced %s/%s (diff %d ops)", dc, fn, len(diff))
+        _log_manager.log("staticmod: full-replaced %s/%s (diff %d ops)%s", dc, fn,
+                         len(diff), (" [container]" if cont else ""))
 
     # 重打包
     bundle.version_player = "limbus_modded"

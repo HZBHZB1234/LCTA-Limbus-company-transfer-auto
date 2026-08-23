@@ -75,6 +75,10 @@ HTML_RESOURCE_TRANSFERS = {
         (FONT_AWESOME_URL, 'css/all.min.css'),
         *CODEMIRROR_MODULES.items(),
     ],
+    'plugin-window.html': [
+        (FONT_AWESOME_URL, 'css/all.min.css'),
+        *CODEMIRROR_MODULES.items(),
+    ],
     'llm-fancy.html': [
         (FONT_AWESOME_URL, 'css/all.min.css'),
     ],

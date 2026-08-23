@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-20 -->
+<!-- Last updated: 2026-08-23 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -470,6 +470,50 @@ Status query (WebUI):
 - 复制到三个目录 `code/cheat_core/cheat_core.bin`
 
 Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, `scripts/cheat_encrypt.py`, `webui/app_api/cheat_core.py`（含 cheat_plugins_list/invoke）, `webui/sections/cheat.html`（密钥门）, `webui/sections/launcher-config.html`（#cheat-plugin-launcher 占位）, `webui/js/cheat-shell.js`, `webui/js/risk-gate.js`（cheat 无 launcherCheckboxId）, `launcher/game_launch.py`, `tests/test_cheat_core.py`；私有仓库：`cheatcore/registry.py`（插件契约）, `cheatcore/cheat_damage_hook.py`（含 start/stop_launcher）, `hooks/cheat_damage.c`, `vendor/minhook/`, `webui/*`, `tools/gen_cheat_damage_json.py`（自动生成偏移 JSON）, `keys/current.txt`, `manifest.json`, `docs/CHEAT_TOOLBOX.md`, `tests/test_cheat_damage_hook.py`, `tests/test_registry.py`
+
+## 6.6.1 静态数据编辑器（static-mod，通用插件独立窗口 + CodeMirror 文本编辑）
+
+```
+入口（工具箱页介绍卡）:
+  cheat.html #staticmod-open-btn → pywebview.api.pw_open('staticmod-editor')
+    → webui/app_api/cheat_core.py pw_open()
+      → cheat_core.ensure_unlocked()                     未解锁拒绝
+      → CheatPluginHost.find_window('staticmod-editor')  注册表 PLUGIN["windows"][] 元数据
+      → consent 风险门（cheat.disclaimer_accepted）
+      → webview.create_window(path_/webui/plugin-window.html,
+                              js_api=PluginWindowAPI('staticmod-editor'), 1360x860)
+      → evaluate_js 预注入主题 + _plugin_windows 跟踪（events.closed 清理）
+
+窗口引导（壳，工具无关）:
+  plugin-window.js 等 pywebviewready → api.pw_get_bootstrap()
+    → webui/plugin_window_api.py PluginWindowAPI.pw_get_bootstrap()
+      → find_window 元数据 + ConfigManager theme
+      → cheat_core._read_webui_file('webui/windows/staticmod-editor.js')   解密/开发目录
+    → 设标题/主题 → new Function(js)() → window.initPluginWindow() 构建 UI
+
+编辑器业务（私有仓库功能脚本 staticmod-editor.js）:
+  get_status / list_static_files        数据源状态 chip + 容器路径文件管理器视图
+                                        （env.container 索引：面包屑/.. 上级/文件夹计数徽标；
+                                        rel=相对 static-data 根的唯一标识，可区分同名不同目录文件）
+  文件名筛选                             跨全目录平铺 + 所在路径副标题
+  search_content                        全文搜索（懒解码脚本 + 字节预算缓存），结果带 rel
+  load_file(rel|container|m_Name)       三级寻址（重名安全，按 path_id 读取）→ CodeMirror 6 (JSON)
+  记录修改(Ctrl+S)                       客户端深度 diff(baseline vs 当前) → 底部待应用变更列表
+                                        （切换文件前自动记录；stagedDocs 存快照）
+  导出 .staticmod                        按 file 分桶 → make_pathset 服务端逐文件校验
+                                        → 模态窗确认（名称/版本/描述/目标：模组目录|自定义目录，
+                                          可记住目录写 launcher.work.cheat_staticmod_export_dir）
+                                        → export_staticmod(patches, fulls, out_dir)
+                                        patch/full 条目携带 container（bundle 容器路径）
+                                        根为数组的文件自动路由 fullFiles 整文件替换形态
+  应用侧(launcher/staticmod.py)          _read_textasset_json 优先按 container 精确匹配
+                                        （缺失即失败）；旧包无 container 按名字首中兼容
+  导出成功                               推进当前文件 baseline → 清理待应用状态
+
+主题同步: sync_theme_to_rule_editor 链尾 → sync_theme_to_plugin_windows(theme) → 各窗口 applyTheme()
+```
+
+Key files: `webui/plugin-window.html`, `webui/js/plugin-window.js`, `webui/plugin_window_api.py`, `webui/app_api/cheat_core.py`（pw_open/sync_theme_to_plugin_windows）, `webutils/cheat_plugins.py`（find_window/is_empty）, `.github/InitCode.py`（HTML_RESOURCE_TRANSFERS['plugin-window.html']）, `tests/test_plugin_window.py`, `launcher/staticmod.py`（应用链 container 精确匹配）, `tests/test_staticmod_apply.py`；私有仓库：`webui/windows/staticmod-editor.js`, `webui/sections/cheat.html`（入口卡）, `webui/js/cheat.js`（initStaticModEntry）, `cheatcore/cheat_staticmod_editor.py`（classmethod 化 + 缓存 + 容器路径索引 + search_content/get_export_targets）, `cheatcore/registry.py`（windows[] + 白名单扩容）, `manifest.json`, `tests/test_staticmod_editor.py`
 
 ## 6.7 Steam 启动器设置（写入/清除 LaunchOptions 到 localconfig.vdf）
 

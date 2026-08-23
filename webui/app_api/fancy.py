@@ -128,3 +128,5 @@ class FancyMixin:
         self.sync_theme_to_translation_log_viewer(theme)
         self.sync_theme_to_llm_fancy(theme)
         self.sync_theme_to_aria2_downloader(theme)
+        # 以及通用插件窗口（静态数据编辑器等）
+        self.sync_theme_to_plugin_windows(theme)

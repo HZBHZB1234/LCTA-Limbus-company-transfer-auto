@@ -302,3 +302,63 @@ def test_create_shortcut_writes_script(tmp_path, monkeypatch):
     assert "server_sync --server lethe" in content
     assert str(lethe) in content
     assert "LimbusCompany.exe" in content
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Launcher 集成入口 run_launcher_server_restore：空路径守卫与错误契约
+# ═══════════════════════════════════════════════════════════════════
+
+def _fake_service_env(monkeypatch, tmp_path, *, enabled=True, lethe_dir=""):
+    """伪造 service 层依赖：ConfigManager 返回官服目录，配置固定可预期。"""
+    import resource_updater.service as service
+
+    official = make_game(tmp_path, "official", "s20260801_official", [])
+
+    class _FakeCM:
+        def get(self, key, default=None):
+            return str(official)
+
+    monkeypatch.setattr(service, "ConfigManager", lambda: _FakeCM())
+
+    config = {
+        "enabled": enabled,
+        "server": "official",
+        "lethe_dir": lethe_dir,
+        "keep_other": False,
+        "jobs": 1,
+        "engine": "builtin",
+        "retry_max": 0,
+        "retry_delay": 5,
+        "connection_limit": 1,
+    }
+    monkeypatch.setattr(server_sync, "get_server_switch_config", lambda: config)
+
+
+def test_launcher_restore_skips_when_lethe_dir_empty(tmp_path, monkeypatch):
+    """修复前：Path('')==当前目录 绕过 is_dir 守卫，报「lethe 缺少 catalog.bin: .」。"""
+    from resource_updater.service import run_launcher_server_restore
+    _fake_service_env(monkeypatch, tmp_path, enabled=True, lethe_dir="")
+    result = run_launcher_server_restore()
+    assert result["success"] is True
+    assert result["skipped"] is True
+    assert result["reason"] == "invalid_lethe_dir"
+
+
+def test_launcher_restore_skips_when_disabled(tmp_path, monkeypatch):
+    from resource_updater.service import run_launcher_server_restore
+    _fake_service_env(monkeypatch, tmp_path, enabled=False)
+    result = run_launcher_server_restore()
+    assert result["success"] is True
+    assert result["reason"] == "disabled"
+
+
+def test_launcher_restore_reports_real_error_message(tmp_path, monkeypatch):
+    """lethe 目录存在但缺 catalog.bin → 真实失败（非 skipped），message 带原因。"""
+    from resource_updater.service import run_launcher_server_restore
+    lethe = tmp_path / "lethe"
+    lethe.mkdir()
+    _fake_service_env(monkeypatch, tmp_path, enabled=True, lethe_dir=str(lethe))
+    result = run_launcher_server_restore()
+    assert result["success"] is False
+    assert not result.get("skipped")
+    assert "缺少 catalog.bin" in result.get("message", "")

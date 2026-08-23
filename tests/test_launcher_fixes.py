@@ -210,3 +210,30 @@ class TestCloseProgressWindow:
         _close_progress_window(progress, MagicMock(), -1, threading.Event())
         progress.close.assert_called_once()
         assert sleeps == [1.5]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Bug 4: restore_sound 冷启动守卫（游戏路径未注入时不抛 TypeError）
+# ═══════════════════════════════════════════════════════════════════
+
+class TestRestoreSoundGamePathGuard:
+    def test_restore_sound_noop_when_game_path_unset(self, monkeypatch):
+        """修复前：预清理阶段 _game_path 为 None 时 Path(None) 抛 TypeError。"""
+        import launcher.sound as sound
+        monkeypatch.setattr(sound, "_game_path", None)
+        sound.restore_sound()
+
+    def test_set_game_path_parses_quoted_steam_argv(self, monkeypatch):
+        import launcher.sound as sound
+        monkeypatch.setattr(sound, "_game_path", None)
+        sound.set_game_path(r'"C:\Games\Limbus Company\LimbusCompany.exe"')
+        assert sound._game_path == r"C:\Games\Limbus Company\LimbusCompany.exe"
+        assert str(sound.sound_folder()).endswith(
+            r"LimbusCompany_Data\StreamingAssets\Assets\Sound\FMODBuilds\Desktop"
+        )
+
+    def test_restore_sound_noop_without_bak_files(self, monkeypatch, tmp_path):
+        import launcher.sound as sound
+        monkeypatch.setattr(sound, "_game_path", None)
+        sound.set_game_path(str(tmp_path / "LimbusCompany.exe"))
+        sound.restore_sound()  # 路径有效但无 .bak 时静默返回

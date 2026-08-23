@@ -76,6 +76,9 @@ def prepare_mod(
     _log_manager.log("Limbus args: %s", sys.argv)
     report(15, "正在清理上次启动残留资源...")
     check_cancel()
+    # 预启动清理依赖游戏路径：先注入 steam_argv，保证 sound.restore_sound、
+    # staticmod 回滚与 lang .bak 还原在首次清理时即可正常执行
+    sound.set_game_path(steam_argv)
     _do_cleanup_assets()
     atexit.register(_do_cleanup_assets)
     signal.signal(signal.SIGINT, kill_handler)

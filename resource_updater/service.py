@@ -235,12 +235,18 @@ def run_launcher_server_restore(
         _log_manager.debug("[服务器切换/Launcher] 官服启动前恢复未启用")
         return {"success": True, "skipped": True, "reason": "disabled"}
     game_path = Path(game_dir or ConfigManager().get("game_path", ""))
-    lethe_dir = Path(config.get("lethe_dir", ""))
+    lethe_dir_value = str(config.get("lethe_dir", "") or "").strip()
+    # 空字符串经 Path("") 会变成当前目录 "." 并绕过 is_dir 检查，必须先行判空
+    lethe_dir = Path(lethe_dir_value) if lethe_dir_value else None
     if not game_path.is_dir():
         _log_manager.log("[服务器切换/Launcher] 官服目录无效，跳过恢复: {}".format(game_path))
         return {"success": True, "skipped": True, "reason": "invalid_official_dir"}
-    if not lethe_dir.is_dir():
-        _log_manager.log("[服务器切换/Launcher] lethe 目录未配置或无效，跳过恢复: {}".format(lethe_dir))
+    if lethe_dir is None or not lethe_dir.is_dir():
+        _log_manager.log(
+            "[服务器切换/Launcher] lethe 目录未配置或无效，跳过恢复: {}".format(
+                lethe_dir_value or "<未配置>"
+            )
+        )
         return {"success": True, "skipped": True, "reason": "invalid_lethe_dir"}
 
     _log_manager.log(
@@ -270,11 +276,17 @@ def run_launcher_server_restore(
                 "[服务器切换/Launcher] 官服资源恢复存在失败项: {}".format(result),
                 logging.WARNING,
             )
+            # 补充 message，避免调用方汇总日志时退化为 "unknown"
+            result["message"] = "{} 个资源条目同步失败".format(result.get("failed", 0))
         return result
     except ServerSyncCancelled:
-        return {"success": False, "skipped": True, "message": "服务器切换已取消"}
+        return {
+            "success": True,
+            "skipped": True,
+            "reason": "cancelled",
+            "message": "服务器切换已取消",
+        }
     except ServerSyncError as exc:
-        _log_manager.log(
-            "[服务器切换/Launcher] 官服资源恢复失败: {}".format(exc), logging.WARNING
-        )
-        return {"success": False, "skipped": True, "message": str(exc)}
+        # 同步失败属于真实错误：skipped=False + 携带原始 message，
+        # 由调用方以「官服资源恢复失败」级别上报（不再在此重复打 WARNING）
+        return {"success": False, "skipped": False, "reason": "sync_error", "message": str(exc)}

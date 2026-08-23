@@ -52,6 +52,18 @@ def is_game_running() -> bool:
     return False
 
 _game_path = None
+
+
+def set_game_path(game_path: str) -> None:
+    """注入游戏 exe 路径（steam_argv），供启动预清理阶段提前定位。
+
+    restore_sound/sound_folder 依赖该路径；冷启动时预清理先于
+    replace_sound 执行，未注入前 restore_sound 直接跳过，
+    避免 Path(None) 抛 TypeError。
+    """
+    global _game_path
+    _game_path = extract_exe_path(game_path)
+
 def sound_folder():
     return Path(_game_path).parent / "LimbusCompany_Data/StreamingAssets/Assets/Sound/FMODBuilds/Desktop"
 
@@ -135,6 +147,10 @@ def sound_replace_thread(mod_folder: str):
         _log_manager.log_error(e)
 
 def restore_sound():
+    if _game_path is None:
+        # 游戏路径尚未注入（冷启动预清理阶段，replace_sound 未执行过），
+        # 此时不存在本会话的 .bak 需要还原，跳过即可
+        return
     with _sound_restore_lock:
         target_folder = sound_folder()
         backup_files = list(Path(target_folder).rglob("*.bank.bak"))

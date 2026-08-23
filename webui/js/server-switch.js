@@ -41,7 +41,20 @@ class ServerSwitchPage {
         if (this._bound) return;
         this._bound = true;
         this.element('ss-go-settings').addEventListener('click', () => goAndShow('settings'));
-        this.element('ss-browse-lethe').addEventListener('click', () => browseFolder('ss-lethe-dir'));
+        this.element('ss-browse-lethe').addEventListener('click', async () => {
+            const input = this.element('ss-lethe-dir');
+            const before = input.value;
+            try {
+                await pywebview.api.browse_folder('ss-lethe-dir');
+            } catch (error) {
+                this.showToast('选择目录失败：' + (error.message || String(error)), 'error');
+                return;
+            }
+            // browse_folder 经后端 run_js 直接赋值输入框，不触发 change 事件
+            // （与 bank.js 已修复的坑相同），这里手动补发一次保存流程；
+            // 用户取消选择时值未变化，不会产生多余写入
+            if (input.value !== before) this.onLetheDirChange();
+        });
         this.element('ss-probe-lethe').addEventListener('click', () => this.probeLethe());
         this.element('ss-go-launcher').addEventListener('click', () => goAndShow('launcher-config', 'lc-card-server-switch'));
         this.element('ss-create-shortcut').addEventListener('click', () => this.createShortcut());

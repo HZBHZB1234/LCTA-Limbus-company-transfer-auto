@@ -506,9 +506,19 @@ Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, 
                                         → export_staticmod(patches, fulls, out_dir)
                                         patch/full 条目携带 container（bundle 容器路径）
                                         根为数组的文件自动路由 fullFiles 整文件替换形态
-  应用侧(launcher/staticmod.py)          _read_textasset_json 优先按 container 精确匹配
+                                        包文件名 _sanitize_pkg_name：仅清洗 \/:*?"<>|
+                                        与控制字符，中文等 Unicode 保留（manifest 存原文）
+  应用侧(launcher/staticmod.py)          功能总开关 launcher.work.staticmod（默认关闭，
+                                        Launcher 配置页勾选经 RiskGate staticmod 门控，
+                                        同意态 staticmod.disclaimer_accepted）未开启时
+                                        apply_staticmods 直接返回 disabled；
+                                        _read_textasset_json 优先按 container 精确匹配
                                         （缺失即失败）；旧包无 container 按名字首中兼容
-  导出成功                               推进当前文件 baseline → 清理待应用状态
+                                        restore_staticmods 不受开关影响（关闭后清理残留）
+  导出成功                               不改动任何修改状态（同一模组可反复导出测试，
+                                        重复导出覆盖同名包）；手动收尾走底部面板
+                                        「清除当前文件修改 / 清除全部修改」：
+                                        移除待应用变更 + advanceBaselineToCurrent 推进基线
 
 主题同步: sync_theme_to_rule_editor 链尾 → sync_theme_to_plugin_windows(theme) → 各窗口 applyTheme()
 ```

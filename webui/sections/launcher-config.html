@@ -35,6 +35,15 @@
             <small class="form-hint">启用后将加载MOD并启动游戏</small>
         </div>
 
+        <div class="form-group" data-risk-service="staticmod">
+            <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-staticmod">
+                <span class="checkmark"></span>
+                启用静态数据 Mod（.staticmod）
+            </label>
+            <small class="form-hint">启用后，启动游戏前自动应用模组目录中的 .staticmod 包（修改官方静态数据，退出后自动还原）；关闭后不再应用，残留修改会在下次启动/退出时自动清理。默认关闭，首次勾选需阅读并同意风险须知。</small>
+        </div>
+
         <div class="form-group">
             <label class="checkbox-container">
                 <input type="checkbox" id="launcher-work-gui-mode">

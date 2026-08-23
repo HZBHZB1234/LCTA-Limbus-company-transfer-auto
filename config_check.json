@@ -121,6 +121,7 @@
         "work": {
             "update": "str",
             "mod": "bool",
+            "staticmod": "bool",
             "tiaozhua": "bool",
             "fancy": "bool",
             "cdn_optimize": "bool",
@@ -183,6 +184,9 @@
         "disclaimer_accepted": "bool"
     },
     "input_bypass": {
+        "disclaimer_accepted": "bool"
+    },
+    "staticmod": {
         "disclaimer_accepted": "bool"
     },
     "cheat": {

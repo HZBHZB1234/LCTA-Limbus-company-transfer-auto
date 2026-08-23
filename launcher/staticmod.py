@@ -27,6 +27,12 @@
                       消除同名不同目录文件的歧义；旧包无此字段走名字匹配）
   patches/<dc>.json   按 dataClass 的补丁（opType=jsonpatch|pathset）
   full/<dc>/<file>.json 整文件替换（首次加载 diff 成 jsonpatch 后缓存）
+
+功能开关：
+  默认关闭。需在 Launcher 配置页勾选「启用静态数据 Mod」并经风险须知同意
+  （launcher.work.staticmod，前端经 RiskGate 门控）。未启用时
+  apply_staticmods 直接返回 disabled；restore_staticmods 不受开关影响，
+  关闭后残留修改会在下次启动/退出时自动清理。
 """
 import base64
 import hashlib
@@ -57,6 +63,18 @@ _log_manager = LogManager()
 
 STATIC_PREFIX_RE = re.compile(rb"static_s1_0_assets_all_([0-9a-f]{32})\.bundle")
 FORMAT = "staticmod/v1"
+# 功能总开关（默认关闭；启用需经 Launcher 配置页风险须知同意）
+CONFIG_KEY_ENABLED = "launcher.work.staticmod"
+
+
+def _config_enabled() -> bool:
+    """读取功能开关（ConfigManager 异常时按未启用处理，宁可不动游戏数据）。"""
+    try:
+        from globalManagers.ConfigManager import ConfigManager
+        return bool(ConfigManager().get(CONFIG_KEY_ENABLED, False))
+    except Exception as e:
+        _log_manager.log_error("staticmod: 读取启用配置失败 %s", e)
+        return False
 
 # jsonpatch / pathset 双模式
 import jsonpatch  # noqa: E402
@@ -472,8 +490,27 @@ def _mod_digest(mod_path: Path, manifest: Dict[str, Any]) -> str:
     return h.hexdigest()
 
 
-def apply_staticmods(mod_zips_root: str, catalog_path: Optional[str] = None) -> Dict[str, Any]:
-    """应用全部启用的 .staticmod。无 .staticmod 直接返回（不进入管线）。"""
+def apply_staticmods(mod_zips_root: str, catalog_path: Optional[str] = None,
+                     enabled: Optional[bool] = None) -> Dict[str, Any]:
+    """应用全部启用的 .staticmod。无 .staticmod 或功能开关未开启时直接返回（不进入管线）。
+
+    功能默认关闭：需在 Launcher 配置页勾选「启用静态数据 Mod」并通过风险须知
+    同意（launcher.work.staticmod）。enabled 参数供调用方/测试显式覆盖；
+    restore_staticmods 不受此开关影响（关闭后残留修改会在下次启动/退出清理）。
+    """
+    if enabled is None:
+        enabled = _config_enabled()
+    if not enabled:
+        # 仅当模组目录确实存在 .staticmod 时提示一次，避免每次启动刷日志
+        try:
+            present = find_staticmods(mod_zips_root)
+        except Exception:
+            present = []
+        if present:
+            _log_manager.log("staticmod: 检测到 %d 个 .staticmod，但功能未启用"
+                             "（Launcher 配置页「启用静态数据 Mod」），跳过应用", len(present))
+        return {"applied": 0, "skipped": 0, "failed": [], "reason": "disabled"}
+
     mods = find_staticmods(mod_zips_root)
     if not mods:
         return {"applied": 0, "skipped": 0, "failed": [], "reason": "no-staticmods"}

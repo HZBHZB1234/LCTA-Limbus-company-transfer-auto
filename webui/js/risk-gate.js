@@ -25,6 +25,13 @@ const RISK_SERVICES = {
         specific: '输入反检测通过注入 hook 对游戏上报的输入数据进行调整，使其更接近真实输入特征。',
         launcherCheckboxId: 'launcher-work-input-bypass',
     },
+    staticmod: {
+        id: 'staticmod',
+        name: '静态数据 Mod（staticmod）',
+        consentKey: 'staticmod.disclaimer_accepted',
+        specific: '静态数据 Mod 会在通过 Launcher 启动游戏前，把模组目录中 .staticmod 包声明的修改写入游戏官方静态数据 bundle 与资源目录文件（人格、技能、敌人、关卡等数值），退出游戏后自动还原为官方数据。',
+        launcherCheckboxId: 'launcher-work-staticmod',
+    },
     cheat: {
         id: 'cheat',
         name: '作弊工具箱',

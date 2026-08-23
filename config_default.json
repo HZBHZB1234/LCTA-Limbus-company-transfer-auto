@@ -121,6 +121,7 @@
         "work": {
             "update": "LM-G",
             "mod": false,
+            "staticmod": false,
             "tiaozhua": false,
             "fancy": false,
             "cdn_optimize": false,
@@ -172,6 +173,9 @@
         "disclaimer_accepted": false
     },
     "input_bypass": {
+        "disclaimer_accepted": false
+    },
+    "staticmod": {
         "disclaimer_accepted": false
     },
     "cheat": {

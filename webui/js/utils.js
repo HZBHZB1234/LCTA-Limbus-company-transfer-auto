@@ -476,6 +476,7 @@ const TOOLTIP_DATA = {
     // ===== Launcher配置 =====
     'launcher-work-update': '启动器自动更新模式。可选择不更新、仅更新指定汉化源，或组合更新多个汉化源。',
     'launcher-work-mod': '启动游戏时自动加载 MOD 支持。启用后可使用各类游戏模组。',
+    'launcher-work-staticmod': '启用后，通过 Launcher 启动游戏前会自动应用模组目录中的 .staticmod 静态数据包（修改官方人格/技能等数值，退出游戏后自动还原）。默认关闭；首次勾选需阅读并同意风险须知（未同意时就地弹出）。',
     'launcher-work-fancy': '更新汉化包后自动进行文本美化处理。相关美化选项请在"文本美化"页面配置。',
     'launcher-work-tiaozhua': '更新汉化包后自动下载导入调爪文本修改包。相关设置请在"汉化包下载"页面配置。',
     'launcher-work-cdn-optimize': '启动游戏前自动测试Cloudflare和CloudFront CDN节点速度，选择最快的IP用于游戏下载和API连接。',

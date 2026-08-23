@@ -31,6 +31,11 @@ static bundle（`static_s1_0_assets_all_<hash>.bundle`）是全表唯一开启
 
 - 放置于模组目录（默认 `%APPDATA%/LimbusCompanyMods`）；
 - 停用：改名 `<name>.staticmod_disable`（与现有 carra2/bank 的 `_disable` 语义一致）；
+- **功能总开关默认关闭**：需在 Launcher 配置页「工作模式配置」勾选
+  「启用静态数据 Mod（.staticmod）」并经风险须知同意（`launcher.work.staticmod`，
+  同意态存 `staticmod.disclaimer_accepted`）。未启用时 apply_staticmods 直接返回
+  disabled（检测到 .staticmod 会记录一条日志提示）；关闭后残留修改由不受开关
+  影响的 restore_staticmods 在下次启动/退出时自动清理；
 - 模组目录无 `.staticmod` 时，Launcher 跳过 apply_staticmods 管线（零开销）。
 
 ## 三、manifest.json

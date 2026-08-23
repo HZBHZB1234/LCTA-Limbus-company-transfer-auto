@@ -294,6 +294,7 @@ class ConfigManager {
             // Launcher设置
             'launcher-work-update': 'launcher.work.update',
             'launcher-work-mod': 'launcher.work.mod',
+            'launcher-work-staticmod': 'launcher.work.staticmod',
             'launcher-work-tiaozhua': 'launcher.work.tiaozhua',
             'launcher-work-fancy': 'launcher.work.fancy',
             'launcher-work-cdn-optimize': 'launcher.work.cdn_optimize',

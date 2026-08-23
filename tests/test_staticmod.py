@@ -229,7 +229,8 @@ def test_end_to_end_apply(tmp_path, monkeypatch, real_catalog, real_bundle):
     monkeypatch.setattr(staticmod, "_cache_roots", lambda: [test_cache])
     monkeypatch.setattr(staticmod, "find_staticmods", lambda root: [mod])
 
-    result = staticmod.apply_staticmods(str(tmp_path), catalog_path=str(test_catalog))
+    result = staticmod.apply_staticmods(str(tmp_path), catalog_path=str(test_catalog),
+                                        enabled=True)
     assert result["applied"] == 1, result
     assert not result["failed"]
 
@@ -245,11 +246,46 @@ def test_end_to_end_apply(tmp_path, monkeypatch, real_catalog, real_bundle):
 
 
 # ---------------------------------------------------------------------------
-# 无 mod 跳过
+# 无 mod 跳过 / 功能开关门控
 # ---------------------------------------------------------------------------
 
 def test_no_staticmods_skips(tmp_path, monkeypatch):
     monkeypatch.setattr(staticmod, "find_staticmods", lambda root: [])
-    result = staticmod.apply_staticmods(str(tmp_path))
+    result = staticmod.apply_staticmods(str(tmp_path), enabled=True)
     assert result["applied"] == 0
     assert result.get("reason") == "no-staticmods"
+
+
+def test_disabled_by_config_skips(tmp_path, monkeypatch):
+    """开关未启用（默认）：即使存在 .staticmod 也不进入应用管线。"""
+    touched = {"locate": 0}
+    monkeypatch.setattr(staticmod, "_config_enabled", lambda: False)
+    monkeypatch.setattr(staticmod, "find_staticmods", lambda root: [tmp_path / "x.staticmod"])
+    monkeypatch.setattr(staticmod, "locate_static_entry",
+                        lambda *a, **k: touched.__setitem__("locate", touched["locate"] + 1))
+    result = staticmod.apply_staticmods(str(tmp_path))
+    assert result == {"applied": 0, "skipped": 0, "failed": [], "reason": "disabled"}
+    assert touched["locate"] == 0  # 未触碰 catalog
+
+
+def test_enabled_via_config(monkeypatch):
+    """开关启用：走正常管线（无包时返回 no-staticmods）。"""
+    monkeypatch.setattr(staticmod, "_config_enabled", lambda: True)
+    monkeypatch.setattr(staticmod, "find_staticmods", lambda root: [])
+    result = staticmod.apply_staticmods("whatever")
+    assert result.get("reason") == "no-staticmods"
+
+
+def test_config_read_failure_treated_as_disabled(tmp_path, monkeypatch):
+    """配置读取异常时按未启用处理（宁可不动游戏数据）。"""
+    import sys
+    cm_mod = sys.modules["globalManagers.ConfigManager"]
+
+    class _Boom:
+        def __init__(self):
+            raise RuntimeError("config unavailable")
+
+    monkeypatch.setattr(cm_mod, "ConfigManager", _Boom)
+    monkeypatch.setattr(staticmod, "find_staticmods", lambda root: [])
+    result = staticmod.apply_staticmods(str(tmp_path))
+    assert result.get("reason") == "disabled"

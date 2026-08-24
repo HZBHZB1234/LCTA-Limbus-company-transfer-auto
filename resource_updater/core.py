@@ -77,11 +77,22 @@ def default_work_dir() -> Path:
 
 
 def default_unity_cache_dir() -> Path:
+    # 允许通过环境变量显式覆盖缓存根（用户把 Unity 缓存迁到其它盘时使用）
+    override = os.getenv("LCTA_UNITY_CACHE_DIR")
+    if override:
+        return Path(override)
     if sys.platform == "win32":
-        return Path.home() / "AppData" / "LocalLow" / "Unity" / "ProjectMoon_LimbusCompany"
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Caches" / "Unity" / "ProjectMoon_LimbusCompany"
-    return Path.home() / ".cache" / "unity3d" / "ProjectMoon_LimbusCompany"
+        base = Path.home() / "AppData" / "LocalLow" / "Unity" / "ProjectMoon_LimbusCompany"
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Caches" / "Unity" / "ProjectMoon_LimbusCompany"
+    else:
+        base = Path.home() / ".cache" / "unity3d" / "ProjectMoon_LimbusCompany"
+    # 解析 junction/符号链接，使经重解析点指向其它盘的缓存也能被正确识别
+    # （参考 CacheWarmer：实际缓存根可能是到 D:\Unity 等的 junction）
+    try:
+        return Path(os.path.realpath(base))
+    except OSError:
+        return base
 
 
 def resolve_aria2_binary() -> Optional[Path]:
@@ -412,8 +423,9 @@ class GameInfo:
 
 
 def _bundle_inner(name: str) -> Optional[str]:
-    match = re.search(r"([0-9a-f]{32})\.bundle$", name)
-    return match.group(1) if match else None
+    # 与参考实现 CacheWarmer/CatalogParser 一致：哈希大小写不敏感
+    match = re.search(r"([0-9a-fA-F]{32})\.bundle$", name)
+    return match.group(1).lower() if match else None
 
 
 def parse_catalog(catalog_path: Path) -> Tuple[List[str], Dict[str, Dict[str, str]]]:
@@ -421,10 +433,13 @@ def parse_catalog(catalog_path: Path) -> Tuple[List[str], Dict[str, Dict[str, st
     names = set()
     for match in re.finditer(rb"[A-Za-z0-9_.\-]+\.bundle", data):
         name = match.group(0).decode("ascii", "replace")
-        if len(name) < 200 and not re.match(r"^(?:l_)?[0-9a-f]{32}\.bundle$", name):
+        if len(name) < 200 and not re.match(
+            r"^(?:l_)?[0-9a-fA-F]{32}\.bundle$", name, re.IGNORECASE
+        ):
             names.add(name)
     ordered_names = sorted(names)
-    outer_pattern = re.compile(rb"(?<![0-9a-f])([0-9a-f]{32})(?![0-9a-f])")
+    # 外层缓存键哈希同样大小写不敏感（参考 CatalogParser.HexPat 带 IgnoreCase）
+    outer_pattern = re.compile(rb"(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])")
     metadata = {}
     for name in ordered_names:
         inner = _bundle_inner(name)
@@ -434,7 +449,7 @@ def parse_catalog(catalog_path: Path) -> Tuple[List[str], Dict[str, Dict[str, st
         if index >= 0:
             match = outer_pattern.search(data[index + len(name): index + len(name) + 200])
             if match:
-                outer = match.group(1).decode("ascii")
+                outer = match.group(1).decode("ascii").lower()
                 if outer != inner:
                     metadata[name] = {"inner": inner, "outer": outer}
                     continue

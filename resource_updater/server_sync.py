@@ -1,20 +1,24 @@
 # -*- coding: utf-8 -*-
 """官服 ⇄ lethe 私服 Addressables 资源切换。
 
-背景（依据 LimbusDecompile 工作区 `docs/LETHE_BUNDLE_SYNC.md` 与
-`tools/sync_server_bundles.py`）：
+背景（依据 LimbusDecompile 工作区 `mods/CacheWarmer/` 的预热研究与
+`analysis/lethe-dll-decompiled/Lethe.decompiled.cs` 的 Lethe.dll 反编译）：
 - lethe 私服通过 BepInEx 插件（Lethe.dll）把 CDN 重定向到
   `assets.lethelc.site`，官服使用 `download.limbuscompanycdn.org`；
-  两者共享同一 Unity Caching 目录
-  `%USERPROFILE%\\AppData\\LocalLow\\Unity\\ProjectMoon_LimbusCompany`。
-- 两服 catalog 的绝大多数 bundle 名称（含内容 hash 尾段）完全一致，
-  缓存键一致、天然共享；仅有少量 lethe 独有 / 官服独有 bundle（随版本变化）。
+  Lethe.dll 仅在 HTTP 请求层改写 host，token 与路径保持不变，两者共享同一
+  Unity Caching 目录 `%USERPROFILE%\\AppData\\LocalLow\\Unity\\ProjectMoon_LimbusCompany`。
+- 游戏运行时按**远程 catalog**（`catalog_S1.bin`）预热缺失 bundle，缓存条目须同时
+  含 `__data` 与 `__info`（`__info` 格式 `-1\\n<UTC epoch>\\n1\\n__data\\n`）。因此本模块
+  的差异分析同样基于远程 catalog（经 `GameInfo.catalog_url()` 拉取，与官方下载器
+  `ResourceUpdater._build_manifest` 同源），本地 `catalog.bin` 仅作网络失败时的回退。
+- 两服 catalog 的绝大多数 bundle 名称（含内容 hash 尾段）完全一致，缓存键一致、
+  天然共享；仅有少量 lethe 独有 / 官服独有 bundle（随版本变化）。
 - 切换服务器时若全量清缓存会重下公共资源（~14 GB）；正确做法是只处理差异：
   目标服独有且缓存缺失的 bundle 从对应 CDN 补下载，另一服独有且缓存存在的
   条目移除，公共 bundle 不动。
 
 本模块提供：
-- `ServerSync`：目录校验、catalog 加载、差异分析、同步计划、执行（下载/删除）。
+- `ServerSync`：目录校验、远程 catalog 加载、差异分析、同步计划、执行（下载/删除）。
 - `run_server_sync()`：Launcher 集成入口（开启官服前恢复官服资源）。
 - `create_lethe_shortcut()`：生成「开启 lethe 私服」桌面快捷方式
   （先同步 lethe 资源，再启动 lethe 游戏 exe）。
@@ -50,7 +54,11 @@ _log_manager = LogManager()
 LETHE_CDN_HOST = "assets.lethelc.site"
 OFFICIAL_CDN_HOST = "download.limbuscompanycdn.org"
 
-S_TOKEN_RE = re.compile(r"download\.limbuscompanycdn\.org/(s\d{8}_[A-Za-z0-9_-]+)/")
+# 主机无关：lethe 的 settings.json 可能直接写 assets.lethelc.site，也可能保留
+# 官方 host 串（Lethe.dll 仅在 HTTP 请求层改写 host），两种都要能提取 s-token
+S_TOKEN_RE = re.compile(
+    r"(?:download\.limbuscompanycdn\.org|assets\.lethelc\.site)/(s\d{8}_[A-Za-z0-9_-]+)/"
+)
 
 ProgressCallback = Callable[[str, str, Optional[float]], None]
 
@@ -246,6 +254,8 @@ class ServerSync:
             retry_delay=self.retry_delay,
             connection_limit=self.connection_limit,
         )
+        # 远程 catalog 解析结果缓存（避免 analyze/plan/run 多次网络拉取）
+        self._catalog_cache: Dict[str, Tuple[List[str], Dict[str, Dict[str, str]]]] = {}
 
     # ---- 报告与取消 ----
 
@@ -276,7 +286,55 @@ class ServerSync:
             raise ServerSyncError("；".join(missing))
 
     def _load_catalog(self, game_dir: Path) -> Tuple[List[str], Dict[str, Dict[str, str]]]:
-        return parse_catalog(_catalog_path_of(game_dir))
+        return self._fetch_catalog(Path(game_dir))
+
+    def _fetch_catalog(self, game_dir: Path) -> Tuple[List[str], Dict[str, Dict[str, str]]]:
+        """解析某服 catalog：优先远程 catalog（与官方下载器 _build_manifest 一致，
+        游戏运行时实际消费的清单），失败再回退本地 catalog.bin。结果按 game_dir 缓存。"""
+        key = str(Path(game_dir))
+        if key in self._catalog_cache:
+            return self._catalog_cache[key]
+        try:
+            info = GameInfo(game_dir)
+            url = info.catalog_url()
+            self.report("正在获取 {} 远程 catalog".format(game_dir), 0.05)
+            # lethe 实际内容托管在 assets.lethelc.site（Lethe.dll 在请求层改写 host），
+            # 直接拉官方 host + lethe token 会 404，故 lethe 侧优先用改写后的 lethe host 地址
+            candidates = [url]
+            if Path(game_dir) == self.lethe_dir:
+                candidates = [url.replace(OFFICIAL_CDN_HOST, LETHE_CDN_HOST, 1), url]
+            data = None
+            last_exc: Optional[Exception] = None
+            for candidate in candidates:
+                try:
+                    data = http_get(candidate, True, timeout=120)
+                    break
+                except Exception as exc:  # 某个候选地址失败，尝试下一个
+                    last_exc = exc
+                    continue
+            if data is None:
+                raise last_exc or ServerSyncError("无法获取远程 catalog")
+            work = default_work_dir() / "server_switch"
+            work.mkdir(parents=True, exist_ok=True)
+            label = "lethe" if Path(game_dir) == self.lethe_dir else "official"
+            cached = work / "{}_catalog.bin".format(label)
+            cached.write_bytes(data)
+            result = parse_catalog(cached)
+        except Exception as exc:
+            self.report(
+                "远程 catalog 获取失败（{}），回退本地 catalog.bin：{}".format(
+                    type(exc).__name__, exc
+                ),
+                level=30,
+            )
+            local = _catalog_path_of(game_dir)
+            if not local.is_file():
+                raise ServerSyncError(
+                    "无法读取 {} 的 catalog（远程与本地均不可用）".format(game_dir)
+                )
+            result = parse_catalog(local)
+        self._catalog_cache[key] = result
+        return result
 
     def _token_of(self, game_dir: Path) -> Optional[str]:
         return _s_token_from_settings(_settings_path_of(game_dir))
@@ -290,7 +348,7 @@ class ServerSync:
         """加载两服 catalog 并计算差异。返回结构化报告。"""
         self.validate()
         self._check_cancel()
-        self.report("正在读取两服资源清单", 0.05)
+        self.report("正在读取两服远程 catalog（网络失败回退本地）", 0.05)
         l_names, l_meta = self._load_catalog(self.lethe_dir)
         o_names, o_meta = self._load_catalog(self.official_dir)
         l_token = self._token_of(self.lethe_dir)
@@ -313,6 +371,17 @@ class ServerSync:
         only_official = sorted(full_o - full_l)
         common = sorted(full_l & full_o)
 
+        # 版本错配软预警：共享 bundle 占比过低说明两服 catalog 版本不一致，
+        # 此时差异集合失真，切换结果可能不符合预期（仅告警，不阻断执行）
+        min_total = min(len(full_l), len(full_o)) or 1
+        version_skew_warning = None
+        if common and len(common) < 0.5 * min_total:
+            version_skew_warning = (
+                "两服共享 bundle 占比过低（{}/{}），可能两服游戏版本不一致，"
+                "切换结果可能不符合预期".format(len(common), min_total)
+            )
+            self.report(version_skew_warning, level=30)
+
         report = {
             "lethe_dir": str(self.lethe_dir),
             "official_dir": str(self.official_dir),
@@ -329,6 +398,7 @@ class ServerSync:
             "only_official_count": len(only_official),
             "lethe_cacheable": len(l_c),
             "official_cacheable": len(o_c),
+            "version_skew_warning": version_skew_warning,
         }
         self.report(
             "差异分析完成：共享 {}，lethe 独有 {}，官服独有 {}".format(
@@ -389,8 +459,16 @@ class ServerSync:
                 item["outer"] = existing[inner]
 
         def entry_exists(outer: str, inner: str) -> bool:
-            data_f = self.cache_dir / outer / inner / "__data"
-            return data_f.is_file() and data_f.stat().st_size > 0
+            # 与官方下载器 update_bundles 的跳过判定一致：__data 与 __info 须同时存在，
+            # 否则视为未完整缓存，需要补下载
+            entry = self.cache_dir / outer / inner
+            data_f = entry / "__data"
+            info_f = entry / "__info"
+            return (
+                data_f.is_file()
+                and data_f.stat().st_size > 0
+                and info_f.is_file()
+            )
 
         plan_add = []
         for name in add_names:

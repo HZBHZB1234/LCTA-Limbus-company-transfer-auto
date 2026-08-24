@@ -1,3 +1,4 @@
+import atexit
 import hashlib
 import json
 import logging
@@ -11,15 +12,32 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import weakref
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from globalManagers.LogManager import LogManager
+from webutils.process_job import ChildProcessJob
 
 
 _log_manager = LogManager()
+
+# 存活 Aria2Client 实例的弱引用集合：解释器关闭（atexit）时兜底停止，
+# 防止资源更新跑在守护线程（WebUI 模式）被强杀、finally 来不及执行导致 aria2c 残留。
+_live_aria2_clients = weakref.WeakSet()
+
+
+def _stop_live_aria2_clients():
+    for client in list(_live_aria2_clients):
+        try:
+            client.stop()
+        except Exception:
+            pass
+
+
+atexit.register(_stop_live_aria2_clients)
 
 USER_AGENT = "UnityPlayer/6000.3.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)"
 X_REQUESTED_WITH = "this_is_header_value"
@@ -173,6 +191,9 @@ class Aria2Client:
         self.process = None
         self.endpoint = None
         self.request_id = 0
+        # 父进程寿命绑定：进程退出时由内核杀死子 aria2c，避免孤儿进程
+        self._job = None
+        _live_aria2_clients.add(self)
 
     def start(self) -> None:
         if self.process is not None and self.process.poll() is None:
@@ -205,6 +226,9 @@ class Aria2Client:
             )
         except OSError as exc:
             raise Aria2Error("无法启动 aria2c: {}".format(exc)) from exc
+        # 绑定到父进程寿命：父进程退出（含崩溃/被强杀）时内核自动杀死子进程
+        self._job = ChildProcessJob()
+        self._job.assign(self.process.pid)
         self.endpoint = "http://127.0.0.1:{}/jsonrpc".format(port)
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
@@ -225,12 +249,18 @@ class Aria2Client:
         process, self.process = self.process, None
         self.endpoint = None
         if process is None or process.poll() is not None:
+            if self._job is not None:
+                self._job.close()
+                self._job = None
             return
         try:
             process.terminate()
             process.wait(timeout=3)
         except Exception:
             process.kill()
+        if self._job is not None:
+            self._job.close()
+            self._job = None
         _log_manager.debug("[游戏资源更新/aria2] 进程已停止")
 
     def call(self, method: str, params: List[Any]) -> Any:

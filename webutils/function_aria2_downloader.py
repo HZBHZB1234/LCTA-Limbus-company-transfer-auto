@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from globalManagers.LogManager import LogManager
+from webutils.process_job import ChildProcessJob
 from resource_updater.core import Aria2Error, resolve_aria2_binary
 
 _log_manager = LogManager()
@@ -61,6 +62,8 @@ class Aria2DlClient:
         self.process = None
         self.endpoint = None
         self.request_id = 0
+        # 父进程寿命绑定：进程退出时由内核杀死子 aria2c，避免孤儿进程
+        self._job = None
 
     def start(self) -> None:
         if self.process is not None and self.process.poll() is None:
@@ -95,6 +98,9 @@ class Aria2DlClient:
             )
         except OSError as exc:
             raise Aria2Error("无法启动 aria2c: {}".format(exc)) from exc
+        # 绑定到父进程寿命：父进程退出（含崩溃/被强杀）时内核自动杀死子进程
+        self._job = ChildProcessJob()
+        self._job.assign(self.process.pid)
         self.endpoint = "http://127.0.0.1:{}/jsonrpc".format(port)
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
@@ -115,12 +121,18 @@ class Aria2DlClient:
         process, self.process = self.process, None
         self.endpoint = None
         if process is None or process.poll() is not None:
+            if self._job is not None:
+                self._job.close()
+                self._job = None
             return
         try:
             process.terminate()
             process.wait(timeout=3)
         except Exception:
             process.kill()
+        if self._job is not None:
+            self._job.close()
+            self._job = None
         _log_manager.debug("[高速下载器/aria2] 进程已停止")
 
     def call(self, method: str, params: List[Any]) -> Any:

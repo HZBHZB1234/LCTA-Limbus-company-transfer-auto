@@ -1,4 +1,5 @@
 ## v5.0.3版本更新内容
+- 修复 aria2c 孤儿进程：Launcher 工作模式与 WebUI 资源更新页下载资源时启动的 aria2c 子进程，此前仅在正常 `stop()`（资源更新 `finally` / 下载器窗口关闭 / atexit）路径下回收；在 WebUI 资源更新跑在守护线程、关闭主窗口被强杀，或进程被硬杀/崩溃等情况下 atexit 与 `finally` 均不执行，会残留 aria2c 孤儿进程。现通过 Windows Job Object（`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`）把 aria2c 绑定到父进程寿命，父进程以任何方式退出时由内核自动杀死子进程；同时对 `resource_updater` 的 `Aria2Client` 增加模块级实例注册表 + atexit 兜底停止，覆盖守护线程被强杀与非 Windows 场景
 - 修复「服务器切换」页通过「浏览」按钮选择 lethe 目录后不落盘的问题：目录选择经后端 run_js 直接给输入框赋值，不触发 change 事件（与音频工具页已修复的坑相同），导致 config.json 中 lethe_dir 始终为空、重启后路径丢失；现浏览完成后由页面显式触发一次保存流程（取消选择时不产生多余写入）
 - 修复启动预清理阶段必现的 `expected str, bytes or os.PathLike object, not NoneType` 报错：冷启动时模组清理先于音频替换执行，游戏路径尚未注入导致 `restore_sound` 抛 TypeError，并连带跳过同批次的 staticmod 回滚与 lang `.bak` 还原（上次异常退出的文本/静态数据残留无法在启动前还原，文本补丁存在重复叠加风险）；现启动流程在首次清理前即注入游戏路径（新增 `sound.set_game_path()`），未注入时 `restore_sound` 静默跳过
 - 修复「服务器切换」Launcher 集成在 lethe 目录未配置时的误导性告警：空路径经 `Path("")` 变为当前目录 `.` 绕过存在性检查，产生「lethe 缺少 catalog.bin: .」WARNING 与自相矛盾的「已跳过: unknown」日志；现在空/空白 lethe 路径直接按「未配置」跳过（不再进入同步流程），同步失败改为真实失败上报并携带原始错误信息（不再显示 unknown），取消操作单独标记 reason=cancelled

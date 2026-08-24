@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-08-19 -->
+<!-- Last updated: 2026-08-23 -->
 
 ## Project Purpose
 
@@ -100,6 +100,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | **Content-Keyed Cache + LRU** | `launcher/modcache.py` | 统一模组缓存（`%LOCALAPPDATA%/LCTA/mod-cache/`）：carra2 转换（键=源 zip sha256）、carra2 解压展平（键=carra2 内容 sha256）、bundle 重打包（键=原版 __data xxh128 + 模组目录 tree_digest）、bank 补丁/导出（键=原版+模组摘要+质量+线程）。工具函数（sha256_file/tree_digest/atomic_write/prune_lru/enabled_mod_files）被 patch/sound/bankmod/changes 共用；各缓存按 mtime LRU 自动清理（默认 30 条）。`enabled_mod_files` 统一 `_disable` 过滤（文件名或任一路径段以 `_disable` 结尾即视为禁用） |
 | **LZ4 Standard-Format Repack** | `launcher/patch.py` | 模组 bundle 重打包优先 `bundle.save(packer="lz4")`（UnityFS LZ4，与原版格式一致），失败回退 `packer="original"`；产物写入 bundle 重打包缓存并由 meta.json 记录原版/模组摘要 |
 | **Singleton Process Pool + Idle Reaper** | `webutils/function_mod_mirror.py` | aria2c 单例池：全局锁 + 引用计数 + 空闲时间戳，所有下载复用同一 aria2c 实例（并发任务共享实例不互斥），进程死亡自动重建，空闲超时（30s）由守护线程回收，程序退出时 atexit 统一停止（不残留子进程） |
+| **Job Object 父进程寿命绑定** | `webutils/process_job.py` + `resource_updater/core.py` `Aria2Client` + `webutils/function_aria2_downloader.py` `Aria2DlClient` | aria2c 子进程经 Windows Job Object（`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`）绑定到 LCTA 进程寿命：父进程无论正常退出、被 `TerminateProcess` 还是崩溃，内核关闭 job 句柄即自动杀死子进程，根除孤儿进程；覆盖资源更新（Launcher 工作模式 + WebUI 资源更新页，后者跑在守护线程）与泛用下载器 / Mod 镜像站池。另对 `resource_updater` 的 `Aria2Client` 增加模块级实例弱引用注册表 + `atexit` 兜底 `stop()`，覆盖守护线程被强杀与非 Windows 平台场景 |
 | **Registry + Interface** | `webutils/drop/` | `DropFileHandler` 接口（检测 + 执行 + 显示名收敛于单类）; `DropFileHandlerRegistry` 按容器类型（zip/folder/json/path）有序检测、按类型分派执行，兜底 `invalid` |
 
 ## Key Interfaces

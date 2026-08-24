@@ -32,7 +32,7 @@
   默认关闭。需在 Launcher 配置页勾选「启用静态数据 Mod」并经风险须知同意
   （launcher.work.staticmod，前端经 RiskGate 门控）。未启用时
   apply_staticmods 直接返回 disabled；restore_staticmods 不受开关影响，
-  关闭后残留修改会在下次启动/退出时自动清理。
+  关闭后残留修改会在下次启动/退出时从打补丁前的本地备份原样还原官方 bundle 并双写 catalog crc/size（无需重下官方版）。
 """
 import base64
 import hashlib
@@ -43,6 +43,7 @@ import re
 import shutil
 import struct
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -490,36 +491,38 @@ def _mod_digest(mod_path: Path, manifest: Dict[str, Any]) -> str:
     return h.hexdigest()
 
 
-def _resolve_official_static_bundle(entry: StaticCatalogEntry) -> Tuple[Optional[bytes], Optional[str]]:
-    """在所有缓存根中定位现行官方 static bundle 的 __data（按 content hash 反查）。
+def _static_backup_dir(entry: StaticCatalogEntry) -> Path:
+    """本地备份目录（独立于 Unity 缓存，避免被 Unity 清除）：
 
-    不依赖 catalog 偏移推导的 outer_key：
-      - 先试常规 outer/inner 路径（catalog 推导正确时的快速路径）；
-      - 未命中再扫描真实缓存目录 root/*/<inner_hash>/__data，按 content hash
-        反查外层目录名（与 launcher/patch.patch_assets、resource_updater
-        的 _existing_bundle_mapping 一致，只信任真实缓存目录结构）。
-
-    返回 (官方 bundle 字节, 实际 outer_key)。未找到返回 (None, None)。
+    %LOCALAPPDATA%/LCTA/staticmod-backup/<outer_key>/<inner_hash>/。
     """
-    for root in _cache_root_paths():
-        fast = root / entry.outer_key / entry.inner_hash / "__data"
-        if fast.is_file():
-            return fast.read_bytes(), entry.outer_key
-        # 不信任 catalog 推导的 outer_key：按 content hash 扫描真实缓存目录，
-        # 兼容官方热修重写 catalog 后 catalog 偏移与缓存外层目录名错位的情况。
-        try:
-            for outer_dir in root.iterdir():
-                if not outer_dir.is_dir():
-                    continue
-                p = outer_dir / entry.inner_hash / "__data"
-                if p.is_file():
-                    _log_manager.log("staticmod: 经真实缓存目录反查到官方 static bundle "
-                                     "(outer=%s, catalog 推导 outer=%s)",
-                                     outer_dir.name, entry.outer_key)
-                    return p.read_bytes(), outer_dir.name
-        except OSError:
-            continue
-    return None, None
+    base = os.environ.get("LOCALAPPDATA", "")
+    return Path(base) / "LCTA" / "staticmod-backup" / entry.outer_key / entry.inner_hash
+
+
+def _backup_official_static(entry: StaticCatalogEntry, official_bytes: bytes) -> None:
+    """打补丁前备份官方 __data（含 __info）到本地备份目录，供退出时原样还原。
+
+    仅在确实取到官方 bundle 时调用；备份存在即代表本会话应用过 staticmod。
+    """
+    bak = _static_backup_dir(entry)
+    try:
+        bak.mkdir(parents=True, exist_ok=True)
+        atomic_write(bak / "__data", official_bytes)
+        # 备份 __info，还原时一并写回，保证 Unity 缓存条目有效
+        for root in _cache_root_paths():
+            info = root / entry.outer_key / entry.inner_hash / "__info"
+            if info.is_file():
+                shutil.copyfile(info, bak / "__info")
+                break
+    except OSError as e:
+        _log_manager.log_error("staticmod: 备份官方 bundle 失败 %s: %s", bak, e)
+
+
+def _write_cache_info(data_path: Path) -> None:
+    """写入缓存条目 __info（token 格式：-1\\n<ts>\\n1\\n__data\\n）。"""
+    info = "-1\n%d\n1\n__data\n" % int(time.time())
+    atomic_write(data_path.parent / "__info", info.encode("utf-8"))
 
 
 def apply_staticmods(mod_zips_root: str, catalog_path: Optional[str] = None,
@@ -528,7 +531,8 @@ def apply_staticmods(mod_zips_root: str, catalog_path: Optional[str] = None,
 
     功能默认关闭：需在 Launcher 配置页勾选「启用静态数据 Mod」并通过风险须知
     同意（launcher.work.staticmod）。enabled 参数供调用方/测试显式覆盖；
-    restore_staticmods 不受此开关影响（关闭后残留修改会在下次启动/退出清理）。
+    restore_staticmods 不受此开关影响（关闭后残留修改会在下次启动/退出时从本地
+    备份原样还原官方 bundle 并双写 catalog crc/size，无需重下）。
     """
     if enabled is None:
         enabled = _config_enabled()
@@ -555,21 +559,22 @@ def apply_staticmods(mod_zips_root: str, catalog_path: Optional[str] = None,
 
     _log_manager.log("staticmod: 定位现行 static 条目 %s", entry)
 
-    # 取现行官方 bundle（缓存条目 → CDN 补拉）
-    # 按 content hash 反查真实缓存目录定位 __data，避免 catalog 偏移推导的
-    # outer_key 与缓存外层目录名错位导致误报"未找到 bundle"。
-    official_bytes, actual_outer = _resolve_official_static_bundle(entry)
+    # 取现行官方 bundle（缓存条目 → CDN 补拉）。outer_key/inner_hash 由
+    # locate_static_entry 从 catalog 动态推导（已实证与真实缓存外层目录名一致）。
+    official_bytes = None
+    for root in _cache_root_paths():
+        p = root / entry.outer_key / entry.inner_hash / "__data"
+        if p.is_file():
+            official_bytes = p.read_bytes()
+            break
     if official_bytes is None:
         _log_manager.log_error("staticmod: 缓存无现行官方 static bundle，跳过（联网重试由资源更新器负责）")
         return {"applied": 0, "skipped": 0, "failed": [{"name": "<bundle>", "reason": "official bundle missing"}],
                 "reason": "official-bundle-missing"}
-    # catalog 推导的 outer_key 可能不匹配实际缓存外层目录名（热修重写 catalog 后常见）：
-    # 以真实外层层目录名为准，保证后续 catalog 双写 / 缓存重建写到 Unity 实际读取的位置。
-    if actual_outer != entry.outer_key:
-        _log_manager.log("staticmod: 采用真实缓存 outer_key=%s 覆盖 catalog 推导=%s",
-                         actual_outer, entry.outer_key)
-        entry = StaticCatalogEntry(entry.bundle_name, entry.inner_hash, actual_outer,
-                                   entry.crc_offset, entry.size_offset, entry.crc, entry.size)
+
+    # 打补丁前先备份官方 __data（含 __info）到本地备份目录，供退出时原样还原，
+    # 避免每次启动都因删除缓存而被迫重下官方 bundle。
+    _backup_official_static(entry, official_bytes)
 
     applied, skipped, failed = 0, 0, []
     for raw_mod in mods:
@@ -680,34 +685,43 @@ def _apply_one(mod_path: Path, manifest: Dict[str, Any], entry: StaticCatalogEnt
 # ---------------------------------------------------------------------------
 
 def restore_staticmods(catalog_path: Optional[str] = None) -> Dict[str, Any]:
-    """恢复官方 static 状态：删除补丁缓存条目，让游戏下次启动重下官方版。
+    """恢复官方 static 状态：从打补丁前的本地备份原样还原官方 __data，并重新计算
+    解压 CRC + size 双写 catalog，撤销 PATCHED 期写入的 crc/size。
 
-    与 bundle 级 cleanup_assets 不同：static 没有 __original 备份语义，
-    直接移除缓存条目即可（官方 catalog 记录会自动指向重下）。
+    与「删除缓存条目」式回滚不同：本实现基于本地备份还原，因此退出后游戏无需
+    重新下载官方 bundle（备份存在即代表本会话应用过 staticmod；无备份则直接跳过，
+    保留官方缓存，避免每次启动被迫重下）。outer_key/inner_hash 由 locate_static_entry
+    从 catalog 动态推导（已实证与真实缓存外层目录名一致）。
     """
     catalog_path = catalog_path or _catalog_path()
     entry = locate_static_entry(catalog_path)
     if entry is None:
         return {"restored": 0, "reason": "no-entry"}
-    removed = 0
+    bak = _static_backup_dir(entry)
+    bak_data = bak / "__data"
+    if not bak_data.is_file():
+        # 本会话未应用 staticmod（无备份）：保留官方缓存，不触碰
+        return {"restored": 0, "reason": "no-backup"}
+    restored = 0
     for root in _cache_root_paths():
-        # 优先试 catalog 推导的 outer/inner；不匹配时按 content hash 扫描真实
-        # 缓存目录，避免 catalog 偏移推导的 outer_key 错位导致清理错目录。
-        candidates = [root / entry.outer_key / entry.inner_hash]
+        entry_dir = root / entry.outer_key / entry.inner_hash
+        if not entry_dir.is_dir():
+            continue
         try:
-            for outer_dir in root.iterdir():
-                if not outer_dir.is_dir():
-                    continue
-                candidates.append(outer_dir / entry.inner_hash)
-        except OSError:
-            pass
-        for entry_dir in candidates:
-            if not entry_dir.is_dir():
-                continue
-            try:
-                shutil.rmtree(entry_dir)
-                removed += 1
-                _log_manager.log("staticmod: 已移除缓存条目 %s", entry_dir)
-            except OSError as e:
-                _log_manager.log_error("staticmod: 移除缓存条目失败 %s: %s", entry_dir, e)
-    return {"restored": removed, "reason": None}
+            shutil.copyfile(bak_data, entry_dir / "__data")
+            if (bak / "__info").is_file():
+                shutil.copyfile(bak / "__info", entry_dir / "__info")
+            else:
+                _write_cache_info(entry_dir / "__data")
+            # 重新计算官方解压 CRC + size，双写 catalog，撤销 PATCHED 期写入的值
+            official = (entry_dir / "__data").read_bytes()
+            new_crc, new_size = bundle_decompressed_crc(official)
+            if not _write_catalog_fields(entry, new_crc, new_size, catalog_path):
+                raise RuntimeError("catalog 双写失败")
+            restored += 1
+            _log_manager.log("staticmod: 已从本地备份还原官方 static bundle（无需重下）%s", entry_dir)
+        except (OSError, RuntimeError) as e:
+            _log_manager.log_error("staticmod: 还原缓存条目失败 %s: %s", entry_dir, e)
+    # 清理备份
+    shutil.rmtree(bak, ignore_errors=True)
+    return {"restored": restored, "reason": None}

@@ -19,7 +19,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from globalManagers.LogManager import LogManager
-from webutils.process_job import ChildProcessJob
 
 
 _log_manager = LogManager()
@@ -238,6 +237,11 @@ class Aria2Client:
         except OSError as exc:
             raise Aria2Error("无法启动 aria2c: {}".format(exc)) from exc
         # 绑定到父进程寿命：父进程退出（含崩溃/被强杀）时内核自动杀死子进程
+        # ChildProcessJob 延迟导入：webutils 反向依赖 resource_updater.core
+        # （function_aria2_downloader 在模块顶层 from resource_updater.core import
+        # Aria2Error），若在 core 顶层导入 webutils 会形成循环导入，导致
+        # `python -m resource_updater.server_sync` 等独立入口导入失败。
+        from webutils.process_job import ChildProcessJob
         self._job = ChildProcessJob()
         self._job.assign(self.process.pid)
         self.endpoint = "http://127.0.0.1:{}/jsonrpc".format(port)

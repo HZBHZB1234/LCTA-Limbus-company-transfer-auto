@@ -84,7 +84,7 @@ def get_server_switch_config() -> Dict[str, Any]:
         except (TypeError, ValueError):
             return default
 
-    return {
+    result = {
         "enabled": bool(manager.get("{}.enabled".format(prefix), False)),
         "server": manager.get("{}.server".format(prefix), "official"),
         "lethe_dir": manager.get("{}.lethe_dir".format(prefix), ""),
@@ -97,6 +97,8 @@ def get_server_switch_config() -> Dict[str, Any]:
             1, min(16, as_int(manager.get("{}.connection_limit".format(prefix), 8), 8))
         ),
     }
+    _log_manager.debug("[服务器切换] 读取配置: {}".format(result))
+    return result
 
 
 def save_server_switch_options(options: Dict[str, Any]) -> Dict[str, Any]:
@@ -131,6 +133,12 @@ def save_server_switch_options(options: Dict[str, Any]) -> Dict[str, Any]:
         ),
     }
     count = ConfigManager().set_batch(updates)
+    _log_manager.log(
+        "[服务器切换] 持久化配置：成功={}, 更新 {}/{} 项".format(
+            count == len(updates), count, len(updates)
+        ),
+        20,
+    )
     return {"success": count == len(updates), "updated": count}
 
 
@@ -203,6 +211,7 @@ def detect_lethe_dir_candidates() -> List[Path]:
         if resolved not in seen:
             seen.add(resolved)
             unique.append(candidate)
+    _log_manager.debug("[服务器切换] 探测到 {} 个 lethe 候选目录: {}".format(len(unique), unique))
     return unique
 
 
@@ -278,11 +287,22 @@ class ServerSync:
     # ---- 加载 ----
 
     def validate(self) -> None:
+        _log_manager.debug(
+            "[服务器切换] 校验目录: lethe={}, official={}".format(
+                self.lethe_dir, self.official_dir
+            )
+        )
         missing = []
         for label, game_dir in (("lethe", self.lethe_dir), ("official", self.official_dir)):
-            if not _catalog_path_of(game_dir).is_file():
+            catalog = _catalog_path_of(game_dir)
+            if catalog.is_file():
+                _log_manager.debug(
+                    "[服务器切换] {} catalog 存在: {}".format(label, catalog)
+                )
+            else:
                 missing.append("{} 缺少 catalog.bin: {}".format(label, game_dir))
         if missing:
+            _log_manager.log("[服务器切换] 目录校验失败: {}".format("；".join(missing)), 40)
             raise ServerSyncError("；".join(missing))
 
     def _load_catalog(self, game_dir: Path) -> Tuple[List[str], Dict[str, Dict[str, str]]]:
@@ -306,11 +326,25 @@ class ServerSync:
             data = None
             last_exc: Optional[Exception] = None
             for candidate in candidates:
+                _log_manager.debug(
+                    "[服务器切换] 尝试获取远程 catalog: {}".format(candidate)
+                )
                 try:
                     data = http_get(candidate, True, timeout=120)
+                    _log_manager.debug(
+                        "[服务器切换] 远程 catalog 获取成功: {} ({} 字节)".format(
+                            candidate, len(data)
+                        )
+                    )
                     break
                 except Exception as exc:  # 某个候选地址失败，尝试下一个
                     last_exc = exc
+                    _log_manager.log(
+                        "[服务器切换] 远程 catalog 候选地址失败: {} ({})".format(
+                            candidate, exc
+                        ),
+                        30,
+                    )
                     continue
             if data is None:
                 raise last_exc or ServerSyncError("无法获取远程 catalog")
@@ -416,6 +450,11 @@ class ServerSync:
             raise ServerSyncError("未知目标服务器: {}".format(server))
         analysis = analyze if analyze is not None else self.analyze()
         self._check_cancel()
+        _log_manager.debug(
+            "[服务器切换] 生成切换至 {} 的同步计划（keep_other={}）".format(
+                server, self.keep_other
+            )
+        )
 
         if server == "lethe":
             target_meta = self._load_catalog(self.lethe_dir)[1]
@@ -498,6 +537,11 @@ class ServerSync:
 
         plan_add.sort(key=lambda item: item["name"])
         plan_remove.sort(key=lambda item: item["name"])
+        _log_manager.debug(
+            "[服务器切换] 计划生成完成：目标独有需下载 {} 个，另一服独有需移除 {} 个".format(
+                len(plan_add), len(plan_remove)
+            )
+        )
         return {
             "server": server,
             "token": token,
@@ -514,6 +558,9 @@ class ServerSync:
     def _remove_entry(self, outer: str, inner: str) -> bool:
         entry = self.cache_dir / outer / inner
         if not entry.exists():
+            _log_manager.debug(
+                "[服务器切换] 移除条目跳过（不存在）: {}/{}".format(outer, inner)
+            )
             return False
         for path in entry.glob("*"):
             if path.is_file():
@@ -529,6 +576,11 @@ class ServerSync:
 
     def run(self, server: str, dry_run: bool = False) -> Dict[str, Any]:
         """执行同步。dry_run=True 时仅预览，不下载不删除。"""
+        _log_manager.debug(
+            "[服务器切换] 执行同步: server={}, dry_run={}, engine={}, jobs={}".format(
+                server, dry_run, self.engine, self.jobs
+            )
+        )
         self.report("正在为 {} 服务器生成同步计划".format(server), 0.1)
         analysis = self.analyze()
         plan = self.plan(server, analysis)
@@ -589,6 +641,9 @@ class ServerSync:
                 ))
             try:
                 if self._updater._resolved_engine() == "aria2":
+                    _log_manager.debug(
+                        "[服务器切换] 使用 aria2 引擎下载 {} 个任务".format(len(tasks))
+                    )
                     result = self._updater._download_many_aria2("server_switch", tasks)
                     added += result["completed"]
                     retried += result.get("retried", 0)
@@ -600,6 +655,9 @@ class ServerSync:
                             level=30,
                         )
                 else:
+                    _log_manager.debug(
+                        "[服务器切换] 使用内置引擎下载 {} 个任务".format(len(tasks))
+                    )
                     for index, task in enumerate(tasks):
                         self._check_cancel()
                         try:
@@ -683,13 +741,16 @@ def run_server_sync(
     配置缺失/目录无效/无差异时安全返回（不抛异常）。
     """
     if server not in ("official", "lethe"):
+        _log_manager.log("[服务器切换] 未知目标服务器: {}".format(server), 30)
         return {"success": False, "message": "未知目标服务器: {}".format(server)}
     cfg = config if config is not None else get_server_switch_config()
     official = Path(official_dir or ConfigManager().get("game_path", ""))
     lethe = Path(lethe_dir or cfg.get("lethe_dir", ""))
     if not official.is_dir():
+        _log_manager.log("[服务器切换] 官服目录无效: {}".format(official), 30)
         return {"success": False, "message": "官服目录无效: {}".format(official)}
     if not lethe.is_dir():
+        _log_manager.log("[服务器切换] lethe 目录无效: {}".format(lethe), 30)
         return {"success": False, "message": "lethe 目录无效: {}".format(lethe)}
     sync = ServerSync(
         lethe_dir=lethe,
@@ -703,13 +764,28 @@ def run_server_sync(
         retry_delay=cfg.get("retry_delay", 30),
         connection_limit=cfg.get("connection_limit", 8),
     )
+    _log_manager.log(
+        "[服务器切换] 开始同步：服务器={}, lethe={}, official={}, dry_run={}".format(
+            server, lethe, official, dry_run
+        ),
+        20,
+    )
     try:
         result = sync.run(server, dry_run=dry_run)
         result["success"] = result.get("failed", 0) == 0
+        _log_manager.log(
+            "[服务器切换] 同步结束：下载={}, 移除={}, 失败={}, dry_run={}".format(
+                result.get("added"), result.get("removed"),
+                result.get("failed"), dry_run,
+            ),
+            20,
+        )
         return result
     except ServerSyncCancelled:
+        _log_manager.log("[服务器切换] 同步已取消", 30)
         return {"success": False, "message": "服务器切换已取消"}
     except ServerSyncError as exc:
+        _log_manager.log("[服务器切换] 同步失败: {}".format(exc), 40)
         return {"success": False, "message": str(exc)}
 
 
@@ -788,12 +864,18 @@ def create_lethe_shortcut(
     lethe = Path(lethe_dir)
     exe = _game_executable_of(lethe)
     if not exe.is_file():
+        _log_manager.log("[服务器切换] lethe 目录缺少 exe: {}".format(lethe), 30)
         return {"success": False, "message": "lethe 目录缺少 LimbusCompany.exe: {}".format(lethe)}
 
     cfg = config if config is not None else get_server_switch_config()
     official = Path(ConfigManager().get("game_path", ""))
     if not official.is_dir():
+        _log_manager.log("[服务器切换] 官服目录无效（快捷方式）: {}".format(official), 30)
         return {"success": False, "message": "官服目录无效，请先在设置页配置游戏目录: {}".format(official)}
+    _log_manager.log(
+        "[服务器切换] 开始创建 lethe 快捷方式: lethe={}, official={}".format(lethe, official),
+        20,
+    )
 
     # 生成启动脚本（内含同步 + 启动）
     script_dir = default_work_dir() / "server_switch"
@@ -802,14 +884,26 @@ def create_lethe_shortcut(
     project_root = Path(os.getenv("path_", "")) or Path(__file__).resolve().parent.parent
     python = Path(sys.executable)
 
+    # 注意：不能用 `python -m resource_updater.server_sync`。
+    # 便携版 python 是 embeddable 构建（python39._pth 仅含 python39.zip 与
+    # 当前 Bins 目录），不会把工作目录加入 sys.path，故 `python -m` 找不到
+    # resource_updater 包（报 ModuleNotFoundError）。改用 `-c` 引导脚本，
+    # 显式把项目根（path_ 环境变量）插入 sys.path[0] 后再导入运行。
+    sync_bootstrap = (
+        "import sys, os; "
+        "sys.path.insert(0, os.environ.get('path_', '')); "
+        "from resource_updater import server_sync; "
+        "raise SystemExit(server_sync.main())"
+    )
     script_lines = [
         "@echo off",
         "chcp 65001 >nul",
         "cd /d \"{}\"".format(str(project_root)),
         "set \"path_={}\"".format(str(project_root)),
         "echo === 正在同步 lethe 私服资源，请稍候... ===",
-        "\"{}\" -m resource_updater.server_sync --server lethe --lethe-dir \"{}\" --official-dir \"{}\" --shortcut".format(
+        "\"{}\" -c \"{}\" --server lethe --lethe-dir \"{}\" --official-dir \"{}\" --shortcut".format(
             str(python),
+            sync_bootstrap,
             str(lethe),
             str(official),
         ),
@@ -817,12 +911,15 @@ def create_lethe_shortcut(
         "start \"\" /d \"{}\" \"{}\"".format(str(lethe), str(exe)),
     ]
     cmd_path.write_text("\r\n".join(script_lines) + "\r\n", encoding="utf-8")
+    _log_manager.debug("[服务器切换] 启动脚本已写入: {}".format(cmd_path))
 
     desktop = _desktop_path()
     lnk_path = desktop / "开启 lethe 私服.lnk"
     ok = _create_lnk(lnk_path, cmd_path, script_dir, exe, "启动 LCTA 管理的 lethe 私服（先同步资源）")
     if not ok:
+        _log_manager.log("[服务器切换] 快捷方式创建失败", 40)
         return {"success": False, "message": "快捷方式创建失败（PowerShell 不可用或权限不足）"}
+    _log_manager.log("[服务器切换] 快捷方式创建成功: {}".format(lnk_path), 20)
     return {
         "success": True,
         "message": "已创建桌面快捷方式",
@@ -858,11 +955,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         or (ConfigManager().get("game_path", ""))
     )
     if not lethe.is_dir():
+        _log_manager.log("[服务器切换] CLI: lethe 目录无效: {}".format(lethe), 30)
         print("error: lethe 目录无效: {}".format(lethe))
         return 2
     if not official.is_dir():
+        _log_manager.log("[服务器切换] CLI: 官服目录无效: {}".format(official), 30)
         print("error: 官服目录无效: {}".format(official))
         return 2
+
+    _log_manager.log(
+        "[服务器切换] CLI 启动同步: server={}, lethe={}, official={}, dry_run={}".format(
+            args.server, lethe, official, args.dry_run
+        ),
+        20,
+    )
 
     sync = ServerSync(
         lethe_dir=lethe,
@@ -877,14 +983,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     try:
         result = sync.run(args.server, dry_run=args.dry_run)
+        _log_manager.log(
+            "[服务器切换] CLI 同步结束: added={}, removed={}, failed={}".format(
+                result["added"], result["removed"], result["failed"]
+            ),
+            20,
+        )
         print("summary: added={} removed={} failed={}".format(
             result["added"], result["removed"], result["failed"]
         ))
         return 0 if result["failed"] == 0 else 1
     except ServerSyncCancelled:
+        _log_manager.log("[服务器切换] CLI 同步已取消", 30)
         print("cancelled")
         return 130
     except ServerSyncError as exc:
+        _log_manager.log("[服务器切换] CLI 同步失败: {}".format(exc), 40)
         print("error: {}".format(exc))
         return 1
 

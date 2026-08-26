@@ -156,7 +156,10 @@ def fing_mod():
     rd.extend(list(mod_path.glob('*.staticmod_disable')))
     rd.extend([i for i in mod_path.glob('*') if i.is_dir() and i.name.endswith('_disable')])
     r = [i.name for i in r]
-    rd = [(i.name).rstrip('_disable') for i in rd]
+    # 注意：必须用 removesuffix 移除字面后缀 _disable，
+    # 不能用 rstrip('_disable')——后者会把 '_disable' 当成字符集合，
+    # 过度截断真实名称（如 coolmod_disable → coolmo），导致禁用态模组无法重新启用。
+    rd = [i.name.removesuffix('_disable') for i in rd]
     return r, rd
 
 def toggle_mod(mod_name: str, enable):

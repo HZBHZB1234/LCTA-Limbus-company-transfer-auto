@@ -152,6 +152,26 @@ class TestModManage:
         assert function_manage.delete_mod('m.json', False) is True
         assert not (mod_path / 'm.json_disable').exists()
 
+    def test_fing_mod_disable_name_not_corrupted(self, mod_path):
+        # 回归：禁用态模组名经 rstrip('_disable') 会过度截断（如 coolmod_disable → coolmo），
+        # 导致前端拿到错误名称、重新启用时找不到真实文件而失败。
+        # 这里验证 removesuffix 仅移除字面后缀、且重新启用成功。
+        (mod_path / 'coolmod_disable').mkdir()      # 真实名为 coolmod（结尾 d 在字符集内）
+        (mod_path / 'm.carra2_disable').write_bytes(b'x')
+        (mod_path / 'MyDir_disable').mkdir()        # 目录模组
+        able, disable = function_manage.fing_mod()
+        assert able == []
+        assert 'coolmod' in disable
+        assert 'm.carra2' in disable
+        assert 'MyDir' in disable
+        # 重新启用应当成功（之前因名称被截断而无法启用）
+        assert function_manage.toggle_mod('coolmod', True) is True
+        assert (mod_path / 'coolmod').exists()
+        assert function_manage.toggle_mod('m.carra2', True) is True
+        assert (mod_path / 'm.carra2').exists()
+        assert function_manage.toggle_mod('MyDir', True) is True
+        assert (mod_path / 'MyDir').exists()
+
     def test_toggle_delete_rebank(self, tmp_path, monkeypatch):
         mod = tmp_path / "mods"
         mod.mkdir()

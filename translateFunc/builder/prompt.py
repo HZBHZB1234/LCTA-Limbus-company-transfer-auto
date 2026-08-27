@@ -14,6 +14,11 @@ _logger = logging.getLogger("LCTA")  # 与 LogManager 一致，确保日志正�
 
 from translateFunc.enums import FileType
 
+try:  # json_repair: 容错解析 LLM 返回的 JSON，提高通过率（可选依赖，缺失时退化为旧修复链）
+    from json_repair import loads as _json_repair_loads
+except ImportError:  # pragma: no cover - 依赖未安装时仍可运行
+    _json_repair_loads = None
+
 
 class PromptTag(Enum):
     """提示词构建中使用的 XML 标签。"""
@@ -637,7 +642,8 @@ class PromptFactory:
     def parse_response(self, text: str, stage: int, prompt_format: str) -> list[dict]:
         """按格式解析 LLM 响应，返回结构化数据列表。
 
-        解析失败时先尝试修复（剥离 markdown 围栏、提取内容、修复常见格式错误），
+        解析失败时先尝试修复（剥离 markdown 围栏、提取内容，并借助
+        json_repair 容错解析修复单引号、缺失引号、NaN、截断等常见问题），
         修复仍失败才返回空列表。
 
         Args:
@@ -764,6 +770,8 @@ class PromptFactory:
         """修复常见 JSON 格式问题后尝试解析。
 
         处理：markdown 代码围栏、周围文本、尾部逗号、控制字符。
+        优先用 json_repair 容错解析（可修复单引号、缺失引号、NaN/Infinity、
+        截断、多余字符等 LLM 常见输出问题），失败再走旧式启发式修复链。
         """
         import json as _json
         import re
@@ -803,21 +811,31 @@ class PromptFactory:
         except _json.JSONDecodeError:
             pass
 
-        # 5. 修复尾部逗号（对象和数组）
+        # 5. json_repair 容错解析（提高通过率：单引号、缺失引号、NaN、
+        #    Infinity、截断输出、多余文本等 LLM 常见问题）
+        if _json_repair_loads is not None:
+            try:
+                repaired = _json_repair_loads(cleaned)
+                if isinstance(repaired, dict):
+                    return repaired
+            except Exception:  # noqa: BLE001 - 修复失败不阻塞后续启发式
+                pass
+
+        # 6. 修复尾部逗号（对象和数组）
         try:
             fixed = re.sub(r',(\s*[}\]])', r'\1', cleaned)
             return _json.loads(fixed)
         except _json.JSONDecodeError:
             pass
 
-        # 6. 放宽控制字符限制
+        # 7. 放宽控制字符限制
         try:
             decoder = _json.JSONDecoder(strict=False)
             return decoder.decode(cleaned)
         except _json.JSONDecodeError:
             pass
 
-        # 7. 修复单引号 JSON（将结构位置的 ' 替换为 "）
+        # 8. 修复单引号 JSON（将结构位置的 ' 替换为 "）
         try:
             # 简单启发式：在 {, [, ,, :, 空白 后的 ' 和 :, ,, }, ], 空白 前的 '
             fixed_sq = re.sub(r"(?<=[\{\[\:,])\s*'|'\s*(?=[\,\}\]\:])", '"', cleaned)
@@ -826,7 +844,7 @@ class PromptFactory:
         except _json.JSONDecodeError:
             pass
 
-        # 8. 修复非标准字面量：NaN → null, Infinity → "Infinity"
+        # 9. 修复非标准字面量：NaN → null, Infinity → "Infinity"
         try:
             fixed_nan = re.sub(r'\bNaN\b', 'null', cleaned)
             fixed_nan = re.sub(r'\b-?Infinity\b', 'null', fixed_nan)
@@ -835,7 +853,7 @@ class PromptFactory:
         except _json.JSONDecodeError:
             pass
 
-        # 9. 修复嵌套转义（\\\\n → \\n, \\\\\" → \\\"）—— 最后手段，可能改变内容
+        # 10. 修复嵌套转义（\\\\n → \\n, \\\\\" → \\\"）—— 最后手段，可能改变内容
         try:
             fixed_esc = cleaned.replace('\\\\\\\\n', '\\\\n')
             fixed_esc = fixed_esc.replace('\\\\\\\\\"', '\\\\\"')

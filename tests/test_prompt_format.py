@@ -942,6 +942,20 @@ class TestRepairEnhancements:
         assert len(result) == 1
         assert result[0]["translation"] == "你好"
 
+    def test_repair_json_missing_quotes(self):
+        """键/值缺失引号（json_repair 容错解析）应可修复。"""
+        text = '{translations: [{id: 1, reasoning: "t", translation: "你好", confidence: high}]}'
+        result = self.pf.parse_response(text, 1, "json_json")
+        assert len(result) == 1
+        assert result[0]["translation"] == "你好"
+
+    def test_repair_json_truncated(self):
+        """截断的输出（json_repair 补全结构）应可修复。"""
+        text = '{"translations": [{"id": 1, "reasoning": "t", "translation": "你好"'
+        result = self.pf.parse_response(text, 1, "json_json")
+        assert len(result) == 1
+        assert result[0]["translation"] == "你好"
+
     def test_repair_xml_namespace_prefix(self):
         text = (
             '<ns:translations>'

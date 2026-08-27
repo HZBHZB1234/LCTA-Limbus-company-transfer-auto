@@ -161,15 +161,24 @@ class StageStrategy:
         try:
             import json as _json
             data = _json.loads(result_text)
-            return data.get("translations", [])
         except _json.JSONDecodeError:
-            lines = result_text.strip().split("\n\n")
-            translations = []
-            for line in lines:
-                line = line.strip()
-                line = line.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
-                translations.append({"id": len(translations) + 1, "translation": line})
-            return translations
+            # 容错解析 LLM 返回的 JSON，失败则按纯文本分行处理
+            data = None
+            try:
+                from json_repair import loads as _json_repair_loads
+                repaired = _json_repair_loads(result_text)
+                data = repaired if isinstance(repaired, dict) else None
+            except Exception:  # noqa: BLE001 - 修复失败按纯文本处理
+                pass
+        if isinstance(data, dict):
+            return data.get("translations", [])
+        lines = result_text.strip().split("\n\n")
+        translations = []
+        for line in lines:
+            line = line.strip()
+            line = line.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+            translations.append({"id": len(translations) + 1, "translation": line})
+        return translations
 
     # ========== 阶段 2：自校验 ==========
 

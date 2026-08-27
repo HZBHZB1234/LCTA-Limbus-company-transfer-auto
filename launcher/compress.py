@@ -32,6 +32,20 @@ def scan_lunartique_data(zip_path: ZipFile, data_folder: str):
     return names
 
 
+def is_lunartique_zip(zip_path: str) -> bool:
+    """判断 zip 是否为 Lunartique 格式模组。
+
+    与 compress_lunartique_mod 转换前置一致：zip 内含同时存在
+    Uninstallation/Installation 的根目录，且 Uninstallation 下至少有一个
+    __data 资源。压缩包损坏/格式不符统一返回 False（由调用方决定兜底行为）。
+    """
+    try:
+        with ZipFile(zip_path, "r") as z:
+            return len(scan_lunartique_data(z, "Uninstallation")) > 0
+    except Exception:
+        return False
+
+
 def compress_lunartique_mod(zip_path: str, output: str):
     with ZipFile(zip_path, "r") as root:
         vanilla_dict = {}

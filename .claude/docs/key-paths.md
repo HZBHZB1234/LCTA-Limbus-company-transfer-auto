@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-23 -->
+<!-- Last updated: 2026-08-26 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -178,9 +178,12 @@ Phase prepare_mod (if enabled):
                                           各步骤间 check_cancel()（cancel_event 触发即中止）
                                          reports stepped progress for cleanup/detection/text/assets/audio
                                         → launcher/patch.py (Unity asset patching)
-                                          1. detect_lunartique_mods   zip→carra2 转换，
+                                          1. detect_lunartique_mods   zip→carra2 转换（先经 compress.is_lunartique_zip
+                                              检测 Uninstallation/Installation 结构），
                                              缓存键=源 zip 文件 sha256（modcache.carra2_convert_dir），
-                                             转换产物复制回模组目录（<zip 名>.carra2）并删除源 zip
+                                             转换产物复制回模组目录（<zip 名>.carra2）并删除源 zip；
+                                              非 Lunartique 格式 zip 直接解压全部内容到模组目录根
+                                              （由后续 json/carra2/bank 各加载阶段按类型消费）并删除源 zip
                                           2. extract_assets           按模组目录 *.carra* 解压+展平，
                                              缓存键=carra2 内容 sha256（modcache.carra2_extract_dir）
                                           3. patch_assets             bundle 重打包缓存，键=

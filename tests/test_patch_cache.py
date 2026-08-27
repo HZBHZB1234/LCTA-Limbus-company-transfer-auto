@@ -103,6 +103,72 @@ def test_detect_skips_disabled_zip(localappdata, tmp_path, monkeypatch):
     assert (mods / "n.zip_disable").exists()  # 禁用 zip 未被删除
 
 
+def test_detect_extracts_non_lunartique_zip(localappdata, tmp_path, monkeypatch):
+    """非 Lunartique 格式 zip 不再转换：全部内容解压到模组目录并删除源 zip。"""
+    import launcher.patch as patch
+
+    mods = tmp_path / "mods"
+    mods.mkdir()
+    zip_path = _write_zip(mods / "plain.zip", {
+        "Acc/Bundle/1.0": b"asset",
+        "data.json": b'{"x": 1}',
+        "cfg/readme.txt": b"hello",
+    })
+
+    calls = []
+    monkeypatch.setattr(patch, "compress_lunartique_mod",
+                        lambda src, dst: calls.append(src))
+
+    patch.detect_lunartique_mods(str(mods))
+
+    assert calls == []                        # 未触发 carra2 转换
+    assert not zip_path.exists()              # 源 zip 已删除
+    assert (mods / "Acc" / "Bundle" / "1.0").read_bytes() == b"asset"
+    assert (mods / "data.json").read_bytes() == b'{"x": 1}'
+    assert (mods / "cfg" / "readme.txt").read_bytes() == b"hello"
+
+
+def test_detect_extracts_zip_with_empty_lunartique_dirs(localappdata, tmp_path, monkeypatch):
+    """含 Uninstallation/Installation 目录但无 __data 的 zip 视为非 Lunartique，走解压。"""
+    import launcher.patch as patch
+
+    mods = tmp_path / "mods"
+    mods.mkdir()
+    zip_path = _write_zip(mods / "fake.zip", {
+        "Root/Uninstallation/notes.txt": b"no data",
+        "Root/Installation/cfg.toml": b"[x]",
+    })
+
+    calls = []
+    monkeypatch.setattr(patch, "compress_lunartique_mod",
+                        lambda src, dst: calls.append(src))
+
+    patch.detect_lunartique_mods(str(mods))
+
+    assert calls == []                        # 未触发 carra2 转换
+    assert not zip_path.exists()
+    assert (mods / "Root" / "Installation" / "cfg.toml").read_bytes() == b"[x]"
+
+
+def test_detect_preserves_invalid_zip(localappdata, tmp_path, monkeypatch):
+    """损坏/非 zip 文件按 error 处理：保留源文件，不转换不解压。"""
+    import launcher.patch as patch
+
+    mods = tmp_path / "mods"
+    mods.mkdir()
+    bad = mods / "bad.zip"
+    bad.write_bytes(b"not a zip at all")
+
+    calls = []
+    monkeypatch.setattr(patch, "compress_lunartique_mod",
+                        lambda src, dst: calls.append(src))
+
+    patch.detect_lunartique_mods(str(mods))
+
+    assert calls == []
+    assert bad.exists()  # 源文件保留，仅记录 error
+
+
 # ═══════════════ extract_assets（解压缓存 + 展平语义） ═══════════════
 
 def test_extract_caches_and_flattens(localappdata, tmp_path):

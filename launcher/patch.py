@@ -53,13 +53,26 @@ def detect_lunartique_mods(mod_zips_root: str) -> None:
     缓存键 = 源 zip 的 sha256：同包重复安装直接命中，跳过耗时的转换。
     转换产物复制回模组目录（<zip 名>.carra2）并删除源 zip，保持旧版数据布局
     （carra2 常驻模组目录，供 extract_assets 按目录扫描）。
+
+    非 Lunartique 格式的 zip（无 Uninstallation/Installation 结构）不再当作
+    carra2 转换，而是把包内全部文件解压到模组目录根，由后续
+    changes/extract_assets/sound 各阶段按类型自动加载；解压成功即删除源 zip，
+    避免每次启动重复解压。
     """
     from launcher.modcache import (carra2_convert_dir, enabled_mod_files,
                                    prune_lru, sha256_file)
+    from launcher.compress import is_lunartique_zip
 
     for mod_zip in enabled_mod_files(mod_zips_root, "*.zip"):
-        _log_manager.log("Compressing lunartique format mod (might take a while!): %s", mod_zip)
+        _log_manager.log("Detecting mod format: %s", mod_zip)
         try:
+            if not is_lunartique_zip(str(mod_zip)):
+                _log_manager.log("* 非 Lunartique 格式，解压到模组目录: %s", mod_zip)
+                with ZipFile(mod_zip) as z:
+                    z.extractall(mod_zips_root)
+                os.remove(mod_zip)
+                continue
+            _log_manager.log("Compressing lunartique format mod (might take a while!): %s", mod_zip)
             digest = sha256_file(mod_zip)
             cached = carra2_convert_dir() / (digest + ".carra2")
             if cached.is_file():

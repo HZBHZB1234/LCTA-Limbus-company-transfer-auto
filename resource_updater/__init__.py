@@ -1,10 +1,9 @@
-"""Limbus Company 官方资源预下载、本地化更新与官服/lethe 资源切换。"""
+"""Limbus Company 官方资源预下载与本地化更新。"""
 
-# 注意：不要在此处导入 server_sync 子模块 —— 桌面快捷方式启动脚本通过
-# `python -c "from resource_updater import server_sync; server_sync.main()"` 运行，
-# 若本包 __init__ 已导入 server_sync，会与 `webutils` 反向导入 `resource_updater.core`
-# 形成循环依赖而失败（详见 core.py 中 ChildProcessJob 的延迟导入说明）。
-# 需要 server_sync 符号时请直接 `from resource_updater.server_sync import ...`。
+# 注意：不要在此包顶层导入会反向依赖 webutils 的模块（如 webutils.process_job），
+# 否则独立入口（`python -c "from resource_updater import ..."`）会因循环导入失败
+# （详见 core.py 中 ChildProcessJob 的延迟导入说明）。
+# 需要符号时请直接 `from resource_updater.<模块> import ...`。
 
 from .core import (
     DownloadCancelled,

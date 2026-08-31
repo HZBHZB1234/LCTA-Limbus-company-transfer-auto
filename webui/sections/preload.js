@@ -67,12 +67,6 @@ async function onSectionLoaded(name) {
                 resourceUpdaterPage.init();
             }
             break;
-        case 'server-switch':
-            console.log('[LCTA] Init section: server-switch');
-            if (typeof serverSwitchPage !== 'undefined') {
-                serverSwitchPage.init();
-            }
-            break;
         case 'download':
             console.log('[LCTA] Init section: download');
             break;

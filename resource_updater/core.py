@@ -240,7 +240,7 @@ class Aria2Client:
         # ChildProcessJob 延迟导入：webutils 反向依赖 resource_updater.core
         # （function_aria2_downloader 在模块顶层 from resource_updater.core import
         # Aria2Error），若在 core 顶层导入 webutils 会形成循环导入，导致
-        # `python -m resource_updater.server_sync` 等独立入口导入失败。
+        # `python -m resource_updater.service` 等独立入口导入失败。
         from webutils.process_job import ChildProcessJob
         self._job = ChildProcessJob()
         self._job.assign(self.process.pid)

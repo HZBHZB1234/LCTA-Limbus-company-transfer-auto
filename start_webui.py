@@ -211,6 +211,44 @@ def _cleanup_motw_on_startup():
         return 0
 
 
+def _migrate_legacy_lethe_shortcut():
+    """启动早期迁移旧版「服务器切换」遗留快捷方式。
+
+    服务器切换功能已移除：旧版「开启 lethe 私服」桌面快捷方式指向
+    `%LOCALAPPDATA%/LCTA/resource-updater/server_switch/launch_lethe.cmd`
+    （旧脚本先同步 lethe 资源再启动私服）。server_sync.py 删除后该脚本会静默
+    失败并直接启动游戏，行为误导；此处把仍存在的旧脚本重写为弹窗提示，
+    引导用户前往 github.com/HZBHZB1234/KeepCachedVersions 获取更好的
+    服务器切换插件。桌面 .lnk 无需改动（仍指向同一脚本路径）。
+
+    经 importlib 按文件路径直接加载 legacy_lethe_shortcut 模块（纯标准库），
+    避免触发 webutils/resource_updater 的重型第三方导入。
+    """
+    try:
+        import importlib.util
+        module_path = (
+            Path(__file__).resolve().parent
+            / 'resource_updater' / 'legacy_lethe_shortcut.py'
+        )
+        if not module_path.exists():
+            return False
+        spec = importlib.util.spec_from_file_location(
+            '_lcta_legacy_lethe_shortcut', module_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        migrated = bool(module.migrate_legacy_lethe_shortcut())
+        if migrated:
+            _log = Path(os.getcwd()) / 'logs' / 'app.log'
+            _log.parent.mkdir(exist_ok=True)
+            with open(_log, '+a' if _log.exists() else '+w', encoding='utf-8') as f:
+                f.write("检测到旧版「服务器切换」快捷方式启动脚本，已迁移为弹窗提示（功能迁往 github.com/HZBHZB1234/KeepCachedVersions）\n")
+        return migrated
+    except Exception as e:
+        print(f"迁移 lethe 快捷方式失败: {e}")
+        return False
+
+
 def init_env():
     """初始化环境变量"""
     os.environ['path_'] = str(get_resource_path())
@@ -238,6 +276,13 @@ def init_env():
         _cleanup_motw_on_startup()
     except Exception as e:
         print(f"清除互联网标记失败: {e}")
+
+    # 迁移旧版「服务器切换」遗留桌面快捷方式（功能已移除，弹窗引导用户
+    # 前往 KeepCachedVersions 插件仓库）；无旧脚本时零开销跳过。
+    try:
+        _migrate_legacy_lethe_shortcut()
+    except Exception as e:
+        print(f"迁移 lethe 快捷方式失败: {e}")
 
 def start_webui():
     """启动PyWebGUI界面"""

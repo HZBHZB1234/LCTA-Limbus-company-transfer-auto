@@ -243,7 +243,6 @@ js_files = [
     'js/init.js',
     'js/cdn.js',
     'js/resource-updater.js',
-    'js/server-switch.js',
     'js/risk-gate.js',
     'js/speed.js',
     'js/input-bypass.js',

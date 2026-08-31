@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-08-26 -->
+<!-- Last updated: 2026-09-01 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -975,32 +975,23 @@ Build path: `build.ps1` and `.github/workflows/release.yml` pin aria2 1.37.0, re
 
 Files: `resource_updater/core.py`, `resource_updater/service.py`, `resource_updater/web_api.py`, `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `webui/css/layout-extras.css`, `webui/app.py`, `webui/sections/launcher-config.html`, `launcher/main.py`, `config_default.json`, `config_check.json`, `build.ps1`, `.github/workflows/release.yml`
 
-## 15A. 官服 ⇄ lethe 服务器切换
+## 15A. 服务器切换（已移除）→ 遗留快捷方式迁移
 
 ```
-配置页（纯配置，无手动切换控件）:
-  Sidebar 「服务器切换」页（lethe 路径浏览/检测/候选、发送快捷方式；
-  Launcher 集成开关位于 Launcher 配置页「更新集成」的「开启官服前自动恢复
-  官服资源」，锚点 goAndShow('launcher-config', 'lc-card-server-switch')）
-    → webui/sections/server-switch.html + js/server-switch.js
-    → webui/app.py LCTA_API.server_switch_*()
-    → resource_updater/web_api.py ServerSwitchAPI
-      → probe_lethe_dir(): resource_updater/server_sync.py _s_token_from_settings
-      → save_options(): save_server_switch_options()
-      → create_shortcut(lethe_dir): create_lethe_shortcut()
-          生成 %LOCALAPPDATA%/LCTA/resource-updater/server_switch/launch_lethe.cmd
-          （先 `-m resource_updater.server_sync --server lethe ...` 同步，再启动
-          lethe 分发包 LimbusCompany.exe）+ PowerShell WScript.Shell 建桌面 .lnk
+「服务器切换」功能（官服 ⇄ lethe 私服资源同步、Launcher 官服资源恢复、
+桌面「开启 lethe 私服」快捷方式）已整体移除，迁往独立插件仓库
+github.com/HZBHZB1234/KeepCachedVersions。
 
-Launcher path（仅用于开启官服时恢复官服资源）:
-  launcher/main.py _resource_update_handler
-    → resource_updater/service.py run_launcher_server_restore()
-      当 launcher.server_switch.enabled 且两目录有效：
-      ServerSync.run('official') 把共享缓存恢复到官服一致状态（官服独有补下载、
-      lethe 独有移除），再执行原有 run_launcher_resource_update() 预下载
+遗留迁移（启动早期，纯标准库）:
+  start_webui.py init_env → _migrate_legacy_lethe_shortcut()
+    → resource_updater/legacy_lethe_shortcut.py migrate_legacy_lethe_shortcut()
+      若存在 %LOCALAPPDATA%/LCTA/resource-updater/server_switch/launch_lethe.cmd
+      （旧快捷方式指向的脚本，先同步资源再启动私服 exe）则重写为弹窗提示：
+      写 UTF-8 BOM 的 lethe_shortcut_notice.ps1（PowerShell MessageBox，Yes
+      打开 GitHub 页面）→ .cmd 仅调用该 .ps1。桌面 .lnk 无需改动。
 ```
 
-Files: `resource_updater/server_sync.py`, `resource_updater/service.py`, `resource_updater/web_api.py`, `webui/sections/server-switch.html`, `webui/js/server-switch.js`, `webui/guide/server-switch.md`, `webui/index.html`, `webui/sections/preload.js`, `webui/sections/launcher-config.html`, `webui/js/core.js`, `webui/js/utils.js`, `launcher/main.py`, `config_default.json`, `config_check.json`, `.github/InitCode.py`
+Files: `resource_updater/legacy_lethe_shortcut.py`, `start_webui.py`
 
 ## 16. Metadata 恢复（IL2CPP metadata 解密恢复，v2 全自动管线）
 

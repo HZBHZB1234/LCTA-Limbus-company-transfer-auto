@@ -140,4 +140,32 @@ def validate_standard(std: bytes, solution: dict, metadata: bytes | None = None,
         gates.append({"name": "受保护节解密结构门", "passed": prot_ok,
                       "evidence": ", ".join(prot_ev)})
 
+    # 5b) attributeDataRange 内容门：{token u32, startOffset u32} 单调数组。
+    # 09-03 版 header 槽位/字段序漂移曾致拼装链尾部偏差 2920B（range 起点落入
+    # attributeData、Il2CppDumper dummy dll 读 range 报错），此门做回归防护：
+    # token 高字节 ∈ token 集合、offset 列单调、末条 start ≈ attributeData 大小。
+    ar_ent = by_name.get("attributeDataRange")
+    ad_ent = by_name.get("attributeData")
+    range_ok = True
+    range_ev = "节缺失/尺寸异常或记录数过少（<1024，非真实游戏规模）"
+    nsamp = (ar_ent["size"] // 8) if ar_ent else 0
+    if (ar_ent and ad_ent and nsamp >= 1024 and ar_ent["size"] % 8 == 0
+            and ad_ent["size"] > 0):
+        nsamp = min(nsamp, 20000)
+        recs = struct.unpack_from(f"<{nsamp * 2}I", std, ar_ent["offset"])
+        toks = recs[0::2]
+        offs = recs[1::2]
+        tok_ok = sum(1 for t in toks if (t >> 24) in (2, 4, 6, 8, 0x14, 0x17, 0x20))
+        mono = sum(1 for a, b in zip(offs, offs[1:]) if a <= b)
+        last_start = struct.unpack_from("<I", std,
+                                        ar_ent["offset"] + ar_ent["size"] - 4)[0]
+        ratio = last_start / ad_ent["size"] if ad_ent["size"] else 0.0
+        range_ev = (f"tok={tok_ok}/{nsamp} mono={mono}/{nsamp - 1} "
+                    f"lastStart={last_start}/{ad_ent['size']}({ratio:.3f})")
+        range_ok = (tok_ok * 100 >= nsamp * 90
+                    and mono >= (nsamp - 1) * 98 // 100
+                    and 0.85 <= ratio <= 1.05)
+    gates.append({"name": "attributeDataRange 内容门（token/start 单调数组）",
+                  "passed": range_ok, "evidence": range_ev})
+
     return gates

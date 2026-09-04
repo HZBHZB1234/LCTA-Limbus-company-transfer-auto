@@ -15,6 +15,8 @@
 3. 逐间隙求解：槽位 rec 匹配条目 + padding（|logical - phys| ≤ MAX_ADJ），
    完成排序 = (内容分, -Σpads, -Σ|adj|) 字典序最大；跨间隙回溯。
 4. 零尺寸节 snap 到 ≥ logical 的最小链边界。
+5. attributeData/attributeDataRange 内容重锚：以 range 表 {token,start} 单调
+   数组强签名为准校正拼装偏差（09-03 版尾部链漂移 2920B 的回归防护）。
 """
 
 from __future__ import annotations
@@ -29,6 +31,132 @@ PAD_MAX = 8
 SCORE_MONO_SIZE = 1 << 20      # 单调列评分的大小上限（避免大节读取开销）
 SCORE_TEXT_SIZE = 4 << 20
 SCORE_MONO_MIN = 0.95
+
+
+# ---- 自定义属性节内容重锚（attributeData / attributeDataRange） -------------
+# attributeDataRange = {token u32, startOffset u32} 单调数组（v29+）。遇 header
+# 槽位/字段序漂移导致拼装链尾部偏差时（如 09-03：attributeData 截短 2920B、
+# attributeDataRange 起点落入 attributeData 内部），以该强签名为准重锚，
+# 否则 Il2CppDumper dummy dll 读 attributeDataRanges 得到错乱 range 而报错。
+
+RANGE_TOKEN_HIGH = (0x02, 0x04, 0x06, 0x08, 0x14, 0x17, 0x20)  # TypeDef/Field/Method/Param/Event/Property/...
+
+
+def _range_token_ok(tok: int) -> bool:
+    return (tok >> 24) in RANGE_TOKEN_HIGH
+
+
+def scan_attribute_data_range(metadata: bytes, lo: int, count: int,
+                              ad_size: int) -> tuple[int, int] | None:
+    """在 [lo, EOF) 中定位真实 attributeDataRange 数组。
+
+    约束：count 条 8 字节记录；startOffset 单调不减、首条 ≤ 8、
+    max(startOffset) ≥ 0.8×attributeData 声明大小（实际数组几乎充满 blob）；
+    token 高字节 ∈ token 集合（≥97%）。未命中返回 None。
+
+    注意：attributeData 总长未必是 8 的倍数（09-03 版为奇数 ×8 +4），
+    数组起点相对 attributeData 起点可能错位 4 字节，因此按 4 字节步进
+    扫描，覆盖两种 8 字节奇偶（真值数组 startOffset 首条必为 0）。"""
+    best = None
+    i = lo
+    end = len(metadata)
+    while i + 8 <= end:
+        tok, start = struct.unpack_from("<II", metadata, i)
+        if start > 8 or not _range_token_ok(tok):
+            i += 4
+            continue
+        prev = start
+        ok = 0
+        mx = start
+        run = 0
+        while run < count + 8:
+            p = i + run * 8
+            if p + 8 > end:
+                break
+            t2, s2 = struct.unpack_from("<II", metadata, p)
+            if s2 < prev:
+                break
+            prev = s2
+            if s2 > mx:
+                mx = s2
+            if _range_token_ok(t2):
+                ok += 1
+            run += 1
+        if (run < count - 2 or ok * 100 < (count - 2) * 97
+                or mx < ad_size * 0.8):
+            i += 4
+            continue
+        score = (-abs(run - count)
+                 - abs(mx - ad_size) / max(1, ad_size) * 40.0
+                 - start)
+        if best is None or score > best[0]:
+            best = (score, i, mx)
+            i += run * 8
+            continue
+        i += 4
+    return None if best is None else (best[1], best[2])
+
+
+def reanchor_custom_attributes(metadata: bytes, solution: dict,
+                               by_index: dict, names: list[str],
+                               version: int) -> list[str]:
+    """按 attributeDataRange 内容强签名重锚 attributeData/attributeDataRange。
+
+    attributeData/attributeDataRange 非受保护节（数据明文），拼装链可能因本版
+    header 槽位/字段序漂移而放错边界（09-03 版：range 起点早 2920B、
+    attributeData 截短 2920B）。这里：attributeData.size 顺延到真实数组起点；
+    range 及后续各节 physical 整体平移 Δ。旧版本 Δ=0 → 恒等操作，无 review。
+    """
+    if version < 29:
+        return []
+    notes: list[str] = []
+    sec_ad = solution["sections"].get("attributeData")
+    sec_ar = solution["sections"].get("attributeDataRange")
+    if sec_ad is None or sec_ar is None:
+        return notes
+    entry_ad = by_index[sec_ad["custom_entry_index"]]
+    entry_ar = by_index[sec_ar["custom_entry_index"]]
+    ev_ad = solution["evidence"].get("attributeData", {})
+    ev_ar = solution["evidence"].get("attributeDataRange", {})
+    ad_phys = ev_ad.get("physical",
+                        entry_ad["offset"] + sec_ad["physical_offset_adjustment"])
+    ar_phys = ev_ar.get("physical",
+                        entry_ar["offset"] + sec_ar["physical_offset_adjustment"])
+    count = entry_ar["count"]
+    # 真实游戏的 attributeDataRange 记录数恒在数千以上；合成/极小 fixture
+    # （几到几十条随机字节）不做重锚，避免误报。
+    if count < 1024 or entry_ad["size"] <= 0 or ar_phys <= ad_phys:
+        return notes
+    found = scan_attribute_data_range(metadata, ad_phys, count, entry_ad["size"])
+    if found is None:
+        notes.append("attributeDataRange 内容扫描未命中强签名：两节边界不可硬校验，"
+                     "请人工复核（requires_review）")
+        return notes
+    pos, mx = found
+    delta = pos - ar_phys
+    if delta == 0:
+        return notes                     # 无偏差：恒等
+    if abs(delta) > MAX_ADJ:
+        notes.append(f"attributeDataRange 重锚偏差 Δ={delta:+d} 超 MAX_ADJ，"
+                     f"拒绝自修（requires_review）")
+        return notes
+    entry_ad["size"] += delta            # attributeData 顺延到真实数组起点
+    sec_ar["physical_offset_adjustment"] += delta
+    ev_ar["physical"] = pos
+    idx_range = names.index("attributeDataRange")
+    for nm in names[idx_range + 1:]:     # 后续各节 physical 整体平移 Δ
+        sec = solution["sections"].get(nm)
+        ev = solution["evidence"].get(nm)
+        if sec is None:
+            continue
+        if ev and "physical" in ev:
+            ev["physical"] += delta
+        sec["physical_offset_adjustment"] += delta
+    notes.append(
+        f"attributeData/attributeDataRange 内容重锚：range 物理 "
+        f"0x{ar_phys:X}→0x{pos:X}（Δ={delta:+d}）；attributeData size "
+        f"{entry_ad['size'] - delta}→{entry_ad['size']}（数组 maxStart={mx}）")
+    return notes
 
 
 class SolveError(RuntimeError):
@@ -429,6 +557,8 @@ def solve(metadata: bytes, profile: dict, version: int = 39) -> dict:
     missing = [n for n in names if n not in solution["sections"]]
     if missing:
         review.append(f"缺失节：{missing}")
+
+    review += reanchor_custom_attributes(metadata, solution, by_index, names, version)
 
     solution["review"] = review
     return solution

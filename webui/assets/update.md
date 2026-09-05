@@ -1,4 +1,5 @@
 ## v5.0.3版本更新内容
+- 移除「自定义加载页CG」功能的所有 UI 入口：侧边栏「加载页 CG」导航按钮、首页「自定义加载页CG」快捷入口卡片与一键配置提示文案中的相关提及一并删除；功能实现代码（页面控制器、后端接口与存档/贴图处理逻辑）完整保留，后续如需恢复可随时重新接回入口
 - 修复模组加载器把模组目录内所有 `.zip` 一律按 Lunartique 格式转换的问题：转换前先经 `compress.is_lunartique_zip` 检测 zip 是否含 `Uninstallation/Installation` 结构（`Uninstallation` 下存在 `__data` 资源）。非 Lunartique 格式的 zip（如直接打包上传的 carra2/bank/json 合集）不再走耗时转换，改为把包内全部文件解压到模组目录根，由后续 json/carra2/bank 各加载阶段按类型自动消费（同一次启动即生效），解压成功后删除源 zip（避免每次启动重复解压）；损坏/非 zip 文件仍保留并仅记录 error
 - 修复模组管理器「禁用后无法重新启用」的问题：模组列表对禁用态模组名（带 `_disable` 后缀）做名称还原时误用了 `str.rstrip('_disable')`，该方法把 `_disable` 当作字符集合而非字面后缀，会过度截断真实名称（如 `coolmod_disable` → `coolmo`、`table_disable` → `t`）。前端据此拿到错误名称，重新启用时找不到真实文件而失败（仅影响名称末尾字符属于 `_disabl` 集合的「部分」模组）。现改为 `str.removesuffix('_disable')` 仅移除字面后缀，禁用态模组可正常重新启用与删除
 - 修复 aria2c 孤儿进程：Launcher 工作模式与 WebUI 资源更新页下载资源时启动的 aria2c 子进程，此前仅在正常 `stop()`（资源更新 `finally` / 下载器窗口关闭 / atexit）路径下回收；在 WebUI 资源更新跑在守护线程、关闭主窗口被强杀，或进程被硬杀/崩溃等情况下 atexit 与 `finally` 均不执行，会残留 aria2c 孤儿进程。现通过 Windows Job Object（`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`）把 aria2c 绑定到父进程寿命，父进程以任何方式退出时由内核自动杀死子进程；同时对 `resource_updater` 的 `Aria2Client` 增加模块级实例注册表 + atexit 兜底停止，覆盖守护线程被强杀与非 Windows 场景

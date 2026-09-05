@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-09-01 -->
+<!-- Last updated: 2026-09-05 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -817,7 +817,7 @@ Files: `webui/js/features.js`, `webui/app.py`, `webutils/drop/`, `webutils/funct
                    webutils/function_steam_launcher.py set_steam_launch_options()
                    备份 localconfig.vdf.lcta.bak → 写 LaunchOptions
   ProgressModal 报表；风险（speed/input_bypass/cheat）与需手动选择
-  （cg CGI / config API / download 汉化来源）不在此列，仅为跳转入口
+  （config API / download 汉化来源）不在此列，仅为跳转入口（cg 快捷入口已于 2026-09-05 移除）
 ```
 
 Files: `webui/sections/dashboard.html`, `webui/js/features.js`, `webui/js/core.js`（configKeyMap）, `webui/js/modals.js`（ProgressModal/showConfirm）, `webutils/function_steam_launcher.py`
@@ -1093,6 +1093,8 @@ Files: `webui/sections/resource-updater.html`, `webui/js/resource-updater.js`, `
 
 
 ## 18. 加载页 CG 替换（锁定 + 贴图替换）
+
+> **2026-09-05：该功能的全部 UI 入口已移除**（侧边栏 `#cg-btn` 导航按钮、首页「自定义加载页CG」快捷卡片、一键配置提示文案提及）。代码完整保留（本节调用链、cg.js/cg.html/后端 CgMixin/webutils/cg 均未改动），当前无入口可达；恢复需重新加入口标记。
 
 原理（逆向自 GameAssembly.dll，详见 LimbusDecompile/docs/LOADING_CG_INJECT.md）:
   存档 save_slot_<id>.json = Base64(AES-256-CBC+PKCS7(JsonUtility JSON))

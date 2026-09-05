@@ -176,20 +176,31 @@ Phase prepare_mod (if enabled):
       pipeline.emit(PHASE_PREPARE_MOD)  → launcher/game_launch.py prepare_mod(
                                          steam_argv, progress_callback, cancel_event)，
                                           各步骤间 check_cancel()（cancel_event 触发即中止）
-                                         reports stepped progress for cleanup/detection/text/assets/audio
-                                        → launcher/patch.py (Unity asset patching)
+                                          线程数读 launcher.work.mod_threads（clamp 1-10，默认 5）
+                                         reports stepped progress for cleanup/detection/text/assets/audio，
+                                         三个重阶段经 stage_progress(start, end, text) 按
+                                         (done, total) 在阶段百分比区间内推进子进度
+                                        → launcher/patch.py (Unity asset patching;
+                                          threads>1 且任务数>1 时 ThreadPoolExecutor 并行，
+                                          任务经 launcher/modstatus.py 注册供 GUI「活跃任务」卡片
+                                          300ms 轮询渲染)
                                           1. detect_lunartique_mods   zip→carra2 转换（先经 compress.is_lunartique_zip
                                               检测 Uninstallation/Installation 结构），
                                              缓存键=源 zip 文件 sha256（modcache.carra2_convert_dir），
                                              转换产物复制回模组目录（<zip 名>.carra2）并删除源 zip；
                                               非 Lunartique 格式 zip 直接解压全部内容到模组目录根
-                                              （由后续 json/carra2/bank 各加载阶段按类型消费）并删除源 zip
+                                              （由后续 json/carra2/bank 各加载阶段按类型消费）并删除源 zip；
+                                              各 zip 线程池独立处理，单包失败记录后继续
                                           2. extract_assets           按模组目录 *.carra* 解压+展平，
-                                             缓存键=carra2 内容 sha256（modcache.carra2_extract_dir）
+                                             缓存键=carra2 内容 sha256（modcache.carra2_extract_dir）；
+                                             仅并行缓存未命中的解压+展平，拷贝到资源根仍按
+                                             体积降序串行（保持同名目标路径合并顺序语义）
                                           3. patch_assets             bundle 重打包缓存，键=
                                              原版 __data xxh128 + 模组目录 tree_digest + packer(lz4)
                                              （modcache.bundle_patch_dir/<digest>/__data + meta.json），
-                                             bundle.save(packer="lz4") 失败回退 packer="original"
+                                             bundle.save(packer="lz4") 失败回退 packer="original"；
+                                             各 bundle_root 独立并行，单 bundle 失败回滚，
+                                             全部结束后重抛第一个异常
                                         → launcher/sound.py (sound replacement)
                                           enabled_mod_files() 过滤 _disable 文件/目录 →
                                           等游戏校验后替换 .bank → bankmod.apply_rebanks(mod_folder)

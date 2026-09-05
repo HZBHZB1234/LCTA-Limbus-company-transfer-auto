@@ -38,6 +38,15 @@ def _do_cleanup_assets():
         _log_manager.log_error(e)
 
 
+def _mod_threads() -> int:
+    """模组处理线程数（launcher.work.mod_threads，1-10，默认 5）。"""
+    try:
+        threads = int(ConfigManager().get("launcher.work.mod_threads", 5))
+    except (TypeError, ValueError):
+        threads = 5
+    return max(1, min(10, threads))
+
+
 def prepare_mod(
     steam_argv: str,
     progress_callback: Optional[Callable[[int, str], None]] = None,
@@ -45,6 +54,7 @@ def prepare_mod(
 ) -> None:
     global _mod_initialized, _steam_argv
     _steam_argv = steam_argv
+    threads = _mod_threads()
 
     def report(percent: int, text: str) -> None:
         if progress_callback is not None:
@@ -52,6 +62,17 @@ def prepare_mod(
                 progress_callback(percent, text)
             except Exception:
                 pass
+
+    def stage_progress(start: int, end: int, text: str):
+        """把多线程阶段的 (done, total) 映射进该阶段的百分比区间。"""
+
+        def _cb(done: int, total: int) -> None:
+            if total <= 0:
+                return
+            percent = int(start + (end - start) * min(done, total) / total)
+            report(percent, f"{text} ({done}/{total})")
+
+        return _cb
 
     def check_cancel() -> None:
         if cancel_event is not None and cancel_event.is_set():
@@ -63,6 +84,7 @@ def prepare_mod(
     import launcher.changes as changes
 
     _log_manager.log("Limbus Mod Loader version: v1.8")
+    _log_manager.log("Mod loader threads: %d", threads)
 
     report(5, "正在定位模组目录...")
     check_cancel()
@@ -86,7 +108,9 @@ def prepare_mod(
     _log_manager.log("Detecting lunartique mods")
     report(28, "正在检测 Lunartique 模组...")
     check_cancel()
-    patch.detect_lunartique_mods(mod_zips_root_path)
+    patch.detect_lunartique_mods(
+        mod_zips_root_path, threads=threads,
+        progress_cb=stage_progress(28, 42, "正在检测 Lunartique 模组"))
     _log_manager.log("Patching text data")
     report(42, "正在应用模组文本补丁...")
     check_cancel()
@@ -95,11 +119,15 @@ def prepare_mod(
     _log_manager.log("Extracting mod assets to %s", tmp_asset_root)
     report(58, "正在解压模组资源...")
     check_cancel()
-    patch.extract_assets(tmp_asset_root, mod_zips_root_path)
+    patch.extract_assets(
+        tmp_asset_root, mod_zips_root_path, threads=threads,
+        progress_cb=stage_progress(58, 74, "正在解压模组资源"))
     _log_manager.log("Backing up data and patching assets....")
     report(74, "正在备份并写入游戏资源...")
     check_cancel()
-    patch.patch_assets(tmp_asset_root)
+    patch.patch_assets(
+        tmp_asset_root, threads=threads,
+        progress_cb=stage_progress(74, 82, "正在备份并写入游戏资源"))
     patch.shutil.rmtree(tmp_asset_root)
     report(82, "正在应用静态数据 Mod...")
     check_cancel()

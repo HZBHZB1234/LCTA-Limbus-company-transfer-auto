@@ -255,7 +255,7 @@ def test_patch_assets_lz4_and_cache(localappdata, tmp_path, monkeypatch):
     monkeypatch.setattr(patch, "UnityPy",
                         type("U", (), {"load": staticmethod(lambda p: fake_env)})())
 
-    patch.patch_assets(str(asset_root), lambda: [str(bundle_root)])
+    patch.patch_assets(str(asset_root), bundle_data=lambda: [str(bundle_root)])
     assert (bundle_root / "__data").read_bytes() == b"LZ4DATA"  # 优先 LZ4 格式
     assert (bundle_root / "__original").exists()
 
@@ -270,7 +270,7 @@ def test_patch_assets_lz4_and_cache(localappdata, tmp_path, monkeypatch):
         return orig_save(b, packer)
 
     fake_env._bundle.save = counting_save
-    patch.patch_assets(str(asset_root), lambda: [str(bundle_root)])
+    patch.patch_assets(str(asset_root), bundle_data=lambda: [str(bundle_root)])
     assert save_calls == []  # 缓存命中，未调用 save
     assert (bundle_root / "__data").read_bytes() == b"LZ4DATA"
 
@@ -287,7 +287,7 @@ def test_patch_assets_skips_without_mod_dir(localappdata, tmp_path, monkeypatch)
     monkeypatch.setattr(patch, "get_bundle_file", lambda env: env._bundle)
     monkeypatch.setattr(patch, "UnityPy", type("U", (), {"load": staticmethod(lambda p: None)})())
 
-    patch.patch_assets(str(asset_root), lambda: [str(bundle_root)])
+    patch.patch_assets(str(asset_root), bundle_data=lambda: [str(bundle_root)])
     assert (bundle_root / "__data").read_bytes() == b"ORIGINAL_DATA"  # 未动
     assert not (bundle_root / "__original").exists()
 

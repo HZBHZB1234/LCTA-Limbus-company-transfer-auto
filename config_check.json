@@ -137,7 +137,8 @@
             "input_bypass_key_real": "str",
             "input_bypass_mouse_synth": "str",
             "input_bypass_key_synth": "str",
-            "input_bypass_volatility": "str"
+            "input_bypass_volatility": "str",
+            "mod_threads": "int"
         },
         "resource_update": {
             "enabled": "bool",

@@ -40,6 +40,7 @@ from System.Windows.Forms import (
 
 from globalManagers.ConfigManager import ConfigManager
 from globalManagers.LogManager import LogManager
+from launcher import modstatus
 from launcher.pipeline import (
     PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN,
     PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
@@ -157,6 +158,14 @@ class LauncherProgressWindow:
         self._visible_phases = list(_PHASE_ORDER)
         self._current_phase = PHASE_INIT
         self._log_expanded = False
+        # 活跃任务卡片（多线程模组准备，移植自 FaustLoader 新线程适配 GUI）：
+        # 仅启用 MOD 支持时创建，窗口与布局相应加高
+        self._has_tasks_card = bool(ConfigManager().get("launcher.work.mod", False))
+        self._tasks_header: Optional[WinForms.Label] = None
+        self._tasks_panel: Optional[WinForms.Panel] = None
+        self._tasks_rows: Dict[str, Dict] = {}
+        self._tasks_timer = None
+        self._spinner_flip = False
         self._collapsed_size = Size(920, 650)
         self._expanded_size = Size(920, 860)
         self._launch_start_time = time.time()
@@ -178,6 +187,17 @@ class LauncherProgressWindow:
 
     def _create_form(self):
         WinForms.Application.EnableVisualStyles()
+
+        # 布局纵向常量：有活跃任务卡片时其下方卡片整体下移、窗口加高
+        # （卡片高 120 + 间距 12；无卡片时与旧布局逐像素一致）
+        tasks_h = 120 if self._has_tasks_card else 0
+        tasks_offset = tasks_h + (12 if tasks_h else 0)
+        summary_y = 236 + tasks_offset
+        btn_y = 550 + tasks_offset
+        footer_y = btn_y + 46
+        log_y = btn_y + 70
+        self._collapsed_size = Size(920, btn_y + 100)
+        self._expanded_size = Size(920, log_y + 240)
 
         form = WinForms.Form()
         form.Text = "LCTA 启动器"
@@ -280,7 +300,7 @@ class LauncherProgressWindow:
 
         content = WinForms.Panel()
         content.Location = Point(258, 106)
-        content.Size = Size(638, 430)
+        content.Size = Size(638, summary_y + 194)
         content.BackColor = _COLOR_BG_FORM
         form.Controls.Add(content)
 
@@ -377,8 +397,36 @@ class LauncherProgressWindow:
         progress_card.Controls.Add(overall)
         self._overall_progress_bar = overall
 
+        if self._has_tasks_card:
+            tasks_card = WinForms.Panel()
+            tasks_card.Location = Point(0, 236)
+            tasks_card.Size = Size(638, tasks_h)
+            tasks_card.BackColor = _COLOR_CARD
+            tasks_card.BorderStyle = BorderStyle.FixedSingle
+            content.Controls.Add(tasks_card)
+
+            tasks_title = WinForms.Label()
+            tasks_title.Text = "活跃任务 (0)"
+            tasks_title.Location = Point(18, 10)
+            tasks_title.Size = Size(360, 20)
+            tasks_title.Font = Font("Microsoft YaHei UI", 10, FontStyle.Bold)
+            tasks_title.ForeColor = _COLOR_FG_LIGHT
+            tasks_card.Controls.Add(tasks_title)
+            self._tasks_header = tasks_title
+
+            tasks_list = WinForms.Panel()
+            tasks_list.Location = Point(14, 34)
+            tasks_list.Size = Size(606, tasks_h - 46)
+            tasks_list.BackColor = _COLOR_BG_DARK
+            tasks_list.BorderStyle = BorderStyle.FixedSingle
+            tasks_list.AutoScroll = True
+            tasks_card.Controls.Add(tasks_list)
+            self._tasks_panel = tasks_list
+
+            self._start_tasks_timer()
+
         summary_card = WinForms.Panel()
-        summary_card.Location = Point(0, 236)
+        summary_card.Location = Point(0, summary_y)
         summary_card.Size = Size(638, 194)
         summary_card.BackColor = _COLOR_CARD
         summary_card.BorderStyle = BorderStyle.FixedSingle
@@ -411,7 +459,7 @@ class LauncherProgressWindow:
 
         btn = WinForms.Button()
         btn.Text = "查看详细日志  ▾"
-        btn.Location = Point(18, 550)
+        btn.Location = Point(18, btn_y)
         btn.Size = Size(700, 38)
         btn.FlatStyle = FlatStyle.Flat
         btn.BackColor = _COLOR_CARD_ALT
@@ -426,7 +474,7 @@ class LauncherProgressWindow:
 
         action = WinForms.Button()
         action.Text = "取消启动"
-        action.Location = Point(734, 550)
+        action.Location = Point(734, btn_y)
         action.Size = Size(162, 38)
         action.FlatStyle = FlatStyle.Flat
         action.BackColor = Color.FromArgb(116, 49, 54)
@@ -439,14 +487,14 @@ class LauncherProgressWindow:
 
         footer = WinForms.Label()
         footer.Text = "关闭窗口时会询问是否中止当前任务；游戏运行后可选择仅关闭 Launcher。"
-        footer.Location = Point(20, 596)
+        footer.Location = Point(20, footer_y)
         footer.Size = Size(870, 20)
         footer.Font = Font("Microsoft YaHei UI", 8)
         footer.ForeColor = _COLOR_FG_MUTED
         form.Controls.Add(footer)
 
         log_panel = WinForms.Panel()
-        log_panel.Location = Point(18, 620)
+        log_panel.Location = Point(18, log_y)
         log_panel.Size = Size(878, 190)
         log_panel.BackColor = _COLOR_CARD
         log_panel.BorderStyle = BorderStyle.FixedSingle
@@ -714,6 +762,7 @@ class LauncherProgressWindow:
 
         def _do():
             self._stop_uptime_timer()
+            self._stop_tasks_timer()
 
             if self._form is not None and not self._form.IsDisposed:
                 self._form.Text = "LCTA 启动器 \u2014 游戏已退出"
@@ -906,6 +955,107 @@ class LauncherProgressWindow:
                 f"游戏进程 PID: {pid}    已运行 {h:02d}:{m:02d}:{s:02d}\n"
                 f"快捷操作:  Ctrl+S 切换加速  |  Ctrl+Shift+S 倍率选择窗口"
             )
+
+    # ---------- 活跃任务列表（多线程模组准备） ----------
+
+    def _start_tasks_timer(self):
+        try:
+            import System.Windows.Forms as WFTimer
+            self._tasks_timer = WFTimer.Timer()
+            self._tasks_timer.Interval = 300
+            self._tasks_timer.add_Tick(EventHandler(self._on_tasks_tick))
+            self._tasks_timer.Start()
+        except Exception:
+            pass
+
+    def _stop_tasks_timer(self):
+        if self._tasks_timer is not None:
+            try:
+                self._tasks_timer.Stop()
+                self._tasks_timer.Dispose()
+            except Exception:
+                pass
+            self._tasks_timer = None
+
+    def _spinner_char(self, status: str) -> str:
+        # running 行按 tick 翻转 ●/○，让用户感知线程仍在动；waiting 为队列中
+        if status == "running":
+            return "\u25cf" if self._spinner_flip else "\u25cb"
+        return "\u00b7"
+
+    def _create_task_row(self) -> Dict:
+        panel = WinForms.Panel()
+        panel.Size = Size(600, 22)
+        panel.BackColor = _COLOR_BG_DARK
+
+        name_lbl = WinForms.Label()
+        name_lbl.Location = Point(6, 3)
+        name_lbl.Size = Size(196, 16)
+        name_lbl.Font = Font("Microsoft YaHei UI", 8.25, FontStyle.Bold)
+        name_lbl.ForeColor = _COLOR_FG_LIGHT
+        name_lbl.AutoEllipsis = True
+        panel.Controls.Add(name_lbl)
+
+        stage_lbl = WinForms.Label()
+        stage_lbl.Location = Point(206, 3)
+        stage_lbl.Size = Size(92, 16)
+        stage_lbl.Font = Font("Microsoft YaHei UI", 8.25)
+        stage_lbl.ForeColor = _COLOR_ACTIVE
+        stage_lbl.AutoEllipsis = True
+        panel.Controls.Add(stage_lbl)
+
+        desc_lbl = WinForms.Label()
+        desc_lbl.Location = Point(302, 3)
+        desc_lbl.Size = Size(294, 16)
+        desc_lbl.Font = Font("Microsoft YaHei UI", 8.25)
+        desc_lbl.ForeColor = _COLOR_FG_MUTED
+        desc_lbl.AutoEllipsis = True
+        panel.Controls.Add(desc_lbl)
+
+        return {"panel": panel, "name_lbl": name_lbl,
+                "stage_lbl": stage_lbl, "desc_lbl": desc_lbl}
+
+    def _refresh_tasks_rows(self, snap) -> None:
+        """按快照差异更新任务行：结束的任务删行、新任务补行、其余原地更新。"""
+        current_keys = {task["key"] for task in snap}
+
+        # 1) 移除已结束的任务（线程完成后自动从列表移除）
+        for key in list(self._tasks_rows.keys()):
+            if key not in current_keys:
+                row = self._tasks_rows.pop(key)
+                try:
+                    row["panel"].Dispose()
+                except Exception:
+                    pass
+
+        # 2) 按快照顺序（开始顺序）新增/更新行
+        y = 2
+        for task in snap:
+            key = task["key"]
+            row = self._tasks_rows.get(key)
+            if row is None:
+                row = self._create_task_row()
+                self._tasks_rows[key] = row
+                self._tasks_panel.Controls.Add(row["panel"])
+            row["panel"].Location = Point(2, y)
+            row["name_lbl"].Text = f"{self._spinner_char(task['status'])}  {task['name']}"
+            row["stage_lbl"].Text = task["stage"]
+            row["desc_lbl"].Text = task["description"]
+            y += 22
+
+        # 3) 表头计数（活跃 = running + waiting，任务结束即移除，同 len）
+        if self._tasks_header is not None and not self._tasks_header.IsDisposed:
+            self._tasks_header.Text = f"活跃任务 ({len(snap)})"
+
+    def _on_tasks_tick(self, sender, e):
+        if self._tasks_panel is None or self._tasks_panel.IsDisposed:
+            return
+        try:
+            snap = modstatus.snapshot()
+        except Exception:
+            return
+        self._spinner_flip = not self._spinner_flip
+        self._refresh_tasks_rows(snap)
 
     def _set_overall_progress_ui(self, value: int) -> None:
         normalized = max(0, min(int(value), 100))

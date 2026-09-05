@@ -1,6 +1,6 @@
 # LCTA Architecture Overview
 
-<!-- Last updated: 2026-09-01 -->
+<!-- Last updated: 2026-09-05 -->
 
 ## Project Purpose
 
@@ -76,7 +76,7 @@ LCTA (Limbus Company Transfer Auto / 边狱公司工具箱) is a comprehensive d
 | `webFunc/` | Infrastructure: GitHub downloads, file transfer, Lanzou parsing, web notes |
 | `translateFunc/` | Translation engine: multi-stage LLM pipeline with proper noun matching |
 | `globalManagers/` | Cross-cutting singletons: `ConfigManager.py`, `LogManager.py`；`pending_pip_ops.py` — 延迟依赖安装（纯标准库模块，启动早期钩子在导入任何第三方库之前重试 GUI 阶段因非网络原因失败的安装；更新永久保留废弃依赖，不执行 pip uninstall） |
-| `launcher/` | Standalone game launcher (GPL-3.0): mod patching, updates, CDN, speed hotkey, and an optional WinForms launch center with configuration summary, vertical phase tracking, overall/stage progress, expandable logs, runtime PID/uptime, and cancellation controls |
+| `launcher/` | Standalone game launcher (GPL-3.0): mod patching (多线程：zip→carra2 转换 / carra2 解压展平 / bundle 重打包三阶段线程池并行，线程数 `launcher.work.mod_threads`，任务经 `modstatus.py` 注册表供 GUI 展示), updates, CDN, speed hotkey, and an optional WinForms launch center with configuration summary, vertical phase tracking, overall/stage progress, active-task card (活跃任务列表，仅启用 MOD 时), expandable logs, runtime PID/uptime, and cancellation controls |
 | `resource_updater/` | Official game resource updater: CDN token extraction, localize ZIP deployment, Unity Bundle cache population, aria2 RPC, Launcher fingerprint state, and the main-window page API. `legacy_lethe_shortcut.py` 迁移旧版「服务器切换」遗留桌面快捷方式（功能已移除，重写启动脚本为弹窗提示，引导用户前往 github.com/HZBHZB1234/KeepCachedVersions） |
 
 ## Design Patterns

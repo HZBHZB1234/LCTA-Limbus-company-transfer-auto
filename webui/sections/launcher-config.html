@@ -35,6 +35,15 @@
             <small class="form-hint">启用后将加载MOD并启动游戏</small>
         </div>
 
+        <div class="form-group">
+            <label for="launcher-work-mod-threads">Mod 处理线程数</label>
+            <div class="speed-input-group">
+                <input type="number" id="launcher-work-mod-threads" value="5" min="1" max="10" step="1">
+                <span class="speed-label">线程</span>
+            </div>
+            <small class="form-hint">模组准备阶段（carra2 转换/解压与 bundle 重打包）使用的最大线程数，1 为串行。线程越多模组准备越快，但占用更多 CPU 与磁盘</small>
+        </div>
+
         <div class="form-group" data-risk-service="staticmod">
             <label class="checkbox-container">
                 <input type="checkbox" id="launcher-work-staticmod">

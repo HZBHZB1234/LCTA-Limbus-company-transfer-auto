@@ -539,6 +539,68 @@ Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, 
 
 Key files: `webui/plugin-window.html`, `webui/js/plugin-window.js`, `webui/plugin_window_api.py`, `webui/app_api/cheat_core.py`（pw_open/sync_theme_to_plugin_windows）, `webutils/cheat_plugins.py`（find_window/is_empty）, `.github/InitCode.py`（HTML_RESOURCE_TRANSFERS['plugin-window.html']）, `tests/test_plugin_window.py`, `launcher/staticmod.py`（应用链 container 精确匹配）, `tests/test_staticmod_apply.py`；私有仓库：`webui/windows/staticmod-editor.js`, `webui/sections/cheat.html`（入口卡）, `webui/js/cheat.js`（initStaticModEntry）, `cheatcore/cheat_staticmod_editor.py`（classmethod 化 + 缓存 + 容器路径索引 + search_content/get_export_targets）, `cheatcore/registry.py`（windows[] + 白名单扩容）, `manifest.json`, `tests/test_staticmod_editor.py`
 
+## 6.6.2 BepInEx 挂载（LimiNex，干净版框架 + 游戏更新本机重建 mapping）
+
+```
+WebUI（作弊工具箱页「BepInEx 挂载（LimiNex）」卡片，命名空间 liminex-*）:
+  cheat.html（私有仓库）状态卡        挂载状态 / 游戏版本锚定（GA SHA-256 前 12 位）/
+                                      mapping 一致性（含「待验证」标记）/ mapping 来源
+                                      （基础包内置 | 本地 A4 构建）/ A4 参考快照 / capstone
+  cheat.js LiminexMountPage          2s 轮询 liminex_get_status + 构建日志滚动；
+                                      按钮 → cheat_plugin_invoke 分发到 liminex_mount 管理器：
+    liminex_mount                      幂等挂载（后台线程）：未挂载 → 下载/解压基础包 →
+                                       按需构建 mapping 三件套
+    liminex_rebuild_mapping            强制重建（重跑 metadata 解密 + A4，修复用）
+    liminex_unmount                    同步卸载（游戏运行中拒绝；删 MOUNT_TARGETS 5 项 +
+                                       doorstop 自写产物 best-effort）
+    liminex_cancel                     取消（metadata 流水线阶段边界响应）
+  下载直链配置                        liminex-base-url / liminex-ref-url 输入框 change →
+                                      update_config_batch 落 launcher.work.liminex_{base,ref}_url
+
+Launcher 集成（PHASE_PREPARE_MOD，游戏启动前同步执行）:
+  launcher/main.py                   pipeline.on(PHASE_PREPARE_MOD, _prepare_cheat_plugins_handler)
+    → launcher/game_launch.py prepare_cheat_plugins()
+      ensure_unlocked()（未解锁静默跳过）→ CheatPluginHost.run_launcher_phase('prepare')
+    → CheatPluginHost 按注册表 launcher_extras[].on_prepare 门控（enabled_key +
+      launcher.work.liminex_mount + consent）分发 → 私有仓库 liminex_mount.prepare_launch()
+    → LiminexMountManager.ensure_ready_sync()（阻塞管线线程直至就绪；失败仅记日志，
+      mapping 过期时 BepInEx 静默不生效、游戏裸跑无害）
+
+挂载/构建链（私有仓库 cheatcore/liminex_mount.py，任务经 _task_lock 串行）:
+  基础包                              内置双源（蓝奏云解析首选 + mods.lcta.top 备用，逐源尝试
+                                      直到 zip 校验通过）→ 流式下载（进度映射进度带）→ 缓存
+                                      %LOCALAPPDATA%/LCTA/liminex/base/（meta.json 记 sha/size/
+                                      命中 url）→ zip 解压到游戏根（_strip_zip_root_prefix 剥包装
+                                      目录 + _safe_extract_target 防 zip-slip）→ 部署完整性抽查
+  标记                                <游戏>/BepInEx/lcta-liminex.json（基础包 sha / mapping 锚定
+                                      GA 哈希 / 来源 / 校验门结果）；基础包锚定版本命中
+                                      （BASE_MAPPING_GA_SHA256）→ 直接视为新鲜并现场快照参考
+  mapping 构建（GA 哈希 ≠ 标记时）:
+    ① capstone 检查                    缺失 → webutils.metadata_recovery.install_capstone
+    ② metadata 解密                    run_recovery(加密 global-metadata.dat, GA) →
+                                       standard-rebuilt.dat（产物在 liminex/runs/，保留 3 次）
+    ③ A4 映射恢复                      il2cpp_mapping_a4.generate_mapping(ref_ga, ref_mapping,
+                                       new_ga)（地址无关签名 + RVA 保序单调 DP）；
+                                       参考三级回退：本地快照（liminex/ref/，meta.sha 校验）
+                                       → 下载参考种子包（liminex_ref_url，仅此一次）
+    ④ 校验门                           validate_mapping（映射值全命中新 GA 导出表）+
+                                       report.unmatched 空 + low_confidence=0
+    ⑤ 安装（两步均成才装，防版本错配）  il2cpp_mappings.txt（游戏根）+ mapping-source.dat
+                                       （BepInEx/，恰好 262,144 B = 零填充 + 文本止于 EOF，
+                                       doorstop 尾窗扫描语义）+ decrypted-metadata.dat（BepInEx/）
+    ⑥ 自链化                           校验门全过 → 快照当前 (GA, 映射) 为下一轮参考
+                                       （origin=local_a4）；未过 → 安装但标记待验证、不刷新快照
+  卸载                                删 winhttp.dll / doorstop_config.ini / il2cpp_mappings.txt /
+                                      BepInEx/（含用户插件）/ dotnet/ + .doorstop_version 等
+                                      doorstop 自写产物；游戏本体零改动
+
+Launcher 集成开关渲染:
+  cheat-shell.js renderLauncherPlugins()   主 launcher + launcher_extras[] 逐项渲染
+                                            （registerConfigKey 动态登记 + consent 门控）
+```
+
+Key files: `launcher/main.py`（PHASE_PREPARE_MOD 注册）, `launcher/game_launch.py`（prepare_cheat_plugins）, `webutils/cheat_plugins.py`（prepare 阶段分发 + launcher_extras）, `webui/js/cheat-shell.js`（extras 渲染）, `webui/sections/launcher-config.html`（#cheat-plugin-launcher）; 私有仓库：`cheatcore/liminex_mount.py`（管理器 + prepare_launch）, `cheatcore/il2cpp_mapping_a4.py`（A4 移植 + build_mapping_source/validate_mapping）, `cheatcore/registry.py`（managers + launcher_extras + 配置 schema）, `webui/sections/cheat.html` + `webui/js/cheat.js`（LiminexMountPage）, `manifest.json`, `tests/test_liminex_mount.py`, `tests/test_registry.py`
+
 ## 6.7 Steam 启动器设置（写入/清除 LaunchOptions 到 localconfig.vdf）
 
 ```

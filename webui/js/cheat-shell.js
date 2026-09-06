@@ -254,68 +254,75 @@ let cheatPage = {
             container.innerHTML = '';
             let renderedAny = false;
             for (const p of plugins) {
-                const lc = p.launcher;
-                if (!lc || !lc.enabled_key) continue;
-                renderedAny = true;
-                const spec = (p.config || {})[lc.enabled_key] || {};
-                const id = lc.checkbox_id || ('launcher-work-' + p.id);
-                const consent = lc.consent || 'cheat';
-                // 动态登记配置键进 configManager，纳入自动保存/回填/缓存管理
-                if (typeof configManager !== 'undefined' && typeof configManager.registerConfigKey === 'function') {
-                    configManager.registerConfigKey(id, lc.enabled_key);
+                // 主 launcher 集成 + launcher_extras（挂载类集成在游戏启动前 on_prepare 执行）
+                const integrations = [];
+                if (p.launcher && p.launcher.enabled_key) integrations.push(p.launcher);
+                for (const extra of (p.launcher_extras || [])) {
+                    if (extra && extra.enabled_key) integrations.push(extra);
                 }
-                let checked = false;
-                try {
-                    checked = !!(await pywebview.api.get_config_value(lc.enabled_key, false));
-                } catch (e) { /* ignore */ }
-
-                const group = document.createElement('div');
-                group.className = 'form-group';
-                const label = document.createElement('label');
-                label.className = 'checkbox-container';
-                label.innerHTML = `<input type="checkbox" id="${id}" data-plugin-enabled-key="${lc.enabled_key}">
-                    <span class="checkmark"></span> ${this._esc(spec.label || p.name)}`;
-                group.appendChild(label);
-                if (spec.hint) {
-                    const hint = document.createElement('small');
-                    hint.className = 'form-hint';
-                    hint.textContent = spec.hint;
-                    group.appendChild(hint);
-                }
-                container.appendChild(group);
-
-                const checkbox = group.querySelector('input[type=checkbox]');
-                checkbox.checked = checked;
-                checkbox.addEventListener('change', async () => {
-                    const want = checkbox.checked;
-                    // 值持久化已由 bindConfigAutoSave 接管（键已登记 configKeyMap，防抖批量落盘），
-                    // 此处即时同步 configManager 缓存，避免其它读取滞后。
-                    if (typeof configManager !== 'undefined') {
-                        configManager.setCachedValue(lc.enabled_key, want);
+                for (const lc of integrations) {
+                    renderedAny = true;
+                    const spec = (p.config || {})[lc.enabled_key] || {};
+                    const id = lc.checkbox_id
+                        || ('launcher-work-' + String(lc.enabled_key).replace(/[^a-z0-9]+/gi, '-'));
+                    const consent = lc.consent || 'cheat';
+                    // 动态登记配置键进 configManager，纳入自动保存/回填/缓存管理
+                    if (typeof configManager !== 'undefined' && typeof configManager.registerConfigKey === 'function') {
+                        configManager.registerConfigKey(id, lc.enabled_key);
                     }
-                    if (want) {
-                        const accepted = await RiskGate.getConsent(consent);
-                        if (!accepted) {
-                            checkbox.checked = false;
-                            if (typeof configManager !== 'undefined') {
-                                configManager.setCachedValue(lc.enabled_key, false);
-                                // 覆盖 bindConfigAutoSave 已入队的 true（getConsent 异步期间
-                                // 事件已先派发），未同意前不得落盘
-                                configManager.pendingUpdates[id] = false;
-                            }
-                            RiskGate.showConsentModal(consent, async () => {
-                                checkbox.checked = true;
-                                try {
-                                    await pywebview.api.update_config_value(lc.enabled_key, true);
-                                    if (typeof configManager !== 'undefined') {
-                                        configManager.setCachedValue(lc.enabled_key, true);
-                                    }
-                                } catch (e) { console.error('launcher plugin toggle error:', e); }
-                            });
-                            return;
+                    let checked = false;
+                    try {
+                        checked = !!(await pywebview.api.get_config_value(lc.enabled_key, false));
+                    } catch (e) { /* ignore */ }
+
+                    const group = document.createElement('div');
+                    group.className = 'form-group';
+                    const label = document.createElement('label');
+                    label.className = 'checkbox-container';
+                    label.innerHTML = `<input type="checkbox" id="${id}" data-plugin-enabled-key="${lc.enabled_key}">
+                        <span class="checkmark"></span> ${this._esc(spec.label || p.name)}`;
+                    group.appendChild(label);
+                    if (spec.hint) {
+                        const hint = document.createElement('small');
+                        hint.className = 'form-hint';
+                        hint.textContent = spec.hint;
+                        group.appendChild(hint);
+                    }
+                    container.appendChild(group);
+
+                    const checkbox = group.querySelector('input[type=checkbox]');
+                    checkbox.checked = checked;
+                    checkbox.addEventListener('change', async () => {
+                        const want = checkbox.checked;
+                        // 值持久化已由 bindConfigAutoSave 接管（键已登记 configKeyMap，防抖批量落盘），
+                        // 此处即时同步 configManager 缓存，避免其它读取滞后。
+                        if (typeof configManager !== 'undefined') {
+                            configManager.setCachedValue(lc.enabled_key, want);
                         }
-                    }
-                });
+                        if (want) {
+                            const accepted = await RiskGate.getConsent(consent);
+                            if (!accepted) {
+                                checkbox.checked = false;
+                                if (typeof configManager !== 'undefined') {
+                                    configManager.setCachedValue(lc.enabled_key, false);
+                                    // 覆盖 bindConfigAutoSave 已入队的 true（getConsent 异步期间
+                                    // 事件已先派发），未同意前不得落盘
+                                    configManager.pendingUpdates[id] = false;
+                                }
+                                RiskGate.showConsentModal(consent, async () => {
+                                    checkbox.checked = true;
+                                    try {
+                                        await pywebview.api.update_config_value(lc.enabled_key, true);
+                                        if (typeof configManager !== 'undefined') {
+                                            configManager.setCachedValue(lc.enabled_key, true);
+                                        }
+                                    } catch (e) { console.error('launcher plugin toggle error:', e); }
+                                });
+                                return;
+                            }
+                        }
+                    });
+                }
             }
             if (!renderedAny) {
                 container.innerHTML = '<p class="form-hint">当前没有可集成到 Launcher 的功能。</p>';

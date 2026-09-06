@@ -119,6 +119,7 @@ class CheatPluginHost:
                 "webui": p.get("webui"),
                 "config": p.get("config"),
                 "launcher": p.get("launcher"),
+                "launcher_extras": p.get("launcher_extras"),
             }
             for p in cls._plugins
         ]
@@ -172,36 +173,61 @@ class CheatPluginHost:
     # Launcher 生命周期（由 launcher/game_launch.py 调用）
     # ------------------------------------------------------------------
 
+    # 阶段名 → 集成描述符上的处理器键
+    _PHASE_HANDLER_KEYS = {
+        "prepare": "on_prepare",
+        "start": "on_start",
+        "stop": "on_stop",
+    }
+
+    @classmethod
+    def _plugin_integrations(cls, plugin) -> list:
+        """插件全部 Launcher 集成：主 launcher 描述符 + launcher_extras[]。
+
+        extras 条目可带 entry 字段指定处理器所在的 cheatcore 子模块
+        （缺省为插件主 entry 模块）。
+        """
+        integrations = []
+        if plugin.get("launcher"):
+            integrations.append(plugin["launcher"])
+        integrations.extend(plugin.get("launcher_extras") or [])
+        return integrations
+
     @classmethod
     def run_launcher_phase(cls, phase: str) -> None:
-        """PHASE_RUNNING('start') / PHASE_EXIT('stop') 通用分发。
+        """PHASE_PREPARE_MOD('prepare') / PHASE_RUNNING('start') / PHASE_EXIT('stop') 通用分发。
 
-        按插件声明检查 enabled_key 与风险同意（consent）后调用 on_start/on_stop；
+        prepare/start 按集成声明的 enabled_key 与风险同意（consent）门控后调用
+        对应处理器；stop 无条件分发（与启动是否被门控放行无关，保证清理执行）。
         未解锁（无插件注册）时安全跳过。
         """
+        handler_key = cls._PHASE_HANDLER_KEYS.get(phase)
+        if not handler_key:
+            return
         if not cls._plugins:
             return
         for plugin in cls._plugins:
-            launcher = plugin.get("launcher")
-            if not launcher:
-                continue
-            handler = launcher.get("on_start" if phase == "start" else "on_stop")
-            if not handler:
-                continue
-            if phase == "start":
-                if not ConfigManager().get(launcher.get("enabled_key"), False):
-                    _log_manager.log(
-                        f"{plugin.get('name')}: 未启用（{launcher.get('enabled_key')}），跳过注入"
-                    )
+            for integration in cls._plugin_integrations(plugin):
+                handler = integration.get(handler_key)
+                if not handler:
                     continue
-                consent = launcher.get("consent")
-                if consent and not ConfigManager().get(f"{consent}.disclaimer_accepted", False):
-                    _log_manager.log(f"{plugin.get('name')}: 未同意风险须知，跳过注入")
-                    continue
-            try:
-                getattr(cls._manager_module_for(plugin, plugin["entry"]), handler)()
-            except Exception as e:
-                _log_manager.log_error(e)
+                if phase in ("prepare", "start"):
+                    if not ConfigManager().get(integration.get("enabled_key"), False):
+                        _log_manager.log(
+                            f"{plugin.get('name')}: 未启用（{integration.get('enabled_key')}），跳过"
+                            + ("挂载准备" if phase == "prepare" else "注入")
+                        )
+                        continue
+                    consent = integration.get("consent")
+                    if consent and not ConfigManager().get(f"{consent}.disclaimer_accepted", False):
+                        _log_manager.log(f"{plugin.get('name')}: 未同意风险须知，跳过")
+                        continue
+                try:
+                    module = cls._manager_module_for(
+                        plugin, integration.get("entry") or plugin["entry"])
+                    getattr(module, handler)()
+                except Exception as e:
+                    _log_manager.log_error(e)
 
     @classmethod
     def close_all(cls) -> None:

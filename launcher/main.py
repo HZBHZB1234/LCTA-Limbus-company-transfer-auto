@@ -157,6 +157,14 @@ def _start_cheat_plugins_handler(**kw):
         _log_manager.log_error(e)
 
 
+def _prepare_cheat_plugins_handler(**kw):
+    try:
+        from launcher.game_launch import prepare_cheat_plugins
+        prepare_cheat_plugins()
+    except Exception as e:
+        _log_manager.log_error(e)
+
+
 def _stop_cheat_plugins_handler(**kw):
     try:
         from launcher.game_launch import stop_cheat_plugins
@@ -236,6 +244,7 @@ def main():
 
     if mod_enabled:
         pipeline.on(PHASE_PREPARE_MOD, _prepare_mod_handler)
+    pipeline.on(PHASE_PREPARE_MOD, _prepare_cheat_plugins_handler)
     pipeline.on(PHASE_RESOURCE_UPDATE, _resource_update_handler)
     pipeline.on(PHASE_EXIT, _cleanup_mod_handler)
     pipeline.on(PHASE_RUNNING, _register_speed_hotkey_handler)

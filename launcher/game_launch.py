@@ -251,6 +251,23 @@ def start_cheat_plugins() -> None:
     CheatPluginHost.run_launcher_phase("start")
 
 
+def prepare_cheat_plugins() -> None:
+    """PHASE_PREPARE_MOD 回调：分发给各插件 on_prepare（游戏启动前准备）。
+
+    挂载型集成（如 BepInEx/LimiNex）的文件必须先于游戏进程就位（winhttp.dll
+    在进程加载期被劫持），故在 prepare 阶段同步执行。未解锁静默跳过——大多数
+    用户不使用工具箱，避免每次启动刷日志。
+    """
+    try:
+        from webutils import cheat_core
+        if not cheat_core.is_unlocked() and not cheat_core.ensure_unlocked().get("success"):
+            return
+        from webutils import CheatPluginHost
+        CheatPluginHost.run_launcher_phase("prepare")
+    except Exception as e:
+        _log_manager.log_error(e)
+
+
 def stop_cheat_plugins() -> None:
     """PHASE_EXIT 回调：分发给各插件 on_stop。"""
     from webutils import CheatPluginHost

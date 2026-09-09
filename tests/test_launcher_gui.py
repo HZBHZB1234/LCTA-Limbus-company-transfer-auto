@@ -566,10 +566,17 @@ class TestEnsureClrWithLog:
 
     def test_failure_logs_and_reraises(self):
         from launcher.gui_progress import _ensure_clr_with_log
+        # 不能用字符串路径 "globalManagers.LogManager.LogManager"，
+        # 也不能 `import globalManagers.LogManager as m`：
+        # globalManagers/__init__.py 重导出了 LogManager 类，包属性遮蔽子模块，
+        # 两种写法都会解析到类上。importlib.import_module 恒取 sys.modules
+        # 中的真实子模块，再 patch.object 直指其属性。
+        import importlib
+        lm_module = importlib.import_module("globalManagers.LogManager")
 
         exc = RuntimeError("clr 加载失败: 详情与修复指引")
         with patch("launcher.gui_progress.ensure_clr", side_effect=exc), \
-             patch("globalManagers.LogManager.LogManager") as mock_cls:
+             patch.object(lm_module, "LogManager") as mock_cls:
             with pytest.raises(RuntimeError) as ei:
                 _ensure_clr_with_log()
 
@@ -578,11 +585,13 @@ class TestEnsureClrWithLog:
 
     def test_logging_failure_does_not_mask_original(self):
         from launcher.gui_progress import _ensure_clr_with_log
+        import importlib
+        lm_module = importlib.import_module("globalManagers.LogManager")
 
         exc = RuntimeError("原始 clr 错误")
         with patch("launcher.gui_progress.ensure_clr", side_effect=exc), \
-             patch("globalManagers.LogManager.LogManager",
-                   side_effect=RuntimeError("日志写入失败")):
+             patch.object(lm_module, "LogManager",
+                          side_effect=RuntimeError("日志写入失败")):
             with pytest.raises(RuntimeError) as ei:
                 _ensure_clr_with_log()
 

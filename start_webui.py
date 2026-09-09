@@ -112,16 +112,27 @@ def get_resource_path():
     
     return base_path
 
+# 启动期依赖更新提示窗常量：
+# - 标题栏必须保持恒定：后台线程与自动关闭都按标题 FindWindow 定位弹窗，
+#   改标题会导致后续找不到窗口、WM_CLOSE 自动关闭失效（历史 bug 根因）。
+# - 自动关闭宽限期：覆盖"后台线程先完成、弹窗尚未弹出"的竞态窗口。
+_PENDING_PROMPT_TITLE = "LCTA 依赖更新"
+_PENDING_PROMPT_CLOSE_GRACE_SECONDS = 3.0
+
+
 def _run_pending_pip_ops_with_prompt():
-    """启动早期执行待处理的依赖操作，并以原生消息框展示进度。
+    """启动早期执行待处理的依赖操作，并以原生消息框展示进度（全自动，零点击）。
 
     - 导入链必须是纯标准库：globalManagers.pending_pip_ops 不依赖任何第三方
       库，即使上次更新残留"库缺失"状态也不会导入失败，保证 pending 安装
       可以在 GUI 依赖加载前重试。
     - 打包版（CREATE_NO_WINDOW 无控制台）下 print/日志均不可见，pip 操作
       可能耗时数分钟而无任何界面反馈；此处用 ctypes MessageBoxW 弹出原生
-      提示窗，后台线程逐项执行并在消息框内实时更新文本，全部完成后自动
-      关闭（PostMessage WM_CLOSE）。
+      提示窗，后台线程逐项执行、进度实时写入弹窗正文（正文 Static 子控件
+      WM_SETTEXT，标题栏保持恒定），全部完成后自动关闭弹窗继续启动，
+      正常路径不需要用户任何点击。
+    - 用户提前点掉弹窗时若操作尚未完成则重新弹出（此时弹窗仍会随后台
+      完成自动关闭）；仅部分依赖装失败时才额外弹一次需确认的报错提示。
     """
     from globalManagers.pending_pip_ops import (
         apply_pending_pip_ops,
@@ -135,38 +146,113 @@ def _run_pending_pip_ops_with_prompt():
 
     import ctypes
     import threading
+    import time
 
-    user32 = ctypes.windll.user32
-    title = "LCTA 依赖更新"
+    title = _PENDING_PROMPT_TITLE
+    close_grace = _PENDING_PROMPT_CLOSE_GRACE_SECONDS
+    WM_CLOSE = 0x0010
+    WM_SETTEXT = 0x000C
+    GWL_STYLE = -16
+    SS_TYPEMASK = 0x1F   # Static 控件样式低 5 位的类型段
+    SS_ICON = 0x0003     # 图标 Static（弹窗左上角图标，非正文）
+
+    # 独立 WinDLL 实例并补全 64 位安全的原型（句柄一律 c_void_p）；
+    # 不复用 ctypes.windll.user32 共享绑定，避免 argtypes 影响其他模块。
+    user32 = ctypes.WinDLL("user32")
+    user32.FindWindowW.restype = ctypes.c_void_p
+    user32.FindWindowW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
+    user32.MessageBoxW.restype = ctypes.c_int
+    user32.MessageBoxW.argtypes = [
+        ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint,
+    ]
+    user32.PostMessageW.restype = ctypes.c_bool
+    user32.PostMessageW.argtypes = [
+        ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
+    ]
+    user32.SendMessageW.restype = ctypes.c_void_p
+    user32.SendMessageW.argtypes = [
+        ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_wchar_p,
+    ]
+    user32.EnumChildWindows.restype = ctypes.c_bool
+    user32.EnumChildWindows.argtypes = [
+        ctypes.c_void_p,
+        ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p),
+        ctypes.c_void_p,
+    ]
+    user32.GetClassNameW.restype = ctypes.c_int
+    user32.GetClassNameW.argtypes = [
+        ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int,
+    ]
+    user32.GetWindowLongW.restype = ctypes.c_long
+    user32.GetWindowLongW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+
+    def _find_body_static(hwnd):
+        """定位 MessageBox 的正文 Static 子控件（排除左上角图标 Static）。"""
+        found = []
+
+        def _on_child(child, _lparam):
+            buf = ctypes.create_unicode_buffer(32)
+            user32.GetClassNameW(child, buf, 32)
+            if buf.value != "Static":
+                return True
+            if (user32.GetWindowLongW(child, GWL_STYLE) & SS_TYPEMASK) == SS_ICON:
+                return True  # 图标控件，跳过
+            found.append(child)
+            return False     # 找到正文即停止枚举
+
+        callback = ctypes.WINFUNCTYPE(
+            ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)(_on_child)
+        user32.EnumChildWindows(hwnd, callback, None)
+        return found[0] if found else None
+
     state = {
         "text": "正在准备依赖更新…",
         "done": False,
         "ok": None,
     }
 
-    def _refresh_window():
+    def _close_box():
+        """向当前弹窗发送 WM_CLOSE；窗口不存在返回 False（由调用方重试）。"""
         hwnd = user32.FindWindowW(None, title)
         if hwnd:
-            user32.SetWindowTextW(hwnd, state["text"])
-            if state["done"]:
-                user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE 自动关闭
+            user32.PostMessageW(hwnd, WM_CLOSE, None, None)
+            return True
+        return False
 
     def _worker():
         def on_progress(text):
             state["text"] = text
-            _refresh_window()
-        state["ok"] = apply_pending_pip_ops(pending_path, progress_callback=on_progress)
-        if state["ok"]:
-            state["text"] = "依赖更新完成"
-        else:
-            state["text"] = "部分依赖更新未完成，将在下次启动时重试（详情见 logs/app.log）"
+            hwnd = user32.FindWindowW(None, title)
+            if hwnd:
+                child = _find_body_static(hwnd)
+                if child:
+                    # 只改正文：标题栏保持 title 恒定，FindWindow 始终可命中
+                    user32.SendMessageW(child, WM_SETTEXT, None, text)
+
+        try:
+            state["ok"] = apply_pending_pip_ops(
+                pending_path, progress_callback=on_progress)
+        except Exception:
+            # apply 内部已兜底不外抛；此处防御线程异常死亡导致弹窗永远
+            # 无法自动关闭、启动卡死。按失败处理保留记录下次重试。
+            state["ok"] = False
+        state["text"] = (
+            "依赖更新完成" if state["ok"]
+            else "部分依赖更新未完成，将在下次启动时重试（详情见 logs/app.log）"
+        )
         state["done"] = True
-        _refresh_window()
+        # 自动关闭 + 竞态兜底：worker 可能先于主线程弹出窗口完成，宽限期内
+        # 反复尝试直到窗口出现并关闭；超时放弃（此时主循环已因 done 跳过弹窗）。
+        deadline = time.monotonic() + close_grace
+        while time.monotonic() < deadline:
+            if _close_box():
+                break
+            time.sleep(0.05)
 
     threading.Thread(target=_worker, daemon=True).start()
     while not state["done"]:
-        # 模态循环：等待消息框关闭（用户点击或完成后自动关闭）；
-        # 用户提前点击时若操作尚未完成则重新弹出
+        # 模态循环：弹窗随后台完成自动关闭（WM_CLOSE）；用户提前点掉时若
+        # 操作尚未完成则重新弹出（标题恒定 → 自动关闭始终可靠）。
         user32.MessageBoxW(
             None,
             state["text"],

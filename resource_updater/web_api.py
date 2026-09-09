@@ -142,15 +142,16 @@ class ResourceUpdaterAPI:
 
         def run() -> None:
             try:
+                defaults = get_resource_update_config()
                 self.updater = ResourceUpdater(
                     game_path,
                     jobs=options.get("jobs", 8),
                     engine=options.get("engine", "auto"),
                     progress_callback=progress,
                     cancel_event=self.cancel_event,
-                    retry_max=options.get("retry_max", 2),
-                    retry_delay=options.get("retry_delay", 30),
-                    connection_limit=options.get("connection_limit", 8),
+                    retry_max=options.get("retry_max", defaults["retry_max"]),
+                    retry_delay=options.get("retry_delay", defaults["retry_delay"]),
+                    connection_limit=options.get("connection_limit", defaults["connection_limit"]),
                 )
                 result = self.updater.run(
                     update_localize=update_localize,

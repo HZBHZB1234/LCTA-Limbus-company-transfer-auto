@@ -135,7 +135,7 @@ def _setup(monkeypatch, updater, app_dir, old_req, source_dir, new_req,
     _write_req(app_dir / "requirements.txt", old_req)
     _write_req(source_dir / "requirements.txt", new_req)
     calls = []
-    monkeypatch.setattr(subprocess, "check_call", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
     monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
     monkeypatch.setattr(update_mod, "_pending_ops_default_path",
                         lambda: pending_path)
@@ -233,14 +233,14 @@ def test_install_requirements_non_network_failure_moves_only_item_to_pending(
     source_dir = tmp_path / "src"
     calls = []
 
-    def fake_check_call(cmd, **kw):
+    def fake_run(cmd, **kw):
         calls.append(cmd)
         raise subprocess.CalledProcessError(
             1, cmd, stderr=b"Permission denied while replacing extension.pyd")
 
     _write_req(app_dir / "requirements.txt", "keep==2.0\n")
     _write_req(source_dir / "requirements.txt", "keep==2.0\nfresh==3.0\n")
-    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
     monkeypatch.setattr(update_mod, "_pending_ops_default_path",
                         lambda: pending_path)
@@ -264,11 +264,11 @@ def test_install_requirements_non_gui_failure_never_creates_pending(
     _write_req(app_dir / "requirements.txt", "keep==2.0\n")
     _write_req(source_dir / "requirements.txt", "keep==2.0\nfresh==3.0\n")
 
-    def fake_check_call(cmd, **kw):
+    def fake_run(cmd, **kw):
         raise subprocess.CalledProcessError(
             1, cmd, stderr=b"Permission denied while replacing extension.pyd")
 
-    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
     monkeypatch.setattr(update_mod, "_pending_ops_default_path",
                         lambda: pending_path)
@@ -288,13 +288,13 @@ def test_install_requirements_network_failure_retries_tsinghua(
     _write_req(source_dir / "requirements.txt", "keep==2.0\nfresh==3.0\n")
     calls = []
 
-    def fake_check_call(cmd, **kw):
+    def fake_run(cmd, **kw):
         calls.append(cmd)
         if "--index-url" not in cmd:
             raise subprocess.CalledProcessError(
                 1, cmd, stderr=b"ProxyError: Cannot connect to proxy")
 
-    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
     monkeypatch.setattr(update_mod, "_pending_ops_default_path",
                         lambda: pending_path)
@@ -320,12 +320,12 @@ def test_install_requirements_double_source_failure_stops_without_pending(
     _write_req(source_dir / "requirements.txt", "keep==2.0\nfresh==3.0\n")
     calls = []
 
-    def fake_check_call(cmd, **kw):
+    def fake_run(cmd, **kw):
         calls.append(cmd)
         raise subprocess.CalledProcessError(
             1, cmd, stderr=b"ProxyError: Cannot connect to proxy")
 
-    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(update_mod, "APPLICATION_PATH", app_dir)
     monkeypatch.setattr(update_mod, "_pending_ops_default_path",
                         lambda: pending_path)
@@ -369,7 +369,7 @@ def test_apply_pending_pip_ops_ignores_legacy_uninstall(monkeypatch, tmp_path, p
         "install": ["fresh==3.0"],
     }), encoding="utf-8")
     calls = []
-    monkeypatch.setattr(subprocess, "check_call", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
 
     result = update_mod.apply_pending_pip_ops(pending_path)
 
@@ -384,13 +384,13 @@ def test_apply_pending_pip_ops_keeps_remaining_on_failure(
     update_mod.save_pending_ops(ops, pending_path)
     calls = []
 
-    def fake_check_call(cmd, **kw):
+    def fake_run(cmd, **kw):
         calls.append(cmd)
         if cmd[-1] == "c":
             raise subprocess.CalledProcessError(
                 1, cmd, stderr=b"Permission denied")
 
-    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     result = update_mod.apply_pending_pip_ops(pending_path)
 
@@ -407,7 +407,7 @@ def test_apply_pending_pip_ops_keeps_remaining_on_failure(
 
 def test_apply_pending_pip_ops_empty_pending_is_noop(monkeypatch, tmp_path, pending_path):
     calls = []
-    monkeypatch.setattr(subprocess, "check_call", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
     assert update_mod.apply_pending_pip_ops(pending_path) is True
     assert calls == []
 
@@ -460,12 +460,12 @@ def test_run_pip_utf8_env_and_gbk_stderr_fallback(monkeypatch):
     # 应回退解码成功，不产生异常、不抛出 UnicodeDecodeError
     calls = []
 
-    def fake_check_call(cmd, **kw):
+    def fake_run(cmd, **kw):
         calls.append((cmd, kw.get("env", {})))
         err = "错误：找不到包".encode("gbk")
         raise subprocess.CalledProcessError(1, cmd, stderr=err)
 
-    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(ppo, "_log_manager", _LogStub())
 
     result = ppo._run_pip(["install", "nope"])
@@ -484,11 +484,11 @@ def test_run_pip_utf8_stderr_passthrough(monkeypatch):
         def log(self, msg):
             messages.append(msg)
 
-    def fake_check_call(cmd, **kw):
+    def fake_run(cmd, **kw):
         raise subprocess.CalledProcessError(
             1, cmd, stderr="distutils 被移除".encode("utf-8"))
 
-    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(ppo, "_log_manager", _Log())
 
     result = ppo._run_pip(["install", "x"])
@@ -498,11 +498,11 @@ def test_run_pip_utf8_stderr_passthrough(monkeypatch):
 
 
 def test_run_pip_classifies_proxy_failure_as_network(monkeypatch):
-    def fake_check_call(cmd, **kw):
+    def fake_run(cmd, **kw):
         raise subprocess.CalledProcessError(
             1, cmd, stderr=b"ProxyError: Cannot connect to proxy")
 
-    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(ppo, "_log_manager", _LogStub())
 
     result = ppo._run_pip(["install", "x"])
@@ -703,7 +703,7 @@ def test_check_and_update_restores_pending_when_update_files_fails(
         raise subprocess.CalledProcessError(
             1, cmd, stderr=b"Permission denied while replacing extension.pyd")
 
-    monkeypatch.setattr(subprocess, "check_call", fail_non_network)
+    monkeypatch.setattr(subprocess, "run", fail_non_network)
 
     result = updater.check_and_update("1.0.0")
 
@@ -744,7 +744,7 @@ def test_check_and_update_keeps_pending_when_update_succeeds(
         raise subprocess.CalledProcessError(
             1, cmd, stderr=b"Permission denied while replacing extension.pyd")
 
-    monkeypatch.setattr(subprocess, "check_call", fail_non_network)
+    monkeypatch.setattr(subprocess, "run", fail_non_network)
 
     result = updater.check_and_update("1.0.0")
 

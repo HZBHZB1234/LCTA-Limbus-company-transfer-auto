@@ -191,8 +191,11 @@ def _run_pip(args: List[str]) -> PipOperationResult:
     env = dict(os.environ)
     env.setdefault("PYTHONIOENCODING", "utf-8")
     try:
-        subprocess.check_call(
-            [sys.executable, "-m", "pip"] + args, capture_output=True, env=env)
+        # capture_output 仅为 subprocess.run 的参数，check_call 会将其透传给
+        # Popen 并抛 TypeError，导致所有 pip 操作永远"无法执行"。
+        subprocess.run(
+            [sys.executable, "-m", "pip"] + args,
+            capture_output=True, env=env, check=True)
         return PipOperationResult(success=True)
     except subprocess.TimeoutExpired as e:
         stderr = _decode_pip_output(e.stderr or b"")

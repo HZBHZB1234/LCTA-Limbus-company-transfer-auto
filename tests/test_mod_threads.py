@@ -247,7 +247,9 @@ def test_patch_assets_threads_error_rolls_back_and_raises(tmp_path, monkeypatch)
                 RuntimeError("boom"))
         return env
 
-    monkeypatch.setattr(patch.UnityPy, "load", staticmethod(load_with_bad))
+    # 注意：patch.UnityPy 是实例，实例属性不参与描述符绑定；此处必须直接赋
+    # 函数对象——赋 staticmethod 对象在 Python 3.9 下不可调用（3.10+ 才可调用）。
+    monkeypatch.setattr(patch.UnityPy, "load", load_with_bad)
 
     with pytest.raises(RuntimeError, match="boom"):
         patch.patch_assets(str(tree / "assets"), threads=2,

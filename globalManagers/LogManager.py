@@ -5,7 +5,6 @@ Singleton log manager wrapping Python standard logging with modal-callback suppo
 import logging
 import logging.handlers
 import os
-import re
 import sys
 from typing import Callable, Optional, Any
 from concurrent.futures import ThreadPoolExecutor
@@ -109,29 +108,36 @@ class LogManager:
         self.debug_mode = enabled
 
     # ---------- 核心日志方法 ----------
-    _FORMAT_RE = re.compile(r"%(?:%|\d*[diouxXeEfFgGcrsa])")
-
     def log(self, message: str, *args, level: int = logging.INFO):
         """记录普通日志，支持 %-格式化参数（message % args）。
 
-        兼容旧式 `log(msg, level)` 调用：仅当消息不含有效格式符且首个位置参数
-        为 int 时才按 level 处理（避免 int 格式参数被误判为 level 而吞掉）。
+        level 一律经关键字传入，位置参数只作为 %-格式化实参。这里刻意不做
+        「首个位置参数是 int 就当 level」的兼容判断：该启发式会因消息正文恰好
+        含 `%` 而失效（如 URL 编码空格 `%20f` / `%20a` / `%20c` 都能被当成
+        格式化占位符），把 level 当成格式化实参抛出 TypeError/ValueError，
+        使日志调用反过来成为业务失败的来源——曾导致文件名含 `%20` 的 mod
+        下载在 0% 直接失败。
+
+        格式化失败时退化为「原文 + 参数」，日志调用永不抛异常。
         """
-        if args and type(args[0]) is int and not self._FORMAT_RE.search(message):
-            level = args[0]
-            args = args[1:]
         if args:
-            message = message % args
+            try:
+                message = message % args
+            except (TypeError, ValueError):
+                message = "{} {}".format(message, " ".join(map(str, args)))
         self._logger.log(level, message)
 
     def debug(self, message: str):
-        """记录调试日志"""
-        self.log(f"[DEBUG] {message}", logging.DEBUG)
+        """记录调试日志（级别前缀由 Formatter 统一输出，消息内不再重复）"""
+        self._logger.log(logging.DEBUG, message)
 
     def log_error(self, error: Any, *args):
         """记录错误日志，支持 %-格式化参数；无额外参数时自动判断异常并含 traceback"""
         if args:
-            msg = str(error) % args
+            try:
+                msg = str(error) % args
+            except (TypeError, ValueError):
+                msg = "{} {}".format(error, " ".join(map(str, args)))
             if isinstance(error, Exception):
                 self._logger.exception(msg)
             else:

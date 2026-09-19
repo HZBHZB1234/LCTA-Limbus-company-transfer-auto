@@ -196,3 +196,97 @@ class TestFancyLoggerConfiguration:
         finally:
             fancy.removeHandler(capture)
         assert any("fancy 调试日志测试" in record.getMessage() for record in records)
+
+
+class TestLogManagerPercentSafety:
+    """LogManager 的 %-格式化必须容忍消息正文里出现的 %（URL 编码等）。
+
+    回归背景：`debug()` 曾以位置参数传 level，而 log() 里「首个位置参数是 int
+    就当 level」的兼容启发式会被消息正文里的 `%20f` / `%20a` / `%20c` 绕过，
+    转而对消息本身执行 `message % (logging.DEBUG,)` 抛 TypeError/ValueError。
+    异常从 `function_aria2_downloader.add_uri` 的调试日志穿透出去，使文件名含
+    `%20`（URL 编码空格）的 mod 下载在 0% 直接失败——日志调用反过来成了业务
+    失败的来源。
+    """
+
+    _ALBINA = ("https://dl.mods.lcta.top/nexus/133/"
+               "Albina%20and%20the%20master.mod.zip")
+    _RODION = ("https://dl.mods.lcta.top/nexus/85/"
+               "Rodion%20Thumb%20Father%20who%20can%20even%20spin%20in%20circles.mod.zip")
+    _MIDDLEFINGER = ("https://dl.mods.lcta.top/nexus/139/530_debe8f70"
+                     "?filename=Middlefinger%20father.Mod.zip")
+
+    @pytest.fixture()
+    def captured(self, monkeypatch):
+        from globalManagers.LogManager import LogManager
+
+        manager = LogManager()
+        records = []
+
+        class CaptureHandler(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        logger = logging.getLogger("LCTA.percent.safety")
+        logger.handlers = [CaptureHandler(level=logging.DEBUG)]
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        monkeypatch.setattr(manager, "_logger", logger)
+        return manager, records
+
+    def test_url_encoded_space_is_not_a_format_placeholder(self, captured):
+        """`%20f` 曾把文件名改写成 `           10.000000`（日志静默损坏）。"""
+        manager, records = captured
+        manager.debug(f"[高速下载器/aria2] 已提交 {self._MIDDLEFINGER} -> C:\\out")
+
+        assert records[-1].levelno == logging.DEBUG
+        assert "Middlefinger%20father.Mod.zip" in records[-1].getMessage()
+
+    def test_albina_url_does_not_raise(self, captured):
+        """修复前：TypeError: not enough arguments for format string。"""
+        manager, records = captured
+        manager.debug(f"已提交 {self._ALBINA}")
+
+        assert "Albina%20and%20the%20master.mod.zip" in records[-1].getMessage()
+
+    def test_rodion_url_does_not_raise(self, captured):
+        """修复前：ValueError: unsupported format character 'T' (0x54)。"""
+        manager, records = captured
+        manager.debug(f"已提交 {self._RODION}")
+
+        assert "Rodion%20Thumb%20Father" in records[-1].getMessage()
+
+    def test_level_keyword_is_respected(self, captured):
+        manager, records = captured
+        manager.log("普通消息", level=logging.WARNING)
+
+        assert records[-1].levelno == logging.WARNING
+
+    def test_int_positional_arg_is_a_format_argument(self, captured):
+        """位置参数只作为格式化实参，不再可能被当成 level。"""
+        manager, records = captured
+        manager.log("- Adding unused mod asset of type %d: %s", 3, "a.3")
+
+        assert records[-1].levelno == logging.INFO
+        assert records[-1].getMessage() == "- Adding unused mod asset of type 3: a.3"
+
+    def test_message_without_placeholder_keeps_level(self, captured):
+        """无占位符 + int 位置参数：按参数处理并降级输出，不改级别。"""
+        manager, records = captured
+        manager.log("no placeholder here", 20)
+
+        assert records[-1].levelno == logging.INFO
+        assert records[-1].getMessage() == "no placeholder here 20"
+
+    def test_format_failure_never_raises(self, captured):
+        manager, records = captured
+        manager.log("broken %s %s", "only-one")
+
+        assert records[-1].getMessage() == "broken %s %s only-one"
+
+    def test_log_error_percent_safety(self, captured):
+        manager, records = captured
+        manager.log_error("错误 %20f 与 %20f", "detail")
+
+        assert records[-1].levelno == logging.ERROR
+        assert "detail" in records[-1].getMessage()

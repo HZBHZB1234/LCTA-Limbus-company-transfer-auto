@@ -252,39 +252,6 @@ def cleanup_assets(bundle_data=bundle_data_paths):
             os.replace(new_path, bundle_path)
 
 
-def make_mod_object_reader(assets_file: SerializedFile, path_id: int, type_id: int,
-                           serialized_type, data: bytes) -> ObjectReader:
-    """构造一个只存在于模组中（原版 bundle 没有）的 ObjectReader，不读流。
-
-    UnityPy 1.10.x 的 `ObjectReader.__init__` 只接受 (assets_file, reader)，
-    并没有新版的关键字构造签名；直接传 path_id/type_id/... 会抛
-    `TypeError: __init__() got an unexpected keyword argument 'path_id'`，
-    使所有「模组新增资产」的 bundle 打补丁失败（表现为 mod 装了但内容不生效）。
-
-    这里统一走「跳过 __init__ + 逐字段赋值」，不依赖具体 UnityPy 版本的构造
-    签名；字段集合取自 1.10.18 `ObjectReader` 读流时写入的属性，且 `write()`
-    （序列化回 bundle 的唯一入口）在 `data` 非空时只用到 path_id / type_id /
-    class_id / serialized_type / data / byte_size，因此足够。
-    """
-    obj = ObjectReader.__new__(ObjectReader)
-    obj.assets_file = assets_file
-    obj.reader = assets_file.reader
-    obj.path_id = path_id
-    obj.type_id = type_id
-    obj.serialized_type = serialized_type
-    obj.class_id = serialized_type.class_id
-    obj.type = ClassIDType(serialized_type.class_id)
-    obj.byte_start = 0
-    obj.byte_size = len(data)
-    obj.is_destroyed = None
-    obj.is_stripped = None
-    obj.stripped = False
-    obj._read_until = 0
-    obj.data = b""
-    obj.set_raw_data(data)
-    return obj
-
-
 def patch_bundle_asset(env: UnityPy.Environment, mod_path: str):
     bundle = get_bundle_file(env)
     for f in bundle.files.values():
@@ -324,8 +291,20 @@ def patch_bundle_asset(env: UnityPy.Environment, mod_path: str):
                 _log_manager.log("- Adding unused mod asset of type %d: %s", type_id, mod_part_path)
                 with open(mod_part_path, "rb") as mf:
                     data = lzma.decompress(mf.read(), format=lzma.FORMAT_XZ)
-                obj = make_mod_object_reader(
-                    f, path_id, type_id, serialized_type, data)
+                obj = ObjectReader(
+                    assets_file=f,
+                    reader=f.reader,
+                    path_id=path_id,
+                    type_id=type_id,
+                    serialized_type=serialized_type,
+                    class_id=serialized_type.class_id,
+                    type=ClassIDType(serialized_type.class_id),
+                    byte_start=0,
+                    byte_size=len(data),
+                    is_destroyed=None,
+                    is_stripped=None,
+                )
+                obj.set_raw_data(data)
                 objects[path_id] = obj
 
 

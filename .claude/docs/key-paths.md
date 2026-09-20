@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-09-05 -->
+<!-- Last updated: 2026-09-21 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -347,6 +347,9 @@ Files: `webutils/function_input_bypass.py`, `hooks/rawinput_hook.c`, `hooks/buil
 > 配置键/Launcher 元数据全部来自注册表）。工具箱页面 = `webui/sections/cheat.html`
 > + `webui/js/cheat.js`（单页多工具卡片；当前含伤害倍率，命名空间 `cheat-damage-*`；
 > 新增工具只需改私有仓库：C 源 + 管理器 + registry.py 注册 + 前端卡片）。
+> 注意：工具箱页 HTML/JS 是解锁后动态注入的，其配置键不在公共 `webui/js/core.js`
+> 的静态 `configKeyMap` 内，`applyConfigToUI()` 不会回填——各工具页须自行
+> `get_config_value()` 读取并赋值（伤害倍率的倍率/日志/启用/API 四项即如此）。
 
 ```
 Sidebar entry (常驻显示，与 speed/input-bypass 同级):
@@ -442,7 +445,13 @@ Launcher startup:
             success=False + reason=stale_offsets 放弃注入（不降级注入）
       apply()                                       writes 16584-byte DHConfig to shared map
                                                       (Local\LCTA_CheatDamage_Config)
+        enabled 位 = _resolve_enabled()：launcher.work.cheat_damage_enabled（工具箱页
+        「启用伤害倍率」）OR launcher.work.cheat_damage（Launcher 集成）——任一为真才
+        装钩；两开关都关时 DLL 只加载、watcher 直接 continue（detour 也不放行）
       inject(pid)                                   remote-thread LoadLibraryW cheat_damage.dll
+        _ensure_config_written() 自检：共享内存无有效配置（magic≠DHGD 或 RVA=0）时
+        先补一次 apply()，覆盖工具箱页「注入」按钮只调 inject() 的路径（此前需用户
+        先点「保存并应用」，否则 DLL 读到全零段空转、页面却显示「已注入」）
   → 私有仓库 hooks/cheat_damage.dll + vendor/minhook
                                                       waits GameAssembly.dll → VerifyPrologue
                                                       (16B, from shared config) →

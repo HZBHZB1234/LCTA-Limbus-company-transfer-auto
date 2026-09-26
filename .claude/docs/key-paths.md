@@ -1368,7 +1368,7 @@ Files: `start_webui.py`（`_cleanup_motw_on_startup`，init_env 内调用）, `w
 > 背景：公告文本**不经过**官方 `Lang/` 语言包本地化系统（`Notice(NoticeDetail)` 是纯字段
 > 拷贝、`LOCALIZE_LANGUAGE` 枚举只有 KR/EN/JP），所以改汉化包对公告零效果。公告存在两套
 > 系统，由 `StaticDataManager.Instance.ControlCodeStaticData.isNoticeRenewal`(+0x110) 切换；
-> 新系统 `NoticeManager` 从 `https://notice.limbuscompanyapi-2.com` 拉 `noticeMeta.json` 与
+> 新系统 `NoticeManager` 从 `https://notice.limbuscompanyapi.com` 拉 `noticeMeta.json` 与
 > 各篇 `noticeDetail_<id>_<lang>_<rev>.json`。可利用的两个判定特性：
 > ① `NoticeManager.DownloadNoticeDetails`(0x18129EC10) 只以 `File.Exists` 判缓存命中
 >    —— 文件在就永不下载；
@@ -1385,7 +1385,7 @@ Files: `start_webui.py`（`_cleanup_motw_on_startup`，init_env 内调用）, `w
   → webui/app_api/notice.py（NoticeMixin，_notice_manager() 私有名取单例）
   → webutils/notice/manager.py get_notice_manager()（模块级单例）
   → webutils/notice/core.py NoticeLocalizer.from_config()
-      · load_meta()      GET https://notice.limbuscompanyapi-2.com/noticeMeta.json
+      · load_meta()      GET https://notice.limbuscompanyapi.com/noticeMeta.json
                          （网络失败 → 回退本地 notice/noticeMeta.json）
       · resolve_language()  lang_mode='auto' → 由 noticeDetails/ 已有文件名后缀推断，
                          回退 EN（中文系统游戏落 default 分支使用英文公告）

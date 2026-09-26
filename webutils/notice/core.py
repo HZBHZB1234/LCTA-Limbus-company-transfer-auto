@@ -43,7 +43,7 @@ from .service import (
     normalize_base_url,
 )
 
-OFFICIAL_BASE_URL = "https://notice.limbuscompanyapi-2.com"
+OFFICIAL_BASE_URL = "https://notice.limbuscompanyapi.com"
 LANGS = ("KR", "EN", "JP")
 DEFAULT_LANG = "EN"
 USER_AGENT = "LCTA-NoticeLocalizer/1.0"

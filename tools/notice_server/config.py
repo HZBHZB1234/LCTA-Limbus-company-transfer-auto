@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
     "host": "127.0.0.1",
     "port": 8000,
     "cache_dir": "cache",
-    "official_base_url": "https://notice.limbuscompanyapi-2.com",
+    "official_base_url": "https://notice.limbuscompanyapi.com",
     "official_timeout": 30,
     "max_concurrency": 2,
     "translate": {

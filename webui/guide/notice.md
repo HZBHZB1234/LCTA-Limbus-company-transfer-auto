@@ -16,6 +16,11 @@
 
 本工具只把**公告文件名**发给你的服务（无需鉴权），服务端按下面的信封响应。
 
+> 仓库里带了一份**参考实现**：`tools/notice_server/`（独立进程，HTTP 层 FastAPI + Uvicorn）。
+> 先 `pip install -r tools/notice_server/requirements.txt`，再
+> `python -m tools.notice_server.server --backend fake` 可以先不配密钥跑通链路，
+> 去掉 `--backend fake` 并配上接口地址与密钥就是真翻译。用法见 `tools/notice_server/README.md`。
+
 - **服务地址**：例如 `http://127.0.0.1:8000`。
 - **请求路径模板**：默认 `{base}/noticeDetails/{file}`，即与服务端保持和官方 CDN 同构的路径，便于直接用静态文件目录托管译文。`{base}` 为服务地址（去掉结尾 `/`），`{file}` 为官方公告文件名（如 `noticeDetail_200001_EN_219.json`）。
 

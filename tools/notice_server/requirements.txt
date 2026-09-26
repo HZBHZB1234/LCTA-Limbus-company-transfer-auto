@@ -1,0 +1,7 @@
+# 公告汉化服务端（tools/notice_server）依赖 —— 独立于 LCTA 运行时，按需安装：
+#   pip install -r tools/notice_server/requirements.txt
+# store / pipeline / config 仍是纯标准库实现；
+# fastapi + uvicorn 负责 HTTP 层，json-repair 负责 LLM 输出的容错 JSON 解析。
+fastapi>=0.110
+uvicorn>=0.29
+json-repair>=0.30

@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-09-26 -->
+<!-- Last updated: 2026-10-08 -->
 
 ## Directory Overview
 
@@ -14,6 +14,7 @@
 | `launcher/` | Standalone game launcher (GPL-3.0) | 15 |
 | `resource_updater/` | Official localize/Bundle updater, Launcher fingerprint gate, and 遗留 lethe 快捷方式迁移（`legacy_lethe_shortcut.py`） | 5 |
 | `tools/cfst/` | CloudflareSpeedTest binary + IP lists（构建时由 InitCode 下载，运行时懒加载兜底） | 3 |
+| `tools/notice_server/` | **公告汉化服务端参考实现**（独立进程、HTTP 层 FastAPI + Uvicorn、LLM 输出解析 json_repair 容错 —— 需 `pip install -r tools/notice_server/requirements.txt`，**不属于 LCTA 运行时**，也不会被打进发布包 —— `InitCode.py` 只引用 `tools/cfst`） | `server.py`（`create_app()` FastAPI 路由工厂 + 异步调度 + CLI，由 Uvicorn 承载：`GET {任意前缀}/{文件名}` → `{status: ok\|pending\|error}` 信封；未命中立刻回 `pending` 并把翻译丢进后台线程，客户端自己退避重试；`/`·`/status`·`/healthz` 状态页 + `/docs` Swagger 文档；端点为同步 `def` 跑在 Starlette 线程池；`--backend fake` 无需密钥即可跑通链路）、`config.py`（**默认配置集中地**：`DEFAULT_CONFIG` + `load_config` 深合并 + 环境变量密钥回退，`server.py` 不再内联配置）、`translator.py`（OpenAI 兼容后端 + `FakeTranslator`；`extract_json_array` 三级容错：剥 `<think>`/围栏 → 严格 `json.loads` → `json_repair` 修复截断/未转义换行/单引号/尾逗号/前后废话；`build_slots`/`apply_translations` 只翻 `title` 与 `content.list[*].formatValue`，跳过 `HyperLink` 与裸 URL；`restore_wrapper` 确定性还原 `<...>`/`[...]` 包裹；`SYSTEM_PROMPT` 要求等长 JSON 数组返回）、`store.py`（官方原文获取 + 译文缓存；`NOTICE_NAME_RE` 白名单兼挡路径穿越；原子写）、`pipeline.py`（原文 → 槽位 → 翻译 → `validate_payload` 自检 → 落盘）、`config.example.json` + `requirements.txt` + `README.md` |
 | `hooks/` | C source for native DLLs | `rawinput_hook.c` (input bypass), compiled to `rawinput_hook.dll` by build.ps1 / CI; 作弊工具箱的 hook DLL 源码已迁往私有仓库 LCTA_CheatingCore（`hooks/*.c` 扫描编译，见 `cheat_core/`） |
 | `vendor/minhook/` | 空（MinHook 已随作弊工具箱功能迁往私有仓库） | — |
 | `scripts/` | 单文件脚本 | `cheat_encrypt.py` — CheatCore 加密器（私有仓库功能文件 → `cheat_core.bin`，格式见私有仓库 README） |

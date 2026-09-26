@@ -1,0 +1,18 @@
+{
+  "host": "127.0.0.1",
+  "port": 8000,
+  "cache_dir": "tools/notice_server/cache",
+  "official_base_url": "https://notice.limbuscompanyapi-2.com",
+  "official_timeout": 30,
+  "max_concurrency": 2,
+  "translate": {
+    "backend": "openai",
+    "base_url": "https://api.deepseek.com/v1",
+    "api_key": "",
+    "model": "deepseek-chat",
+    "timeout": 120,
+    "temperature": 0.2,
+    "max_retries": 2,
+    "target_language": "简体中文"
+  }
+}

@@ -42,6 +42,7 @@ webui/assets/README.md
 CFST/
 tools/cfst/
 tools/7z/
+tools/notice_server/cache/
 /*.zip
 /tmp/*
 .workbuddy

@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-09-26 -->
+<!-- Last updated: 2026-10-08 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1480,6 +1480,33 @@ webui/js/core.js 静态 configKeyMap 登记 → bindConfigAutoSave 自动保存�
   Launcher 集成开关 `launcher-notice-enabled` 只放在 launcher-config.html 的
   「工作模式配置」卡片内（符合 AGENTS「Launcher 集成规范」），notice.html 上只有
   集成介绍 + goAndShow('launcher-config') 跳转按钮。
+
+服务端（tools/notice_server/，独立进程、不属于 LCTA 运行时、不参与打包；
+HTTP 层 FastAPI + Uvicorn、LLM 输出解析 json_repair，
+需 pip install -r tools/notice_server/requirements.txt）:
+  GET {任意前缀}/{官方文件名}      （只取 basename，前缀随 url_template 配）
+    → 400  文件名不匹配 NOTICE_NAME_RE（顺带挡住 ../ 路径穿越）
+    → {"status":"ok","data":{…}}        译文缓存命中，直接回整篇公告
+    → {"status":"pending","message":…}  未命中：立刻回 pending + 后台线程翻译
+    → {"status":"error","message":…}    最近一次失败（**只上报一次**，下次请求重新排队）
+  server.create_app(service)       FastAPI 路由工厂：`/`·`/status`·`/healthz` 状态页
+    + `/{file_path:path}` catch-all（注册在状态页之后）；`/docs` Swagger 文档。
+    端点为同步 def，Starlette 放线程池执行；CLI 用 uvicorn.run 承载
+  config.load_config()             默认值（config.py 的 DEFAULT_CONFIG，server.py 不内联）
+    < config.json（translate 深合并）< CLI 参数；密钥回退 LCTA_NOTICE_API_KEY/OPENAI_API_KEY
+  server.NoticeService.respond()   缓存命中判定 / 异步调度（max_concurrency 上限；
+    同一文件的并发请求只翻译一次）/ 失败原因留存；缓存损坏自动删除重译
+  pipeline.NoticePipeline.translate()  官方原文 → build_slots → translator.translate
+    → apply_translations（restore_wrapper 还原 <...>/[...] 包裹）
+    → validate_payload 自检 → store.save_translated（原子写）
+  translator.OpenAIChatTranslator   POST {base_url}/chat/completions，要求等长 JSON 数组；
+    extract_json_array 三级容错（剥 <think>/围栏 → 严格 json.loads → json_repair 修截断/
+    未转义换行/单引号/尾逗号/废话），修不回或长度/类型不符重试 max_retries 次后报错
+    （宁可报错也不缓存坏结构）
+  store.NoticeStore                官方原文（内存缓存）+ 译文缓存；文件名白名单
+  --backend fake 用 FakeTranslator（每段加 `【中】` 前缀）不配密钥先跑通链路
+  验证：tests/test_notice_server.py（50 项，含「真实客户端 ↔ 真实 Uvicorn HTTP
+    服务端」端到端：状态路由 / 400 信封 / 任意前缀路由 / json_repair 容错解析）
 
 Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.md`,
       `webui/app_api/notice.py`, `webutils/notice/{__init__,paths,service,core,manager}.py`,

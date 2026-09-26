@@ -251,6 +251,7 @@ js_files = [
     'js/cg.js',
     'js/bank.js',
     'js/mod-mirror.js',
+    'js/notice.js',
 ]
 js_content = ''
 for f in js_files:

@@ -1,0 +1,238 @@
+<div id="notice-page" class="resource-updater-page">
+    <div class="section-header">
+        <h2 class="section-title">
+            <i class="fas fa-bullhorn"></i>
+            公告汉化
+        </h2>
+        <p class="section-subtitle">
+            把游戏内公告的标题与正文替换为中文：译文按官方同名文件名写入公告缓存，
+            游戏判定缓存只认文件是否存在，因此写入后不会再下载或覆盖。
+        </p>
+    </div>
+
+    <div class="resource-updater-layout">
+        <div class="resource-updater-config-column">
+            <div class="setting-card resource-updater-card">
+                <div class="resource-card-heading">
+                    <div>
+                        <span class="resource-card-eyebrow">状态</span>
+                        <h3 class="setting-title"><i class="fas fa-circle-info"></i> 公告缓存</h3>
+                    </div>
+                    <span id="notice-lang-chip" class="resource-state-chip neutral">检测中</span>
+                </div>
+
+                <div class="speed-status-grid">
+                    <div class="speed-status-item">
+                        <span class="speed-status-label">公告目录:</span>
+                        <span id="notice-dir-status" class="speed-status-value inactive">检测中</span>
+                    </div>
+                    <div class="speed-status-item">
+                        <span class="speed-status-label">目标语言:</span>
+                        <span id="notice-lang-status" class="speed-status-value">—</span>
+                    </div>
+                    <div class="speed-status-item">
+                        <span class="speed-status-label">已汉化:</span>
+                        <span id="notice-count-status" class="speed-status-value">—</span>
+                    </div>
+                    <div class="speed-status-item">
+                        <span class="speed-status-label">公告清单来源:</span>
+                        <span id="notice-meta-status" class="speed-status-value">—</span>
+                    </div>
+                </div>
+
+                <div id="notice-dir-notice" class="resource-inline-notice neutral">
+                    <i class="fas fa-circle-info"></i>
+                    <span>公告缓存目录由游戏创建。若显示「未检测到」，请先启动一次游戏并进入大厅。</span>
+                </div>
+
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+                    <button id="notice-open-dir" type="button" class="action-btn secondary">
+                        <i class="fas fa-folder-open"></i> 打开公告缓存目录
+                    </button>
+                    <button id="notice-refresh" type="button" class="action-btn secondary">
+                        <i class="fas fa-rotate"></i> 刷新状态
+                    </button>
+                </div>
+            </div>
+
+            <div class="setting-card resource-updater-card">
+                <div class="resource-card-heading">
+                    <div>
+                        <span class="resource-card-eyebrow">翻译服务</span>
+                        <h3 class="setting-title"><i class="fas fa-server"></i> 服务与策略</h3>
+                    </div>
+                    <span id="notice-service-chip" class="resource-state-chip neutral">
+                        <i class="fas fa-circle-info"></i> 未测试
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label for="notice-service-url">服务地址</label>
+                    <input type="text" id="notice-service-url" placeholder="http://127.0.0.1:8000">
+                    <small class="form-hint">
+                        本工具只把<strong>公告文件名</strong>发给该服务（无需鉴权）。服务端按
+                        <code>{"status": "ok", "data": {…}}</code> 信封返回整篇译好的公告 JSON；
+                        未命中缓存时返回 <code>{"status": "pending"}</code>，本工具会自动等待重试
+                        （指数退避 1→2→4→8→16 秒，单篇最多等 60 秒），服务端无需阻塞请求或长轮询。
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="notice-url-template">请求路径模板</label>
+                    <input type="text" id="notice-url-template" placeholder="{base}/noticeDetails/{file}">
+                    <small class="form-hint">
+                        可用占位符 <code>{base}</code>（服务地址）与 <code>{file}</code>（公告文件名）。
+                        默认与服务端保持官方 CDN 同构的路径，便于直接复用静态文件布局。
+                    </small>
+                </div>
+
+                <div class="resource-settings-grid">
+                    <div class="form-group">
+                        <label for="notice-lang">目标语言</label>
+                        <div class="select-wrapper">
+                            <select id="notice-lang">
+                                <option value="auto">自动（按缓存推断，通常 EN）</option>
+                                <option value="EN">EN — 英文公告文件</option>
+                                <option value="KR">KR — 韩文公告文件</option>
+                                <option value="JP">JP — 日文公告文件</option>
+                            </select>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <small class="form-hint">
+                            只写当前语言的那一个文件名：游戏的清理逻辑只保留「当前语言」的文件名，
+                            多写的其它语言文件会在下次刷新公告清单时被删掉。
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label for="notice-timeout">请求超时（秒）</label>
+                        <input type="number" id="notice-timeout" min="5" max="600" step="1" value="60">
+                    </div>
+                    <div class="form-group">
+                        <label for="notice-launcher-timeout">Launcher 启动预算（秒）</label>
+                        <input type="number" id="notice-launcher-timeout" min="5" max="300" step="1" value="30">
+                        <small class="form-hint">通过 Launcher 启动时最多占用多久，超时只跳过剩余公告，不影响启动。</small>
+                    </div>
+                </div>
+
+                <label class="checkbox-container">
+                    <input type="checkbox" id="notice-only-valid" checked>
+                    <span class="checkmark"></span>
+                    只处理有效期内的公告
+                </label>
+                <small class="form-hint">已过期的公告不会出现在游戏里，跳过可省下翻译开销。</small>
+
+                <label class="checkbox-container">
+                    <input type="checkbox" id="notice-verify-official" checked>
+                    <span class="checkmark"></span>
+                    与官方原文比对校验后再落盘
+                </label>
+                <small class="form-hint">
+                    校验 <code>formatKey</code> 序列、id 与 noticeType 是否与官方一致。
+                    缺项或自创 <code>formatKey</code> 会让整篇公告正文渲染中断，因此校验不过时一律不写入。
+                </small>
+
+                <label class="checkbox-container">
+                    <input type="checkbox" id="notice-seed-meta" checked>
+                    <span class="checkmark"></span>
+                    缺失时补种官方公告清单
+                </label>
+                <small class="form-hint">本地没有 noticeMeta.json 时写入一份官方原文，避免首次进大厅时的公告下载失败弹窗。</small>
+
+                <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button id="notice-test" type="button" class="action-btn secondary">
+                        <i class="fas fa-plug"></i> 测试服务连接
+                    </button>
+                </div>
+            </div>
+
+            <div class="setting-card resource-updater-card">
+                <div class="resource-card-heading">
+                    <div>
+                        <span class="resource-card-eyebrow">自动化</span>
+                        <h3 class="setting-title"><i class="fas fa-rocket"></i> Launcher 集成</h3>
+                    </div>
+                    <span id="notice-integration-chip" class="resource-state-chip neutral">
+                        <i class="fas fa-circle-info"></i> 未开启
+                    </span>
+                </div>
+                <div class="resource-integration-heading">
+                    <div class="resource-integration-icon">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <div class="resource-integration-text">
+                        <strong>启动游戏前自动同步并汉化新公告</strong>
+                        <small>
+                            开启后，Launcher 在模组准备阶段做一次增量同步（只处理官方清单里新增或未汉化的公告），
+                            并在设定预算内完成；服务不可用或超时只记录日志，不会阻塞游戏启动。
+                            开关位于 Launcher 配置页「工作模式配置」中的「启用公告汉化」。
+                        </small>
+                    </div>
+                </div>
+                <div class="resource-integration-actions" style="margin-top: 12px;">
+                    <button type="button" class="action-btn secondary" onclick="goAndShow('launcher-config')">
+                        <i class="fas fa-arrow-right"></i> 前往 Launcher 配置
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <aside class="setting-card resource-updater-task-card">
+            <div class="resource-task-header">
+                <div>
+                    <span class="resource-card-eyebrow">当前任务</span>
+                    <h3 class="setting-title">同步进度</h3>
+                </div>
+                <span id="notice-status-badge" class="resource-status-badge idle">
+                    <i class="fas fa-pause"></i>
+                    <span>等待操作</span>
+                </span>
+            </div>
+            <p id="notice-status-description" class="resource-task-description">
+                点击「开始同步并汉化」按官方公告清单处理未汉化的公告。
+            </p>
+
+            <div class="resource-progress-list">
+                <div class="resource-progress-item">
+                    <div class="resource-progress-heading">
+                        <span><i class="fas fa-arrow-trend-up"></i> 进度</span>
+                        <strong id="notice-progress-text">0%</strong>
+                    </div>
+                    <div class="resource-progress-track">
+                        <div id="notice-progress-bar" class="resource-progress-bar"></div>
+                    </div>
+                    <small id="notice-progress-message">等待开始</small>
+                </div>
+            </div>
+
+            <div id="notice-log-panel" class="notice-log-panel"></div>
+
+            <div class="resource-task-actions">
+                <button id="notice-cancel" type="button" class="action-btn danger" disabled>
+                    <i class="fas fa-stop"></i> 取消
+                </button>
+                <button id="notice-sync" type="button" class="primary-btn">
+                    <i class="fas fa-language"></i> 开始同步并汉化
+                </button>
+                <button id="notice-force" type="button" class="action-btn secondary">
+                    <i class="fas fa-rotate-right"></i> 强制重新汉化
+                </button>
+                <button id="notice-restore" type="button" class="action-btn secondary">
+                    <i class="fas fa-rotate-left"></i> 还原官方原文
+                </button>
+            </div>
+        </aside>
+    </div>
+
+    <div class="setting-card resource-updater-card">
+        <div class="resource-card-heading">
+            <div>
+                <span class="resource-card-eyebrow">明细</span>
+                <h3 class="setting-title"><i class="fas fa-list-check"></i> 公告清单</h3>
+            </div>
+            <span id="notice-list-summary" class="resource-selection-summary">—</span>
+        </div>
+        <div id="notice-list" class="notice-list">
+            <p class="form-hint">正在读取官方公告清单...</p>
+        </div>
+    </div>
+</div>

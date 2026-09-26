@@ -44,3 +44,5 @@ tools/cfst/
 tools/7z/
 /*.zip
 /tmp/*
+.workbuddy
+.workbuddy-ai

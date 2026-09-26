@@ -123,6 +123,15 @@ function initNavigation() {
                         }
                     }
 
+                    // 公告汉化页：进入时刷新清单并轮询同步进度，离开时停止轮询
+                    if (typeof noticePage !== 'undefined') {
+                        if (sectionId === 'notice-section') {
+                            noticePage.init();
+                        } else {
+                            noticePage.stop();
+                        }
+                    }
+
                     // 作弊工具箱页同样按导航生命周期管理轮询
                     if (typeof cheatPage !== 'undefined') {
                         if (sectionId === 'cheat-section') {

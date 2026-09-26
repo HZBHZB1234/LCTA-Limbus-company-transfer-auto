@@ -55,6 +55,19 @@
 
         <div class="form-group">
             <label class="checkbox-container">
+                <input type="checkbox" id="launcher-notice-enabled">
+                <span class="checkmark"></span>
+                启用公告汉化
+            </label>
+            <small class="form-hint">启动游戏前自动同步并汉化官方公告（只处理新增或未汉化的），在「Launcher 启动预算」内完成；服务不可用或超时只记录日志，不会阻塞启动。</small>
+            <small class="form-hint">相关设置（翻译服务地址、目标语言等）请在公告汉化页面配置</small>
+            <button type="button" class="action-btn secondary" style="margin:4px 6px 0 0; padding:4px 10px; font-size:12px;" onclick="goAndShow('notice')">
+                <i class="fas fa-arrow-right"></i> 前往公告汉化页面
+            </button>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
                 <input type="checkbox" id="launcher-work-gui-mode">
                 <span class="checkmark"></span>
                 启用GUI进度窗口

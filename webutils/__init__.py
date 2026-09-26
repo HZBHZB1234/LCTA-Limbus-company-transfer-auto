@@ -45,6 +45,7 @@ from .cdn import (
 )
 from .function_speed import SpeedManager
 from .function_input_bypass import InputBypassManager
+from .notice import NoticeLocalizer, NoticeManager, get_notice_manager
 from .function_aria2_downloader import Aria2DownloaderManager, aria2_manager
 from . import metadata_recovery
 from . import cg
@@ -119,6 +120,9 @@ __all__ = [
     'elevate_remove_hosts',
     'SpeedManager',
     'InputBypassManager',
+    'NoticeLocalizer',
+    'NoticeManager',
+    'get_notice_manager',
     'Aria2DownloaderManager',
     'aria2_manager',
     'metadata_recovery',

@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-09-21 -->
+<!-- Last updated: 2026-09-26 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1362,3 +1362,132 @@ Files: `webui/index.html`（#mod-mirror-btn）, `webui/js/mod-mirror.js`,
 
 Files: `start_webui.py`（`_cleanup_motw_on_startup`，init_env 内调用）, `webutils/utils/motw.py`,
       `webutils/utils/__init__.py`（导出）, `tests/test_motw.py`
+
+## 21. 公告汉化（Notice 本地化，零注入路线）
+
+> 背景：公告文本**不经过**官方 `Lang/` 语言包本地化系统（`Notice(NoticeDetail)` 是纯字段
+> 拷贝、`LOCALIZE_LANGUAGE` 枚举只有 KR/EN/JP），所以改汉化包对公告零效果。公告存在两套
+> 系统，由 `StaticDataManager.Instance.ControlCodeStaticData.isNoticeRenewal`(+0x110) 切换；
+> 新系统 `NoticeManager` 从 `https://notice.limbuscompanyapi-2.com` 拉 `noticeMeta.json` 与
+> 各篇 `noticeDetail_<id>_<lang>_<rev>.json`。可利用的两个判定特性：
+> ① `NoticeManager.DownloadNoticeDetails`(0x18129EC10) 只以 `File.Exists` 判缓存命中
+>    —— 文件在就永不下载；
+> ② `RemoveInvalidNoticeFiles`(0x18129D9C0) 每次 meta 下载后（≥10 分钟一次）只删
+>    「不在 `GetNoticeDetailFileNames(onlyValid:false)` 名单里」的文件。
+> 因此把译文按**官方同名文件名**预置进 `noticeDetails/` 即可永久生效，无需注入/打补丁；
+> 中文字形沿用汉化包的 TMP 全局 fallback（`TextMeshProLanguageSetter.UpdateTMP`）。
+
+```
+公告汉化页面（侧边栏「常用工具」组 → #notice-btn → goAndShow('notice')）
+  → utils.js initNavigation 导航生命周期：进入 notice-section → noticePage.init()，
+    离开 → noticePage.stop()（500ms 轮询 notice_get_status）
+  → webui/js/notice.js → pywebview.api.notice_get_info()
+  → webui/app_api/notice.py（NoticeMixin，_notice_manager() 私有名取单例）
+  → webutils/notice/manager.py get_notice_manager()（模块级单例）
+  → webutils/notice/core.py NoticeLocalizer.from_config()
+      · load_meta()      GET https://notice.limbuscompanyapi-2.com/noticeMeta.json
+                         （网络失败 → 回退本地 notice/noticeMeta.json）
+      · resolve_language()  lang_mode='auto' → 由 noticeDetails/ 已有文件名后缀推断，
+                         回退 EN（中文系统游戏落 default 分支使用英文公告）
+      · enumerate_targets()  按语言枚举；DETAIL_NAME_RE 拒绝非法文件名
+      · _classify()      missing（无文件）/ translated（sha256 与 state 记录一致）
+                         / official（存在但指纹不符 = 官方原文或外部改动）
+
+点「开始同步并汉化」→ notice_start_sync() → NoticeManager.start_sync(force=False)
+  → 后台线程 threading.Thread(name='notice-localize', daemon=True)
+  → NoticeLocalizer.sync(force, cancel_event, progress, deadline=None, targets_filter)
+      ① seed_meta：meta 缺失时才补种（绝不覆盖，内容会被游戏重下）
+      ② state.lang 与本次 lang 不一致 → 清空 state.files（旧语言文件将被游戏清理）
+      ③ 逐条：not force 且本地存在 且 sha256 与 state 一致 → skipped（已汉化）
+      ④ verify_official=True → 先 GET 官方原文（失败则 official_raw=None，跳过比对）
+      ⑤ service.request(file_name) → GET {service_url}/noticeDetails/{file}
+           （url_template 可配；失败分类 not_found/http/network/timeout/too_large/empty）
+           · 响应是 {status, data} 信封（见下「翻译服务响应契约」）：
+             status=ok → 取 data 作为译文；status=pending → 未命中缓存，等待重试
+           · pending → 指数退避 1→2→4→8→16 秒（之后固定 16，最后一次按剩余预算
+             截断）重试同一文件名，单篇累计等待上限 60 秒；等待期间受 cancel_event
+             与 deadline（Launcher 启动预算）约束
+           · 等待预算耗尽 → 该篇记 status=pending、result.pending=True、**停止本轮**、
+             **不计入 failed**（服务端只是还没译好，剩余公告留待下次同步）
+      ⑥ validate_translated(translated, official_raw) —— 硬门，不过一律不写：
+           非 JSON / {"ok":false} 信封 / 缺 id·noticeType·content.list / 空 title /
+           formatKey·formatValue 缺失或非字符串 / formatKey 序列与官方漂移 /
+           id·noticeType 漂移  → 全部拒绝
+           仅警告：sprList 漂移、标题与官方相同且无中日韩字符
+      ⑦ 备份官方原文到 %LOCALAPPDATA%/LCTA/notice/originals/<file>（已存在则保留）
+      ⑧ atomic_write_bytes(details_dir/<file>)  同目录临时文件 + fsync + os.replace
+           （对齐游戏侧 DownloadHandlerFile 直写半截 JSON 且永不重下的历史坑）
+      ⑨ 记 state（sha256/size/title/fetched_at/service/warnings）→ save_state
+  → 进度经 progress(done,total,msg) 回写 NoticeManager，前端轮询刷新进度条与日志
+
+翻译服务响应契约（服务端实现，客户端只发文件名、无需鉴权）:
+  GET {service_url}/noticeDetails/{file}      （url_template 可配）
+  200 + JSON 信封，由 status 决定语义:
+    {"status": "ok",      "data": {…整篇公告 JSON…}}   译文就绪，data 即公告本体
+    {"status": "pending", "message": "…"}               未命中缓存，客户端稍后重试
+    {"status": "error",   "message": "…"}               服务端内部失败
+  · data 与官方 NoticeDetail 同结构，仅 title 与 content.list[*].formatValue 为中文
+  · pending 由**客户端**等待重试 —— 服务端不必阻塞请求或做长轮询
+  · 拆信封在 service.parse_envelope()：缺 status → kind=protocol；
+    status=ok 但无 data 对象 → kind=protocol；未知 status → kind=service_error；
+    兼容旧错误信封 {"ok": false, "error": {…}}
+  · 等待预算耗尽抛 NoticePendingError(reason=budget|deadline|cancelled)，
+    sync() 据此分别映射为 pending / timed_out / cancelled
+
+为什么只写一种语言的文件名:
+  GetNoticeDetailFileNames(onlyValid:false)(0x18129DEB0) 每篇只返回**当前语言**的名字
+  （实测 noticeDetail_200001_KR_219.json / _EN_219.json / _JP_219.json 三个不同名），
+  多写的其它语言文件会在下次 meta 刷新被 RemoveInvalidNoticeFiles 删掉。
+
+为什么 formatKey 是硬安全门:
+  自创或丢失 formatKey → NoticeUIContentViewManager.FindEmptyContent 返回 null →
+  sub_1807677F0（IL2CPP 空引用）抛异常 → 整篇公告正文渲染中断。
+  另：HyperLink 的 formatValue 是**裸 URL**（如 https://twitter.com/LimbusCompany_B），
+  绝不能翻译；SubTitle 用 <...>/[...] 包裹，翻译需保留包裹。
+
+Launcher 集成（启动前自动同步）:
+  Launcher 配置页 · 工作模式配置 → #launcher-notice-enabled（'notice.enabled'）
+  → launcher/main.py pipeline.on(PHASE_PREPARE_MOD, _prepare_notice_handler)
+  → launcher/notice.py run_notice_sync(cancel_event)
+      · notice.enabled 未开 / 模块导入失败 / 配置读取失败 / 未配服务地址
+        → {"skipped": True, ...}（静默）
+      · budget = clamp(notice.launcher_timeout, 下限 5s，默认 30s)
+      · NoticeLocalizer.from_config().sync(cancel_event, progress, deadline=monotonic()+budget)
+      · 预算耗尽 → timed_out，只跳过剩余条目（已写入文件保持有效）
+      · 服务端未命中缓存（pending）→ 等待同样受启动预算约束（预算不足即停手，
+        默认 30s 预算小于客户端 60s 上限），日志记「服务端尚未命中缓存
+        （已汉化 N 篇），剩余公告留待下次同步」（WARNING）
+      · 任何异常只 _log_manager.log_error / log(level=logging.WARNING)，**不阻塞启动**
+
+还原官方原文:
+  notice_restore() → NoticeLocalizer.restore(files)
+    · 仅当本地文件 sha256 与 state 记录一致才 unlink（已被游戏重下/外部改动 → 跳过并清状态）
+    · 删除后游戏下次进大厅会重新下载官方原文
+
+连通性测试:
+  notice_test_service(file_name) → NoticeTranslationService.probe()
+    · file_name 为空 → 取 enumerate_targets(only_valid=False) 第一篇
+    · probe 只发**一次**请求、不等待重试；status=pending → 返回 pending=True
+    · 返回 {file, title, bytes, elapsed, pending}，**不落盘**
+    · pending=True 仍算 success（连接是通的，只是服务端还没译好），页面提示
+      「服务可用，但该公告尚未命中缓存」
+
+配置键（config_default.json / config_check.json 的 notice 段，全部经
+webui/js/core.js 静态 configKeyMap 登记 → bindConfigAutoSave 自动保存）:
+  notice.enabled(bool) / service_url(str) / url_template(str) / lang(auto|EN|KR|JP) /
+  timeout(int) / launcher_timeout(int) / only_valid(bool) / verify_official(bool) /
+  seed_meta(bool)
+  Launcher 集成开关 `launcher-notice-enabled` 只放在 launcher-config.html 的
+  「工作模式配置」卡片内（符合 AGENTS「Launcher 集成规范」），notice.html 上只有
+  集成介绍 + goAndShow('launcher-config') 跳转按钮。
+
+Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.md`,
+      `webui/app_api/notice.py`, `webutils/notice/{__init__,paths,service,core,manager}.py`,
+      `launcher/notice.py`, `launcher/main.py`（PHASE_PREPARE_MOD 注册）,
+      `webui/sections/launcher-config.html`（#launcher-notice-enabled）,
+      `webui/js/core.js`（configKeyMap）, `webui/js/utils.js`（noticePage 导航生命周期）,
+      `webui/index.html`（#notice-btn / #notice-section / script）,
+      `webui/css/layout-extras.css`（公告汉化段）, `config_default.json` / `config_check.json`,
+      `.github/InitCode.py`（js_files）, `webutils/__init__.py`（导出）,
+      `tests/test_notice_localize.py`, `webui/assets/update.md`
+

@@ -14,6 +14,10 @@
 指数退避（1→2→4→8→16 秒，上限 60 秒）自动重试同一文件名，重试时命中缓存即
 拿到 `ok`。所以单个请求永远秒回，不会挂住连接。
 
+**定时预热**（`refresher.py`）：默认每 30 分钟拉一次官方 `noticeMeta.json`，
+把清单里还没有译文的公告提前翻译好，客户端第一次请求通常就直接命中缓存。
+间隔由 `refresh_interval` 控制（0 = 关闭），预热语言由 `refresh_languages` 控制。
+
 HTTP 层是 FastAPI（`create_app()` 路由工厂），由 Uvicorn 承载；
 `translator` / `store` / `pipeline` 等业务模块仍是纯标准库实现，
 `json_repair` 负责 LLM 输出的容错解析。默认配置集中在 `config.py`。
@@ -24,7 +28,7 @@ HTTP 层是 FastAPI（`create_app()` 路由工厂），由 Uvicorn 承载；
     python -m tools.notice_server.server --config tools/notice_server/config.json
     python -m tools.notice_server.server --backend fake        # 不调接口，先跑通链路
 
-浏览器打开服务地址可看到状态页（缓存数、正在翻译的文件、最近错误），
+浏览器打开服务地址可看到状态页（缓存数、正在翻译的文件、最近错误、预热轮次），
 `/docs` 是 FastAPI 自带的接口文档页。
 """
 from __future__ import annotations
@@ -34,6 +38,7 @@ import json
 import posixpath
 import sys
 import threading
+import time
 from pathlib import Path
 
 import uvicorn
@@ -44,6 +49,7 @@ if __package__ in (None, ""):  # 支持 `python tools/notice_server/server.py` �
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
     from tools.notice_server.config import load_config
     from tools.notice_server.pipeline import NoticePipeline
+    from tools.notice_server.refresher import DEFAULT_LANGUAGES, NoticeRefresher
     from tools.notice_server.store import (
         NoticeStore,
         NoticeStoreError,
@@ -57,6 +63,7 @@ if __package__ in (None, ""):  # 支持 `python tools/notice_server/server.py` �
 else:
     from .config import load_config
     from .pipeline import NoticePipeline
+    from .refresher import DEFAULT_LANGUAGES, NoticeRefresher
     from .store import NoticeStore, NoticeStoreError, is_valid_notice_name
     from .translator import FakeTranslator, OpenAIChatTranslator, TranslationError
 
@@ -103,8 +110,11 @@ class NoticeService:
 
         if self._schedule(file_name):
             return 200, {"status": "pending", "message": "未命中缓存，正在翻译"}
+        # `reason: busy` 供服务端内部（定时预热）区分「并发已满」与「正在翻译」，
+        # 客户端只认 status，多出的字段会被忽略
         return 200, {
             "status": "pending",
+            "reason": "busy",
             "message": "并发已满，稍后重试时会再排队",
         }
 
@@ -180,12 +190,13 @@ class NoticeService:
 # --------------------------------------------------------------------------
 # HTTP 层（FastAPI）
 # --------------------------------------------------------------------------
-def create_app(service: NoticeService) -> FastAPI:
+def create_app(service: NoticeService, refresher: NoticeRefresher = None) -> FastAPI:
     """按 service 构建 FastAPI 应用，路由与 `{status}` 信封协议完全同构。
 
     * `/`、`/status`、`/healthz` —— 状态页，必须注册在 catch-all 之前；
+      传入 `refresher` 时一并带出定时预热状态（间隔 / 上一轮摘要）；
     * `/{file_path:path}`       —— 兜底路由：任意前缀 + 官方文件名。
-      只取最后一段做文件名（前缀随便写，LCTA 侧的「请求路径模板」可配），
+      只取最后一段做文件名（前缀随便写，客户端内置模板为 `/noticeDetails/{file}`），
       文件名本身仍走 `NOTICE_NAME_RE` 白名单校验（挡路径穿越）。
 
     端点一律用同步 `def`：Starlette 会把它们放进线程池执行，
@@ -203,10 +214,12 @@ def create_app(service: NoticeService) -> FastAPI:
     )
 
     @app.get("/", include_in_schema=False)
-    @app.get("/status", summary="服务状态（缓存数 / 正在翻译 / 最近错误）")
+    @app.get("/status", summary="服务状态（缓存数 / 正在翻译 / 最近错误 / 预热）")
     @app.get("/healthz", summary="存活探针（同 /status）")
     def get_status() -> dict:
-        return service.status()
+        info = service.status()
+        info["refresh"] = refresher.status() if refresher is not None else None
+        return info
 
     @app.get(
         "/{file_path:path}",
@@ -247,6 +260,15 @@ def parse_args(argv=None):
     parser.add_argument("--model", help="模型名，如 deepseek-chat")
     parser.add_argument("--official-base-url", help="官方公告地址")
     parser.add_argument("--max-concurrency", type=int, help="同时翻译的公告数，默认 2")
+    parser.add_argument(
+        "--refresh-interval",
+        type=int,
+        help="定时预热间隔（秒），默认 1800（30 分钟），0 关闭",
+    )
+    parser.add_argument(
+        "--refresh-languages",
+        help="预热哪些语言的公告文件，逗号分隔（如 EN,KR），默认 EN",
+    )
     return parser.parse_args(argv)
 
 
@@ -261,6 +283,14 @@ def apply_cli_overrides(config: dict, args) -> dict:
         config["official_base_url"] = args.official_base_url
     if args.max_concurrency:
         config["max_concurrency"] = int(args.max_concurrency)
+    if args.refresh_interval is not None:
+        config["refresh_interval"] = int(args.refresh_interval)
+    if args.refresh_languages:
+        languages = [
+            part.strip().upper() for part in args.refresh_languages.split(",") if part.strip()
+        ]
+        if languages:
+            config["refresh_languages"] = languages
     translate = config["translate"]
     if args.backend:
         translate["backend"] = args.backend
@@ -288,6 +318,32 @@ def build_translator(config: dict):
     )
 
 
+def refresh_log(message: str) -> None:
+    """预热日志：直接打时间戳到 stdout（与 uvicorn 的日志互不干扰）。"""
+    print(
+        "[refresh] {} {}".format(time.strftime("%Y-%m-%d %H:%M:%S"), message),
+        flush=True,
+    )
+
+
+def build_refresher(config: dict, store: NoticeStore, service: NoticeService):
+    """按配置构建定时预热器；`refresh_interval` 为 0 时返回 None（不预热）。"""
+    interval = config.get("refresh_interval", 0)
+    try:
+        if int(interval) <= 0:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return NoticeRefresher(
+        store,
+        service,
+        interval=interval,
+        languages=config.get("refresh_languages") or DEFAULT_LANGUAGES,
+        only_valid=bool(config.get("refresh_only_valid", True)),
+        logger=refresh_log,
+    )
+
+
 def main(argv=None) -> int:
     args = parse_args(argv)
     try:
@@ -306,7 +362,8 @@ def main(argv=None) -> int:
     service = NoticeService(
         store, NoticePipeline(store, build_translator(config)), config["max_concurrency"]
     )
-    app = create_app(service)
+    refresher = build_refresher(config, store, service)
+    app = create_app(service, refresher)
 
     backend = config["translate"].get("backend") or "openai"
     model = config["translate"].get("model") or "-"
@@ -325,16 +382,31 @@ def main(argv=None) -> int:
     print("翻译后端   : {}（model={}）".format(backend, model))
     print("官方公告源 : {}".format(config["official_base_url"]))
     print("并发上限   : {}".format(config["max_concurrency"]))
+    if refresher is not None:
+        print(
+            "定时预热   : 每 {} 秒一轮（{}，{}）".format(
+                refresher.interval,
+                "、".join(refresher.languages),
+                "仅有效期内公告" if refresher.only_valid else "含已过期公告",
+            )
+        )
+    else:
+        print("定时预热   : 已关闭")
     print("-" * 66)
-    print("在 LCTA「公告汉化」页面把服务地址填成上面这个地址即可；")
+    print("客户端（LCTA「公告汉化」页）已内置本服务地址，无需手工填写；")
     print("状态页: http://{}:{}/   接口文档: http://{}:{}/docs".format(host, port, host, port))
     print("按 Ctrl+C 退出。")
     print("=" * 66)
 
+    if refresher is not None:
+        refresher.start()
     try:
         uvicorn.run(app, host=host, port=port, log_level="info")
     except KeyboardInterrupt:
         print("\n已停止。")
+    finally:
+        if refresher is not None:
+            refresher.stop()
     return 0
 
 

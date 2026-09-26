@@ -321,16 +321,9 @@ class ConfigManager {
             // 游戏官方资源预下载（仅开关，详细配置在游戏资源更新页面）
             'launcher-resource-update-enabled': 'launcher.resource_update.enabled',
 
-            // 公告汉化（仅 Launcher 集成开关在 Launcher 配置页，详细配置在公告汉化页面）
+            // 公告汉化（服务地址与全部策略内置，页面无配置项；
+            // 仅 Launcher 集成开关在 Launcher 配置页）
             'launcher-notice-enabled': 'notice.enabled',
-            'notice-service-url': 'notice.service_url',
-            'notice-url-template': 'notice.url_template',
-            'notice-lang': 'notice.lang',
-            'notice-timeout': 'notice.timeout',
-            'notice-launcher-timeout': 'notice.launcher_timeout',
-            'notice-only-valid': 'notice.only_valid',
-            'notice-verify-official': 'notice.verify_official',
-            'notice-seed-meta': 'notice.seed_meta',
 
             // 音频工具
             'bank-dll-dir': 'ui_default.bank.dll_dir',

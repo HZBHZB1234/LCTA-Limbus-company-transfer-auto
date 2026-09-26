@@ -29,6 +29,13 @@ uvicorn = pytest.importorskip("uvicorn")
 
 from tools.notice_server.config import load_config
 from tools.notice_server.pipeline import NoticePipeline, PipelineError
+from tools.notice_server import refresher as refresher_module
+from tools.notice_server.refresher import (
+    DEFAULT_INTERVAL_SECONDS,
+    NoticeRefresher,
+    enumerate_notice_names,
+    evaluate_validity,
+)
 from tools.notice_server.server import NoticeService, create_app
 from tools.notice_server.store import (
     NoticeStore,
@@ -360,6 +367,212 @@ class TestStore:
         store = NoticeStore(tmp_path / "cache", "https://official.example")
         assert store.read_translated(NAME) is None
 
+    def test_official_meta_is_refetched_every_time(self, tmp_path):
+        """清单刻意不做内存缓存：定时预热每轮都要拿到最新清单。"""
+        calls = []
+        store = NoticeStore(
+            tmp_path / "cache", "https://official.example",
+            opener=opener_returning(to_bytes({"noticeDetailList": []}), calls),
+        )
+        store.official_meta()
+        store.official_meta()
+        assert len(calls) == 2
+        assert calls[0].full_url == "https://official.example/noticeMeta.json"
+
+
+# --------------------------------------------------------------------------
+# 定时预热（refresher）
+# --------------------------------------------------------------------------
+def make_meta(entries, latest="Fri Jun 20 2025 18:29:34 GMT+0900 (KST)"):
+    return {"latestUpdateDate": latest, "noticeDetailList": entries}
+
+
+def make_meta_entry(notice_id, suffix, start=None, end=None, langs=("KR", "EN", "JP")):
+    entry = {
+        "id": notice_id,
+        "startDate": start or "Thu Sep 17 2020 01:04:36 GMT+0000 (Coordinated Universal Time)",
+        "endDate": end or "Thu Sep 17 2099 01:04:36 GMT+0000 (Coordinated Universal Time)",
+    }
+    for lang in langs:
+        entry["fileName_" + lang] = "noticeDetail_{}_{}_{}.json".format(notice_id, lang, suffix)
+    return entry
+
+
+def meta_opener(meta, detail_calls=None):
+    """meta URL 返回清单，详情 URL 返回官方原文（同时记录详情请求）。"""
+
+    def opener(req, timeout=None):
+        if req.full_url.endswith("noticeMeta.json"):
+            return StubResponse(to_bytes(meta))
+        if detail_calls is not None:
+            detail_calls.append(req.full_url)
+        return StubResponse(to_bytes(official_payload()))
+
+    return opener
+
+
+class TestRefresherHelpers:
+    def test_enumerate_picks_configured_languages(self):
+        meta = make_meta([make_meta_entry(200001, "219")])
+        assert enumerate_notice_names(meta, ("EN",)) == ["noticeDetail_200001_EN_219.json"]
+        assert enumerate_notice_names(meta, ("EN", "KR")) == [
+            "noticeDetail_200001_EN_219.json",
+            "noticeDetail_200001_KR_219.json",
+        ]
+
+    def test_enumerate_skips_expired_and_duplicates(self):
+        expired = make_meta_entry(
+            200002, "564",
+            end="Thu Sep 17 2020 01:04:36 GMT+0000 (Coordinated Universal Time)",
+        )
+        meta = make_meta([make_meta_entry(200001, "219"), expired, make_meta_entry(200001, "219")])
+        names = enumerate_notice_names(meta, ("EN",))
+        assert names == ["noticeDetail_200001_EN_219.json"]
+        # only_valid=False 时过期公告也进清单
+        assert len(enumerate_notice_names(meta, ("EN",), only_valid=False)) == 2
+
+    def test_enumerate_rejects_unexpected_names(self):
+        entry = make_meta_entry(200003, "1")
+        entry["fileName_EN"] = "../../evil.json"
+        assert enumerate_notice_names(make_meta([entry]), ("EN",)) == []
+        assert enumerate_notice_names({"noticeDetailList": "nope"}, ("EN",)) == []
+
+    def test_evaluate_validity_iso_and_dateutil(self):
+        assert evaluate_validity("2020-01-01T00:00:00.000Z", "2098-12-31T21:00:00.000Z") is True
+        assert evaluate_validity("2098-01-01T00:00:00.000Z", "2099-01-01T00:00:00.000Z") is False
+        assert evaluate_validity("", "") is True      # 解析失败保守放行
+
+
+class TestRefresher:
+    def test_run_once_queues_uncached_and_skips_cached(self, tmp_path):
+        meta = make_meta([make_meta_entry(200001, "219"), make_meta_entry(200002, "564")])
+        store = NoticeStore(
+            tmp_path / "cache", "https://official.example", opener=meta_opener(meta)
+        )
+        service = NoticeService(store, NoticePipeline(store, StubTranslator()))
+        # 200001 预先译好 → 本轮应被跳过
+        store.save_translated("noticeDetail_200001_EN_219.json", official_payload())
+
+        logs = []
+        refresher = NoticeRefresher(store, service, interval=1800, logger=logs.append)
+        summary = refresher.run_once()
+
+        assert summary["success"] is True
+        assert summary["total"] == 2
+        assert summary["cached"] == 1
+        assert summary["queued"] == 1
+
+        for _ in range(200):
+            if service.status()["running"] == 0:
+                break
+            time.sleep(0.02)
+        assert store.read_translated("noticeDetail_200002_EN_564.json") is not None
+        assert refresher.status()["last_run"] is not None
+        assert logs and "清单 2 篇" in logs[-1]
+
+    def test_run_once_reports_meta_failure(self, tmp_path):
+        def opener(req, timeout=None):
+            raise urllib.error.HTTPError(req.full_url, 503, "down", {}, None)
+
+        store = NoticeStore(tmp_path / "cache", "https://official.example", opener=opener)
+        service = NoticeService(store, NoticePipeline(store, StubTranslator()))
+        summary = NoticeRefresher(store, service).run_once()
+        assert summary["success"] is False
+        assert "官方公告清单" in summary["message"]
+
+    def test_interval_zero_disables_refresh(self, tmp_path):
+        store = NoticeStore(tmp_path / "cache", "https://official.example")
+        service = NoticeService(store, NoticePipeline(store, StubTranslator()))
+        refresher = NoticeRefresher(store, service, interval=0)
+        assert refresher.interval == 0
+        assert refresher.status()["enabled"] is False
+        assert refresher.start() is False
+
+    def test_start_runs_a_round_then_stops(self, tmp_path):
+        meta = make_meta([make_meta_entry(200001, "219")])
+        store = NoticeStore(
+            tmp_path / "cache", "https://official.example", opener=meta_opener(meta)
+        )
+        service = NoticeService(store, NoticePipeline(store, StubTranslator()))
+        refresher = NoticeRefresher(store, service, interval=DEFAULT_INTERVAL_SECONDS)
+        assert refresher.start() is True
+        for _ in range(200):
+            if refresher.status()["last_run"] is not None:
+                break
+            time.sleep(0.02)
+        refresher.stop()
+        assert refresher.status()["last_run"] is not None
+        assert refresher.status()["interval"] == 1800
+
+    def test_interval_is_clamped_to_minimum(self, tmp_path):
+        store = NoticeStore(tmp_path / "cache", "https://official.example")
+        service = NoticeService(store, NoticePipeline(store, StubTranslator()))
+        assert NoticeRefresher(store, service, interval=1).interval == 60
+
+    def test_queue_waits_for_a_free_slot(self, tmp_path, monkeypatch):
+        """并发已满（reason=busy）时先等名额，等到就继续排队，不算漏掉。"""
+        meta = make_meta([make_meta_entry(200001, "219")])
+        store = NoticeStore(
+            tmp_path / "cache", "https://official.example", opener=meta_opener(meta)
+        )
+        service = NoticeService(store, NoticePipeline(store, StubTranslator()))
+        monkeypatch.setattr(refresher_module, "QUEUE_POLL_SECONDS", 0.0)
+
+        calls = []
+
+        class BusyOnce:
+            def respond(self, name):
+                calls.append(name)
+                if len(calls) == 1:
+                    return 200, {
+                        "status": "pending",
+                        "reason": "busy",
+                        "message": "并发已满，稍后重试时会再排队",
+                    }
+                return service.respond(name)
+
+        refresher = NoticeRefresher(store, BusyOnce(), interval=1800)
+        summary = refresher.run_once()
+        assert summary["queued"] == 1
+        assert summary["deferred"] == 0
+        assert len(calls) == 2
+
+    def test_queue_defers_when_slots_never_free(self, tmp_path, monkeypatch):
+        """名额一直不腾出来：记为「留待下轮」而不是失败，也不会卡死整轮。"""
+        meta = make_meta([make_meta_entry(200001, "219")])
+        store = NoticeStore(
+            tmp_path / "cache", "https://official.example", opener=meta_opener(meta)
+        )
+        monkeypatch.setattr(refresher_module, "QUEUE_WAIT_SECONDS", 0.0)
+
+        class AlwaysBusy:
+            def respond(self, name):
+                return 200, {"status": "pending", "reason": "busy", "message": "并发已满"}
+
+        refresher = NoticeRefresher(store, AlwaysBusy(), interval=1800)
+        summary = refresher.run_once()
+        assert summary["success"] is True
+        assert summary["deferred"] == 1
+        assert summary["queued"] == 0
+        assert summary["failed"] == 0
+        assert "留待下轮" in summary["message"]
+
+    def test_queue_reports_error_envelope(self, tmp_path):
+        """服务端回 error（上一轮失败残留）：本轮记失败，不误记为排队成功。"""
+        meta = make_meta([make_meta_entry(200001, "219")])
+        store = NoticeStore(
+            tmp_path / "cache", "https://official.example", opener=meta_opener(meta)
+        )
+
+        class Broken:
+            def respond(self, name):
+                return 200, {"status": "error", "message": "翻译引擎失败"}
+
+        refresher = NoticeRefresher(store, Broken(), interval=1800)
+        summary = refresher.run_once()
+        assert summary["failed"] == 1
+        assert summary["queued"] == 0
+
 
 # --------------------------------------------------------------------------
 # 流水线
@@ -586,6 +799,22 @@ class TestEndToEndWithRealClient:
                 assert resp.status == 200
                 payload = json.loads(resp.read().decode("utf-8"))
             assert payload["service"] == "lcta-notice-server"
+            # 未传 refresher 时该字段为 None（不影响老客户端）
+            assert payload["refresh"] is None
+
+    def test_status_route_carries_refresh_info(self, tmp_path):
+        """传了 refresher 时 `/status` 带出预热状态（间隔 / 语言 / 上一轮摘要）。"""
+        service, store = build_service(tmp_path)
+        refresher = NoticeRefresher(store, service, interval=1800, languages=("EN",))
+        server = LiveServer(create_app(service, refresher))
+        try:
+            with urllib.request.urlopen(server.url + "/status", timeout=10) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        finally:
+            server.stop()
+        assert payload["refresh"]["enabled"] is True
+        assert payload["refresh"]["interval"] == 1800
+        assert payload["refresh"]["languages"] == ["EN"]
 
     def test_invalid_filename_is_http_400_envelope(self, live_server):
         """文件名不合法：HTTP 400 + error 信封（而非 FastAPI 默认 404/422）。"""

@@ -11,7 +11,10 @@ LCTA 客户端只把**官方公告文件名**发过来（无需鉴权），服�
 1. 查译文缓存 → 命中就直接返回整篇译好的公告 JSON；
 2. 未命中 → 拉官方原文 → 交给大模型翻译 → 自检 → 落盘，然后返回译文；
 3. 翻译是**异步**的：首次请求立刻回 `pending` 并在后台翻译，
-   客户端会按指数退避自动重试同一文件名，重试时命中缓存即拿到 `ok`。
+   客户端会按指数退避自动重试同一文件名，重试时命中缓存即拿到 `ok`；
+4. **定时预热**：默认每 **30 分钟**拉一次官方公告清单，把清单里还没有译文的
+   公告提前翻好（`refresh_interval` = 1800 秒，0 关闭）。预热后客户端第一次
+   请求通常就直接命中缓存，不必等重试。
 
 所以单个请求永远秒回，不会挂住连接，服务端也不需要长轮询。
 
@@ -29,8 +32,11 @@ pip install -r tools/notice_server/requirements.txt
 python -m tools.notice_server.server --backend fake
 ```
 
-输出里会给出监听地址（默认 `http://127.0.0.1:8000`）。把这个地址填进
-LCTA「公告汉化」页面的**服务地址**，点「测试服务连接」和「开始同步并汉化」。
+输出里会给出监听地址（默认 `http://127.0.0.1:8000`），以及预热间隔与语言。
+
+> LCTA 客户端里内置的服务地址是公共翻译服务 `https://notice.lcta.top`
+> （`webutils/notice/service.py` 的 `DEFAULT_SERVICE_URL`，公告汉化页不再让用户填写）。
+> 自建服务时把该常量改成自己的地址即可，接口协议完全一致。
 
 假后端给每段文本加 `【中】` 前缀，产物形如 `【中】Official Twitter` ——
 客户端会正常收下，但游戏里看到的就是这个，只用来确认链路通不通。
@@ -52,8 +58,24 @@ python -m tools.notice_server.server \
 ```
 
 浏览器打开服务地址（`http://127.0.0.1:8000/`）可以看到状态页：缓存了多少篇、
-正在翻译哪些、最近一次失败原因。`/docs` 是 FastAPI 自带的交互式接口文档页
-（无需额外配置）。
+正在翻译哪些、最近一次失败原因、预热间隔与上一轮预热摘要。`/docs` 是 FastAPI
+自带的交互式接口文档页（无需额外配置）。
+
+## 定时预热
+
+服务端启动后立刻跑第一轮预热，之后每 `refresh_interval` 秒（默认 **1800**，即
+30 分钟）跑一轮：
+
+```
+拉官方 noticeMeta.json（带 Cache-Control: no-cache）
+  → 按 refresh_languages（默认 EN）枚举公告文件名，跳过已过期的
+  → 未命中缓存的交给翻译调度（复用请求路径的并发上限与去重，同一篇不会重复翻）
+  → 并发已满时排队等待名额（上限 120 秒），仍排不上则留待下一轮
+```
+
+预热日志形如 `[refresh] 2026-01-01 12:00:00 清单 12 篇：已有译文 10 篇，新排队 2 篇，失败 0 篇`。
+关掉预热用 `--refresh-interval 0`（或配置 `"refresh_interval": 0`）；
+想连韩文/日文公告一起预热用 `--refresh-languages EN,KR,JP`。
 
 ## 接口协议
 
@@ -61,8 +83,7 @@ python -m tools.notice_server.server \
 GET {任意前缀}/{官方文件名}
 ```
 
-路径前缀随便写（LCTA 侧的「请求路径模板」可配，默认 `/noticeDetails/{file}`），
-服务端只取最后一段做文件名，并要求它匹配
+路径前缀随便写（服务端只取最后一段），服务端只取最后一段做文件名，并要求它匹配
 `noticeDetail_<id>_<KR|EN|JP>_<rev>.json` —— 这条白名单同时挡住了路径穿越。
 
 响应恒为 HTTP 200 + JSON 信封：
@@ -70,12 +91,16 @@ GET {任意前缀}/{官方文件名}
 ```json
 {"status": "ok",      "data": { …整篇公告 JSON… }}
 {"status": "pending", "message": "未命中缓存，正在翻译"}
+{"status": "pending", "reason": "busy", "message": "并发已满，稍后重试时会再排队"}
 {"status": "error",   "message": "TranslationError: 翻译接口返回 HTTP 401 …"}
 ```
 
 `data` 与官方 `NoticeDetail` 同结构，只有 `title` 与
 `content.list[*].formatValue` 被换成中文；`id` / `noticeType` / `startDate` /
 `endDate` / `sprList` / 每个条目的 `formatKey` 全部原样保留。
+
+`reason: "busy"` 只在**服务端内部**（定时预热）用来区分「并发已满、这篇还没派下去」
+与「这篇已经在翻译中」；客户端只认 `status`，多出来的字段会被忽略。
 
 `/`、`/status`、`/healthz` 返回状态 JSON（不是公告信封）；`/docs` 为接口文档页。
 
@@ -107,6 +132,9 @@ GET {任意前缀}/{官方文件名}
 | `official_base_url` | 官方公告 CDN | 官方原文来源 |
 | `official_timeout` | `30` | 拉官方原文超时（秒） |
 | `max_concurrency` | `2` | 同时翻译的公告数上限 |
+| `refresh_interval` | `1800` | 定时预热间隔（秒），0 关闭；下限 60 秒 |
+| `refresh_languages` | `["EN"]` | 预热哪些语言的公告文件 |
+| `refresh_only_valid` | `true` | 只预热有效期内的公告 |
 | `translate.backend` | `openai` | `openai` 或 `fake` |
 | `translate.base_url` | — | OpenAI 兼容接口地址（DeepSeek / OpenAI / Ollama / vLLM） |
 | `translate.api_key` | — | 密钥；留空则不发 `Authorization` 头（本地 Ollama 用） |

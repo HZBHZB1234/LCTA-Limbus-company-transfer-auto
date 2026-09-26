@@ -31,6 +31,7 @@ from webutils.notice.core import (
     validate_translated,
 )
 from webutils.notice.service import (
+    DEFAULT_SERVICE_URL,
     DEFAULT_URL_TEMPLATE,
     PENDING_MAX_WAIT,
     WAIT_SLICE_SECONDS,
@@ -593,6 +594,17 @@ def http_service():
         "/noticeDetails/ok-without-data.json": to_bytes({"status": "ok"}),
         "/noticeDetails/error-status.json": to_bytes({"status": "error", "message": "翻译引擎挂了"}),
         "/noticeDetails/legacy-error.json": to_bytes({"ok": False, "error": {"message": "旧信封错误"}}),
+        "/status": to_bytes(
+            {
+                "service": "lcta-notice-server",
+                "state": "ok",
+                "cached": 7,
+                "running": 1,
+                "translated": 9,
+                "failed": 0,
+            }
+        ),
+        "/v1/status": b"<html>oops</html>",
     }
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -687,6 +699,51 @@ class TestServiceClient:
 
     def test_default_template_constant(self):
         assert DEFAULT_URL_TEMPLATE == "{base}/noticeDetails/{file}"
+
+    def test_status_route_is_parsed(self, http_service):
+        info = NoticeTranslationService(http_service).status()
+        assert info["service"] == "lcta-notice-server"
+        assert info["cached"] == 7
+        assert _Handler.seen == ["/status"]
+
+    def test_status_requires_base_url(self):
+        with pytest.raises(NoticeServiceError) as excinfo:
+            NoticeTranslationService("").status()
+        assert excinfo.value.kind == "config"
+
+    def test_status_non_json_is_classified(self, http_service):
+        client = NoticeTranslationService(http_service + "/v1", timeout=10)
+        with pytest.raises(NoticeServiceError) as excinfo:
+            client.status()
+        assert excinfo.value.kind == "invalid_json"
+
+
+class TestBuiltinService:
+    """服务地址与全部策略内置：页面不再有任何配置项。"""
+
+    def test_service_url_is_hardcoded(self):
+        assert DEFAULT_SERVICE_URL == "https://notice.lcta.top"
+
+    def test_from_config_uses_builtin_defaults(self):
+        localizer = NoticeLocalizer.from_config()
+        assert localizer.service_url == DEFAULT_SERVICE_URL
+        assert localizer.url_template == DEFAULT_URL_TEMPLATE
+        assert localizer.lang_mode == "auto"
+        assert localizer.only_valid is True
+        assert localizer.verify_official is True
+        assert localizer.seed_meta is True
+
+    def test_service_status_success(self, http_service):
+        result = NoticeLocalizer(service_url=http_service).service_status()
+        assert result["success"] is True
+        assert result["cached"] == 7
+        assert result["running"] == 1
+        assert result["service_url"] == http_service
+
+    def test_service_status_failure_is_reported(self):
+        result = NoticeLocalizer(service_url="http://127.0.0.1:1", timeout=2).service_status()
+        assert result["success"] is False
+        assert result["kind"] in ("network", "timeout")
 
 
 # --------------------------------------------------------------------------

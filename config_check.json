@@ -180,18 +180,6 @@
     },
     "notice": {
         "enabled": "bool",
-        "service_url": "str",
-        "url_template": "str",
-        "lang": [
-            "auto",
-            "EN",
-            "KR",
-            "JP"
-        ],
-        "timeout": "int",
-        "launcher_timeout": "int",
-        "only_valid": "bool",
-        "verify_official": "bool",
-        "seed_meta": "bool"
+        "launcher_timeout": "int"
     }
 }

@@ -23,6 +23,7 @@ from .core import (  # noqa: F401
 )
 from .manager import NoticeManager, get_notice_manager  # noqa: F401
 from .service import (  # noqa: F401
+    DEFAULT_SERVICE_URL,
     DEFAULT_URL_TEMPLATE,
     PENDING_MAX_WAIT,
     NoticePendingError,
@@ -38,6 +39,7 @@ __all__ = [
     "NoticeServiceError",
     "NoticePendingError",
     "NoticeTranslationService",
+    "DEFAULT_SERVICE_URL",
     "DEFAULT_URL_TEMPLATE",
     "PENDING_MAX_WAIT",
     "DEFAULT_LANG",

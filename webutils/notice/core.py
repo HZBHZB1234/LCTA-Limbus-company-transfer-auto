@@ -15,6 +15,10 @@
 客户端职责：取官方 meta → 逐个把目标文件名交给翻译服务 → 校验 → 原子落盘。
 文本切分与回填由服务端完成，客户端不参与。
 
+翻译服务地址**内置**为公共翻译服务（`service.DEFAULT_SERVICE_URL` =
+`https://notice.lcta.top`），语言 / 超时 / 校验策略也全部取内置默认值——
+公告汉化页面不提供任何配置项，`from_config()` 只负责组装这些常量。
+
 服务端按 `{"status": "ok" | "pending", …}` 信封响应（契约见 `service.py`）：
 `pending` 表示未命中缓存，客户端按指数退避等待重试，累计不超过
 `service.PENDING_MAX_WAIT` 秒，并始终受调用方的时间预算与取消事件约束。
@@ -36,6 +40,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from . import paths
 from .service import (
+    DEFAULT_SERVICE_URL,
     DEFAULT_URL_TEMPLATE,
     NoticePendingError,
     NoticeServiceError,
@@ -397,15 +402,16 @@ def save_state(state_path: Path, state: dict) -> None:
 class NoticeLocalizer:
     """公告汉化执行器。
 
-    所有路径与配置均可注入，便于单测；默认值取自 `paths` 与显式参数，
-    `from_config()` 负责从 `ConfigManager` 组装。
+    所有路径与配置均可注入，便于单测；默认值取自 `paths` 与显式参数。
+    `from_config()` 不读任何用户配置——服务地址与全部策略都内置
+    （见 `service.DEFAULT_SERVICE_URL`），页面不提供配置项。
     """
 
     def __init__(
         self,
         notice_dir: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
-        service_url: str = "",
+        service_url: str = DEFAULT_SERVICE_URL,
         url_template: str = DEFAULT_URL_TEMPLATE,
         timeout: int = 60,
         lang_mode: str = "auto",
@@ -450,18 +456,36 @@ class NoticeLocalizer:
     # -- 配置组装 ---------------------------------------------------------
     @classmethod
     def from_config(cls) -> "NoticeLocalizer":
-        from globalManagers.ConfigManager import ConfigManager
+        """组装执行器：服务地址与全部策略都内置，页面不再提供任何配置项。
 
-        config = ConfigManager()
-        return cls(
-            service_url=config.get("notice.service_url", ""),
-            url_template=config.get("notice.url_template", DEFAULT_URL_TEMPLATE),
-            timeout=config.get("notice.timeout", 60),
-            lang_mode=config.get("notice.lang", "auto"),
-            only_valid=config.get("notice.only_valid", True),
-            verify_official=config.get("notice.verify_official", True),
-            seed_meta=config.get("notice.seed_meta", True),
-        )
+        服务地址固定为 `service.DEFAULT_SERVICE_URL`（公共翻译服务），
+        `url_template` / `timeout` / `lang_mode` / `only_valid` / `verify_official`
+        / `seed_meta` 一律取类默认值 —— 语言按公告缓存自动推断、校验与补种恒开，
+        用户侧无需（也无法）配置。
+        """
+        return cls(service_url=DEFAULT_SERVICE_URL)
+
+    # -- 服务状态 ---------------------------------------------------------
+    def service_status(self) -> dict:
+        """查询内置翻译服务的运行状态（页面加载时自动刷新，不落盘）。"""
+        try:
+            payload = self.service().status()
+        except NoticeServiceError as exc:
+            return {
+                "success": False,
+                "service_url": self.service_url,
+                "kind": exc.kind,
+                "message": str(exc),
+            }
+        return {
+            "success": True,
+            "service_url": self.service_url,
+            "state": payload.get("state") or "",
+            "cached": payload.get("cached"),
+            "running": payload.get("running"),
+            "translated": payload.get("translated"),
+            "failed": payload.get("failed"),
+        }
 
     # -- 只读状态 ---------------------------------------------------------
     def _classify(self, file_name: str, state: dict) -> Tuple[str, Optional[str]]:

@@ -24,6 +24,8 @@ from typing import Callable, List, Optional
 USER_AGENT = "LCTA-NoticeServer/1.0"
 MAX_OFFICIAL_BYTES = 4 * 1024 * 1024
 
+META_FILE_NAME = "noticeMeta.json"
+
 NOTICE_NAME_RE = re.compile(r"^noticeDetail_(\d+)_(KR|EN|JP)_(\d+)\.json$", re.IGNORECASE)
 
 
@@ -116,25 +118,45 @@ class NoticeStore:
         if hit is not None:
             return hit
 
+        data = self._fetch(
+            "{}/noticeDetails/{}".format(self.official_base_url, file_name),
+            label="官方公告",
+        )
+        with self._lock:
+            self._official[file_name] = data
+        return data
+
+    def official_meta(self) -> bytes:
+        """拉官方公告清单 `noticeMeta.json`。
+
+        **刻意不做内存缓存**：定时预热需要每轮都拿到最新清单，否则官方新发的
+        公告永远不会被提前翻译。带 `Cache-Control: no-cache` 以避开 CDN 旧副本。
+        """
+        return self._fetch(
+            "{}/{}".format(self.official_base_url, META_FILE_NAME),
+            label="官方公告清单",
+        )
+
+    def _fetch(self, url: str, label: str = "官方资源") -> bytes:
         if not self.official_base_url:
             raise NoticeStoreError("未配置官方公告地址")
-        url = "{}/noticeDetails/{}".format(self.official_base_url, file_name)
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        req = urllib.request.Request(
+            url, headers={"User-Agent": USER_AGENT, "Cache-Control": "no-cache"}
+        )
         try:
             with self._opener(req, timeout=self.timeout) as resp:
                 data = resp.read(MAX_OFFICIAL_BYTES + 1)
         except urllib.error.HTTPError as exc:
-            raise NoticeStoreError("官方公告不存在或不可用（HTTP {}）".format(exc.code))
+            raise NoticeStoreError("{}不存在或不可用（HTTP {}）".format(label, exc.code))
         except urllib.error.URLError as exc:
-            raise NoticeStoreError("无法获取官方公告: {}".format(getattr(exc, "reason", exc)))
+            raise NoticeStoreError(
+                "无法获取{}: {}".format(label, getattr(exc, "reason", exc))
+            )
         except TimeoutError:
-            raise NoticeStoreError("获取官方公告超时（{} 秒）".format(self.timeout))
+            raise NoticeStoreError("获取{}超时（{} 秒）".format(label, self.timeout))
 
         if len(data) > MAX_OFFICIAL_BYTES:
-            raise NoticeStoreError("官方公告过大，已拒绝")
+            raise NoticeStoreError("{}过大，已拒绝".format(label))
         if not data.strip():
-            raise NoticeStoreError("官方公告内容为空")
-
-        with self._lock:
-            self._official[file_name] = data
+            raise NoticeStoreError("{}内容为空".format(label))
         return data

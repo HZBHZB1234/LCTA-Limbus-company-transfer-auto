@@ -48,10 +48,6 @@ def run_notice_sync(cancel_event=None) -> dict:
         _log_manager.log_error(e)
         return {"skipped": True, "reason": "读取公告汉化配置失败"}
 
-    if not localizer.service_url:
-        _log_manager.log("公告汉化已跳过: 未配置翻译服务地址", level=logging.WARNING)
-        return {"skipped": True, "reason": "未配置翻译服务地址"}
-
     budget = _budget_seconds()
     deadline = time.monotonic() + budget
     _log_manager.log("公告汉化: 开始增量同步（预算 {:.0f} 秒）".format(budget))

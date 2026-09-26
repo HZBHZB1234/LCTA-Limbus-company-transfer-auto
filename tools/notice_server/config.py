@@ -7,6 +7,9 @@
 
 加载优先级：默认值 < `config.json` < CLI 参数（`server.apply_cli_overrides`）；
 密钥额外支持环境变量 `LCTA_NOTICE_API_KEY` / `OPENAI_API_KEY`（配置文件优先）。
+
+`refresh_interval` 控制**定时预热**：默认每 30 分钟拉一次官方公告清单，把清单里
+还没有译文的公告提前翻好，客户端第一次请求就能命中缓存（见 `refresher.py`）。
 """
 from __future__ import annotations
 
@@ -21,6 +24,11 @@ DEFAULT_CONFIG = {
     "official_base_url": "https://notice.limbuscompanyapi.com",
     "official_timeout": 30,
     "max_concurrency": 2,
+    # 定时预热：每 refresh_interval 秒拉一次官方公告清单，把新增公告提前翻好
+    # （0 = 关闭；下限 60 秒，防止打爆官方 CDN）
+    "refresh_interval": 1800,
+    "refresh_languages": ["EN"],
+    "refresh_only_valid": True,
     "translate": {
         "backend": "openai",
         "base_url": "https://api.deepseek.com/v1",

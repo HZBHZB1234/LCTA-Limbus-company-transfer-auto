@@ -176,13 +176,6 @@
     },
     "notice": {
         "enabled": false,
-        "service_url": "http://127.0.0.1:8000",
-        "url_template": "{base}/noticeDetails/{file}",
-        "lang": "auto",
-        "timeout": 60,
-        "launcher_timeout": 30,
-        "only_valid": true,
-        "verify_official": true,
-        "seed_meta": true
+        "launcher_timeout": 30
     }
 }

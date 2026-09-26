@@ -1,8 +1,9 @@
 // ============================
 // 公告汉化模块
 // ============================
-// 客户端只把「官方公告文件名」交给用户自建的翻译服务，服务端负责查缓存 / 拉取 /
+// 客户端只把「官方公告文件名」交给内置的公共翻译服务，服务端负责查缓存 / 拉取 /
 // 翻译，返回整篇译好的公告 JSON；本页负责发起同步、展示进度与逐条状态、还原原文。
+// 服务地址与全部策略（语言、超时、校验）都由后端自动确定，页面无配置项。
 // 落盘细节（官方同名文件、原子写入、与官方原文比对校验）全部在后端完成。
 
 class NoticePage {
@@ -21,15 +22,11 @@ class NoticePage {
         this.langStatusEl = document.getElementById('notice-lang-status');
         this.countStatusEl = document.getElementById('notice-count-status');
         this.metaStatusEl = document.getElementById('notice-meta-status');
+        this.serviceUrlStatusEl = document.getElementById('notice-service-url-status');
         this.langChip = document.getElementById('notice-lang-chip');
         this.dirNotice = document.getElementById('notice-dir-notice');
         this.serviceChip = document.getElementById('notice-service-chip');
         this.integrationChip = document.getElementById('notice-integration-chip');
-
-        this.serviceUrlInput = document.getElementById('notice-service-url');
-        this.urlTemplateInput = document.getElementById('notice-url-template');
-        this.langSelect = document.getElementById('notice-lang');
-        this.timeoutInput = document.getElementById('notice-timeout');
 
         this.badge = document.getElementById('notice-status-badge');
         this.description = document.getElementById('notice-status-description');
@@ -55,6 +52,8 @@ class NoticePage {
         this._stopped = false;
         this._refreshIntegrationChip();
         await this.loadInfo();
+        // 服务地址与运行状态自动获取（无需用户配置）
+        this.loadServiceStatus();
         this._startPolling();
     }
 
@@ -88,7 +87,12 @@ class NoticePage {
             });
         }
         if (this.btnTest) this.btnTest.addEventListener('click', () => this.doTest());
-        if (this.btnRefresh) this.btnRefresh.addEventListener('click', () => this.loadInfo());
+        if (this.btnRefresh) {
+            this.btnRefresh.addEventListener('click', () => {
+                this.loadInfo();
+                this.loadServiceStatus();
+            });
+        }
         if (this.btnOpenDir) this.btnOpenDir.addEventListener('click', () => this.doOpenDir());
     }
 
@@ -151,6 +155,8 @@ class NoticePage {
             this.metaStatusEl,
             info.meta_source === 'official' ? '官方 CDN' : (info.meta_source === 'local' ? '本地缓存' : '—')
         );
+        // 服务地址由后端内置（无需配置），这里只做展示
+        if (info.service_url) this._setValue(this.serviceUrlStatusEl, info.service_url);
         this._setChip(
             this.langChip,
             `${info.lang} · ${counts.total || 0} 篇`,
@@ -216,6 +222,33 @@ class NoticePage {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    // 服务地址与运行状态自动获取（页面加载 / 点「刷新状态」时调用）。
+    // 服务端状态页 `/status` 返回缓存篇数与正在翻译的数量，全部由后端查询。
+    async loadServiceStatus() {
+        this._setChip(this.serviceChip, '检测中...', 'running', 'spinner fa-spin');
+        try {
+            const result = await pywebview.api.notice_service_status();
+            if (this._stopped) return;
+            if (!result || !result.success) {
+                this._setChip(this.serviceChip, '无法连接', 'error', 'triangle-exclamation');
+                return;
+            }
+            if (result.service_url) this._setValue(this.serviceUrlStatusEl, result.service_url);
+            const cached = Number(result.cached || 0);
+            const running = Number(result.running || 0);
+            const detail = '已缓存 ' + cached + ' 篇';
+            this._setChip(
+                this.serviceChip,
+                running > 0 ? '在线 · ' + detail + '（译 ' + running + '）' : '在线 · ' + detail,
+                'success',
+                'check'
+            );
+        } catch (e) {
+            if (!this._stopped) this._setChip(this.serviceChip, '无法连接', 'error', 'triangle-exclamation');
+            console.error('notice loadServiceStatus error:', e);
+        }
     }
 
     _renderLogs(logs) {

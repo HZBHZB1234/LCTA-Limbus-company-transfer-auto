@@ -37,6 +37,15 @@ from typing import Callable, List, Optional, Tuple
 DEFAULT_URL_TEMPLATE = "{base}/noticeDetails/{file}"
 USER_AGENT = "LCTA-NoticeLocalizer/1.0"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+# 状态页（服务端 `/status`）体量很小，单独设一个上限
+MAX_STATUS_BYTES = 256 * 1024
+# 状态页探测的超时上限：页面加载时自动刷新，不能挂在默认的 60 秒请求超时上
+STATUS_TIMEOUT = 10
+
+# 内置翻译服务地址：公告汉化页不再让用户配置，直接使用官方公共翻译服务
+DEFAULT_SERVICE_URL = "https://notice.lcta.top"
+# 服务端状态页路径（`server.create_app` 注册的 `/status`）
+STATUS_PATH = "/status"
 
 STATUS_OK = "ok"
 STATUS_PENDING = "pending"
@@ -189,16 +198,25 @@ class NoticeTranslationService:
 
     def fetch_raw(self, file_name: str) -> bytes:
         """单次 HTTP 往返，返回原始响应体（不拆信封）。"""
-        url = self.build_url(file_name)
+        return self._get(self.build_url(file_name))
+
+    def _get(
+        self,
+        url: str,
+        max_bytes: int = MAX_RESPONSE_BYTES,
+        timeout: Optional[int] = None,
+    ) -> bytes:
+        """单次 GET，返回原始响应体并做体积 / 空响应检查。"""
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        wait = self.timeout if timeout is None else max(1, int(timeout))
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with urllib.request.urlopen(req, timeout=wait) as resp:
                 status = getattr(resp, "status", 200)
                 if status != 200:
                     raise NoticeServiceError(
                         "服务返回 HTTP {}".format(status), kind="http", status=status
                     )
-                data = resp.read(MAX_RESPONSE_BYTES + 1)
+                data = resp.read(max_bytes + 1)
         except urllib.error.HTTPError as exc:
             kind = "not_found" if exc.code == 404 else "http"
             raise NoticeServiceError(
@@ -210,26 +228,49 @@ class NoticeTranslationService:
             reason = getattr(exc, "reason", exc)
             if isinstance(reason, TimeoutError) or "timed out" in str(reason).lower():
                 raise NoticeServiceError(
-                    "连接翻译服务超时（{} 秒）".format(self.timeout), kind="timeout"
+                    "连接翻译服务超时（{} 秒）".format(wait), kind="timeout"
                 )
             raise NoticeServiceError("无法连接翻译服务: {}".format(reason), kind="network")
         except TimeoutError:
             raise NoticeServiceError(
-                "连接翻译服务超时（{} 秒）".format(self.timeout), kind="timeout"
+                "连接翻译服务超时（{} 秒）".format(wait), kind="timeout"
             )
         except NoticeServiceError:
             raise
         except Exception as exc:  # pragma: no cover - 兜底
             raise NoticeServiceError("请求翻译服务失败: {}".format(exc), kind="network")
 
-        if len(data) > MAX_RESPONSE_BYTES:
+        if len(data) > max_bytes:
             raise NoticeServiceError(
-                "服务返回内容过大（超过 {} KB），已拒绝写入".format(MAX_RESPONSE_BYTES // 1024),
+                "服务返回内容过大（超过 {} KB），已拒绝".format(max_bytes // 1024),
                 kind="too_large",
             )
         if not data.strip():
             raise NoticeServiceError("服务返回空内容", kind="empty")
         return data
+
+    def status(self) -> dict:
+        """查询服务端运行状态（`GET {base}/status`）。
+
+        页面加载时自动刷新用：服务端返回缓存篇数 / 正在翻译的文件 / 最近错误。
+        探测超时收紧到 `STATUS_TIMEOUT`，失败抛 `NoticeServiceError`。
+        """
+        if not self.base_url:
+            raise NoticeServiceError("未配置翻译服务地址", kind="config")
+        raw = self._get(
+            self.base_url + STATUS_PATH,
+            max_bytes=MAX_STATUS_BYTES,
+            timeout=min(self.timeout, STATUS_TIMEOUT),
+        )
+        try:
+            payload = json.loads(raw.decode("utf-8-sig"))
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise NoticeServiceError(
+                "服务状态页返回内容不是合法 JSON: {}".format(exc), kind="invalid_json"
+            )
+        if not isinstance(payload, dict):
+            raise NoticeServiceError("服务状态页返回顶层不是对象", kind="protocol")
+        return payload
 
     def fetch(self, file_name: str) -> bytes:
         """单次请求并拆信封，返回**译文 JSON 字节**。

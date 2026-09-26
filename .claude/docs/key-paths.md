@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-10-08 -->
+<!-- Last updated: 2026-09-26 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1385,6 +1385,10 @@ Files: `start_webui.py`（`_cleanup_motw_on_startup`，init_env 内调用）, `w
   → webui/app_api/notice.py（NoticeMixin，_notice_manager() 私有名取单例）
   → webutils/notice/manager.py get_notice_manager()（模块级单例）
   → webutils/notice/core.py NoticeLocalizer.from_config()
+      · 服务地址与全部策略**内置**（页面无任何配置项）：
+        service_url = service.DEFAULT_SERVICE_URL（https://notice.lcta.top）、
+        url_template = DEFAULT_URL_TEMPLATE、timeout=60、lang_mode='auto'、
+        only_valid / verify_official / seed_meta 恒 True
       · load_meta()      GET https://notice.limbuscompanyapi.com/noticeMeta.json
                          （网络失败 → 回退本地 notice/noticeMeta.json）
       · resolve_language()  lang_mode='auto' → 由 noticeDetails/ 已有文件名后缀推断，
@@ -1392,6 +1396,15 @@ Files: `start_webui.py`（`_cleanup_motw_on_startup`，init_env 内调用）, `w
       · enumerate_targets()  按语言枚举；DETAIL_NAME_RE 拒绝非法文件名
       · _classify()      missing（无文件）/ translated（sha256 与 state 记录一致）
                          / official（存在但指纹不符 = 官方原文或外部改动）
+
+服务状态自动获取（页面加载 / 点「刷新状态」，无需用户配置）:
+  → webui/js/notice.js loadServiceStatus() → pywebview.api.notice_service_status()
+  → webutils/notice/manager.py NoticeManager.service_status()
+  → webutils/notice/core.py NoticeLocalizer.service_status()
+  → webutils/notice/service.py NoticeTranslationService.status()
+      GET {base}/status（超时收紧到 STATUS_TIMEOUT=10s，体积上限 256KB）
+  → 服务端 status JSON 取 state/cached/running/translated/failed 回填
+    「翻译服务」「服务地址」两行（失败 → chip「无法连接」，不影响页面其余部分）
 
 点「开始同步并汉化」→ notice_start_sync() → NoticeManager.start_sync(force=False)
   → 后台线程 threading.Thread(name='notice-localize', daemon=True)
@@ -1421,7 +1434,7 @@ Files: `start_webui.py`（`_cleanup_motw_on_startup`，init_env 内调用）, `w
   → 进度经 progress(done,total,msg) 回写 NoticeManager，前端轮询刷新进度条与日志
 
 翻译服务响应契约（服务端实现，客户端只发文件名、无需鉴权）:
-  GET {service_url}/noticeDetails/{file}      （url_template 可配）
+  GET {service_url}/noticeDetails/{file}      （url_template 内置为 {base}/noticeDetails/{file}）
   200 + JSON 信封，由 status 决定语义:
     {"status": "ok",      "data": {…整篇公告 JSON…}}   译文就绪，data 即公告本体
     {"status": "pending", "message": "…"}               未命中缓存，客户端稍后重试
@@ -1447,10 +1460,10 @@ Files: `start_webui.py`（`_cleanup_motw_on_startup`，init_env 内调用）, `w
 
 Launcher 集成（启动前自动同步）:
   Launcher 配置页 · 工作模式配置 → #launcher-notice-enabled（'notice.enabled'）
+  → 首页「一键配置」oneClickSetup() 默认写入 'launcher-notice-enabled': true
   → launcher/main.py pipeline.on(PHASE_PREPARE_MOD, _prepare_notice_handler)
   → launcher/notice.py run_notice_sync(cancel_event)
-      · notice.enabled 未开 / 模块导入失败 / 配置读取失败 / 未配服务地址
-        → {"skipped": True, ...}（静默）
+      · notice.enabled 未开 / 模块导入失败 → {"skipped": True, ...}（静默）
       · budget = clamp(notice.launcher_timeout, 下限 5s，默认 30s)
       · NoticeLocalizer.from_config().sync(cancel_event, progress, deadline=monotonic()+budget)
       · 预算耗尽 → timed_out，只跳过剩余条目（已写入文件保持有效）
@@ -1472,30 +1485,38 @@ Launcher 集成（启动前自动同步）:
     · pending=True 仍算 success（连接是通的，只是服务端还没译好），页面提示
       「服务可用，但该公告尚未命中缓存」
 
-配置键（config_default.json / config_check.json 的 notice 段，全部经
-webui/js/core.js 静态 configKeyMap 登记 → bindConfigAutoSave 自动保存）:
-  notice.enabled(bool) / service_url(str) / url_template(str) / lang(auto|EN|KR|JP) /
-  timeout(int) / launcher_timeout(int) / only_valid(bool) / verify_official(bool) /
-  seed_meta(bool)
+配置键（config_default.json / config_check.json 的 notice 段）:
+  notice.enabled(bool)  —— Launcher 集成开关（首页一键配置默认开启）
+  notice.launcher_timeout(int) —— Launcher 启动预算，默认 30s（无 UI，改配置文件）
+  服务地址与其余策略**不再有配置键**：硬编码在内置常量里（页面无配置项）。
   Launcher 集成开关 `launcher-notice-enabled` 只放在 launcher-config.html 的
   「工作模式配置」卡片内（符合 AGENTS「Launcher 集成规范」），notice.html 上只有
-  集成介绍 + goAndShow('launcher-config') 跳转按钮。
+  状态卡（含服务地址 / 服务状态自动获取）+ 集成介绍 + goAndShow('launcher-config') 跳转按钮。
 
 服务端（tools/notice_server/，独立进程、不属于 LCTA 运行时、不参与打包；
 HTTP 层 FastAPI + Uvicorn、LLM 输出解析 json_repair，
 需 pip install -r tools/notice_server/requirements.txt）:
-  GET {任意前缀}/{官方文件名}      （只取 basename，前缀随 url_template 配）
+  GET {任意前缀}/{官方文件名}      （只取 basename，前缀随意）
     → 400  文件名不匹配 NOTICE_NAME_RE（顺带挡住 ../ 路径穿越）
     → {"status":"ok","data":{…}}        译文缓存命中，直接回整篇公告
     → {"status":"pending","message":…}  未命中：立刻回 pending + 后台线程翻译
+        （并发已满时额外带 `reason:"busy"`，仅服务端内部/预热用来区分
+         「还没派下去」与「正在翻译」；客户端只认 status，忽略多余字段）
     → {"status":"error","message":…}    最近一次失败（**只上报一次**，下次请求重新排队）
-  server.create_app(service)       FastAPI 路由工厂：`/`·`/status`·`/healthz` 状态页
-    + `/{file_path:path}` catch-all（注册在状态页之后）；`/docs` Swagger 文档。
-    端点为同步 def，Starlette 放线程池执行；CLI 用 uvicorn.run 承载
+  GET / · /status · /healthz          状态页（缓存数 / 正在翻译 / 最近错误 / 预热状态）
+  server.create_app(service, refresher=None)  FastAPI 路由工厂：状态页注册在 catch-all
+    之前；传了 refresher 时 /status 带出 refresh{enabled,interval,languages,last_run,last}
   config.load_config()             默认值（config.py 的 DEFAULT_CONFIG，server.py 不内联）
     < config.json（translate 深合并）< CLI 参数；密钥回退 LCTA_NOTICE_API_KEY/OPENAI_API_KEY
   server.NoticeService.respond()   缓存命中判定 / 异步调度（max_concurrency 上限；
     同一文件的并发请求只翻译一次）/ 失败原因留存；缓存损坏自动删除重译
+  refresher.NoticeRefresher        **定时预热（默认每 30 分钟）**：启动即跑第一轮，
+    之后每 refresh_interval 秒（0 关闭，下限 60s）拉官方 noticeMeta.json
+    （store.official_meta()，带 Cache-Control: no-cache 且不做内存缓存）→
+    enumerate_notice_names(meta, refresh_languages, refresh_only_valid) 按语言枚举
+    （白名单校验 + 过期过滤 + 去重）→ 未缓存的经 service.respond() 排队翻译
+    （复用请求路径的并发上限与去重；并发已满时排队等名额，上限 120s，等不到留待下轮）；
+    预热后客户端第一次请求通常直接命中 ok，不必等指数退避
   pipeline.NoticePipeline.translate()  官方原文 → build_slots → translator.translate
     → apply_translations（restore_wrapper 还原 <...>/[...] 包裹）
     → validate_payload 自检 → store.save_translated（原子写）
@@ -1503,18 +1524,23 @@ HTTP 层 FastAPI + Uvicorn、LLM 输出解析 json_repair，
     extract_json_array 三级容错（剥 <think>/围栏 → 严格 json.loads → json_repair 修截断/
     未转义换行/单引号/尾逗号/废话），修不回或长度/类型不符重试 max_retries 次后报错
     （宁可报错也不缓存坏结构）
-  store.NoticeStore                官方原文（内存缓存）+ 译文缓存；文件名白名单
+  store.NoticeStore                官方原文（内存缓存）+ 官方清单（不缓存）+ 译文缓存；
+    文件名白名单；原子写
   --backend fake 用 FakeTranslator（每段加 `【中】` 前缀）不配密钥先跑通链路
-  验证：tests/test_notice_server.py（50 项，含「真实客户端 ↔ 真实 Uvicorn HTTP
-    服务端」端到端：状态路由 / 400 信封 / 任意前缀路由 / json_repair 容错解析）
+  --refresh-interval / --refresh-languages  覆盖预热间隔与语言
+  验证：tests/test_notice_server.py（含定时预热、真实客户端 ↔ 真实 Uvicorn HTTP
+    服务端端到端：状态路由 / 400 信封 / 任意前缀路由 / json_repair 容错解析）
 
 Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.md`,
       `webui/app_api/notice.py`, `webutils/notice/{__init__,paths,service,core,manager}.py`,
       `launcher/notice.py`, `launcher/main.py`（PHASE_PREPARE_MOD 注册）,
       `webui/sections/launcher-config.html`（#launcher-notice-enabled）,
+      `webui/js/features.js`（一键配置 oneClickSetup）, `webui/sections/dashboard.html`,
       `webui/js/core.js`（configKeyMap）, `webui/js/utils.js`（noticePage 导航生命周期）,
       `webui/index.html`（#notice-btn / #notice-section / script）,
       `webui/css/layout-extras.css`（公告汉化段）, `config_default.json` / `config_check.json`,
+      `tools/notice_server/{server,config,refresher,store,pipeline,translator}.py`,
       `.github/InitCode.py`（js_files）, `webutils/__init__.py`（导出）,
-      `tests/test_notice_localize.py`, `webui/assets/update.md`
+      `tests/test_notice_localize.py`, `tests/test_notice_server.py`, `webui/assets/update.md`
+
 

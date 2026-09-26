@@ -66,6 +66,14 @@ class NoticeMixin:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
+    def notice_service_status(self):
+        """内置翻译服务的运行状态（页面加载时自动刷新，无需用户配置）。"""
+        try:
+            return self._notice_manager().service_status()
+        except Exception as e:
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
     def notice_open_dir(self, target="notice"):
         """在资源管理器中打开游戏公告缓存目录 / 本工具缓存目录。"""
         from pathlib import Path

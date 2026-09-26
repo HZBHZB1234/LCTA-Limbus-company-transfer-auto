@@ -70,9 +70,8 @@ class NoticeManager:
         if self.worker and self.worker.is_alive():
             return {"success": False, "message": "同步任务正在运行"}
 
+        # 服务地址固定内置（`core.NoticeLocalizer.from_config`），无需用户配置
         localizer = NoticeLocalizer.from_config()
-        if not localizer.service_url:
-            return {"success": False, "message": "请先填写翻译服务地址"}
 
         self.cancel_event = threading.Event()
         self.status = "running"
@@ -163,6 +162,14 @@ class NoticeManager:
             return {"success": False, "message": str(exc)}
         self._log(result.get("message", ""))
         return result
+
+    def service_status(self) -> dict:
+        """查询内置翻译服务的运行状态（页面加载时自动刷新，不进同步日志）。"""
+        try:
+            return NoticeLocalizer.from_config().service_status()
+        except Exception as exc:  # pragma: no cover - 兜底
+            _log_manager.log_error(exc)
+            return {"success": False, "message": str(exc)}
 
 
 _manager: Optional[NoticeManager] = None

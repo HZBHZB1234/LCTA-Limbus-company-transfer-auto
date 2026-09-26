@@ -5,6 +5,9 @@
   "official_base_url": "https://notice.limbuscompanyapi.com",
   "official_timeout": 30,
   "max_concurrency": 2,
+  "refresh_interval": 1800,
+  "refresh_languages": ["EN"],
+  "refresh_only_valid": true,
   "translate": {
     "backend": "openai",
     "base_url": "https://api.deepseek.com/v1",

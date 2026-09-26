@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-10-08 -->
+<!-- Last updated: 2026-09-26 -->
 
 ## How to Run
 
@@ -71,7 +71,7 @@ pytest tests/test_notice_server.py
 
 Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`, `tests/test_llm_fancy.py`, `tests/test_resource_updater.py`, `tests/test_input_bypass.py`, `tests/test_cheat_core.py`, `tests/test_notice_server.py`
 
-> 公告汉化服务端测试（`tests/test_notice_server.py`）覆盖 FastAPI HTTP 层、json_repair 容错解析与端到端（真实客户端打真实 Uvicorn 端口），因此需要 `fastapi` / `uvicorn` / `json-repair`（`tools/notice_server/requirements.txt`）；未安装时 `pytest.importorskip` 会让整个文件跳过而非报错。
+> 公告汉化服务端测试（`tests/test_notice_server.py`）覆盖 FastAPI HTTP 层、json_repair 容错解析、定时预热（`refresher.py`：清单枚举 / 过期过滤 / 未缓存排队 / 间隔下限）与端到端（真实客户端打真实 Uvicorn 端口），因此需要 `fastapi` / `uvicorn` / `json-repair`（`tools/notice_server/requirements.txt`）；未安装时 `pytest.importorskip` 会让整个文件跳过而非报错。
 
 > 作弊工具箱管理器测试（`tests/test_cheat_damage_hook.py`）已随实现迁往私有仓库，在私有仓库内运行 `pytest tests/`（需要 Windows）。公共仓库侧 `tests/test_cheat_core.py` 覆盖加密/解密/解锁/锁定全链路（纯逻辑，跨平台）。
 

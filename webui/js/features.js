@@ -1374,7 +1374,7 @@ async function refreshDashboard() {
 }
 
 // === 一键配置（首页） ===
-// 统一启用绝大多数可自动化的 Launcher / 美化 / CDN / 资源预下载等配置，
+// 统一启用绝大多数可自动化的 Launcher / 美化 / CDN / 资源预下载 / 公告汉化等配置，
 // 并尝试写入 Steam 启动项。涉及风险同意（加速/反检测/作弊）或需手动选择
 // （CG、API、汉化包来源）的功能不在此列，仅在首页保留跳转入口。
 async function oneClickSetup() {
@@ -1399,6 +1399,7 @@ async function oneClickSetup() {
             'launcher-work-crash-popup': true,                  // 异常日志提示
             'launcher-work-gui-mode': true,                     // GUI进度窗口
             'launcher-resource-update-enabled': true,           // 游戏资源预下载
+            'launcher-notice-enabled': true,                    // 公告汉化（启动前自动同步并汉化公告）
             'auto-check-update': true,                          // 自动更新检查
             // 调爪「替换」文本包：彩色气泡（3）/ 随机加载文本（5）/ 事件美化（7）
             'lc-tiaozhua-replace-3': true,
@@ -1417,7 +1418,7 @@ async function oneClickSetup() {
 
         const cfgResult = await configManager.updateConfigValues(updates);
         if (cfgResult && cfgResult.success) {
-            modal.addLog('已启用 Launcher / 文本美化 / CDN优选 / 资源预下载 / 调爪替换文本等配置');
+            modal.addLog('已启用 Launcher / 文本美化 / CDN优选 / 资源预下载 / 公告汉化 / 调爪替换文本等配置');
         } else {
             modal.addLog('配置写入未完全成功：' + (cfgResult ? cfgResult.message : '未知错误'));
         }

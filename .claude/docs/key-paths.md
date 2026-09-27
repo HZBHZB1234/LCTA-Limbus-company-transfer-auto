@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-09-26 -->
+<!-- Last updated: 2026-09-28 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -636,10 +636,26 @@ WebUI Launcher配置页 steam命令旁「写入Steam启动选项」/「清除启
       → 备份 → apps[GAME_ID].pop('LaunchOptions')（保留 LastPlayed 等字段）→ vdf.dump 写回；未配置时幂等
   → 结果 showMessage + refreshSteamLauncherStatus() 刷新状态文本
 
+首页「一键配置」写入启动项前停止 Steam（oneClickSetup steam_running 分支）:
+   → webui/js/features.js oneClickSetup() —— steamStatus.steam_running 时关闭进度窗并
+       showConfirm('需要停止 Steam', '写入启动配置需要停止 Steam，是否继续？')
+       「否」→ showMessage 提示跳过（其余配置已生效）；「是」→ oneClickStopSteamAndWrite()
+   → webui/js/features.js oneClickStopSteamAndWrite() —— 新建 ProgressModal，
+       run_func('stop_steam') 停止 Steam → 成功后等待 5 秒（Steam 退出落盘缓冲，
+       确保写入是最后一笔）→ 复用 doOneClickSteamWrite() 写入 → refreshDashboard()
+   → webui/app_api/core.py CoreMixin.stop_steam（set_function 注册）
+   → webutils/function_steam_launcher.py stop_steam()
+       → 未运行 → 幂等 {success:True, method:'noop'}
+       → 优雅退出: 注册表 Steam 路径 steam.exe -shutdown（CREATE_NO_WINDOW Popen），
+         _wait_steam_exit() 轮询 is_steam_running（0.5s 间隔，上限 15s）
+       → 超时/无 steam.exe → 回退 taskkill /IM steam.exe /T /F，再轮询上限 5s
+       → 仍运行 → {success:False, method:'failed'}（前端提示手动退出后重试，不写入）
+   注：Launcher配置页「写入Steam启动选项」按钮保持原「仅警告继续」行为，未接入自动停止。
+
 页面加载: webui/sections/preload.js 'launcher-config' 分支调 refreshSteamLauncherStatus()
 ```
 
-Files: `webutils/function_steam_launcher.py`, `webutils/__init__.py`, `webui/app_api/core.py`（set_function 注册）, `webui/sections/launcher-config.html`, `webui/js/modals.js`, `webui/sections/preload.js`, `tests/test_steam_launcher.py`
+Files: `webutils/function_steam_launcher.py`, `webutils/__init__.py`, `webui/app_api/core.py`（set_function 注册）, `webui/sections/launcher-config.html`, `webui/js/modals.js`, `webui/js/features.js`（oneClickSetup / oneClickStopSteamAndWrite）, `webui/sections/preload.js`, `tests/test_steam_launcher.py`
 
 ## 7. Rule Editor — File Edit → Smart Ruleset Generation
 

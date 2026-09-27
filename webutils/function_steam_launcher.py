@@ -8,6 +8,7 @@
 import io
 import os
 import sys
+import time
 import shutil
 import subprocess
 from typing import Optional, Tuple
@@ -188,6 +189,77 @@ def is_steam_running() -> bool:
         return 'steam.exe' in out.stdout.lower()
     except Exception:
         return False
+
+
+# 停止 Steam 的等待参数：优雅退出（-shutdown）与强制结束（taskkill）后的轮询上限
+STEAM_SHUTDOWN_TIMEOUT = 15.0
+STEAM_FORCE_KILL_TIMEOUT = 5.0
+STEAM_STOP_POLL_INTERVAL = 0.5
+
+
+def _wait_steam_exit(timeout: float) -> bool:
+    """轮询等待 steam.exe 退出；退出返回 True，超时仍运行返回 False。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not is_steam_running():
+            return True
+        time.sleep(STEAM_STOP_POLL_INTERVAL)
+    return not is_steam_running()
+
+
+def stop_steam() -> dict:
+    """停止 Steam 客户端：先经 steam.exe -shutdown 优雅退出，超时回退 taskkill 强制结束。
+
+    用于写入 localconfig.vdf 前关闭 Steam，避免其退出时用内存态覆盖磁盘配置。
+    返回 {'success': bool, 'message': str, 'method': 'noop'|'graceful'|'forced'}。
+    """
+    if not is_steam_running():
+        return {'success': True, 'message': 'Steam 未在运行，无需停止。', 'method': 'noop'}
+
+    # 1. 优雅退出：Steam 官方支持的 -shutdown 参数，保证其正常落盘
+    graceful_started = False
+    steam_path = get_steam_path()
+    if steam_path:
+        steam_exe = os.path.join(steam_path, 'steam.exe')
+        if os.path.exists(steam_exe):
+            try:
+                subprocess.Popen(
+                    [steam_exe, '-shutdown'],
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+                graceful_started = True
+                _log_manager.log(f"正在优雅退出 Steam: {steam_exe} -shutdown")
+            except Exception as e:
+                _log_manager.log(f"启动 steam.exe -shutdown 失败: {e}")
+        else:
+            _log_manager.log(f"未找到 steam.exe（{steam_exe}），跳过优雅退出")
+    else:
+        _log_manager.log("注册表未定位到 Steam 安装目录，跳过优雅退出")
+
+    if graceful_started and _wait_steam_exit(STEAM_SHUTDOWN_TIMEOUT):
+        _log_manager.log("Steam 已优雅退出")
+        return {'success': True, 'message': 'Steam 已退出。', 'method': 'graceful'}
+
+    # 2. 回退：强制结束 steam.exe（含其子进程，如 steamwebhelper）
+    _log_manager.log("Steam 优雅退出超时，改用 taskkill 强制结束")
+    try:
+        subprocess.run(
+            ['taskkill', '/IM', 'steam.exe', '/T', '/F'],
+            capture_output=True, text=True, timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except Exception as e:
+        _log_manager.log(f"taskkill 结束 steam.exe 失败: {e}")
+
+    if _wait_steam_exit(STEAM_FORCE_KILL_TIMEOUT):
+        _log_manager.log("Steam 已强制结束")
+        return {'success': True, 'message': 'Steam 已强制退出。', 'method': 'forced'}
+
+    return {
+        'success': False,
+        'message': '无法停止 Steam，请手动完全退出 Steam（托盘图标 → Steam → 退出）后重试。',
+        'method': 'failed',
+    }
 
 
 def is_lcta_launch_options(launch_options: Optional[str]) -> bool:

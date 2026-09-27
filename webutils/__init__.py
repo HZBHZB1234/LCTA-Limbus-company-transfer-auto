@@ -57,6 +57,7 @@ from .function_steam_launcher import (
     set_steam_launch_options,
     clear_steam_launch_options,
     read_current_launch_options,
+    stop_steam,
     start_game,
 )
 from webutils.function_bank import (
@@ -134,6 +135,7 @@ __all__ = [
     'set_steam_launch_options',
     'clear_steam_launch_options',
     'read_current_launch_options',
+    'stop_steam',
     'start_game',
     'bank_dll_status',
     'bank_set_dll_dir',

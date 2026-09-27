@@ -337,3 +337,94 @@ class TestClearLaunchOptions:
 
     def test_missing_steam_returns_error(self, no_steam):
         assert clear_steam_launch_options()['success'] is False
+
+
+class TestStopSteam:
+    """stop_steam：幂等 no-op / 优雅退出 / 超时回退 taskkill / 最终失败。"""
+
+    @pytest.fixture
+    def fast_timers(self, monkeypatch):
+        import webutils.function_steam_launcher as fsl
+        monkeypatch.setattr(fsl, 'STEAM_SHUTDOWN_TIMEOUT', 0.2)
+        monkeypatch.setattr(fsl, 'STEAM_FORCE_KILL_TIMEOUT', 0.2)
+        monkeypatch.setattr(fsl, 'STEAM_STOP_POLL_INTERVAL', 0.01)
+
+    @pytest.fixture
+    def steam_exe(self, tmp_path, monkeypatch):
+        """伪造 Steam 安装目录（含 steam.exe），返回该目录。"""
+        import webutils.function_steam_launcher as fsl
+        root = tmp_path / 'Steam'
+        root.mkdir(parents=True, exist_ok=True)
+        (root / 'steam.exe').write_text('stub')
+        monkeypatch.setattr(fsl, 'get_steam_path', lambda: str(root))
+        return root
+
+    @staticmethod
+    def _install_fakes(monkeypatch, *, running, kill_exits=False, shutdown_exits=False):
+        """伪造运行检测与子进程调用。
+
+        running: 初始是否视为在运行。
+        shutdown_exits: steam.exe -shutdown 之后进程退出（优雅路径成功）。
+        kill_exits: taskkill 之后进程退出（强制路径成功）。
+        返回 {'popens': [...], 'runs': [...]} 记录调用。
+        """
+        import webutils.function_steam_launcher as fsl
+        state = {'running': running, 'popens': [], 'runs': []}
+
+        monkeypatch.setattr(fsl, 'is_steam_running', lambda: state['running'])
+        monkeypatch.setattr(fsl.subprocess, 'Popen',
+                            lambda cmd, **kw: state['popens'].append(cmd) or state.update(
+                                {'running': state['running'] and not shutdown_exits}))
+        monkeypatch.setattr(fsl.subprocess, 'run',
+                            lambda cmd, **kw: state['runs'].append(cmd) or state.update(
+                                {'running': state['running'] and not kill_exits}))
+        return state
+
+    def test_not_running_is_noop(self, monkeypatch, fast_timers):
+        import webutils.function_steam_launcher as fsl
+        monkeypatch.setattr(fsl, 'is_steam_running', lambda: False)
+        result = fsl.stop_steam()
+        assert result['success'] is True
+        assert result['method'] == 'noop'
+
+    def test_graceful_shutdown(self, monkeypatch, fast_timers, steam_exe):
+        state = self._install_fakes(monkeypatch, running=True, shutdown_exits=True)
+        import webutils.function_steam_launcher as fsl
+        result = fsl.stop_steam()
+        assert result['success'] is True
+        assert result['method'] == 'graceful'
+        assert state['popens'] and state['popens'][0][-1] == '-shutdown'
+        assert str(steam_exe) in state['popens'][0][0]
+        # 优雅退出成功时不应触发 taskkill
+        assert not state['runs']
+
+    def test_falls_back_to_taskkill(self, monkeypatch, fast_timers, steam_exe):
+        # -shutdown 发了但进程赖着不走 → 超时后 taskkill 才生效
+        state = self._install_fakes(monkeypatch, running=True, shutdown_exits=False, kill_exits=True)
+        import webutils.function_steam_launcher as fsl
+        result = fsl.stop_steam()
+        assert result['success'] is True
+        assert result['method'] == 'forced'
+        assert state['popens'] and state['popens'][0][-1] == '-shutdown'
+        assert state['runs'] and state['runs'][0][0] == 'taskkill'
+
+    def test_still_running_after_force_fails(self, monkeypatch, fast_timers, steam_exe):
+        state = self._install_fakes(monkeypatch, running=True)
+        import webutils.function_steam_launcher as fsl
+        result = fsl.stop_steam()
+        assert result['success'] is False
+        assert result['method'] == 'failed'
+        assert result['message']
+        assert state['runs'] and state['runs'][0][0] == 'taskkill'
+
+    def test_missing_exe_skips_graceful(self, monkeypatch, fast_timers, tmp_path):
+        import webutils.function_steam_launcher as fsl
+        root = tmp_path / 'SteamNoExe'
+        root.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(fsl, 'get_steam_path', lambda: str(root))
+        # 无 steam.exe → 不发 -shutdown，直接 taskkill 成功
+        state = self._install_fakes(monkeypatch, running=True, kill_exits=True)
+        result = fsl.stop_steam()
+        assert result['success'] is True
+        assert result['method'] == 'forced'
+        assert not state['popens']

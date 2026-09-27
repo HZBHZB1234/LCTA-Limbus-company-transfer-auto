@@ -1434,11 +1434,14 @@ async function oneClickSetup() {
         if (steamStatus && steamStatus.localconfig_path && steamStatus.state !== 'lcta_current') {
             modal.addLog('准备写入 Steam 启动项...');
             if (steamStatus.steam_running) {
-                // 异步门控：Steam 运行中退出时可能覆盖 localconfig.vdf
+                // 异步门控：写入前需先停止 Steam，避免其退出时用内存态覆盖 localconfig.vdf
                 modal.cancel();
-                showConfirm('Steam 正在运行',
-                    '一键配置将写入 Steam 启动项，但 Steam 正在运行，其退出时可能覆盖修改。\n\n是否仍要继续写入？',
-                    function () { doOneClickSteamWrite(steamStatus); });
+                showConfirm('需要停止 Steam',
+                    '写入启动配置需要停止 Steam，是否继续？\n\n选择「是」：自动退出 Steam，停止后等待几秒再写入启动项。\n选择「否」：跳过启动项写入（其余配置已生效）。',
+                    function () { oneClickStopSteamAndWrite(steamStatus); },
+                    function () {
+                        showMessage('一键配置', '已跳过 Steam 启动项写入，其余配置已生效。可到 Launcher配置页单独处理。');
+                    });
                 return;
             }
             await doOneClickSteamWrite(steamStatus, modal);
@@ -1473,6 +1476,34 @@ async function startGame() {
     } catch (e) {
         console.error('开启游戏失败:', e);
         showToast('开启游戏失败: ' + e, 'error');
+    }
+}
+
+// 一键配置：用户确认后先停止 Steam，等待数秒再写入启动项。
+// 停止后延时是为了给 Steam 退出流程落盘 localconfig.vdf 的缓冲，确保本工具的写入是最后一笔。
+async function oneClickStopSteamAndWrite(status) {
+    const modal = new ProgressModal('一键配置 · Steam 启动项');
+    try {
+        modal.setStatus('正在停止 Steam...');
+        modal.addLog('正在退出 Steam（优先优雅退出，超时将强制结束）');
+        const stopResult = await pywebview.api.run_func('stop_steam');
+        if (!stopResult || !stopResult.success) {
+            const reason = stopResult ? stopResult.message : '未知错误';
+            modal.addLog('停止 Steam 失败: ' + reason);
+            modal.complete(false, '停止 Steam 失败，未写入启动项');
+            showMessage('一键配置', '停止 Steam 失败：' + reason + '\n\n其余配置已生效，可手动退出 Steam 后重试。');
+            return;
+        }
+        modal.addLog(stopResult.message || 'Steam 已停止');
+        modal.setStatus('Steam 已停止，5 秒后写入配置...');
+        await new Promise(function (resolve) { setTimeout(resolve, 5000); });
+        modal.addLog('开始写入 Steam 启动项...');
+        const ok = await doOneClickSteamWrite(status, modal);
+        modal.complete(ok ? true : false, ok ? 'Steam 启动项写入完成' : 'Steam 启动项写入失败');
+        // 写入后即时刷新「开启游戏」按钮显隐
+        refreshDashboard();
+    } catch (e) {
+        modal.complete(false, '停止 Steam 或写入启动项失败: ' + e);
     }
 }
 

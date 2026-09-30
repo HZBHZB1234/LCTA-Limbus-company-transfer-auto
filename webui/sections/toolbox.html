@@ -1,0 +1,94 @@
+<!--
+  工具箱（公共安全层）：账号/赛季资格 + 本地安装管理。
+
+  ⚠️ 这一层**刻意不依赖**旧 cheat_core.bin 解密门：
+  过季后用户仍必须能停用、卸载、回滚已下载的插件 —— 否则「过季就卸不掉」。
+  因此本区块由 toolbox-manager.js 独立初始化，不经 cheatPage.init() 的门控。
+-->
+<div class="disclaimer-overlay" data-risk-overlay="cheat" style="display:none;"></div>
+
+<div id="toolbox-public" style="display:none;">
+    <div class="section-header">
+        <h2 class="section-title">
+            <i class="fas fa-toolbox"></i>
+            工具箱
+        </h2>
+        <p class="section-subtitle">
+            赛季资格与本地安装管理。本地管理（停用/卸载/回滚）不需要联网，也不依赖旧版密钥解锁。
+        </p>
+        <a href="javascript:void(0)" class="risk-reread-link" onclick="RiskGate.showNoticeModal('cheat')">
+            <i class="fas fa-exclamation-triangle"></i> 查看风险须知与使用协议
+        </a>
+    </div>
+
+    <div class="settings-grid">
+        <!-- 账号 / 赛季状态 -->
+        <div class="setting-card" id="tb-account-card">
+            <h3 class="setting-title"><i class="fas fa-user"></i> 账号与赛季</h3>
+            <div id="tb-account-body">
+                <p class="form-hint">正在读取状态…</p>
+            </div>
+        </div>
+
+        <!-- 底座 -->
+        <div class="setting-card" id="tb-runtime-card">
+            <h3 class="setting-title"><i class="fas fa-layer-group"></i> 底座</h3>
+            <div id="tb-runtime-body">
+                <p class="form-hint">正在读取状态…</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 插件目录（需已解锁） -->
+    <div class="setting-card" id="tb-catalog-card" style="display:none;">
+        <h3 class="setting-title"><i class="fas fa-download"></i> 本赛季可获取内容</h3>
+        <div id="tb-catalog-body"></div>
+    </div>
+
+    <!-- 已安装（本地管理，离线可用） -->
+    <div class="setting-card" id="tb-installed-card">
+        <h3 class="setting-title"><i class="fas fa-puzzle-piece"></i> 已安装</h3>
+        <div id="tb-installed-body">
+            <p class="form-hint">正在读取本地状态…</p>
+        </div>
+        <div style="margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="tb-refresh-btn" class="secondary-btn">
+                <i class="fas fa-sync"></i> 刷新
+            </button>
+            <button id="tb-open-folder-btn" class="secondary-btn">
+                <i class="fas fa-folder-open"></i> 打开受管目录
+            </button>
+        </div>
+    </div>
+
+    <!-- 游戏目录配置 -->
+    <div class="setting-card">
+        <h3 class="setting-title"><i class="fas fa-folder"></i> 游戏目录</h3>
+        <div class="form-group">
+            <label for="tb-game-root">Limbus Company 安装目录</label>
+            <input type="text" id="tb-game-root" placeholder="例如 D:\Steam\steamapps\common\Limbus Company">
+            <small class="form-hint">
+                安装/更新/停用/卸载前请先关闭游戏。路径会做安全校验（拒绝盘符根、不可写目录）。
+            </small>
+        </div>
+        <button id="tb-save-root-btn" class="primary-btn">
+            <i class="fas fa-save"></i> 保存游戏目录
+        </button>
+    </div>
+
+    <!--
+      Launcher 集成：按 AGENTS.md，集成复选框**只能**放在
+      launcher-config.html 的「工作模式配置」区，源页面只放介绍 + 跳转按钮。
+      在源页面重复放置开关会导致双份配置、状态不同步。
+    -->
+    <div class="setting-card">
+        <h3 class="setting-title"><i class="fas fa-rocket"></i> Launcher 集成</h3>
+        <p class="form-hint">
+            可让 Launcher 启动游戏前自动检查并准备工具箱底座与插件。
+            该集成开关位于「工作模式配置」中，请在 Launcher 配置页开启。
+        </p>
+        <button class="secondary-btn" onclick="goAndShow('launcher-config')">
+            <i class="fas fa-arrow-right"></i> 前往 Launcher 配置
+        </button>
+    </div>
+</div>

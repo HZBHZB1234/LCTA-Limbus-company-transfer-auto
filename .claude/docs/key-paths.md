@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-09-30 -->
+<!-- Last updated: 2026-10-01 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1560,3 +1560,43 @@ Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.m
       `tests/test_notice_localize.py`, `tests/test_notice_server.py`, `webui/assets/update.md`
 
 
+
+## 工具箱安装管理（P6）
+
+点击「工具箱」导航 → `toolboxManager.init()`（webui/js/toolbox-manager.js）
+  → 风险门控（RiskGate.gatePage('cheat')，与作弊工具箱共用同一风险须知）
+  → `toolbox_status()` 一次性取回本地状态 + 在线资格
+    · 本地：`webutils.toolbox.state.recover_if_needed(game_root)`（崩溃恢复）
+      → `install.list_installed(game_root)`（受管插件 + 非受管 DLL）
+    · 在线：`ToolboxApi.access()` —— **失败只标 online_error，不影响本地管理**
+      （过季/断网仍必须能停用、卸载、回滚）
+
+本地操作（**不需要联网、不需要赛季资格**）
+  `toolbox_set_enabled`  → `install.set_enabled`
+    启用 = 从 `.lcta-toolbox/disabled/<tool>/<release>/` 移回 `BepInEx/plugins/LCTA/<tool>/`
+    停用 = 反向移动，**移出整个 BepInEx 加载树**（不是改配置布尔值）
+  `toolbox_uninstall`    → `install.uninstall_plugin`（只删 manifest 记载且哈希未变的文件）
+  `toolbox_rollback`     → `install.rollback_plugin`（从本地备份恢复，保持启停状态）
+  `toolbox_verify_integrity` → `install.verify_integrity`（区分缺失/被改，提示修复）
+  前置：`runtime.game_lock`（OS 级跨进程锁）→ `runtime.assert_can_install`（游戏运行中拒绝）
+
+安装/更新（**需要**本赛季已解锁）
+  `toolbox_install(tool_id, release_id)`
+    → `ToolboxApi.manifest()` → **Ed25519 验签**（webutils/toolbox/ed25519.py，
+      纯 Python 实现，拒绝小阶点与 S>=L；缺公钥或验签失败一律拒绝）
+    → `ToolboxApi.download_ticket()`（票据由服务端签发，客户端不接受任意 URL）
+    → `download.fetch_or_reuse()`（https 限制 + 强制 SHA256 校验 + 缓存污染重下）
+    → `install.install_plugin()` → `archive.extract_zip_safe()`（Zip Slip/ADS/
+      压缩炸弹/大小写冲突防护）→ journal 事务提交 → manifest 原子写
+  任何失败 → `state.restore_from_journal()` 回滚，不留半安装
+
+登录凭据：`session.CredentialStore`（Windows DPAPI 当前用户加密 + 原子写），
+  检测到旧明文凭据时迁移后**删除**原文件
+
+Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
+      `webui/app_api/toolbox.py`, `webutils/toolbox/{paths,archive,state,runtime,
+      install,ed25519,session,api,download}.py`, `webui/app.py`（LCTA_API 混入）,
+      `webui/js/utils.js`（导航生命周期）, `webui/sections/preload.js`（section 分发）,
+      `webui/index.html`（#toolbox-btn / #toolbox-section / script）,
+      `.github/InitCode.py`（js_files）, `webui/assets/update.md`,
+      `tests/test_toolbox_{paths,state,install,ed25519,session,api,bridge,packaging}.py`

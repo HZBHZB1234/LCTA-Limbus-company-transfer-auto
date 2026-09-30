@@ -150,6 +150,13 @@ async function onSectionLoaded(name) {
                 cheatPage.init();
             }
             break;
+        case 'toolbox':
+            console.log('[LCTA] Init section: toolbox');
+            // 公共安全层：不依赖旧密钥门，过季后仍可管理已安装插件
+            if (typeof toolboxManager !== 'undefined' && toolboxManager) {
+                toolboxManager.init();
+            }
+            break;
         case 'metadata-recovery':
             console.log('[LCTA] Init section: metadata-recovery');
             if (typeof metadataRecoveryPage !== 'undefined' && metadataRecoveryPage) {

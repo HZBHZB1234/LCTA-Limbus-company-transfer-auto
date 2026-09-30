@@ -141,6 +141,17 @@ function initNavigation() {
                         }
                     }
 
+                    // 工具箱公共层（赛季资格 + 本地安装管理）：
+                    // 与 cheat 页**独立**，刻意不依赖旧密钥门 —— 过季后用户
+                    // 仍必须能停用/卸载/回滚已下载的插件。
+                    if (typeof toolboxManager !== 'undefined') {
+                        if (sectionId === 'toolbox-section') {
+                            toolboxManager.init();
+                        } else {
+                            toolboxManager.stop();
+                        }
+                    }
+
                     // Metadata 恢复页：每次进入刷新插件/输出目录状态（无轮询）
                     if (sectionId === 'metadata-recovery-section' && typeof metadataRecoveryPage !== 'undefined') {
                         metadataRecoveryPage.init();

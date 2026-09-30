@@ -252,6 +252,7 @@ js_files = [
     'js/bank.js',
     'js/mod-mirror.js',
     'js/notice.js',
+    'js/toolbox-manager.js',
 ]
 js_content = ''
 for f in js_files:

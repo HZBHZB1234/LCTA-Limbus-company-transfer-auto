@@ -19,7 +19,6 @@ hooks/*.dll
 *.zip
 *.7z
 *config.json
-proper.json
 .vscode
 .workshop
 .git

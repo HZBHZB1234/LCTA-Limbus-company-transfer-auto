@@ -3,7 +3,7 @@
 > 面向开发者的完整开发环境搭建、构建、调试和发布指南。
 > AI 快速参考请见 `.claude/docs/dev-guide.md`
 
-<!-- Last updated: 2026-08-09 -->
+<!-- Last updated: 2026-09-30 -->
 
 ## 前置条件
 
@@ -142,7 +142,7 @@ LCTA-Limbus-company-transfer-auto/
 python start_webui.py
 ```
 
-启动完整的桌面应用，包含所有功能标签页：仪表盘、安装、下载、翻译、API 配置、管理、清理、美化、专有名词、老版、设置、CDN、变速、日志等。
+启动完整的桌面应用，包含所有功能标签页：仪表盘、安装、下载、翻译、API 配置、管理、清理、美化、设置、CDN、变速等。
 
 ### Launcher 模式（轻量级游戏启动器）
 

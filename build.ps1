@@ -1,4 +1,4 @@
-﻿# LCTA Build Script
+# LCTA Build Script
 # 参照 .github/workflows/release.yml 的打包逻辑
 # 产物输出到 dist/ 目录
 
@@ -561,7 +561,7 @@ $excludeDirs = @(
 )
 
 $excludeFiles = @(
-    "*.pyc", "*.pyo", ".rmv", ".lock", ".env", "proper.json", "build.ps1"
+    "*.pyc", "*.pyo", ".rmv", ".lock", ".env", "build.ps1"
 )
 
 # 优先使用 git ls-files（自动匹配 .gitignore），与 CI checkout 行为一致

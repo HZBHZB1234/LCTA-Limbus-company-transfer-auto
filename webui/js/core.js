@@ -284,13 +284,6 @@ class ConfigManager {
             'fancy-user': 'user_fancy',
             'fancy-allow': 'fancy_allow',
 
-            // 抓取设置
-            'proper-join-char': 'ui_default.proper.join_char',
-            'proper-skip-space': 'ui_default.proper.disable_space',
-            'proper-max-count': 'ui_default.proper.max_length',
-            'proper-min-count': 'ui_default.proper.min_length',
-            'proper-output': 'ui_default.proper.output_type',
-            
             // Launcher设置
             'launcher-work-update': 'launcher.work.update',
             'launcher-work-mod': 'launcher.work.mod',

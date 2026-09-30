@@ -67,13 +67,6 @@
             "clean_notice": false,
             "clean_mods": false
         },
-        "proper": {
-            "join_char": "|||",
-            "disable_space": false,
-            "max_length": "0",
-            "min_length": "0",
-            "output_type": "json"
-        },
         "llm_fancy": {
             "rules": "{\"name\": \"LLM 文本美化\", \"files\": [\"*.json\"], \"rules\": []}",
             "exclusions": "[]",

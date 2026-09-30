@@ -67,13 +67,6 @@
         "manage": {
             "mod_path": "str"
         },
-        "proper": {
-            "join_char": "str",
-            "disable_space": "bool",
-            "max_length": "str",
-            "min_length": "str",
-            "output_type": "str"
-        },
         "llm_fancy": {
             "rules": "str",
             "exclusions": "str",

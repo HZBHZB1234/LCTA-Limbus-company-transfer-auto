@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-"""LCTA_API 翻译相关：开始翻译、API 密钥测试、专有词汇抓取。"""
+"""LCTA_API 翻译相关：开始翻译、API 密钥测试。"""
 import os
 import logging
 from typing import TYPE_CHECKING
 
 from globalManagers.ConfigManager import ConfigManager
-from webutils import function_fetch_main
 from webutils.function_translate import translate_main
 from webui.app_api.exceptions import CancelRunning
 
@@ -89,25 +88,6 @@ class TranslatorMixin:
             return {"success": True, "message": result_dict}
         except CancelRunning:
             self.log('API测试已取消')
-            self.del_modal_list(modal_id)
-            return {"success": False, "message": "已取消"}
-        except Exception as e:
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
-
-    def fetch_proper_nouns(self, modal_id= "false"):
-        """获取专有词汇"""
-        try:
-            self.add_modal_log("开始抓取专有词汇...", modal_id)
-            proper_config = ConfigManager().get('ui_default.proper', {})
-            function_fetch_main(
-                modal_id,
-                **proper_config
-            )
-            self.add_modal_log("专有词汇抓取成功", modal_id)
-            return {"success": True, "message": "专有词汇抓取成功"}
-        except CancelRunning:
-            self.log('专有词汇抓取已取消')
             self.del_modal_list(modal_id)
             return {"success": False, "message": "已取消"}
         except Exception as e:

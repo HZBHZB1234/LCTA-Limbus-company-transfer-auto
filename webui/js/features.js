@@ -413,55 +413,6 @@ async function applyFancy() {
     doApplyFancy();
 };
 
-// === 专有词汇 ===
-function fetchProperNouns() {
-    const outputFormat = document.getElementById('proper-output').value;
-    const skipSpace = document.getElementById('proper-skip-space').checked;
-    const maxCount = document.getElementById('proper-max-count').value;
-    const minCount = document.getElementById('proper-min-count').value;
-    const joinChar = document.getElementById('proper-join-char').value;
-    
-    const updates = {
-        'proper-join-char': joinChar,
-        'proper-max-count': maxCount,
-        'proper-min-count': minCount,
-        'proper-output': outputFormat,
-        'proper-skip-space': skipSpace
-    };
-
-    const modal = new ProgressModal('抓取专有词汇');
-    modal.addLog('开始抓取专有词汇...');
-    modal.addLog(`输出格式: ${outputFormat}`);
-    modal.addLog(`跳过含空格词汇: ${skipSpace ? '是' : '否'}`);
-    modal.addLog(`最短长度: ${minCount}`);
-    if (maxCount) {
-        modal.addLog(`最大词汇数量: ${maxCount}`);
-    }
-    if (outputFormat === 'single') {
-        modal.addLog(`文本分隔符：${joinChar}`);
-    }
-    
-    configManager.updateConfigValues(updates)
-        .then(() => {
-            pywebview.api.fetch_proper_nouns(modal.id)
-                .then(function(result) {
-                    if (result && result.message === '已取消') {
-                        modal.cancel();
-                    } else if (result.success) {
-                        modal.complete(true, '专有词汇抓取成功');
-                    } else {
-                        modal.complete(false, '抓取失败: ' + result.message);
-                    }
-                })
-                .catch(function(error) {
-                    modal.complete(false, '抓取过程中发生错误: ' + error);
-                });
-        })
-        .catch(function(error) {
-            modal.complete(false, '配置保存失败: ' + error);
-        });
-}
-
 
 // === 下载功能 ===
 function onOurplaySourceChange() {

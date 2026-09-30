@@ -514,13 +514,6 @@ const TOOLTIP_DATA = {
     'input-bypass-volatility': '手动模式下计数的波动百分比（0-50，0 为关闭）。hook 会周期性在 ±该百分比内随机抖动计数再据此计算比例，防止恒定数值被检测。',
     'steam-command': '用于通过 Steam 启动游戏的命令行参数。复制后可粘贴到 Steam 游戏属性中的启动选项。',
 
-    // ===== 抓取专有词汇 =====
-    'proper-output': '专有名词的输出格式。"JSON格式"输出标准 JSON 文件；"单文件格式"将所有词汇合并在一个文件中；"双文件格式"将词汇分为两个文件输出。',
-    'proper-skip-space': '跳过包含空格的词汇，避免将多词短语错误识别为专有名词。',
-    'proper-max-count': '限制最多提取的专有名词数量。留空表示不限制。数值越大结果越多但可能包含更多噪声。',
-    'proper-min-count': '专有名词的最小字符长度。增大此值可减少短词汇的错误匹配，提高提取精度。',
-    'proper-join-char': '单文件格式输出时分隔"原词"与"译词"的分隔符，默认值为 |||。仅在输出格式为"单文件格式"时生效。',
-
     // ===== 音频工具 =====
     'bank-dll-dir': 'FMOD 工具 DLL 目录（fmod64.dll / fsbank64.dll / libfsbvorbis64.dll）。留空自动检测（LCTA_FMOD_DLL_DIR 环境变量 / 程序目录），缺失时可在本页一键从 GitHub 下载。',
     'bank-dll-url': 'FMOD 工具 DLL 下载源（可选）。留空使用官方 GitHub release（Fmod-Bank-Tools），填写后优先使用该直链 zip。',

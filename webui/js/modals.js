@@ -933,8 +933,174 @@ function showProgress(title) {
     return new ProgressModal(title);
 }
 
+// ============================
+// 首次翻译提示：优先引导使用 LCTA-AU 现成汉化包
+// ============================
+// 自行翻译需要自备 API 密钥（可能产生费用）并等待整包跑完；作者已通过 LCTA-AU
+// 每隔约一小时自动检测新版汉化包并完成翻译发布，直接下载安装即可、无需配置。
+// 首次点击「开始翻译」时先给出这条提示，避免用户在不知情的情况下花了钱和时间。
+// 看过一次后不再打断 —— 状态持久化在 ui_default.translator.au_hint_shown。
+
+const TRANSLATE_AU_HINT_KEY = 'ui_default.translator.au_hint_shown';
+
+// LCTA-AU 项目主页与作者赞助页（与 markdown 渲染器一致，外链交由系统浏览器打开）
+const TRANSLATE_AU_REPO_URL = 'https://github.com/HZBHZB1234/LCTA_auto_update';
+const TRANSLATE_AU_SPONSOR_URL = 'https://afdian.com/a/LCTAs';
+
+const TRANSLATE_AU_HINT_HTML = `
+    <div class="disclaimer-body" style="margin:0;">
+        <p style="margin:0 0 0.75rem;">
+            自己翻译需要你先在「配置汉化API」里填好自己的密钥（<strong>通常会产生费用</strong>），
+            再等整包文本跑完。其实<strong>作者已经把汉化包翻译好并发布了</strong> ——
+            LCTA-AU 会每隔约一小时自动检测新版汉化包并完成翻译发布，
+            下载安装即可，<strong>无需任何配置、无需密钥</strong>。
+        </p>
+
+        <p class="risk-section-title">如何用 LCTA-AU（约 1 分钟）</p>
+        <ol style="margin:0.25rem 0 0.75rem 1.2rem; padding:0;">
+            <li>左侧进入「汉化包下载」，找到 <strong>LCTA-AU下载配置</strong> 卡片。</li>
+            <li>「文本下载来源」选 <strong>从github下载</strong>（GitHub 访问不稳可改「从公益镜像下载」），
+                并勾选「使用代理加速下载」。</li>
+            <li>点击 <strong>下载LCTA-AU汉化包</strong>，等待下载完成。</li>
+            <li>到「安装已有汉化」页面安装刚下载好的汉化包。</li>
+            <li>（可选）「Launcher配置」把更新模式设为 <strong>零协 + LCTA-AU（GitHub 源）</strong>，
+                以后通过 Launcher 启动游戏时自动更新汉化。</li>
+        </ol>
+
+        <p class="risk-section-title">项目与支持</p>
+        <ul>
+            <li>LCTA-AU 仓库：<a href="${TRANSLATE_AU_REPO_URL}" target="_blank" rel="noopener noreferrer">${TRANSLATE_AU_REPO_URL}</a></li>
+            <li>赞助作者（爱发电）：<a href="${TRANSLATE_AU_SPONSOR_URL}" target="_blank" rel="noopener noreferrer">${TRANSLATE_AU_SPONSOR_URL}</a></li>
+        </ul>
+
+        <p style="margin:0.5rem 0 0; font-size:0.85rem; opacity:0.85;">
+            如果你确实需要自己翻译（例如要自定义译文或做私人改动），可直接继续。
+            此提示只出现一次，之后可在「开始翻译」旁的入口再次查看。
+        </p>
+    </div>`;
+
+// 读取「已提示过」状态（API 优先，失败回退前端配置缓存）
+async function isTranslateAuHintShown() {
+    try {
+        const value = await pywebview.api.get_config_value(TRANSLATE_AU_HINT_KEY, false);
+        return !!value;
+    } catch (e) {
+        console.error('读取翻译引导提示状态失败:', e);
+    }
+    try {
+        if (typeof configManager !== 'undefined') {
+            return !!configManager.getCachedValue(TRANSLATE_AU_HINT_KEY);
+        }
+    } catch (e) { /* ignore */ }
+    return false;
+}
+
+// 标记「已提示过」并同步前端缓存
+async function markTranslateAuHintShown() {
+    try {
+        await pywebview.api.update_config_value(TRANSLATE_AU_HINT_KEY, true);
+        if (typeof configManager !== 'undefined') {
+            configManager.setCachedValue(TRANSLATE_AU_HINT_KEY, true);
+        }
+    } catch (e) {
+        console.error('保存翻译引导提示状态失败:', e);
+    }
+}
+
+// 展示引导弹窗。onContinue 仅在用户明确选择「我仍要自行翻译」时回调；
+// onDismiss 在用户关闭/取消时回调（两者最多触发一次）。
+// showContinue=false 时为「重看说明」入口，不提供继续翻译的按钮。
+function showTranslateAuHint(onContinue, onDismiss, showContinue = true) {
+    const modal = new ModalWindow('先看看现成的汉化包？', {
+        showProgress: false,
+        showCancelButton: false,
+        showMinimizeButton: false,
+        showLog: false,
+    });
+
+    // settled 兼作两件事：① 三个出口互斥（重复点击无效）② 结果只落一次。
+    // finish(continued) 统一收口：必须先置 settled 再关窗，保证 dismissed/continued
+    // 恰好触发一次；否则 Promise 永不落定，调用方 await 会一直挂住。
+    let settled = false;
+    const finish = (continued) => {
+        if (settled) return;
+        settled = true;
+        modal.close();
+        if (continued) {
+            if (typeof onContinue === 'function') onContinue();
+        } else if (typeof onDismiss === 'function') {
+            onDismiss();
+        }
+    };
+    // 标题栏 × 走 ModalWindow 原生关闭，兜住「关闭」语义
+    const originalClose = modal.close.bind(modal);
+    modal.close = function () {
+        originalClose();
+        if (!settled) {
+            settled = true;
+            if (typeof onDismiss === 'function') onDismiss();
+        }
+    };
+
+    const statusEl = document.getElementById(`modal-status-${modal.id}`);
+    if (statusEl) {
+        statusEl.classList.add('risk-modal-scroll');
+        statusEl.innerHTML = TRANSLATE_AU_HINT_HTML;
+    }
+
+    const footer = document.getElementById(`modal-footer-${modal.id}`);
+    if (!footer) return modal;
+    footer.innerHTML = `
+        <button class="primary-btn" id="au-hint-download-${modal.id}">
+            <i class="fas fa-download"></i> 前往下载 LCTA-AU 汉化包
+        </button>
+        ${showContinue ? `<button class="action-btn" id="au-hint-continue-${modal.id}">我仍要自行翻译</button>` : ''}
+        <button class="action-btn" id="au-hint-close-${modal.id}">关闭</button>`;
+
+    document.getElementById(`au-hint-download-${modal.id}`).addEventListener('click', async () => {
+        if (settled) return;
+        await markTranslateAuHintShown();
+        finish(false);                       // 去下载 = 本次不启动翻译
+        // 直达下载页的 LCTA-AU 卡片（锚点高亮）
+        if (typeof goAndShow === 'function') goAndShow('download', 'dl-card-lcta-au');
+    });
+
+    const continueBtn = document.getElementById(`au-hint-continue-${modal.id}`);
+    if (continueBtn) {
+        continueBtn.addEventListener('click', async () => {
+            if (settled) return;
+            await markTranslateAuHintShown();
+            finish(true);
+        });
+    }
+
+    document.getElementById(`au-hint-close-${modal.id}`).addEventListener('click', () => {
+        finish(false);
+    });
+
+    return modal;
+}
+
+// 开始翻译前的引导门控：已看过则直接放行；否则弹窗，用户明确继续才返回 true。
+// 关闭弹窗 / 选择去下载都返回 false（本次不启动翻译）。
+async function checkTranslateAuHint() {
+    if (await isTranslateAuHintShown()) return true;
+    return await new Promise(resolve => {
+        showTranslateAuHint(() => resolve(true), () => resolve(false));
+    });
+}
+
+// 「重看说明」入口：只展示内容，不改变已读状态，也不触发翻译
+function showTranslateAuHintAgain() {
+    showTranslateAuHint(null, null, false);
+}
+
 // 各功能函数
 async function startTranslation() {
+    // 首次点击先引导：作者已通过 LCTA-AU 发布现成汉化包，可能无需自行翻译
+    const proceed = await checkTranslateAuHint();
+    if (!proceed) return;
+
     const modal = new ProgressModal('开始翻译');
     modal.setStatus('正在初始化翻译过程...');
     modal.addLog('开始翻译任务');

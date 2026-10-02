@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-10-01 -->
+<!-- Last updated: 2026-10-02 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -36,6 +36,8 @@ JS: user clicks install button (PC or Android source)
 
 ```
 JS: user configures & clicks translate
+  → webui/js/modals.js           startTranslation() → await checkTranslateAuHint()
+      （首次点击门控，详见 3e；已看过或用户明确「我仍要自行翻译」才继续执行下方流程）
   → webui/app.py                   LCTA_API.translate()
   → webutils/function_translate.py orchestration entry
   → translateFunc/pipeline.py      TranslationPipeline.run()
@@ -125,6 +127,38 @@ The viewer does not scan directories or provide content search. It only accepts 
 ```
 
 Files: `webui/sections/translate.html`（横幅 + 跳转按钮）, `webui/js/api-config.js`（`getMissingRequiredSettings`/`updateTranslatorApiWarning`/`goConfigWithTranslator`）, `webui/js/utils.js`（导航钩子）, `webui/sections/preload.js`, `webui/css/components.css`（`.api-config-warning`/`.form-group-header`）
+
+### 3e. 首次翻译的 LCTA-AU 引导提示
+
+自行翻译要自备 API 密钥（通常产生费用）并等待整包跑完，而作者已通过 LCTA-AU 自动翻译并发布汉化包。首次点击「开始翻译」时不直接起任务，先弹说明：
+
+```
+点击「开始翻译」
+  → webui/js/modals.js             startTranslation() → checkTranslateAuHint()
+      ├─ isTranslateAuHintShown()  pywebview.api.get_config_value(
+      │                              'ui_default.translator.au_hint_shown', false)
+      │                            （API 失败回退 configManager.getCachedValue）
+      ├─ 已看过 → true，直接走原翻译流程
+      └─ 未看过 → showTranslateAuHint() 弹 ModalWindow（showLog=false，
+                  status 区加 .risk-modal-scroll 可滚动，footer 三个按钮）
+             ├─「前往下载 LCTA-AU 汉化包」→ markTranslateAuHintShown()
+             │                            → goAndShow('download', 'dl-card-lcta-au')
+             │                              （锚点高亮下载页 LCTA-AU 卡片，不启动翻译）
+             ├─「我仍要自行翻译」→ markTranslateAuHintShown() → resolve(true) 继续翻译
+             └─「关闭」/ 标题栏 × → resolve(false)，本次不翻译且**不**标记已读
+  → 重看入口：translate.html 底部 .au-hint-link → showTranslateAuHintAgain()
+              （showContinue=false，不显示「我仍要自行翻译」，不改已读状态）
+```
+
+弹窗正文 `TRANSLATE_AU_HINT_HTML`：说明 LCTA-AU 每约一小时自动发布、无需密钥 → 五步操作教程（下载页 LCTA-AU 卡片 → 选下载来源 + 勾选代理加速 → 下载 → 安装已有汉化 → 可选 Launcher 更新模式设为「零协 + LCTA-AU（GitHub 源）」）→ 项目与支持（LCTA-AU 仓库、爱发电赞助页，均为 `<a target="_blank" rel="noopener noreferrer">` 交系统浏览器打开，与 `utils.js` 的 markdown link renderer 一致，无需后端桥接）。
+
+Files: `webui/js/modals.js`（`TRANSLATE_AU_HINT_KEY`/`showTranslateAuHint`/`checkTranslateAuHint`/`showTranslateAuHintAgain`）, `webui/sections/translate.html`（重看入口）, `webui/sections/download.html`（`#dl-card-lcta-au` 锚点）, `webui/css/components.css`（`.au-hint-link`/`.risk-modal-scroll`）, `config_default.json` + `config_check.json`（`ui_default.translator.au_hint_shown: bool`）
+
+**出口收口（易错点）**：`settled` 既是「三出口互斥」开关又是「结果只落一次」标记，必须统一走
+`finish(continued)`（内部先置 `settled` 再 `modal.close()`）。若在某个出口里先 `settled = true`
+再手动 `originalClose()`，`dismiss()` 会被去重逻辑吞掉，`checkTranslateAuHint()` 的 Promise
+永不落定 → `startTranslation()` 静默挂住（界面无任何反馈，但 `goAndShow` 仍执行）。
+因此每次改动本弹窗的出口分支，必须保证三个出口都能恰好触发一次 `resolve`。
 
 ---
 

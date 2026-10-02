@@ -1397,6 +1397,21 @@ button {
     opacity: 0.85;
 }
 
+/* 翻译页「不想自己翻译？」引导重看入口（中性色，区别于红色风险须知链接） */
+.au-hint-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+    color: var(--color-primary);
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.au-hint-link:hover {
+    opacity: 0.85;
+}
+
 /* 风险须知弹窗内容滚动区。
    .modal-body 被 layout-extras.css 全局覆盖为 overflow:hidden（markdown 弹窗适配），
    故让 .modal-status 自身在 flex 列中撑满剩余空间并滚动，footer 保持可见。 */

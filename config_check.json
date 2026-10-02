@@ -24,7 +24,8 @@
             "disambiguation_mode": "str",
             "min_confidence": "str",
             "enable_thinking": "bool",
-            "enable_rule_validation": "bool"
+            "enable_rule_validation": "bool",
+            "au_hint_shown": "bool"
         },
         "install": {
             "package_directory": "str"

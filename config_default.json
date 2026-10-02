@@ -24,7 +24,8 @@
             "has_prefix": true,
             "dump": false,
             "enable_thinking": false,
-            "enable_rule_validation": true
+            "enable_rule_validation": true,
+            "au_hint_shown": false
         },
         "install": {
             "package_directory": ""

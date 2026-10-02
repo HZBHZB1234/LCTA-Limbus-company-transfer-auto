@@ -34,17 +34,14 @@
             "zip_type": "str",
             "use_proxy": "bool",
             "use_cache": "bool",
-            "dump_default": "bool",
-            "download_source": "str"
+            "dump_default": "bool"
         },
         "machine": {
-            "use_proxy": "bool",
-            "download_source": "str"
+            "use_proxy": "bool"
         },
         "ourplay": {
             "font_option": "str",
             "check_hash": "bool",
-            "use_api": "bool",
             "source": "str",
             "official": "bool",
             "refer_package": "str"

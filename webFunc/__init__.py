@@ -1,6 +1,5 @@
 from .FileTransfer import UpFileClient
 from .GithubDownload import GitHubReleaseFetcher, init_request, GithubRequester, ReleaseInfo, ReleaseAsset
-from .Webnote import Note
 
 __all__ = [
     "UpFileClient",
@@ -9,5 +8,4 @@ __all__ = [
     "GithubRequester",
     "ReleaseInfo",
     "ReleaseAsset",
-    "Note"
 ]

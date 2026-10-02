@@ -959,8 +959,7 @@ const TRANSLATE_AU_HINT_HTML = `
         <p class="risk-section-title">如何用 LCTA-AU（约 1 分钟）</p>
         <ol style="margin:0.25rem 0 0.75rem 1.2rem; padding:0;">
             <li>左侧进入「汉化包下载」，找到 <strong>LCTA-AU下载配置</strong> 卡片。</li>
-            <li>「文本下载来源」选 <strong>从github下载</strong>（GitHub 访问不稳可改「从公益镜像下载」），
-                并勾选「使用代理加速下载」。</li>
+            <li>勾选「使用代理加速下载」（GitHub 访问不稳时建议开启）。</li>
             <li>点击 <strong>下载LCTA-AU汉化包</strong>，等待下载完成。</li>
             <li>到「安装已有汉化」页面安装刚下载好的汉化包。</li>
             <li>（可选）「Launcher配置」把更新模式设为 <strong>零协 + LCTA-AU（GitHub 源）</strong>，

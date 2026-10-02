@@ -1,6 +1,6 @@
 # LCTA Module Map
 
-<!-- Last updated: 2026-10-02 -->
+<!-- Last updated: 2026-10-03 -->
 
 ## Directory Overview
 
@@ -134,7 +134,7 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `load.py` | Config & game detection | Config loading/validation, Steam registry game path detection |
 | `update.py` | Self-updater | GitHub Releases-based auto-update. `install_requirements` 按**包名**比对 requirements（去行内注释/空行/选项行，PEP 503 归一化；spec 比较前经 `_normalize_spec` 归一化包名大小写/空白，避免仅格式差异误触发延迟）：涉及依赖移除或版本变动时，将整个依赖修改写入 pending 文件（`%LOCALAPPDATA%/LCTA/pending_pip_ops.json`），延迟到下次启动、加载任何第三方库之前由 `globalManagers/pending_pip_ops.py apply_pending_pip_ops()` 统一执行（先卸载后安装；**纯标准库模块**，导入链不触发 webutils 包）——规避 pythonnet/clr_loader 等已加载 DLL 包在更新会话中无法卸载/替换的问题，且"库缺失"状态不阻断执行；仅全新依赖立即安装，失败跳过继续。pending 写入时补模态状态提示"依赖变更将在下次启动时自动完成"；`check_and_update` 成功后若 pending 存在，最终状态提示重启。`check_and_update` 缓存下载/解压置于 `tempfile.mkdtemp` 临时目录（不再用应用目录内 `updateCache`，否则 update_files 清空应用目录时销毁解压源导致复制必然失败），finally 清理（仅清理本函数自建的临时目录，调用方传入的缓存目录保留）；`update_files` 失败时还原 `install_requirements` 写入的 pending 操作记录（避免下次启动按新版本依赖卸载旧代码）。启动执行 pending 时经 ctypes MessageBoxW 弹原生进度窗（后台线程逐项执行；进度经 EnumChildWindows 定位弹窗正文 Static 子控件后 WM_SETTEXT 实时刷新，标题栏保持恒定以保证按标题 FindWindow 始终可命中；完成后 PostMessage WM_CLOSE 自动关闭并带 3 秒竞态宽限重试，正常路径零点击；用户提前点掉时重弹且仍自动关闭；仅部分失败时追加一次需确认的报错弹窗），打包版无控制台也可见 |
 | `translator_constants.py` | API provider configs | TranslateKit provider definitions (Baidu, Google, DeepL, etc.) |
-| `function_llc.py` | LLC/零协会 install | Download & install Zero Association translation packs |
+| `function_llc.py` | LLC/零协会 install | Download & install Zero Association translation packs（仅 GitHub Release，代理由 `use_proxy` 控制） |
 | `function_ourplay_pc.py` | OurPlay PC install | Download OurPlay PC translation packs |
 | `function_ourplay_android.py` | OurPlay Android install | Download OurPlay Android-origin translation packs |
 | `function_LCTA_auto.py` | Auto-translate download | Download from LCTA_auto_update repo；下载完成后自动注入 `Font/Context/ChineseFont.ttf`（优先缓存字体 `get_cache_font`，缺失时下载 LLC 官方字体），使包满足 `find_translation_packages`/`find_installed_packages` 的 Font 校验，下载页与 Launcher 自动更新（`launcher/updates.py MachineUpdate`）安装的 LCTA-AU 包均自带字体 |
@@ -173,7 +173,6 @@ Public API aggregated in `__init__.py`. Each `function_*.py` handles one feature
 | `GithubDownload.py` | GitHub Release API client: static proxy list (`webui/assets/github_proxies.json`, loaded via `path_`/项目根回退, `gh-proxy.org` 首位 + 直连兜底), concurrent proxy attempts |
 | `FileTransfer.py` | File upload client (UpFileClient) |
 | `LanzouFolder.py` | Lanzou cloud drive folder downloader (modified from 52pojie) |
-| `Webnote.py` | Webnote/note.chat API client for remote config/data |
 
 ## translateFunc/ — Translation Engine
 

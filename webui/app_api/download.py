@@ -3,7 +3,6 @@
 from globalManagers.ConfigManager import ConfigManager
 from webutils import (
     function_ourplay_main,
-    function_ourplay_api,
     function_ourplay_new_main,
     function_llc_main,
     function_LCTA_auto_main,
@@ -23,7 +22,6 @@ class DownloadMixin:
             # 从配置中读取字体处理选项
             font_option = ConfigManager().get("ui_default.ourplay.font_option", "keep")
             check_hash = ConfigManager().get("ui_default.ourplay.check_hash", True)
-            use_api = ConfigManager().get("ui_default.ourplay.use_api", False)
             source = ConfigManager().get("ui_default.ourplay.source", "pc")
 
             if source == "android":
@@ -36,8 +34,6 @@ class DownloadMixin:
                     official=official,
                     refer_package=refer_package if refer_package else None
                 )
-            elif use_api:
-                function_ourplay_api(modal_id, font_option=font_option, check_hash=check_hash)
             else:
                 function_ourplay_main(modal_id, font_option=font_option, check_hash=check_hash)
         
@@ -63,14 +59,12 @@ class DownloadMixin:
             zip_type = ConfigManager().get("ui_default.zero.zip_type", "zip")
             use_proxy = ConfigManager().get("ui_default.zero.use_proxy", True)
             use_cache = ConfigManager().get("ui_default.zero.use_cache", False)
-            download_source = ConfigManager().get("ui_default.zero.download_source", "github")
             cache_path = get_cache_font()
-        
+
             # 传递新参数给function_llc_main
             function_llc_main(
                 modal_id,
                 dump_default=dump_default,
-                download_source=download_source,
                 from_proxy=use_proxy,
                 zip_type=zip_type,
                 use_cache=use_cache,

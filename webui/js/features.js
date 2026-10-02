@@ -417,11 +417,9 @@ async function applyFancy() {
 // === 下载功能 ===
 function onOurplaySourceChange() {
     const sourceEl = document.getElementById('ourplay-source');
-    const useApiGroup = document.getElementById('ourplay-use-api-group');
     const androidOptions = document.getElementById('ourplay-android-options');
     if (!sourceEl) return;
     const isAndroid = sourceEl.value === 'android';
-    if (useApiGroup) useApiGroup.style.display = isAndroid ? 'none' : '';
     if (androidOptions) androidOptions.style.display = isAndroid ? '' : 'none';
 }
 
@@ -435,7 +433,6 @@ function notifyDownloadDone() {
 function downloadOurplay() {
     const fontOption = document.getElementById('ourplay-font-option').value;
     const checkHash = document.getElementById('ourplay-check-hash').checked;
-    const useApi = document.getElementById('ourplay-use-api').checked;
     const source = document.getElementById('ourplay-source').value;
     const official = document.getElementById('ourplay-official').checked;
     const referPackage = document.getElementById('ourplay-refer-package').value;
@@ -444,7 +441,6 @@ function downloadOurplay() {
     modal.addLog('开始下载OurPlay汉化包...');
     modal.addLog(`字体选项: ${fontOption}`);
     modal.addLog(`哈希校验: ${checkHash ? '启用' : '禁用'}`);
-    modal.addLog(`使用API: ${useApi ? '启用' : '禁用'}`);
     modal.addLog(`API源: ${source}`);
     if (source === 'android') {
         modal.addLog(`权威汉化: ${official ? '是' : '否（修改版）'}`);
@@ -455,7 +451,6 @@ function downloadOurplay() {
     const updates = {
         'ourplay-font-option': fontOption,
         'ourplay-check-hash': checkHash,
-        'ourplay-use-api': useApi,
         'ourplay-source': source,
         'ourplay-official': official,
         'ourplay-refer-package': referPackage
@@ -705,15 +700,13 @@ function downloadLLC() {
     const useProxy = document.getElementById('llc-use-proxy').checked;
     const useCache = document.getElementById('llc-use-cache').checked;
     const dumpDefault = document.getElementById('llc-dump-default').checked;
-    const download_source = document.getElementById('llc-download-source').value;
-    
+
     // 批量更新配置
     const updates = {
         'llc-zip-type': zipType,
         'llc-use-proxy': useProxy,
         'llc-use-cache': useCache,
-        'llc-dump-default': dumpDefault,
-        'llc-download-source': download_source
+        'llc-dump-default': dumpDefault
     };
 
     const modal = new ProgressModal('下载零协汉化包');
@@ -722,7 +715,6 @@ function downloadLLC() {
     modal.addLog(`使用代理: ${useProxy ? '是' : '否'}`);
     modal.addLog(`使用缓存: ${useCache ? '是' : '否'}`);
     modal.addLog(`导出默认配置: ${dumpDefault ? '是' : '否'}`);
-    modal.addLog(`下载源: ${download_source}`);
 
     configManager.updateConfigValues(updates)
         .then(() => {
@@ -1286,8 +1278,7 @@ const helpDrawer = {
                 <p><strong>A:</strong></p>
                 <ul>
                     <li>检查网络连接是否正常</li>
-                    <li>尝试切换下载源（GitHub → 公益镜像）</li>
-                    <li>开启/关闭代理加速选项</li>
+                    <li>开启/关闭代理加速选项（"使用代理加速下载"）</li>
                     <li>手动下载汉化包放入程序目录，使用"安装已有汉化"功能</li>
                 </ul>
 

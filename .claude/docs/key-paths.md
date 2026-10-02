@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-10-02 -->
+<!-- Last updated: 2026-10-03 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -273,11 +273,18 @@ C launcher fallback (launcher.c):
 
 Launcher auto-update config (与「汉化包下载」页共用一套配置):
   → webui/sections/launcher-config.html     仅保留更新模式 (launcher.work.update) 与各集成开关
-                                             汉化包下载细节（压缩格式/下载来源/代理/字体/基板包等）
+                                             汉化包下载细节（压缩格式/代理/字体/基板包等）
                                              已在 Launcher 页移除，只由「汉化包下载」页配置
-  → launcher/updates.py                     LLCUpdate/MachineUpdate/OurPlayUpdate/LMGUpdate
+  → launcher/updates.py                     LLCUpdate/MachineUpdate/OurPlayUpdate/LOUpdate/LMGUpdate
                                              改读 ConfigManager().get('ui_default')
                                              .{zero,machine,ourplay}（不再读 launcher.{zero,machine,ourplay}）
+                                             更新模式仅剩 LM-G（零协 + LCTA-AU，按 GitHub release
+                                             发布时间选较新者）；已移除的 LM-A（公益镜像源）在
+                                             create_update() 中回退为 LM-G
+  → LOUpdate.get_latest_type()              零协优先：先查 LLCUpdate.check_update()，无新版才查
+                                             OurPlay（OurPlay 官方接口只返回 versionCode、无时间
+                                             字段，故不再比较时间戳；查询异常按「无新版」处理，
+                                             让另一个源仍有机会被选中）
 
 ## 6. Game Speed Modification
 

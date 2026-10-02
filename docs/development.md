@@ -96,8 +96,7 @@ LCTA-Limbus-company-transfer-auto/
 ├── webFunc/                    # 基础设施层
 │   ├── GithubDownload.py
 │   ├── FileTransfer.py
-│   ├── LanzouFolder.py
-│   └── Webnote.py
+│   └── LanzouFolder.py
 │
 ├── translateFunc/              # 翻译引擎
 │   ├── pipeline.py             # 流水线编排

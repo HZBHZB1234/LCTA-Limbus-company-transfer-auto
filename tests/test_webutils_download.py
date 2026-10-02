@@ -90,8 +90,7 @@ class TestBareRaiseWithContext:
         _stub_llc_github(monkeypatch, _make_asset("LimbusLocalize_v5.0.0.zip"))
         monkeypatch.setattr(function_llc, "download_with_github", lambda *a, **k: False)
         with pytest.raises(Exception, match="下载文本文件失败"):
-            function_llc.function_llc_main("test", download_source="github",
-                                           zip_type="zip", use_cache=False)
+            function_llc.function_llc_main("test", zip_type="zip", use_cache=False)
 
     def test_llc_github_font_download_failure(self, monkeypatch, tmp_path):
         _stub_llc_github(monkeypatch, _make_asset("LimbusLocalize_v5.0.0.7z"))
@@ -103,26 +102,7 @@ class TestBareRaiseWithContext:
 
         monkeypatch.setattr(function_llc, "download_with_github", fake_download)
         with pytest.raises(Exception, match="下载字体文件失败"):
-            function_llc.function_llc_main("test", download_source="github",
-                                           zip_type="seven", use_cache=False)
-
-    def test_llc_api_text_download_failure(self, monkeypatch, tmp_path):
-        class FakeNote:
-            def __init__(self, *a, **k):
-                pass
-
-            def fetch_note_info(self):
-                pass
-
-            note_content = json.dumps({
-                "llc_download_mirror": {"zip": {"direct": "https://example.com/x.zip"}}
-            })
-
-        monkeypatch.setattr(function_llc, "Note", FakeNote)
-        monkeypatch.setattr(function_llc, "download_with", lambda *a, **k: False)
-        with pytest.raises(Exception, match="下载文本文件失败"):
-            function_llc._download_from_api(str(tmp_path), "test", "zip",
-                                            True, False, True, "")
+            function_llc.function_llc_main("test", zip_type="seven", use_cache=False)
 
     def test_ourplay_pc_fetch_info_failure(self, monkeypatch, tmp_path):
         monkeypatch.setattr(function_ourplay_pc, "download_ourplay", lambda: None)
@@ -135,21 +115,6 @@ class TestBareRaiseWithContext:
         monkeypatch.setattr(function_ourplay_pc, "download_with", lambda *a, **k: False)
         with pytest.raises(Exception, match="下载 OurPlay 汉化包失败"):
             function_ourplay_pc.function_ourplay_main("test")
-
-    def test_ourplay_pc_api_download_failure(self, monkeypatch, tmp_path):
-        class FakeNote:
-            def __init__(self, *a, **k):
-                pass
-
-            def fetch_note_info(self):
-                pass
-
-            note_content = json.dumps({"ourplay_download_url": "https://example.com/x.zip"})
-
-        monkeypatch.setattr(function_ourplay_pc, "Note", FakeNote)
-        monkeypatch.setattr(function_ourplay_pc, "download_with", lambda *a, **k: False)
-        with pytest.raises(Exception, match="下载 OurPlay 汉化包失败"):
-            function_ourplay_pc.function_ourplay_api("test")
 
     def test_ourplay_pc_zip_failure(self, monkeypatch, tmp_path):
         _write_workdir_zip(tmp_path)

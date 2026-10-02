@@ -1,5 +1,5 @@
 from .function_llc import function_llc_main, check_ver_github
-from .function_ourplay_pc import function_ourplay_main, check_ver_ourplay, function_ourplay_api
+from .function_ourplay_pc import function_ourplay_main, check_ver_ourplay
 from .function_ourplay_android import function_ourplay_new_main, check_ver_ourplay_new
 from .packages import (
     find_translation_packages,
@@ -76,7 +76,6 @@ __all__ = [
     'export_system_font',
     'check_ver_github',
     'check_ver_ourplay',
-    'function_ourplay_api',
     'function_ourplay_new_main',
     'check_ver_ourplay_new',
     'save_cache_font',

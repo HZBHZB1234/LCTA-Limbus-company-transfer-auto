@@ -9,7 +9,6 @@ import shutil
 import json
 import base64
 import os
-from webFunc import Note
 
 
 def check_ver_ourplay():
@@ -213,41 +212,3 @@ def function_ourplay_main(modal_id, **kwargs):
             hash_ok
         )
             
-def function_ourplay_api(modal_id, **kwargs):
-    """
-    OurPlay API 下载函数
-    """
-    _log_manager.log_modal_process("成功链接后端", modal_id)
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        _log_manager.log_modal_process("开始下载 OurPlay 汉化包", modal_id)
-        _log_manager.log_modal_status("正在初始化链接", modal_id)
-
-        note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
-        note_.fetch_note_info()
-        url = json.loads(note_.note_content).get("ourplay_download_url")
-        save_path = f"{temp_dir}/transfile.zip"
-
-        _log_manager.log(f"OurPlay 下载地址: {url}")
-        _log_manager.check_running(modal_id)
-        _log_manager.log_modal_process("开始下载汉化包", modal_id)
-        _log_manager.log_modal_status("正在下载汉化包", modal_id)
-
-        # 下载文件
-        if not download_with(url, save_path, chunk_size=1024*100,
-                            modal_id=modal_id, progress_=[0, 50]):
-            _log_manager.log_modal_process("下载 OurPlay 汉化包时出现错误", modal_id)
-            raise Exception("下载 OurPlay 汉化包失败")
-
-        _log_manager.log("OurPlay 汉化包下载完成")
-        _log_manager.log_modal_process("OurPlay 汉化包下载完成", modal_id)
-        _log_manager.update_modal_progress(50, "下载完成", modal_id)
-
-        _log_manager.log_modal_process("跳过文件校验", modal_id)
-        _log_manager.update_modal_progress(60, "跳过文件校验", modal_id)
-
-        _process_ourplay_package(
-            temp_dir, modal_id,
-            kwargs.get("font_option", "keep"),
-            kwargs.get('cache_path', "")
-        )

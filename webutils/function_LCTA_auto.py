@@ -7,7 +7,6 @@ from globalManagers.LogManager import LogManager
 from globalManagers.ConfigManager import ConfigManager
 _log_manager = LogManager()
 from webFunc import GithubDownload
-from webFunc import Note
 from webutils.utils.io import extract_zip_smartly, zip_folder
 from webutils.utils.font import get_cache_font
 from webutils.utils.net import download_with_github, download_with
@@ -31,38 +30,6 @@ def _LCTA_auto_github(modal_id, use_proxy) -> str:
         _log_manager.log_modal_process("下载失败", modal_id)
         _log_manager.log_modal_status("下载失败", modal_id)
         return None
-
-def _LCTA_auto_api(modal_id) -> str:
-    note_ = Note(address="1df3ff8fe2ff2e4c", pwd="AutoTranslate", read_only=True)
-    note_.fetch_note_info()
-    
-    try:
-        api_data = json.loads(note_.note_content)
-    except json.JSONDecodeError:
-        _log_manager.log_modal_process("API数据解析失败", modal_id)
-        raise Exception("API数据解析失败")
-    
-    # 获取相应的下载链接
-    download_url = api_data.get('machine_download_mirror', {}).get('zip', {}).get('direct')
-    if not download_url:
-        _log_manager.log_modal_process("未能从API获取有效的下载链接", modal_id)
-        raise Exception("未能从API获取有效的下载链接")
-    _log_manager.log_modal_process(f"下载地址获取完毕 {download_url}", modal_id)
-    _log_manager.update_modal_progress(30, "下载地址获取完毕", modal_id)
-    
-    _log_manager.log_modal_process("开始下载", modal_id)
-    _log_manager.log_modal_status("正在下载", modal_id)
-    
-    r = download_with(download_url, 'LCTA_auto.zip', modal_id=modal_id, progress_=[30, 100])
-    if r:
-        _log_manager.log_modal_process("下载完成", modal_id)
-        _log_manager.log_modal_status("下载完成", modal_id)
-        return 'LCTA_auto.zip'
-    else:
-        _log_manager.log_modal_process("下载失败", modal_id)
-        _log_manager.log_modal_status("下载失败", modal_id)
-        return None
-
 
 def _resolve_font_path(modal_id, temp_dir) -> Optional[str]:
     """获取注入汉化包的中文字体路径：优先缓存字体，缺失时在 temp_dir 内下载 LLC 官方字体。"""
@@ -118,12 +85,9 @@ def function_LCTA_auto_main(modal_id):
     _log_manager.log_modal_status("正在初始化", modal_id)
     config = ConfigManager().get('ui_default.machine', {})
     use_proxy = config.get('use_proxy', True)
-    download_source = config.get('download_source', 'github')
-    
-    if download_source == 'github':
-        result = _LCTA_auto_github(modal_id, use_proxy)
-    else:
-        result = _LCTA_auto_api(modal_id)
+
+    # download_source 曾支持 'api'（公益镜像源，已移除），现一律从 GitHub 下载
+    result = _LCTA_auto_github(modal_id, use_proxy)
 
     if result is None:
         raise Exception("下载失败，无法继续翻译流程")

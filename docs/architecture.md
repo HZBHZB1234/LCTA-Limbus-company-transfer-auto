@@ -87,7 +87,7 @@ launcher/ 的模组功能基于 LimbusModLoader（GPL-3.0），因此该子目�
 ├──────────────────────────────────────────────────────────────┤
 │                     INFRASTRUCTURE                            │
 │                                                              │
-│  webFunc/          GitHub API / 文件上传 / 蓝奏云 / Webnote  │
+│  webFunc/          GitHub API / 文件上传 / 蓝奏云            │
 │  globalManagers/   ConfigManager & LogManager (单例)         │
 │  tools/cfst/          CloudflareSpeedTest (第三方二进制)      │
 ├──────────────────────────────────────────────────────────────┤

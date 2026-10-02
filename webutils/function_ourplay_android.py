@@ -11,7 +11,6 @@ import os
 import zipfile
 from collections import defaultdict, Counter
 from globalManagers.ConfigManager import ConfigManager
-from webFunc import Note
 
 
 def check_ver_ourplay_new(official: bool = True):

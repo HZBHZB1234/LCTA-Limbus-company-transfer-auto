@@ -34,17 +34,14 @@
             "zip_type": "zip",
             "use_proxy": true,
             "use_cache": true,
-            "dump_default": false,
-            "download_source": "github"
+            "dump_default": false
         },
         "machine": {
-            "use_proxy": true,
-            "download_source": "github"
+            "use_proxy": true
         },
         "ourplay": {
             "font_option": "simplify",
             "check_hash": true,
-            "use_api": false,
             "source": "pc",
             "official": true,
             "refer_package": ""

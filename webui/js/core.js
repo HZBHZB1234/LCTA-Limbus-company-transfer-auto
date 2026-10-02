@@ -238,20 +238,17 @@ class ConfigManager {
             // OurPlay设置
             'ourplay-font-option': 'ui_default.ourplay.font_option',
             'ourplay-check-hash': 'ui_default.ourplay.check_hash',
-            'ourplay-use-api': 'ui_default.ourplay.use_api',
             'ourplay-source': 'ui_default.ourplay.source',
             'ourplay-official': 'ui_default.ourplay.official',
             'ourplay-refer-package': 'ui_default.ourplay.refer_package',
             
             // 零协设置
             'llc-zip-type': 'ui_default.zero.zip_type',
-            'llc-download-source': 'ui_default.zero.download_source',
             'llc-use-proxy': 'ui_default.zero.use_proxy',
             'llc-use-cache': 'ui_default.zero.use_cache',
             'llc-dump-default': 'ui_default.zero.dump_default',
 
             // LCTA-auto-update配置
-            'machine-download-source': 'ui_default.machine.download_source',
             'machine-use-proxy': 'ui_default.machine.use_proxy',
 
             // 调爪文本修改包配置

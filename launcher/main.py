@@ -208,6 +208,26 @@ def _hide_launcher_console():
         user32.ShowWindow(hwnd, 0)
 
 
+def _flush_log_files():
+    """把 LogManager 的文件日志缓冲刷到磁盘（异常退出导出日志前调用）。
+
+    LogManager 的 LCTA logger 与各子日志器（fancy/rule_editor/llm_fancy）共享
+    同一批 handler，刷主 logger 即覆盖全部；失败不影响后续流程。
+    """
+    try:
+        logger = getattr(_log_manager, "_logger", None)
+        if logger is None:
+            return
+        for h in list(getattr(logger, "handlers", []) or []):
+            if isinstance(h, logging.FileHandler):
+                try:
+                    h.flush()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 def _close_progress_window(progress, game_process, exit_code, cancel_event):
     if not (progress and progress.is_alive()):
         return
@@ -391,10 +411,15 @@ def main():
         except Exception:
             pass
 
+    # 异常退出弹窗会把 logs/app.log 一起打包导出，这里先把日志缓冲刷到磁盘，
+    # 保证导出的文件含本次启动流程的完整记录（logging 的 FileHandler 每次
+    # emit 后虽会 flush，但轮转/收尾阶段仍需显式刷一次以防尾部残留）。
+    _flush_log_files()
+
     if (
         progress is not None
         and progress.is_alive()
-        and ConfigManager().get("launcher.work.crash_popup", True)
+        and ConfigManager().get("launcher.work.crash_popup", False)
     ):
         try:
             from launcher.crash_export import is_abnormal_exit

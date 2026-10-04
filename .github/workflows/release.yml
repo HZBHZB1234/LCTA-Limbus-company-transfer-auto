@@ -197,13 +197,16 @@ jobs:
           ./LCTA_update
         retention-days: 7
 
-    # 压缩文件夹为ZIP文件
-    - name: Create ZIP archives
+    # 压缩打包：完整版用 7z（体积更小，GitHub Windows Runner 预装 7-Zip），更新包保持 zip
+    - name: Create archives (7z full package + zip update package)
       if: startsWith(github.ref, 'refs/tags/')
       run: |
-        # 压缩便携版完整文件夹
-        Compress-Archive -Path release/${{ env.APP_NAME }} -DestinationPath release/${{ env.APP_NAME }}-Portable-Full.zip
-        
+        # 压缩便携版完整文件夹为 7z（进入 release 目录打包，保证解压后直接得到 LCTA 文件夹，与原 Compress-Archive 行为一致）
+        Push-Location release
+        7z a -t7z -mx=9 "./${{ env.APP_NAME }}-Portable-Full.7z" "./${{ env.APP_NAME }}"
+        Pop-Location
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
         # 压缩更新文件夹
         Remove-Item -Path ./LCTA_update/.git -Recurse -Force
         Compress-Archive -Path ./LCTA_update/* -DestinationPath release/${{ env.APP_NAME }}-update.zip
@@ -218,7 +221,7 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          release/${{ env.APP_NAME }}-Portable-Full.zip
+          release/${{ env.APP_NAME }}-Portable-Full.7z
           release/${{ env.APP_NAME }}-update.zip
         tag_name: ${{ github.ref_name }}
       env:

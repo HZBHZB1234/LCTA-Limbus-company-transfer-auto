@@ -823,11 +823,13 @@ class LauncherProgressWindow:
             _log_manager.log(f"显示游戏异常退出弹窗失败: {e}")
 
     def _build_crash_export_dialog(self, exit_code: int):
+        """构建异常退出弹窗：导出日志 / 忽略，外加「忽略此种异常退出码」
+        复选框（默认不勾选，勾选后该退出码写入配置，此后不再提示）。"""
         dlg = WinForms.Form()
         dlg.Text = "游戏异常退出"
         dlg.FormBorderStyle = WinForms.FormBorderStyle.FixedDialog
         dlg.StartPosition = WinForms.FormStartPosition.CenterParent
-        dlg.Size = Size(440, 208)
+        dlg.Size = Size(460, 278)
         dlg.MaximizeBox = False
         dlg.MinimizeBox = False
         dlg.ShowInTaskbar = False
@@ -838,7 +840,7 @@ class LauncherProgressWindow:
         title = WinForms.Label()
         title.Text = "游戏异常退出"
         title.Location = Point(20, 14)
-        title.Size = Size(400, 26)
+        title.Size = Size(420, 26)
         title.Font = Font("Microsoft YaHei UI", 13, FontStyle.Bold)
         title.ForeColor = Color.FromArgb(239, 83, 80)
         dlg.Controls.Add(title)
@@ -846,39 +848,68 @@ class LauncherProgressWindow:
         desc = WinForms.Label()
         desc.Text = (
             f"游戏进程非正常退出（退出码: {exit_code}）。\n"
-            "可导出游戏日志与崩溃报告，便于排查问题。"
+            "可导出游戏日志、崩溃报告与启动器日志，便于排查问题。"
         )
         desc.Location = Point(20, 50)
-        desc.Size = Size(400, 44)
+        desc.Size = Size(420, 44)
         desc.Font = Font("Microsoft YaHei UI", 9)
         desc.ForeColor = _COLOR_FG_LIGHT
         dlg.Controls.Add(desc)
 
         hint = WinForms.Label()
-        hint.Text = "导出内容：Player.log、Player-prev.log 及崩溃报告（如有）"
+        hint.Text = (
+            "导出内容：Player.log、Player-prev.log、崩溃报告（如有）\n"
+            "以及启动器自身日志 logs/app.log"
+        )
         hint.Location = Point(20, 96)
-        hint.Size = Size(400, 20)
+        hint.Size = Size(420, 34)
         hint.Font = Font("Microsoft YaHei UI", 8)
         hint.ForeColor = _COLOR_FG_MUTED
         dlg.Controls.Add(hint)
 
+        ignore_code_cb = WinForms.CheckBox()
+        ignore_code_cb.Text = "忽略此种异常退出码（此后该退出码不再提示）"
+        ignore_code_cb.Location = Point(24, 136)
+        ignore_code_cb.Size = Size(420, 22)
+        ignore_code_cb.Font = Font("Microsoft YaHei UI", 8.25)
+        ignore_code_cb.ForeColor = _COLOR_FG_MUTED
+        ignore_code_cb.UseVisualStyleBackColor = True
+        dlg.Controls.Add(ignore_code_cb)
+
+        def _persist_ignore_choice() -> None:
+            # 勾选时把该退出码写入忽略列表；add_ignored_exit_code 幂等，
+            # 导出成功/忽略/关闭多条路径重复触发不会重复写盘。
+            try:
+                if ignore_code_cb.Checked:
+                    from launcher.crash_export import add_ignored_exit_code
+                    add_ignored_exit_code(exit_code)
+            except Exception as e:
+                _log_manager.log(f"保存忽略退出码失败: {e}")
+
+        def _on_export_click(s, e) -> None:
+            _persist_ignore_choice()
+            self._on_crash_export_click(dlg)
+
+        def _on_dialog_closed(s, e) -> None:
+            _persist_ignore_choice()
+
         export_btn = WinForms.Button()
         export_btn.Text = "导出日志"
-        export_btn.Location = Point(130, 132)
+        export_btn.Location = Point(140, 170)
         export_btn.Size = Size(120, 36)
         export_btn.FlatStyle = FlatStyle.Flat
         export_btn.BackColor = Color.FromArgb(56, 94, 128)
         export_btn.ForeColor = Color.White
         export_btn.Font = Font("Microsoft YaHei UI", 9, FontStyle.Bold)
         export_btn.FlatAppearance.BorderSize = 0
-        export_btn.add_Click(EventHandler(lambda s, e: self._on_crash_export_click(dlg)))
+        export_btn.add_Click(EventHandler(_on_export_click))
         dlg.Controls.Add(export_btn)
         dlg.AcceptButton = export_btn
 
         ignore_btn = WinForms.Button()
         ignore_btn.Text = "忽略"
-        ignore_btn.Location = Point(268, 132)
-        ignore_btn.Size = Size(90, 36)
+        ignore_btn.Location = Point(280, 170)
+        ignore_btn.Size = Size(100, 36)
         ignore_btn.FlatStyle = FlatStyle.Flat
         ignore_btn.BackColor = _COLOR_CARD_ALT
         ignore_btn.ForeColor = _COLOR_FG_LIGHT
@@ -888,6 +919,9 @@ class LauncherProgressWindow:
         ignore_btn.add_Click(EventHandler(lambda s, e: dlg.Close()))
         dlg.Controls.Add(ignore_btn)
         dlg.CancelButton = ignore_btn
+
+        # 兜底：任何关闭方式（含忽略按钮与标题栏 ×）都落一次勾选状态
+        dlg.add_Closed(EventHandler(_on_dialog_closed))
 
         return dlg
 

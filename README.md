@@ -32,7 +32,7 @@
 ### 安装
 1. 从 [Release 页面](https://github.com/HZBHZB1234/LCTA-Limbus-company-transfer-auto/releases) 下载最新版本
    > 文件下载指导  
-   - LCTA-Portable-Full.zip 正常版本。推荐下载此版本  
+   - LCTA-Portable-Full.7z 正常版本。推荐下载此版本（7z 格式，需用 7-Zip / WinRAR / Bandizip 等解压）  
    - LCTA-update.zip 完整版自动更新功能需求文件，包含项目源码 
 2. 解压到任意目录
 3. 运行 **可执行文件(.exe)** 即可启动工具箱

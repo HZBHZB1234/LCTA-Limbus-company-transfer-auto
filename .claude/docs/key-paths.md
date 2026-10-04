@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-10-03 -->
+<!-- Last updated: 2026-10-04 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1131,6 +1131,41 @@ github.com/HZBHZB1234/KeepCachedVersions。
 ```
 
 Files: `resource_updater/legacy_lethe_shortcut.py`, `start_webui.py`
+
+## 15B. 游戏异常退出 → 日志导出（含启动器自身日志）
+
+```
+游戏进程退出，launcher/main.py 拿到 exit_code
+  → main.py _flush_log_files()
+      遍历 LogManager()._logger.handlers 的 logging.FileHandler 逐个 flush()
+      （子日志器 fancy/rule_editor/llm_fancy 共享同一批 handler，刷主 logger 即全刷）
+      → 保证落盘的 logs/app.log 含本次启动流程完整记录；异常一律吞掉不阻塞
+  → 门控：launcher.work.crash_popup（默认 false，首页「一键配置」会开启）
+      + crash_export.is_abnormal_exit(exit_code, game_process, cancel_event)
+        （退出码非 0 / 非用户取消 / 游戏进程已创建 / 退出码不在
+         launcher.work.crash_popup_ignored_codes 忽略列表）
+  → gui_progress.py prompt_crash_export(exit_code)
+      form.Invoke 同步切 GUI 线程 → 模态对话框（导出日志 / 忽略
+      + 「忽略此种异常退出码」复选框，勾选后 add_ignored_exit_code 落盘、幂等）
+  → 点「导出日志」→ crash_export.export_game_logs()
+      collect_log_sources(include_launcher_logs=True) 组装来源：
+        ├ 游戏侧  GAME_LOG_DIR/Player.log、Player-prev.log（存在才收）
+        │         CRASH_DIR 递归全部文件 → zip 内 Crashes/<rel>
+        └ 启动器侧 collect_launcher_log_sources()：
+                  LAUNCHER_LOG_DIR(=logs)/app.log  → zip 内 LauncherLogs/app.log
+                  （只收当前日志；轮转备份 app.log.* 不收——体积大、关联弱）
+      → 打 zip（LCTA_游戏日志导出_<时间戳>.zip）到系统「下载」文件夹
+        单文件读取失败仅跳过该文件并记日志，不中断打包
+      → explorer /select 定位；无可导出内容返回 None 并提示
+```
+
+要点：
+- `LAUNCHER_LOG_DIR` 是**相对 CWD** 的 `logs`，与 `LogManager` 默认 `log_dir="logs"` 对齐；
+  `launcher.c` 与 `start_webui.py` 均把 CWD 设为应用目录，故打包态与开发态一致
+- 导出前必须 flush，否则弹窗打包时磁盘上的 app.log 可能缺本次尾部日志
+- 启动器日志单独放 `LauncherLogs/` 子目录，与游戏日志来源可区分
+
+Files: `launcher/main.py`（`_flush_log_files` + 门控）, `launcher/crash_export.py`（`collect_launcher_log_sources`/`collect_log_sources`/`export_game_logs`）, `launcher/gui_progress.py`（弹窗文案与布局）, `webui/sections/launcher-config.html` + `webui/js/utils.js`（开关说明与 tooltip）, `tests/test_crash_export.py`, `tests/test_launcher_fixes.py`
 
 ## 16. Metadata 恢复（IL2CPP metadata 解密恢复，v2 全自动管线）
 

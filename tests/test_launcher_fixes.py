@@ -1,5 +1,6 @@
 """launcher 修复回归测试：shlex 路径解析、wait_for_validation 超时、退出等待。"""
 
+import logging
 import os
 import threading
 from pathlib import Path
@@ -213,7 +214,50 @@ class TestCloseProgressWindow:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Bug 4: restore_sound 冷启动守卫（游戏路径未注入时不抛 TypeError）
+# Bug 4: 异常退出导出前刷盘（保证 logs/app.log 含完整本次流程）
+# ═══════════════════════════════════════════════════════════════════
+
+class TestFlushLogFiles:
+    def test_flushes_file_handlers(self, monkeypatch, tmp_path):
+        """导出前 flush：文件 handler 被调用，控制台 handler 不参与。"""
+        import launcher.main as launcher_main
+
+        file_handler = MagicMock(spec=logging.FileHandler)
+        stream_handler = MagicMock(spec=logging.StreamHandler)
+        logger = MagicMock()
+        logger.handlers = [stream_handler, file_handler]
+        monkeypatch.setattr(launcher_main, "_log_manager", MagicMock(_logger=logger))
+
+        launcher_main._flush_log_files()
+
+        file_handler.flush.assert_called_once()
+        stream_handler.flush.assert_not_called()
+
+    def test_tolerates_flush_failure(self, monkeypatch):
+        """单个 handler flush 抛错不影响其余 handler，也不向外抛。"""
+        import launcher.main as launcher_main
+
+        bad = MagicMock(spec=logging.FileHandler)
+        bad.flush.side_effect = OSError("disk full")
+        good = MagicMock(spec=logging.FileHandler)
+        logger = MagicMock()
+        logger.handlers = [bad, good]
+        monkeypatch.setattr(launcher_main, "_log_manager", MagicMock(_logger=logger))
+
+        launcher_main._flush_log_files()
+
+        good.flush.assert_called_once()
+
+    def test_no_logger_is_safe(self, monkeypatch):
+        """LogManager 初始化失败时用的是 _FallbackLogManager（无 _logger）。"""
+        import launcher.main as launcher_main
+
+        monkeypatch.setattr(launcher_main, "_log_manager", object())
+        launcher_main._flush_log_files()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Bug 5: restore_sound 冷启动守卫（游戏路径未注入时不抛 TypeError）
 # ═══════════════════════════════════════════════════════════════════
 
 class TestRestoreSoundGamePathGuard:

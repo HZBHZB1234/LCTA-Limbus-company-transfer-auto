@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-09-26 -->
+<!-- Last updated: 2026-10-03 -->
 
 ## How to Run
 
@@ -26,7 +26,7 @@ python start_webui.py -launcher
 6-step pipeline: InitCode + pinned aria2c acquisition → C compilation (MinGW-w64) → embedded Python → dist assembly → update package clean → ZIP packaging.
 
 Outputs:
-- `LCTA-Portable-Full.zip` — normal release
+- `LCTA-Portable-Full.zip` — normal release (local `build.ps1`; **CI Release attachment is `LCTA-Portable-Full.7z`** — the tag-published CD flow packs the full package with `7z a -t7z -mx=9`, runner-built-in 7-Zip, while `LCTA-update.zip` stays zip)
 - `LCTA-update.zip` — source update package
 
 Requirements: PowerShell 5.0+, MinGW-w64 (optional, skips if unavailable), Python 3.9.6, network.

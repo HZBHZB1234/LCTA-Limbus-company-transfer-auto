@@ -122,6 +122,7 @@
             "speed_factor": "str",
             "gui_mode": "bool",
             "crash_popup": "bool",
+            "crash_popup_ignored_codes": "str",
             "input_bypass": "bool",
             "input_bypass_mode": "str",
             "input_bypass_mouse_real": "str",

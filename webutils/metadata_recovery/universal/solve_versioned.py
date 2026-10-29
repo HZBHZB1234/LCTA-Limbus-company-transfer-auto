@@ -191,6 +191,22 @@ def _rec_of(entry: dict) -> int | None:
     return None
 
 
+def _slot_candidates(er_target, pool_by_rec: dict, byte_blobs: list[dict]) -> list[dict]:
+    """按槽位期望 rec 选择候选条目。
+
+    整数 rec 槽位：仅取同 rec 的固定记录条目。
+
+    rec=None 槽位（字节流：stringLiteralData / string / attributeData）：
+    取 rec=None 条目，加上 byte_blobs——即 "size==count 且 _rec_of 误判为整数 rec"
+    的字节 blob（见 solve() 内 byte_blobs 说明）。本分支修复 2026-10-29 版
+    attributeData（size==count=2234324）被误判为 rec=1 而无法被字节流槽位选中的
+    缺陷（旧版 size≠count 未暴露）。
+    """
+    if er_target is None:
+        return pool_by_rec.get(None, []) + byte_blobs
+    return pool_by_rec.get(er_target, [])
+
+
 class _Scorer:
     """内容签名评分器（按 (entry, phys) 记忆化）。"""
 
@@ -288,6 +304,16 @@ def solve(metadata: bytes, profile: dict, version: int = 39) -> dict:
     pool_by_rec: dict[tuple, list[dict]] = {}
     for e in pool:
         pool_by_rec.setdefault(_rec_of(e), []).append(e)
+
+    # 字节流条目（stringLiteralData / string / attributeData）：在版本表里 rec=None。
+    # 但 _rec_of 仅凭 "size % count == 0" 就推断整数 rec——当某字节流恰好
+    # size == count（如 2026-10-29 版 attributeData size=count=2234324），会被
+    # 误判为 rec=1，从而无法被 rec=None 的字节流槽位选中，导致整链无解
+    # （旧版 size≠count 未暴露）。这里单独收集 "size == count 且被误判为整数 rec"
+    # 的字节 blob，供 rec=None 槽位作为候选并集使用（配合位置/内容签名消歧）。
+    byte_blobs = [e for e in pool
+                  if e["size"] > 0 and e["size"] == e["count"]
+                  and _rec_of(e) is not None]
 
     review: list[str] = []
 
@@ -399,11 +425,16 @@ def solve(metadata: bytes, profile: dict, version: int = 39) -> dict:
                     best = (key, [(s, e, p) for s, e, p in placements])
                 return
             if next_start is None:
-                # 链尾间隙：默认 pad=0；放置于 prev_end 累计
+                # 链尾间隙：pad=0，放置于 prev_end 累计。
+                # 注意：必须校验每节 |phys - logical| <= MAX_ADJ，否则一个
+                # 尺寸不符的候选（如 size==count 字节 blob 误入）也能"拼满"，
+                # 破坏后续配准且无法回溯纠正。位置校验保证只有真实布局成立。
                 placements = []
                 run = prev_end
                 for slot, eidx in chosen:
                     er = by_index[eidx]
+                    if abs(run - er["offset"]) > MAX_ADJ:
+                        return
                     placements.append([slot, eidx, run])
                     run += er["size"]
                 key = placements_rank(placements)
@@ -424,7 +455,7 @@ def solve(metadata: bytes, profile: dict, version: int = 39) -> dict:
                 return
             slot = non_zero[i]
             er_target = rec[names[slot]]
-            cands = pool_by_rec.get(None if er_target is None else er_target, [])
+            cands = _slot_candidates(er_target, pool_by_rec, byte_blobs)
             for e in cands:
                 if e["index"] in used or e["index"] in used_local:
                     continue

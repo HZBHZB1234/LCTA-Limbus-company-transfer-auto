@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """webutils.metadata_recovery 测试（v2 universal 管线，全部合成数据）。
 
 覆盖：PE 解析、xorshift 模板扫描、三元组布局自动判定、结构验证、
@@ -32,7 +32,11 @@ from webutils.metadata_recovery.universal.rebuild_validate import (
     rebuild_standard,
     validate_standard,
 )
-from webutils.metadata_recovery.universal.solve_versioned import solve
+from webutils.metadata_recovery.universal.solve_versioned import (
+    _rec_of,
+    _slot_candidates,
+    solve,
+)
 from webutils.metadata_recovery.universal.verify_structural import (
     VERDICT_FAIL,
     VERDICT_PASS,
@@ -377,6 +381,36 @@ class TestSolveRebuildSynthetic:
         gates = validate_standard(std, solution, metadata, profile["table_hex"])
         assert all(g["passed"] for g in gates), \
             [g["name"] + ": " + g["evidence"] for g in gates if not g["passed"]]
+
+
+# ------------------------------------------------------- 字节流 rec 判定回归
+# 2026-10-29 版失效根因：attributeData 恰 size==count（2234324），被 _rec_of
+# 误判为整数 rec=1，导致 rec=None 的字节流槽位永远配不到它，整链求解失败
+# （"无可行锚点槽位组合"）。此前各版 size≠count 未触发。以下锁死该判定。
+
+class TestByteStreamRecRegression:
+    def test_size_eq_count_blob_misjudged_as_int_rec(self):
+        # 字节流 size==count 时 _rec_of 返回整数 rec（这是诱发条件本身）
+        e = {"index": 80, "size": 2234324, "count": 2234324, "offset": 0}
+        assert _rec_of(e) == 1
+
+    def test_rec_none_slot_includes_misjudged_blob(self):
+        # attributeData 字节 blob（被误判为 rec=1）必须仍能被 rec=None 槽位选中
+        e_attr = {"index": 80, "size": 2234324, "count": 2234324, "offset": 0}
+        e_vtbl = {"index": 36, "size": 13098732, "count": 3274683, "offset": 0}  # rec=4
+        pool_by_rec = {1: [], 4: [e_vtbl], None: []}
+        byte_blobs = [e_attr]
+        cands_none = _slot_candidates(None, pool_by_rec, byte_blobs)
+        assert e_attr in cands_none
+        # 整数 rec 槽位不受污染：绝不把 size==count 的字节 blob 混入
+        assert _slot_candidates(4, pool_by_rec, byte_blobs) == [e_vtbl]
+        assert e_attr not in _slot_candidates(4, pool_by_rec, byte_blobs)
+
+    def test_rec_none_slot_keeps_plain_none_entries(self):
+        e_sld = {"index": 76, "size": 931799, "count": 32187, "offset": 0}  # size%count!=0 -> None
+        assert _rec_of(e_sld) is None
+        pool_by_rec = {None: [e_sld]}
+        assert _slot_candidates(None, pool_by_rec, []) == [e_sld]
 
 
 # ------------------------------------------------------------- 流水线包装

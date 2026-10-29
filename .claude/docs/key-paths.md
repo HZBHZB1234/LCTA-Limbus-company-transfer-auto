@@ -1637,15 +1637,19 @@ Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.m
 
 
 
-## 工具箱安装管理（P6）
+## 订阅工具安装管理（P6；2026-10-30 更名并接入订阅语义）
 
-点击「工具箱」导航 → `toolboxManager.init()`（webui/js/toolbox-manager.js）
+点击「订阅工具」导航（原「工具箱」）→ `toolboxManager.init()`（webui/js/toolbox-manager.js）
   → 风险门控（RiskGate.gatePage('cheat')，与作弊工具箱共用同一风险须知）
-  → `toolbox_status()` 一次性取回本地状态 + 在线资格
+  → `toolbox_status()` 一次性取回本地状态 + 在线状态 + 赛季/目录
     · 本地：`webutils.toolbox.state.recover_if_needed(game_root)`（崩溃恢复）
       → `install.list_installed(game_root)`（受管插件 + 非受管 DLL）
-    · 在线：`ToolboxApi.access()` —— **失败只标 online_error，不影响本地管理**
-      （过季/断网仍必须能停用、卸载、回滚）
+    · 在线（`_toolbox_fill_online`，各项独立失败不影响其它）：
+      `season()`（公开价格/谜题开关）/ `access()`（登录时，失败只标 online_error，
+      过季/断网仍必须能停用、卸载、回滚）/ `catalog()`（**名单对游客公开**，
+      条目带 access_kind/downloadable/files）/ `current_user()`+`afdian_status()`（登录时）
+    · 未登录 → 页面渲染登录表单（`toolbox_login` → `/api/auth/client/login`），
+      注册引导外链到站点 /register
 
 本地操作（**不需要联网、不需要赛季资格**）
   `toolbox_set_enabled`  → `install.set_enabled`
@@ -1656,15 +1660,31 @@ Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.m
   `toolbox_verify_integrity` → `install.verify_integrity`（区分缺失/被改，提示修复）
   前置：`runtime.game_lock`（OS 级跨进程锁）→ `runtime.assert_can_install`（游戏运行中拒绝）
 
-安装/更新（**需要**本赛季已解锁）
-  `toolbox_install(tool_id, release_id)`
-    → `ToolboxApi.manifest()` → **Ed25519 验签**（webutils/toolbox/ed25519.py，
-      纯 Python 实现，拒绝小阶点与 S>=L；缺公钥或验签失败一律拒绝）
-    → `ToolboxApi.download_ticket()`（票据由服务端签发，客户端不接受任意 URL）
-    → `download.fetch_or_reuse()`（https 限制 + 强制 SHA256 校验 + 缓存污染重下）
-    → `install.install_plugin()` → `archive.extract_zip_safe()`（Zip Slip/ADS/
-      压缩炸弹/大小写冲突防护）→ journal 事务提交 → manifest 原子写
+安装/更新（**一键安装契约，2026-10-30 清单驱动**）
+  `toolbox_install(tool_id, release_id, confirm_foreign=False)` / `toolbox_install_runtime(...)`
+    → `_toolbox_fetch_verified_manifest()`：`ToolboxApi.manifest()` → **Ed25519 验签**
+      （webutils/toolbox/ed25519.py，纯 Python 实现，拒绝小阶点与 S>=L；
+      缺公钥或验签失败一律拒绝）→ `install_kind` 白名单
+      （bepinex_plugin_dll | runtime_zip_root，未知一律拒绝）→ files 非空
+    → `_toolbox_download_all_files()`：**逐文件** `download_ticket()`（票据由服务端
+      签发，file_name+sha256 必须与清单一致）→ `download.fetch_or_reuse()`
+      （https 限制 + 强制 SHA256 校验 + 缓存污染重下）
+    → 插件：`_toolbox_pack_plugin_stub()`（单 zip 直接复用；裸 DLL/多文件打包成
+      临时 zip）→ `install.install_plugin()`；底座：`install.install_runtime()`
+      （外部 loader 需 confirm_foreign 二次确认）
+    → `archive.extract_zip_safe()`（Zip Slip/ADS/压缩炸弹/大小写冲突防护）
+      → journal 事务提交 → manifest 原子写
   任何失败 → `state.restore_from_journal()` 回滚，不留半安装
+
+订阅语义（页面）
+  账号卡：登录表单 / 用户名+登出 / 订阅来源（按月（至 expires_at 日期）/按赛季）
+    / 未解锁 reason 文案（订阅语义，解谜仅站点 PUZZLE_ENABLED=true 时显示）
+  爱发电：未绑定 →「关联爱发电账号」（`toolbox_afdian_bind_url` 取授权地址后
+    **系统浏览器**打开，pywebview 内会 404）；已绑定 →「刷新订阅状态」
+    （`toolbox_afdian_refresh` → POST /api/integrations/afdian/refresh，幂等）+
+    手填订单号折叠区（`toolbox_verify_order`）
+  目录卡：逐条 原创·订阅专享 / 转载·免费 标签；downloadable 决定
+    「安装/更新」/「安装底座」按钮，锁定原创显示订阅引导；名单游客可见
 
 登录凭据：`session.CredentialStore`（Windows DPAPI 当前用户加密 + 原子写），
   检测到旧明文凭据时迁移后**删除**原文件

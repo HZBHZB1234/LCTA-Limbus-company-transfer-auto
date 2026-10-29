@@ -2124,3 +2124,28 @@ button {
 .cg-game-warning i {
     flex-shrink: 0;
 }
+
+/* ==================== 订阅工具页（toolbox-manager.js）==================== */
+.tb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.tb-table th,
+.tb-table td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+    vertical-align: top;
+}
+.tb-login-form {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 6px 0;
+}
+.tb-login-form input {
+    flex: 1;
+    min-width: 140px;
+}

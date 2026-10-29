@@ -212,6 +212,14 @@ class ToolboxApi:
     def afdian_status(self) -> Dict[str, Any]:
         return self._request("GET", "/api/integrations/afdian/status", auth=True)
 
+    def afdian_refresh(self) -> Dict[str, Any]:
+        """刷新订阅状态：服务端重新拉取该赞助者全部订单并自动核验（幂等）。
+
+        2026-10-30 起站点语义：绑定后订单自动核验，之后每月续费也只需点一次
+        本接口（服务端按赞助者全量扫描，无需传订单号）。
+        """
+        return self._request("POST", "/api/integrations/afdian/refresh", auth=True)
+
     def verify_order(self, order_no: str) -> Dict[str, Any]:
         """核验赞助订单（服务端主动查询官方 API，客户端只给订单号）。"""
         return self._request(
@@ -219,8 +227,83 @@ class ToolboxApi:
         )
 
     def catalog(self) -> Dict[str, Any]:
-        """当前季可获取的底座与插件目录（需已解锁）。"""
+        """当前季可获取的底座与插件目录。
+
+        2026-10-30 起站点名单对游客可见：条目带 ``access_kind``（原创/转载）、
+        ``downloadable`` 与 ``files``；未登录时服务端返回未下载态名单，
+        ``downloadable`` 一律为 False。
+        """
         return self._request("GET", "/api/toolbox/catalog", auth=True)
+
+    # -- 启动鉴权：设备授权（TPM，2026-10-27）---------------------------------
+
+    def list_devices(self) -> Dict[str, Any]:
+        """本人已授权设备（最多 2 台）。"""
+        return self._request("GET", "/api/toolbox/authz/devices", auth=True)
+
+    def register_device(self, device_id: str, public_key_b64: str,
+                        display_name: str = "",
+                        machine_hint: Optional[str] = None) -> Dict[str, Any]:
+        """注册本机为授权设备。
+
+        ``public_key_b64`` 是 TPM 内不可导出私钥对应的**公钥**（DER 的 base64）。
+        私钥永不出芯片。
+        """
+        body: Dict[str, Any] = {
+            "device_id": device_id,
+            "public_key": public_key_b64,
+            "display_name": display_name or "",
+        }
+        if machine_hint:
+            body["machine_hint"] = machine_hint
+        return self._request("POST", "/api/toolbox/authz/devices", body=body, auth=True)
+
+    def revoke_device(self, device_id: str) -> Dict[str, Any]:
+        """撤销某台设备。"""
+        return self._request(
+            "DELETE",
+            f"/api/toolbox/authz/devices/{urllib.parse.quote(str(device_id), safe='')}",
+            auth=True,
+        )
+
+    def authz_public_key(self) -> Dict[str, Any]:
+        """票据验签公钥（部署时内嵌进 doorstop）。"""
+        return self._request("GET", "/api/toolbox/authz/public-key")
+
+    def enable_device(self, display_name: str = "") -> Dict[str, Any]:
+        """**一键启用本机**：生成/复用 TPM 密钥 → 注册设备 → 写本地凭据。
+
+        这是用户在工具箱里点的那个按钮。成功后 Zylarnex 可脱离启动器自行运行。
+        """
+        from . import authz_tpm
+
+        if not authz_tpm.tpm_available():
+            raise ApiError("tpm_unavailable", "本机没有可用的 TPM，无法启用订阅工具")
+
+        key_name = authz_tpm.DEFAULT_KEY_NAME
+        public_key_b64 = authz_tpm.export_public_key_der(key_name)
+
+        existing = authz_tpm.load_device()
+        device_id = existing.get("device_id") if existing else None
+        if not device_id:
+            device_id = authz_tpm.new_device_id()
+
+        result = self.register_device(device_id, public_key_b64, display_name)
+        authz_tpm.save_device(device_id, api_base=self.base_url, key_name=key_name)
+        return result
+
+    def disable_device(self) -> Dict[str, Any]:
+        """撤销本机设备并清除本地凭据。"""
+        from . import authz_tpm
+
+        existing = authz_tpm.load_device()
+        if existing and existing.get("device_id"):
+            try:
+                self.revoke_device(existing["device_id"])
+            except ApiError:
+                logger.warning("撤销设备失败（继续清理本地）", exc_info=True)
+        authz_tpm.clear_device()
+        return {"ok": True}
 
     def manifest(self, tool_id: int, release_id: str) -> Dict[str, Any]:
         """签名安装清单。"""

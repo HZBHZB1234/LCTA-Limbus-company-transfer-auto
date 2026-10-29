@@ -1,7 +1,8 @@
 <!--
-  工具箱（公共安全层）：账号/赛季资格 + 本地安装管理。
+  订阅工具（原「工具箱」，2026-10-30 更名并对齐站点订阅语义）：
+  资源站账号登录 + 月/赛季订阅资格 + 本地安装管理。
 
-  ⚠️ 这一层**刻意不依赖**旧 cheat_core.bin 解密门：
+  ⚠️ 本层**刻意不依赖**旧 cheat_core.bin 解密门：
   过季后用户仍必须能停用、卸载、回滚已下载的插件 —— 否则「过季就卸不掉」。
   因此本区块由 toolbox-manager.js 独立初始化，不经 cheatPage.init() 的门控。
 -->
@@ -10,11 +11,13 @@
 <div id="toolbox-public" style="display:none;">
     <div class="section-header">
         <h2 class="section-title">
-            <i class="fas fa-toolbox"></i>
-            工具箱
+            <i class="fas fa-box-open"></i>
+            订阅工具
         </h2>
         <p class="section-subtitle">
-            赛季资格与本地安装管理。本地管理（停用/卸载/回滚）不需要联网，也不依赖旧版密钥解锁。
+            使用资源站（mods.lcta.top）账号登录：原创内容需有效订阅（按月 / 按赛季），
+            转载内容登录即可下载；一键安装由签名安装清单驱动。
+            本地管理（停用/卸载/回滚）不需要联网，也不依赖旧版密钥解锁。
         </p>
         <a href="javascript:void(0)" class="risk-reread-link" onclick="RiskGate.showNoticeModal('cheat')">
             <i class="fas fa-exclamation-triangle"></i> 查看风险须知与使用协议
@@ -22,9 +25,9 @@
     </div>
 
     <div class="settings-grid">
-        <!-- 账号 / 赛季状态 -->
+        <!-- 账号 / 订阅状态（登录表单与订阅展示由 JS 渲染） -->
         <div class="setting-card" id="tb-account-card">
-            <h3 class="setting-title"><i class="fas fa-user"></i> 账号与赛季</h3>
+            <h3 class="setting-title"><i class="fas fa-user"></i> 账号与订阅</h3>
             <div id="tb-account-body">
                 <p class="form-hint">正在读取状态…</p>
             </div>
@@ -39,10 +42,12 @@
         </div>
     </div>
 
-    <!-- 插件目录（需已解锁） -->
-    <div class="setting-card" id="tb-catalog-card" style="display:none;">
-        <h3 class="setting-title"><i class="fas fa-download"></i> 本赛季可获取内容</h3>
-        <div id="tb-catalog-body"></div>
+    <!-- 订阅目录（名单公开：游客可见，逐条按 downloadable 决定可否安装） -->
+    <div class="setting-card" id="tb-catalog-card">
+        <h3 class="setting-title"><i class="fas fa-download"></i> 本赛季内容目录</h3>
+        <div id="tb-catalog-body">
+            <p class="form-hint">正在读取目录…</p>
+        </div>
     </div>
 
     <!-- 已安装（本地管理，离线可用） -->
@@ -84,7 +89,7 @@
     <div class="setting-card">
         <h3 class="setting-title"><i class="fas fa-rocket"></i> Launcher 集成</h3>
         <p class="form-hint">
-            可让 Launcher 启动游戏前自动检查并准备工具箱底座与插件。
+            可让 Launcher 启动游戏前自动检查并准备订阅工具底座与插件。
             该集成开关位于「工作模式配置」中，请在 Launcher 配置页开启。
         </p>
         <button class="secondary-btn" onclick="goAndShow('launcher-config')">

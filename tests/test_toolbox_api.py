@@ -376,3 +376,16 @@ class TestManifestHashLookup:
     def test_short_hash_rejected(self):
         m = {"files": [{"path": "A.dll", "sha256": "abc"}]}
         assert dl.verify_manifest_hash(m, "A.dll") is None
+
+class TestAfdianRefresh:
+    def test_afdian_refresh_posts_with_auth(self, client, store):
+        """「刷新订阅状态」：POST /api/integrations/afdian/refresh（带凭据）。"""
+        def route(h):
+            assert h.headers.get("Authorization")  # 必须带 access token
+            return 200, {"ok": True, "scanned": 3, "verified": 1, "unmapped": 0, "failed": 0}
+
+        _Handler.routes[("POST", "/api/integrations/afdian/refresh")] = route
+        client.save_auth({"access_token": "tok", "refresh_token": "r"})
+        data = client.afdian_refresh()
+        assert data["verified"] == 1
+        assert ("POST", "/api/integrations/afdian/refresh", "Bearer tok") in _Handler.calls

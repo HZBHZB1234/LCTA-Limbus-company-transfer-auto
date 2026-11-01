@@ -628,7 +628,11 @@ async function goAndShow(name, anchorId) {
     const targetButton = document.getElementById(`${name}-btn`);
     if (!targetButton) return;
     await loadSection(name);
-    targetButton.style.display = '';
+    // 默认隐藏的入口（例如已从侧边栏移除、只保留按钮入口的作弊工具箱）
+    // 不能被「跳转」重新显示出来，否则隐藏导航会失效。
+    if (targetButton.dataset.hiddenDefault !== '1') {
+        targetButton.style.display = '';
+    }
     targetButton.click();
     // 如果切换到首页，刷新仪表盘
     if (name === 'dashboard') {

@@ -162,7 +162,8 @@ class TestJournalRollback:
     def test_rollback_is_reverse_order(self, tmp_path):
         """逆序回滚：同一路径被多次改动时顺序不能乱。"""
         game = self._setup(tmp_path)
-        t1 = game / "a.txt"
+        t1 = game / "BepInEx" / "plugins" / "LCTA" / "tool-a" / "a.txt"
+        t1.parent.mkdir(parents=True)
         t1.write_text("v1", encoding="utf-8")
 
         j = state.Journal(game)
@@ -246,7 +247,8 @@ class TestCrashRecovery:
     def test_journal_cleared_after_recovery(self, tmp_path):
         game = tmp_path / "game"
         game.mkdir()
-        target = game / "a.txt"
+        target = game / "BepInEx" / "plugins" / "LCTA" / "tool-a" / "a.txt"
+        target.parent.mkdir(parents=True)
         target.write_text("orig", encoding="utf-8")
 
         j = state.Journal(game)

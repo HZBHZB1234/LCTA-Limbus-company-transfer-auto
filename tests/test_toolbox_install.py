@@ -310,6 +310,73 @@ class TestConflictDetection:
         assert c["managed_runtime"] is True
 
 
+class TestPackageInstall:
+    """game_relative_files：签名清单指定游戏内相对目录。"""
+
+    def _plan(self, tmp_path, target_dir="BepInEx/plugins/Foo", requires_runtime=False):
+        a = tmp_path / "a.dll"
+        b = tmp_path / "b.txt"
+        a.write_bytes(b"AAA")
+        b.write_bytes(b"BBB")
+        return install.InstallPlan(
+            kind="package",
+            release_id="rp1",
+            version="1.0.0",
+            tool_id="pkg-a",
+            target_dir=target_dir,
+            requires_runtime=requires_runtime,
+            file_sources=[("a.dll", a), ("sub/b.txt", b)],
+        )
+
+    def test_installs_to_target_dir_and_records_manifest(self, game, tmp_path):
+        r = install.install_package(game, self._plan(tmp_path))
+        assert r["ok"] is True
+        assert (game / "BepInEx" / "plugins" / "Foo" / "a.dll").read_bytes() == b"AAA"
+        assert (game / "BepInEx" / "plugins" / "Foo" / "sub" / "b.txt").read_bytes() == b"BBB"
+        m = state.Manifest.load(game)
+        assert m.packages["pkg-a"].target_dir == "BepInEx/plugins/Foo"
+
+    def test_rejects_sensitive_target_dir(self, game, tmp_path):
+        with pytest.raises(paths.UnsafePathError):
+            install.install_package(game, self._plan(tmp_path, "BepInEx/core"))
+
+    def test_rejects_traversal_target_dir(self, game, tmp_path):
+        with pytest.raises(paths.UnsafePathError):
+            install.install_package(game, self._plan(tmp_path, "../escape"))
+
+    def test_update_removes_old_managed_files(self, game, tmp_path):
+        install.install_package(game, self._plan(tmp_path))
+        old = game / "BepInEx" / "plugins" / "Foo" / "sub" / "b.txt"
+        assert old.exists()
+
+        a = tmp_path / "a.dll"
+        a.write_bytes(b"NEW")
+        plan = install.InstallPlan(
+            kind="package", release_id="rp2", version="1.1.0", tool_id="pkg-a",
+            target_dir="BepInEx/plugins/Foo", requires_runtime=False,
+            file_sources=[("a.dll", a)],
+        )
+        install.install_package(game, plan)
+        assert not old.exists(), "新版本不再声明的旧受管文件应被清理"
+
+    def test_uninstall_removes_package_files(self, game, tmp_path):
+        install.install_package(game, self._plan(tmp_path))
+        r = install.uninstall_package(game, "pkg-a")
+        assert r["removed"] == 2
+        assert not (game / "BepInEx" / "plugins" / "Foo" / "a.dll").exists()
+        assert "pkg-a" not in state.Manifest.load(game).packages
+
+    def test_verify_and_rollback(self, game, tmp_path):
+        install.install_package(game, self._plan(tmp_path))
+        target = game / "BepInEx" / "plugins" / "Foo" / "a.dll"
+        target.write_bytes(b"MODIFIED")
+        v = install.verify_integrity_package(game, "pkg-a")
+        assert v["ok"] is False and "a.dll" in v["modified"]
+        # rollback 只恢复有备份的文件；首次安装的文件没有旧备份
+        rr = install.rollback_package(game, "pkg-a")
+        assert rr["ok"] is True
+
+
 class TestListing:
     def test_lists_managed_and_unmanaged(self, game, tmp_path):
         z = _zip(tmp_path / "rt.zip", [("BepInEx/core/x.dll", b"core")])

@@ -35,9 +35,26 @@ logger = logging.getLogger(__name__)
 CONFIG_KEY = "ui_default.toolbox"
 BRIDGE_PROTOCOL_VERSION = 2
 
+# 官方资源站签名清单公钥（公开信息，非密钥）。写入代码而不是只放
+# config_default.json：已有用户的 config.json 不会自动合并新增默认项，
+# 仅靠默认文件会让老用户安装时因「缺公钥」被 fail-closed 拒绝。
+DEFAULT_MANIFEST_PUBLIC_KEY = (
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MCowBQYDK2VwAyEAwR/+IVWZvbqixhs8A+y+QCzEQzKf4bsxz8UKdL1imIk=\n"
+    "-----END PUBLIC KEY-----"
+)
+
 # 一键安装契约（站点 install_kind 白名单，与站点 services/tool_releases.py 同源）
 INSTALL_KIND_PLUGIN = "bepinex_plugin_dll"
 INSTALL_KIND_RUNTIME = "runtime_zip_root"
+INSTALL_KIND_PACKAGE = "game_relative_files"
+INSTALL_KIND_DOWNLOAD = "download_only"
+INSTALL_KINDS = frozenset({
+    INSTALL_KIND_PLUGIN,
+    INSTALL_KIND_RUNTIME,
+    INSTALL_KIND_PACKAGE,
+    INSTALL_KIND_DOWNLOAD,
+})
 
 # 同一时刻只允许一个安装/更新任务（并发安装会互相覆盖文件）
 _task_lock = threading.Lock()
@@ -87,7 +104,14 @@ class ToolboxMixin:
                 "local": None,
                 "game_running": None,
                 "recovered": None,
+                "mirror_auth_available": False,
             }
+            try:
+                from webutils.function_mod_mirror import mod_mirror_get_auth
+
+                data["mirror_auth_available"] = bool(mod_mirror_get_auth())
+            except Exception:  # noqa: BLE001
+                pass
 
             try:
                 root = self._toolbox_game_root()
@@ -344,13 +368,17 @@ class ToolboxMixin:
             return {"success": False, "message": str(e)}
 
     def toolbox_uninstall(self, tool_id, remove_config=False):
-        """卸载受管插件（本地操作，离线可用）。"""
+        """卸载受管插件/文件包（本地操作，离线可用）。"""
         try:
-            from webutils.toolbox import install
+            from webutils.toolbox import install, state
 
-            data = install.uninstall_plugin(
-                self._toolbox_game_root(), str(tool_id or ""), remove_config=bool(remove_config)
-            )
+            root = self._toolbox_game_root()
+            tool_id = str(tool_id or "")
+            manifest = state.Manifest.load(root)
+            if tool_id in manifest.packages:
+                data = install.uninstall_package(root, tool_id)
+            else:
+                data = install.uninstall_plugin(root, tool_id, remove_config=bool(remove_config))
             self.log_ui(f"订阅工具：已卸载 {tool_id}")
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
@@ -360,9 +388,15 @@ class ToolboxMixin:
     def toolbox_rollback(self, tool_id):
         """回滚到本地备份（离线可用）。"""
         try:
-            from webutils.toolbox import install
+            from webutils.toolbox import install, state
 
-            data = install.rollback_plugin(self._toolbox_game_root(), str(tool_id or ""))
+            root = self._toolbox_game_root()
+            tool_id = str(tool_id or "")
+            manifest = state.Manifest.load(root)
+            if tool_id in manifest.packages:
+                data = install.rollback_package(root, tool_id)
+            else:
+                data = install.rollback_plugin(root, tool_id)
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
@@ -370,12 +404,16 @@ class ToolboxMixin:
 
     def toolbox_verify_integrity(self, tool_id):
         try:
-            from webutils.toolbox import install
+            from webutils.toolbox import install, state
 
-            return {
-                "success": True,
-                "data": install.verify_integrity(self._toolbox_game_root(), str(tool_id or "")),
-            }
+            root = self._toolbox_game_root()
+            tool_id = str(tool_id or "")
+            manifest = state.Manifest.load(root)
+            if tool_id in manifest.packages:
+                data = install.verify_integrity_package(root, tool_id)
+            else:
+                data = install.verify_integrity(root, tool_id)
+            return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
             return {"success": False, "message": str(e)}
@@ -386,10 +424,19 @@ class ToolboxMixin:
             import os
             import subprocess
 
-            from webutils.toolbox import paths
+            from webutils.toolbox import paths, state
 
             root = self._toolbox_game_root()
-            target = paths.plugin_dir(root, tool_id) if tool_id else paths.toolbox_dir(root)
+            tool_id = str(tool_id or "")
+            if tool_id:
+                manifest = state.Manifest.load(root)
+                pkg = manifest.packages.get(tool_id)
+                if pkg is not None:
+                    target = paths.package_dir(root, pkg.target_dir)
+                else:
+                    target = paths.plugin_dir(root, tool_id)
+            else:
+                target = paths.toolbox_dir(root)
             target.mkdir(parents=True, exist_ok=True)
             if os.name == "nt":
                 subprocess.Popen(["explorer", str(target)])
@@ -398,86 +445,261 @@ class ToolboxMixin:
             self.log_error(e)
             return {"success": False, "message": str(e)}
 
-    def toolbox_install(self, tool_id, release_id, confirm_foreign=False):
-        """一键安装/更新一个订阅工具（**清单驱动**，需要相应下载资格）。
-
-        契约：只信签名清单 —— 验签 → 逐文件取票据下载并校验 sha256 →
-        ``bepinex_plugin_dll`` 打包成事务化 zip 走 ``install_plugin``。
-        网页无法指定 URL 或目标路径；未签名/未知 install_kind 一律拒绝。
-        """
-        if not _task_lock.acquire(blocking=False):
-            return {"success": False, "message": "已有安装任务在进行中，请稍候"}
+    def toolbox_open_downloads(self):
+        """打开系统「下载」目录（仅下载类工具的落点）。"""
         try:
-            from webutils.toolbox import ed25519, install
+            import os
+            import subprocess
 
-            root = self._toolbox_game_root()
-            api = self._toolbox_api()
-            manifest, kind, files = self._toolbox_fetch_verified_manifest(api, tool_id, release_id)
-            if kind != INSTALL_KIND_PLUGIN:
-                return {
-                    "success": False,
-                    "message": f"该版本是底座（install_kind={kind}），请使用「安装底座」入口",
-                }
-            stubs = self._toolbox_download_all_files(api, tool_id, release_id, files)
-            stub = self._toolbox_pack_plugin_stub(stubs, files)
+            from webutils.utils.shell import get_downloads_dir
 
-            plan = install.InstallPlan(
-                kind="plugin",
-                release_id=str(release_id),
-                version=str(manifest.get("version") or ""),
-                tool_id=str(tool_id),
-                guid=manifest.get("guid"),
-                main_dll=str(files[0].get("path") or ""),
-                requires_runtime=True,
-                stub_path=stub,
-            )
-            data = install.install_plugin(root, plan)
-            self.log_ui(f"订阅工具：已安装 {tool_id}/{release_id}（{len(files)} 个文件）")
-            return {"success": True, "data": data}
+            target = get_downloads_dir()
+            os.makedirs(target, exist_ok=True)
+            if os.name == "nt":
+                subprocess.Popen(["explorer", target])
+            return {"success": True, "data": {"path": target}}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
             return {"success": False, "message": str(e)}
-        finally:
-            _task_lock.release()
 
-    def toolbox_install_runtime(self, tool_id, release_id, confirm_foreign=False):
+    def toolbox_sync_mirror_login(self, force=False):
+        """把 Mod 镜像站当前保存的登录态同步为 LCTA 订阅工具会话。
+
+        只导入 ``access_token``（30 分钟有效）与用户信息，**不导入 refresh
+        token**：镜像站和客户端各自刷新 refresh token 会互相判重放并撤销整个
+        会话。客户端已有会话时默认不覆盖；``force=True`` 用于显式点击
+        「同步登录」时刷新 access token（保留客户端自己的 refresh token）。
+        """
+        try:
+            import json
+
+            from webutils.function_mod_mirror import mod_mirror_get_auth
+
+            data = mod_mirror_get_auth() or {}
+            token = str(data.get("access_token") or "")
+            if not token:
+                return {"success": False, "message": "镜像站尚未登录，无法同步"}
+            api = self._toolbox_api()
+            if api.is_logged_in() and not force:
+                return {"success": True, "data": {"synced": False, "message": "客户端已有登录会话"}}
+            user = data.get("user")
+            if isinstance(user, str):
+                try:
+                    user = json.loads(user)
+                except (ValueError, TypeError):
+                    user = None
+            api.save_auth({"access_token": token, "user": user if isinstance(user, dict) else None})
+            self.log_ui("订阅工具：已从 Mod 镜像站同步登录态（仅 access token）")
+            return {"success": True, "data": {"synced": True}}
+        except Exception as e:  # noqa: BLE001
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+
+    def toolbox_install(self, tool_id, release_id, confirm_foreign=False, modal_id="false"):
+        """一键安装/更新插件、文件包或仅下载（清单驱动，需要下载资格）。"""
+        return self._toolbox_install_guarded(
+            tool_id, release_id,
+            allowed_kinds={INSTALL_KIND_PLUGIN, INSTALL_KIND_PACKAGE, INSTALL_KIND_DOWNLOAD},
+            confirm_foreign=confirm_foreign, modal_id=modal_id,
+        )
+
+    def toolbox_install_any(self, tool_id, release_id, confirm_foreign=False, modal_id="false"):
+        """按签名清单的 ``install_kind`` 自动分发安装（供镜像站/统一入口使用）。"""
+        return self._toolbox_install_guarded(
+            tool_id, release_id, allowed_kinds=INSTALL_KINDS,
+            confirm_foreign=confirm_foreign, modal_id=modal_id,
+        )
+
+    def toolbox_install_runtime(self, tool_id, release_id, confirm_foreign=False, modal_id="false"):
         """一键安装/更新订阅工具底座（``runtime_zip_root``，清单驱动）。
 
         ``confirm_foreign``：检测到非 LCTA 管理的 BepInEx 时必须由用户
         明确确认（网页侧 confirm 对话框），否则拒绝覆盖。
         """
-        if not _task_lock.acquire(blocking=False):
-            return {"success": False, "message": "已有安装任务在进行中，请稍候"}
-        try:
-            from webutils.toolbox import ed25519, install
+        return self._toolbox_install_guarded(
+            tool_id, release_id, allowed_kinds={INSTALL_KIND_RUNTIME},
+            confirm_foreign=confirm_foreign, modal_id=modal_id,
+        )
 
-            root = self._toolbox_game_root()
+    def toolbox_download_file(self, tool_id, release_id, file_name, sha256, modal_id="false"):
+        """下载清单内的单个文件到系统「下载」目录（镜像站嵌入模式用）。"""
+        if not _task_lock.acquire(blocking=False):
+            return {"success": False, "message": "已有下载/安装任务在进行中，请稍候"}
+        try:
+            from webutils.toolbox import download
+
             api = self._toolbox_api()
-            manifest, kind, files = self._toolbox_fetch_verified_manifest(api, tool_id, release_id)
-            if kind != INSTALL_KIND_RUNTIME:
-                return {
-                    "success": False,
-                    "message": f"该版本是插件（install_kind={kind}），请使用「安装/更新」入口",
-                }
-            stubs = self._toolbox_download_all_files(api, tool_id, release_id, files)
-            if len(stubs) != 1:
-                raise ValueError("底座清单必须恰好声明一个整包文件")
-            plan = install.InstallPlan(
-                kind="runtime",
-                release_id=str(release_id),
-                version=str(manifest.get("version") or ""),
-                tool_id=str(tool_id),
-                requires_runtime=False,
-                stub_path=stubs[0],
+            manifest, _kind, files = self._toolbox_fetch_verified_manifest(api, tool_id, release_id)
+            name = str(file_name or "")
+            sha = str(sha256 or "").lower()
+            meta = next(
+                (f for f in files
+                 if str(f.get("path") or "") == name
+                 and str(f.get("sha256") or "").lower() == sha),
+                None,
             )
-            data = install.install_runtime(root, plan, confirm_foreign=bool(confirm_foreign))
-            self.log_ui(f"订阅工具：已安装底座 {tool_id}/{release_id}")
-            return {"success": True, "data": data}
+            if meta is None:
+                return {"success": False, "message": "该文件不在当前版本的签名清单内"}
+            ticket = api.download_ticket(int(tool_id), str(release_id), name, sha)
+            url = ticket.get("download_url")
+            if not url:
+                return {"success": False, "message": "服务端未返回下载地址"}
+            self._toolbox_progress(modal_id, 10, f"下载 {name}…")
+            stub = download.fetch_or_reuse(url, sha, expected_size=meta.get("size"))
+            folder = str(manifest.get("tool_dir") or tool_id)
+            saved = download.save_to_downloads([(name, stub)], folder)
+            self._toolbox_progress(modal_id, 100, "下载完成")
+            return {"success": True, "data": {"save_paths": [str(p) for p in saved]}}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
             return {"success": False, "message": str(e)}
         finally:
             _task_lock.release()
+
+    def _toolbox_install_guarded(self, tool_id, release_id, *, allowed_kinds,
+                                 confirm_foreign=False, modal_id="false"):
+        if not _task_lock.acquire(blocking=False):
+            return {"success": False, "message": "已有安装任务在进行中，请稍候"}
+        try:
+            return self._toolbox_install_impl(
+                tool_id, release_id,
+                allowed_kinds=allowed_kinds,
+                confirm_foreign=confirm_foreign,
+                modal_id=modal_id,
+            )
+        except Exception as e:  # noqa: BLE001
+            self.log_error(e)
+            return {"success": False, "message": str(e)}
+        finally:
+            _task_lock.release()
+
+    def _toolbox_install_impl(self, tool_id, release_id, *, allowed_kinds,
+                              confirm_foreign=False, modal_id="false"):
+        from webutils.toolbox import install
+
+        api = self._toolbox_api()
+        manifest, kind, files = self._toolbox_fetch_verified_manifest(api, tool_id, release_id)
+        if kind not in allowed_kinds:
+            label = {
+                INSTALL_KIND_RUNTIME: "底座",
+                INSTALL_KIND_PLUGIN: "插件",
+                INSTALL_KIND_PACKAGE: "文件包",
+                INSTALL_KIND_DOWNLOAD: "仅下载",
+            }.get(kind, kind)
+            return {
+                "success": False,
+                "message": f"该版本是{label}（install_kind={kind}），请使用对应入口",
+            }
+
+        if kind == INSTALL_KIND_DOWNLOAD:
+            return self._toolbox_install_download_impl(
+                api, tool_id, release_id, manifest, files, modal_id
+            )
+
+        root = self._toolbox_game_root()
+        if kind == INSTALL_KIND_RUNTIME:
+            return self._toolbox_install_runtime_impl(
+                api, root, tool_id, release_id, manifest, files, confirm_foreign, modal_id
+            )
+        if kind == INSTALL_KIND_PACKAGE:
+            return self._toolbox_install_package_impl(
+                api, root, tool_id, release_id, manifest, files, modal_id
+            )
+        return self._toolbox_install_plugin_impl(
+            api, root, tool_id, release_id, manifest, files, modal_id
+        )
+
+    def _toolbox_install_plugin_impl(self, api, root, tool_id, release_id, manifest, files, modal_id):
+        from webutils.toolbox import install
+
+        stubs = self._toolbox_download_all_files(api, tool_id, release_id, files, modal_id)
+        stub = self._toolbox_pack_plugin_stub(stubs, files)
+        self._toolbox_progress(modal_id, 90, "安装插件…")
+        plan = install.InstallPlan(
+            kind="plugin",
+            release_id=str(release_id),
+            version=str(manifest.get("version") or ""),
+            tool_id=str(tool_id),
+            guid=manifest.get("guid"),
+            main_dll=str(files[0].get("path") or ""),
+            requires_runtime=True,
+            stub_path=stub,
+        )
+        data = install.install_plugin(root, plan)
+        self._toolbox_progress(modal_id, 100, "安装完成")
+        self.log_ui(f"订阅工具：已安装 {tool_id}/{release_id}（{len(files)} 个文件）")
+        return {"success": True, "data": data}
+
+    def _toolbox_install_runtime_impl(self, api, root, tool_id, release_id, manifest, files,
+                                      confirm_foreign, modal_id):
+        from webutils.toolbox import install
+
+        stubs = self._toolbox_download_all_files(api, tool_id, release_id, files, modal_id)
+        if len(stubs) != 1:
+            raise ValueError("底座清单必须恰好声明一个整包文件")
+        self._toolbox_progress(modal_id, 90, "安装底座…")
+        plan = install.InstallPlan(
+            kind="runtime",
+            release_id=str(release_id),
+            version=str(manifest.get("version") or ""),
+            tool_id=str(tool_id),
+            requires_runtime=False,
+            stub_path=stubs[0],
+        )
+        data = install.install_runtime(root, plan, confirm_foreign=bool(confirm_foreign))
+        self._toolbox_progress(modal_id, 100, "安装完成")
+        self.log_ui(f"订阅工具：已安装底座 {tool_id}/{release_id}")
+        return {"success": True, "data": data}
+
+    def _toolbox_install_package_impl(self, api, root, tool_id, release_id, manifest, files, modal_id):
+        from webutils.toolbox import install
+
+        target_dir = str(manifest.get("target_dir") or "")
+        if not target_dir:
+            raise ValueError("文件包清单缺少 target_dir，拒绝安装")
+        stubs = self._toolbox_download_all_files(api, tool_id, release_id, files, modal_id)
+        sources = [
+            (str(meta.get("path") or ""), stub)
+            for meta, stub in zip(files, stubs)
+        ]
+        self._toolbox_progress(modal_id, 90, f"安装到 {target_dir} …")
+        plan = install.InstallPlan(
+            kind="package",
+            release_id=str(release_id),
+            version=str(manifest.get("version") or ""),
+            tool_id=str(tool_id),
+            target_dir=target_dir,
+            requires_runtime=bool(manifest.get("requires_runtime", False)),
+            file_sources=sources,
+        )
+        data = install.install_package(root, plan)
+        self._toolbox_progress(modal_id, 100, "安装完成")
+        self.log_ui(f"订阅工具：已安装文件包 {tool_id}/{release_id} → {target_dir}")
+        return {"success": True, "data": data}
+
+    def _toolbox_install_download_impl(self, api, tool_id, release_id, manifest, files, modal_id):
+        from webutils.toolbox import download
+
+        stubs = self._toolbox_download_all_files(api, tool_id, release_id, files, modal_id)
+        folder = str(manifest.get("tool_dir") or tool_id)
+        self._toolbox_progress(modal_id, 90, "复制到下载目录…")
+        saved = download.save_to_downloads(
+            [(str(meta.get("path") or ""), stub) for meta, stub in zip(files, stubs)],
+            folder,
+            progress=lambda done, total: self._toolbox_progress(
+                modal_id, 90 + int(10 * done / max(total, 1)), "复制到下载目录…"
+            ),
+        )
+        self._toolbox_progress(modal_id, 100, "下载完成")
+        self.log_ui(f"订阅工具：已下载 {tool_id}/{release_id} 到系统下载目录")
+        return {
+            "success": True,
+            "data": {
+                "kind": "download",
+                "folder": folder,
+                "save_paths": [str(p) for p in saved],
+            },
+        }
 
     # -- 一键安装契约的内部步骤 ---------------------------------------------
 
@@ -498,20 +720,27 @@ class ToolboxMixin:
             raise ValueError("清单签名校验失败，拒绝安装")
 
         kind = str(manifest.get("install_kind") or "")
-        if kind not in (INSTALL_KIND_PLUGIN, INSTALL_KIND_RUNTIME):
+        if kind not in INSTALL_KINDS:
             raise ValueError(f"未知的安装类型（install_kind={kind or '缺失'}），拒绝安装")
+        if kind == INSTALL_KIND_PACKAGE:
+            target_dir = str(manifest.get("target_dir") or "")
+            if not target_dir:
+                raise ValueError("文件包清单缺少 target_dir，拒绝安装")
+        if kind == INSTALL_KIND_DOWNLOAD and manifest.get("target_dir"):
+            raise ValueError("仅下载清单不应包含 target_dir，拒绝安装")
 
         files = manifest.get("files") or []
         if not files:
             raise ValueError("清单没有文件，拒绝安装")
         return manifest, kind, files
 
-    def _toolbox_download_all_files(self, api, tool_id, release_id, files):
-        """逐文件取短期票据下载并校验 sha256（契约第 2 步：清单外文件不可得）。"""
+    def _toolbox_download_all_files(self, api, tool_id, release_id, files, modal_id="false"):
+        """逐文件取票据下载并校验 sha256（契约第 2 步：清单外文件不可得）。"""
         from webutils.toolbox import download
 
         paths = []
-        for f in files:
+        total = max(len(files), 1)
+        for idx, f in enumerate(files):
             name = str(f.get("path") or "")
             sha = str(f.get("sha256") or "").lower()
             if not name or len(sha) != 64:
@@ -520,8 +749,27 @@ class ToolboxMixin:
             url = ticket.get("download_url")
             if not url:
                 raise ValueError(f"服务端未返回下载地址：{name}")
-            paths.append(download.fetch_or_reuse(url, sha, expected_size=f.get("size")))
+
+            base_pct = 5 + int(80 * idx / total)
+
+            def _on_bytes(done, total_bytes, _idx=idx, _name=name, _base=base_pct):
+                if total_bytes:
+                    pct = _base + int(80 / total * min(done / total_bytes, 1.0))
+                    self._toolbox_progress(modal_id, pct, f"下载 {_name}…")
+
+            self._toolbox_progress(modal_id, base_pct, f"下载 {name}（{idx + 1}/{total}）…")
+            paths.append(download.fetch_or_reuse(
+                url, sha, expected_size=f.get("size"), progress=_on_bytes
+            ))
         return paths
+
+    def _toolbox_progress(self, modal_id, percent, text):
+        """更新进度模态框；modal_id 无效/空时静默（主页面可直接用 toast）。"""
+        try:
+            if modal_id and str(modal_id) != "false" and hasattr(self, "update_modal_progress"):
+                self.update_modal_progress(percent, text, modal_id)
+        except Exception:  # noqa: BLE001 - 进度展示失败不影响安装
+            pass
 
     @staticmethod
     def _toolbox_pack_plugin_stub(stub_paths, manifest_files):
@@ -555,12 +803,14 @@ class ToolboxMixin:
 
     @staticmethod
     def _manifest_public_key():
-        """清单验签公钥（本地配置）。
+        """清单验签公钥：本地配置优先，未配置时使用官方内置公钥。
 
-        未配置时返回 None → 调用方拒绝安装（fail-closed）。
+        内置公钥解决「已有 config.json 不会合并 config_default 新增项」的
+        老用户升级问题；两者都没有时才返回 None（调用方仍 fail-closed）。
         """
         cfg = ConfigManager().get(CONFIG_KEY, {}) or {}
         pem = (cfg.get("manifest_public_key") if isinstance(cfg, dict) else "") or ""
+        pem = pem or DEFAULT_MANIFEST_PUBLIC_KEY
         return pem.encode("utf-8") if pem else None
 
     def toolbox_set_game_root(self, path):

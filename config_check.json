@@ -1,5 +1,10 @@
 {
     "ui_default": {
+        "toolbox": {
+            "base_url": "str",
+            "game_root": "str",
+            "manifest_public_key": "str"
+        },
         "translator": {
             "translator": "str",
             "fallback": "bool",

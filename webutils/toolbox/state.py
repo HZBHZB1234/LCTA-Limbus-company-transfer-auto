@@ -37,7 +37,7 @@ from . import paths
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # 事务状态
 STATE_IDLE = "idle"
@@ -166,6 +166,46 @@ class PluginEntry:
 
 
 @dataclass
+class PackageEntry:
+    """受管文件包（``game_relative_files``，2026-11-01）。
+
+    与插件不同：包不参与 BepInEx 的启用/停用（没有加载树概念），
+    但同样记录目标目录、文件哈希与备份，支持卸载/回滚/完整性检查。
+    """
+
+    tool_id: str
+    release_id: str
+    version: str = ""
+    target_dir: str = ""
+    files: List[ManagedFile] = field(default_factory=list)
+    installed_at: str = ""
+    requires_runtime: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "tool_id": self.tool_id,
+            "release_id": self.release_id,
+            "version": self.version,
+            "target_dir": self.target_dir,
+            "files": [f.to_dict() for f in self.files],
+            "installed_at": self.installed_at,
+            "requires_runtime": self.requires_runtime,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "PackageEntry":
+        return cls(
+            tool_id=str(d.get("tool_id", "")),
+            release_id=str(d.get("release_id", "")),
+            version=str(d.get("version", "")),
+            target_dir=str(d.get("target_dir", "")),
+            files=[ManagedFile.from_dict(x) for x in (d.get("files") or [])],
+            installed_at=str(d.get("installed_at", "")),
+            requires_runtime=bool(d.get("requires_runtime", False)),
+        )
+
+
+@dataclass
 class RuntimeEntry:
     """受管底座（BepInEx 定制包）。"""
 
@@ -208,6 +248,7 @@ class Manifest:
         self.normalized_root = str(self.game_root.resolve())
         self.runtime: Optional[RuntimeEntry] = None
         self.plugins: Dict[str, PluginEntry] = {}
+        self.packages: Dict[str, PackageEntry] = {}
         self.updated_at = _utcnow_iso()
 
         if data:
@@ -223,6 +264,7 @@ class Manifest:
                            stored_root, self.normalized_root)
             self.runtime = None
             self.plugins = {}
+            self.packages = {}
             return
 
         rt = data.get("runtime")
@@ -230,6 +272,13 @@ class Manifest:
         self.plugins = {
             str(k): PluginEntry.from_dict(v) for k, v in (data.get("plugins") or {}).items()
         }
+        # v1 manifest 没有 packages 字段：按空处理，保存时升到 v2
+        self.packages = {
+            str(k): PackageEntry.from_dict(v) for k, v in (data.get("packages") or {}).items()
+        }
+        # v1 → v2：旧清单没有 packages；读取后按当前 schema 保存
+        if self.schema_version < SCHEMA_VERSION:
+            self.schema_version = SCHEMA_VERSION
         self.updated_at = str(data.get("updated_at", _utcnow_iso()))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -239,6 +288,7 @@ class Manifest:
             "updated_at": _utcnow_iso(),
             "runtime": self.runtime.to_dict() if self.runtime else None,
             "plugins": {k: v.to_dict() for k, v in self.plugins.items()},
+            "packages": {k: v.to_dict() for k, v in self.packages.items()},
         }
 
     # -- 持久化 --------------------------------------------------------------
@@ -255,7 +305,7 @@ class Manifest:
     # -- 查询 ----------------------------------------------------------------
 
     def is_managed(self, tool_id: str) -> bool:
-        return tool_id in self.plugins
+        return tool_id in self.plugins or tool_id in self.packages
 
     def enabled_plugins(self) -> List[PluginEntry]:
         return [p for p in self.plugins.values() if p.enabled]
@@ -334,13 +384,26 @@ class Journal:
         self.entries = []
         self.save()
 
-    def add_entry(self, target: Path, *, backup_rel: Optional[str], existed: bool) -> None:
-        """登记一个将要被改动的文件（**写之前**登记）。"""
+    def add_entry(
+        self,
+        target: Path,
+        *,
+        backup_rel: Optional[str],
+        existed: bool,
+        allowed_root: Optional[Path] = None,
+    ) -> None:
+        """登记一个将要被改动的文件（**写之前**登记）。
+
+        ``allowed_root`` 供 ``game_relative_files`` 使用：包目标可以不在
+        ``.lcta-toolbox``/``BepInEx/plugins/LCTA`` 内，回滚时必须按登记时
+        的包根校验，而不是误用到受管区白名单。
+        """
         self.entries.append(
             {
                 "target": str(target),
                 "backup_rel": backup_rel,
                 "existed_before": bool(existed),
+                **({"allowed_root": str(allowed_root)} if allowed_root else {}),
             }
         )
         self.save()
@@ -381,12 +444,14 @@ def restore_from_journal(game_root: os.PathLike | str, journal: Journal) -> Dict
         target = Path(str(entry.get("target", "")))
         backup_rel = entry.get("backup_rel")
         existed = bool(entry.get("existed_before", False))
+        allowed_root = entry.get("allowed_root")
+        extra_roots = [str(allowed_root)] if allowed_root else []
 
         try:
             if not existed:
                 # 原本没有 → 删除新写入的
                 if target.exists():
-                    paths.assert_managed_target(game_root, target)
+                    paths.assert_managed_target(game_root, target, extra_roots=extra_roots)
                     target.unlink()
                     deleted.append(str(target))
                 continue
@@ -397,6 +462,7 @@ def restore_from_journal(game_root: os.PathLike | str, journal: Journal) -> Dict
             if not backup.exists():
                 missing.append(str(target))
                 continue
+            paths.assert_managed_target(game_root, target, extra_roots=extra_roots)
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(str(backup), str(target))
             restored.append(str(target))

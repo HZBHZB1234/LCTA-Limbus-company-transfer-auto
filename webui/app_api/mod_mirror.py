@@ -32,6 +32,7 @@ class ModMirrorMixin:
             js_api=api,
         )
         api.set_main_window(self._window)
+        api.set_main_api(self)
 
         self._mod_mirror_window = window
 

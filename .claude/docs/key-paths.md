@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-10-04 -->
+<!-- Last updated: 2026-11-01 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1696,3 +1696,27 @@ Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
       `webui/index.html`（#toolbox-btn / #toolbox-section / script）,
       `.github/InitCode.py`（js_files）, `webui/assets/update.md`,
       `tests/test_toolbox_{paths,state,install,ed25519,session,api,bridge,packaging}.py`
+
+### 2026-11-01 扩展：安装预览 / 文件包 / 仅下载 / 镜像站安装
+
+- 侧边栏 `#cheat-btn` 改为 `data-hidden-default="1"` 隐藏项；入口移到
+  `webui/sections/toolbox.html` 的「作弊工具箱（旧版功能）」卡片，
+  点击 `goAndShow('cheat')`。`goAndShow()` 不再把隐藏入口重新显示。
+- 「订阅工具 · 本机授权」卡片从 `sections/cheat.html` 迁入
+  `sections/toolbox.html`；`authzRefresh/authzEnable/authzDisable/authzRevoke`
+  并入 `toolbox-manager.js`（不再依赖 cheat 页 DOMContentLoaded）。
+- 目录行新增「查看」预览：`toolbox-manager.js preview()` 用 `ModalWindow`
+  展示版本/类型/访问分类/作者/简介/兼容与版本说明/文件清单/`target_dir`。
+- 新增 `game_relative_files`：`webui/app_api/toolbox.py` 走
+  `install.install_package()`；`webutils/toolbox/paths.py package_dir()` 校验
+  签名清单里的 `target_dir`，`state.PackageEntry` 记录安装根，支持
+  `uninstall_package/verify_integrity_package/rollback_package`；
+  `state.Manifest` schema v1→v2 向后兼容，journal 条目带 `allowed_root`
+  供崩溃回滚校验包根。
+- 新增 `download_only`：不要求游戏目录，`download.save_to_downloads()`
+  把已校验缓存复制到系统「下载」目录下的 `<tool_dir>/`。
+- Mod 镜像站窗口：`webui/mod_mirror_api.py` 新增
+  `toolboxStatus/toolboxSyncLogin/toolboxInstallRequest/toolboxOpenToolbox/
+  toolboxOpenDownloads`；安装请求只转发 `tool_id/release_id/action`，主窗口
+  `toolboxManager.installFromMirror()` 重新走签名清单/票据/哈希校验。
+  未登录时可把镜像站 access token 同步到 DPAPI（不导入 refresh token）。

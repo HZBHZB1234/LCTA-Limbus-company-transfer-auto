@@ -661,3 +661,76 @@ def test_aria2_cancel_removes_task(monkeypatch, tmp_path):
         mm._download_aria2("https://x/a", dest, "false", 0)
     assert removed == ["g1"]  # 取消时已移除 aria2 任务
     assert mm._aria2_users == 0  # 引用已释放
+
+# ==================== 订阅工具桥（2026-11-01） ====================
+
+class _FakeWindow:
+    def __init__(self):
+        self.scripts = []
+
+    def evaluate_js(self, js):
+        self.scripts.append(js)
+
+
+class _FakeMainApi:
+    def __init__(self):
+        self.synced = []
+
+    def toolbox_sync_mirror_login(self, force=False):
+        self.synced.append(force)
+        return {"success": True, "data": {"synced": True}}
+
+    def toolbox_open_downloads(self):
+        return {"success": True, "data": {"path": "Downloads"}}
+
+
+def test_toolbox_install_request_forwards_ids_only():
+    from webui.mod_mirror_api import ModMirrorWindowAPI
+
+    api = ModMirrorWindowAPI()
+    win = _FakeWindow()
+    api.set_main_window(win)
+    r = api.toolboxInstallRequest({
+        "source": "lcta-mod-mirror",
+        "action": "install",
+        "payload": {
+            "tool_id": 7, "release_id": "r123", "tool_name": "Test",
+            "install_kind": "game_relative_files", "target_path": "C:/evil",
+        },
+    })
+    assert r["ok"] is True
+    assert len(win.scripts) == 1
+    js = win.scripts[0]
+    assert "lcta-toolbox-install" in js
+    assert '"tool_id": 7' in js
+    assert '"release_id": "r123"' in js
+    # 网页传来的任意路径不得进入转发载荷
+    assert "target_path" not in js
+    assert "C:/evil" not in js
+
+
+def test_toolbox_install_request_rejects_bad_source_and_ids():
+    from webui.mod_mirror_api import ModMirrorWindowAPI
+
+    api = ModMirrorWindowAPI()
+    api.set_main_window(_FakeWindow())
+    assert api.toolboxInstallRequest({"source": "other"})["ok"] is False
+    assert api.toolboxInstallRequest({
+        "source": "lcta-mod-mirror",
+        "payload": {"tool_id": "x", "release_id": "r1"},
+    })["ok"] is False
+    assert api.toolboxInstallRequest({
+        "source": "lcta-mod-mirror",
+        "payload": {"tool_id": 1, "release_id": "../evil"},
+    })["ok"] is False
+
+
+def test_toolbox_sync_login_delegates():
+    from webui.mod_mirror_api import ModMirrorWindowAPI
+
+    api = ModMirrorWindowAPI()
+    main = _FakeMainApi()
+    api.set_main_api(main)
+    r = api.toolboxSyncLogin(force=True)
+    assert r["success"] is True
+    assert main.synced == [True]

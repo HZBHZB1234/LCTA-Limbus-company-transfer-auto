@@ -197,6 +197,38 @@ def fetch_or_reuse(
     )
 
 
+def save_to_downloads(
+    files: list[tuple[str, Path]],
+    folder: str,
+    *,
+    progress: Optional[Callable[[int, int], None]] = None,
+) -> list[Path]:
+    """把已校验的缓存文件复制到系统「下载」目录。
+
+    ``files`` 为 ``[(清单相对路径, 缓存文件), ...]``。多文件会放进
+    ``Downloads/<folder>/`` 下并保留相对路径；单文件同样放在该子目录，
+    避免不同工具的同名文件互相覆盖。绝不接受绝对路径或 ``..``。
+    """
+    from . import paths as _paths
+    from webutils.utils.shell import get_downloads_dir
+
+    clean_folder = _paths.sanitize_member_name(folder or "toolbox-download")
+    base = _paths.resolve_within(Path(get_downloads_dir()), clean_folder)
+    base.mkdir(parents=True, exist_ok=True)
+
+    total = len(files)
+    out: list[Path] = []
+    for idx, (rel, src) in enumerate(files, start=1):
+        clean_rel = _paths.sanitize_member_name(rel)
+        dest = _paths.resolve_within(base, clean_rel)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(src), str(dest))
+        out.append(dest)
+        if progress:
+            progress(idx, total)
+    return out
+
+
 def clear_cache(keep_sha256: Optional[set] = None) -> int:
     """清理缓存；``keep_sha256`` 中的哈希保留（如仍安装的版本）。"""
     root = cache_root()

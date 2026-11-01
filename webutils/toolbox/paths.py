@@ -50,6 +50,25 @@ LOCK_NAME = "toolbox.lock"
 # BepInEx 插件加载树（受管 DLL 的启用位置）
 BEPINEX_PLUGINS = ("BepInEx", "plugins", "LCTA")
 
+# 游戏目录内自定义安装目标（game_relative_files）的硬性禁区。
+# 这些路径承载启动器/游戏核心，发布者签名也不能覆盖。
+FORBIDDEN_PACKAGE_DIRS = frozenset({
+    "bepinex",
+    "bepinex/core",
+    "bepinex/plugins/lcta",
+    "dotnet",
+    TOOLBOX_DIR,
+    "limbuscompany_data/managed",
+    "limbuscompany_data/il2cpp",
+})
+FORBIDDEN_PACKAGE_FILES = frozenset({
+    "winhttp.dll",
+    "doorstop_config.ini",
+    "limbuscompany.exe",
+    "gameassembly.dll",
+    "unityplayer.dll",
+})
+
 
 class UnsafePathError(ValueError):
     """路径不安全（逃逸/设备名/ADS/链接等）：一律中止，不做「尽力而为」的修正。"""
@@ -234,6 +253,50 @@ def plugin_dir(game_root: os.PathLike | str, tool_id: str) -> Path:
     return Path(game_root).joinpath(*BEPINEX_PLUGINS, _safe_id(tool_id))
 
 
+def package_dir(game_root: os.PathLike | str, target_dir: str) -> Path:
+    """游戏目录内自定义安装根（``game_relative_files``）。
+
+    ``target_dir`` 来自**已验签的安装清单**，不是网页参数。这里仍做一次
+    路径逃逸/敏感目录检查：签名只能证明发布者意图，不能替代本机安全边界。
+    """
+    root = Path(game_root).resolve()
+    clean = sanitize_member_name(target_dir)
+    low = clean.casefold()
+    if not low:
+        raise UnsafePathError("安装目标目录为空")
+    if low in FORBIDDEN_PACKAGE_DIRS:
+        raise UnsafePathError(f"安装目标目录是受保护目录：{target_dir}")
+    for prefix in (
+        "bepinex/core/",
+        "bepinex/plugins/lcta/",
+        f"{TOOLBOX_DIR}/",
+        "limbuscompany_data/managed/",
+        "limbuscompany_data/il2cpp/",
+        "dotnet/",
+    ):
+        if low.startswith(prefix):
+            raise UnsafePathError(f"安装目标目录落在受保护区域：{target_dir}")
+    if "/" not in low and low in FORBIDDEN_PACKAGE_FILES:
+        raise UnsafePathError(f"安装目标目录不能覆盖关键文件：{target_dir}")
+
+    target = resolve_within(root, clean)
+    if target == root:
+        raise UnsafePathError("安装目标目录不能是游戏根目录")
+    return target
+
+
+def assert_package_target(game_root: os.PathLike | str, target: os.PathLike | str,
+                          package_root: os.PathLike | str) -> None:
+    """包安装/卸载/回滚的目标断言：必须落在该包的根目录内。"""
+    root = Path(game_root)
+    pkg = Path(package_root)
+    if not is_within(pkg, root):
+        raise UnsafePathError(f"包安装根不在游戏目录内：{pkg}")
+    if not is_within(target, pkg):
+        raise UnsafePathError(f"目标不在包安装根内：{target}")
+    assert_not_link(target)
+
+
 def manifest_path(game_root: os.PathLike | str) -> Path:
     return toolbox_dir(game_root) / MANIFEST_NAME
 
@@ -289,13 +352,29 @@ def managed_paths_under(game_root: os.PathLike | str) -> Tuple[Path, ...]:
     return (toolbox_dir(root), plugin_dir(root, "x").parent)
 
 
-def assert_managed_target(game_root: os.PathLike | str, target: os.PathLike | str) -> None:
+def assert_managed_target(
+    game_root: os.PathLike | str,
+    target: os.PathLike | str,
+    *,
+    extra_roots: Iterable[os.PathLike | str] = (),
+) -> None:
     """删除/移动前的最终断言：目标必须在受管区内，且不是链接。
 
     所有删除路径都必须经过这里，禁止「调用方自己拼路径直接 remove」。
+
+    ``extra_roots`` 供 ``game_relative_files`` 的包安装使用：包目标可以超出
+    ``.lcta-toolbox`` / ``BepInEx/plugins/LCTA``，但必须位于明确的包根内，
+    且包根本身必须在游戏目录内（不能是游戏根）。
     """
-    root = Path(game_root)
-    allowed = managed_paths_under(root)
+    root = Path(game_root).resolve()
+    allowed = list(managed_paths_under(root))
+    for extra in extra_roots:
+        extra_path = Path(extra).resolve()
+        if extra_path == root:
+            raise UnsafePathError(f"拒绝把游戏根当作包安装根：{extra_path}")
+        if not is_within(extra_path, root):
+            raise UnsafePathError(f"包安装根不在游戏目录内：{extra_path}")
+        allowed.append(extra_path)
     t = Path(target)
     if not any(is_within(t, a) for a in allowed):
         raise UnsafePathError(f"拒绝操作受管区外的路径：{t}")

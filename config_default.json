@@ -1,5 +1,10 @@
 {
     "ui_default": {
+        "toolbox": {
+            "base_url": "https://mods.lcta.top",
+            "game_root": "",
+            "manifest_public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAwR/+IVWZvbqixhs8A+y+QCzEQzKf4bsxz8UKdL1imIk=\n-----END PUBLIC KEY-----"
+        },
         "translator": {
             "translator": "LLM通用翻译服务",
             "fallback": true,

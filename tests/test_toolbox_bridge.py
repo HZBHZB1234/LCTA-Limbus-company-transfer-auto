@@ -210,9 +210,10 @@ class TestInstallBoundary:
         from webui.app_api.toolbox import ToolboxMixin
 
         params = set(inspect.signature(ToolboxMixin.toolbox_install).parameters)
-        # confirm_foreign 是布尔确认位（外部 loader 二次确认），不是 URL/路径；
-        # 契约不变：接口里永远不允许出现下载源或目标目录参数。
-        assert params == {"self", "tool_id", "release_id", "confirm_foreign"}
+        # confirm_foreign 是布尔确认位（外部 loader 二次确认），modal_id 只用于
+        # 进度显示；两者都不是 URL/路径。契约不变：接口里永远不允许出现下载源
+        # 或目标目录参数。
+        assert params == {"self", "tool_id", "release_id", "confirm_foreign", "modal_id"}
         assert not any(k and ("url" in k or "path" in k) for k in params)
         for name in ("url", "path", "target", "command", "script"):
             assert name not in params
@@ -401,7 +402,7 @@ class TestManifestDrivenInstall:
         api = _ContractApi(signed["manifest_out"])
         monkeypatch.setattr(
             "webutils.toolbox.download.fetch_or_reuse",
-            lambda url, sha, expected_size=None: cache[sha],
+            lambda url, sha, expected_size=None, progress=None: cache[sha],
         )
         b = _make_bridge(game, api=api)
         b._manifest_public_key = lambda: signed["pub_der"]
@@ -438,7 +439,7 @@ class TestManifestDrivenInstall:
         signed = self._signed(manifest)
         monkeypatch.setattr(
             "webutils.toolbox.download.fetch_or_reuse",
-            lambda url, sha_, expected_size=None: fp,
+            lambda url, sha_, expected_size=None, progress=None: fp,
         )
         api = _ContractApi(signed["manifest_out"])
         b = _make_bridge(game, api=api)
@@ -446,6 +447,66 @@ class TestManifestDrivenInstall:
         r = b.toolbox_install_runtime(9, "rt1")
         assert r["success"] is True, r
         assert state.Manifest.load(game).runtime is not None
+
+    def test_package_install_via_bridge(self, game, tmp_path, monkeypatch):
+        """game_relative_files：按签名清单 target_dir 写入并记录 packages。"""
+        import hashlib
+
+        content = b"PACKAGE"
+        sha = hashlib.sha256(content).hexdigest()
+        fp = tmp_path / "pkg.bin"
+        fp.write_bytes(content)
+        manifest = {
+            "schema_version": 1, "tool_id": 7, "release_id": "rp1", "version": "1.0",
+            "resource_kind": "package", "install_kind": "game_relative_files",
+            "tool_dir": "pkg-test", "target_dir": "BepInEx/plugins/PkgTest",
+            "requires_runtime": False,
+            "files": [{"path": "PkgTest.dll", "sha256": sha, "size": len(content)}],
+            "dependencies": [], "conflict_guids": [],
+        }
+        signed = self._signed(manifest)
+        monkeypatch.setattr(
+            "webutils.toolbox.download.fetch_or_reuse",
+            lambda url, sha_, expected_size=None, progress=None: fp,
+        )
+        b = _make_bridge(game, api=_ContractApi(signed["manifest_out"]))
+        b._manifest_public_key = lambda: signed["pub_der"]
+        r = b.toolbox_install_any(7, "rp1")
+        assert r["success"] is True, r
+        assert (game / "BepInEx" / "plugins" / "PkgTest" / "PkgTest.dll").read_bytes() == content
+        assert state.Manifest.load(game).packages["7"].target_dir == "BepInEx/plugins/PkgTest"
+
+    def test_download_only_works_without_game_root(self, tmp_path, monkeypatch):
+        """download_only 不要求配置游戏目录，只落系统下载目录。"""
+        import hashlib
+
+        content = b"DOWNLOAD"
+        sha = hashlib.sha256(content).hexdigest()
+        fp = tmp_path / "dl.bin"
+        fp.write_bytes(content)
+        manifest = {
+            "schema_version": 1, "tool_id": 9, "release_id": "rd1", "version": "1.0",
+            "resource_kind": "download", "install_kind": "download_only",
+            "tool_dir": "dl-test",
+            "files": [{"path": "file.bin", "sha256": sha, "size": len(content)}],
+            "dependencies": [], "conflict_guids": [],
+        }
+        signed = self._signed(manifest)
+        monkeypatch.setattr(
+            "webutils.toolbox.download.fetch_or_reuse",
+            lambda url, sha_, expected_size=None, progress=None: fp,
+        )
+        saved = tmp_path / "Downloads" / "dl-test" / "file.bin"
+        monkeypatch.setattr(
+            "webutils.toolbox.download.save_to_downloads",
+            lambda files, folder, progress=None: [saved],
+        )
+        b = _make_bridge(tmp_path, api=_ContractApi(signed["manifest_out"]), game_root=False)
+        b._manifest_public_key = lambda: signed["pub_der"]
+        r = b.toolbox_install_any(9, "rd1")
+        assert r["success"] is True, r
+        assert r["data"]["kind"] == "download"
+        assert r["data"]["save_paths"] == [str(saved)]
 
     def test_wrong_entry_refused(self, game, tmp_path):
         """插件入口装底座 / 底座入口装插件 → 明确报错而不是装错。"""

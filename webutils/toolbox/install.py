@@ -68,7 +68,7 @@ class InstallPlan:
     文件名与 install_kind；不接受任意绝对路径（plan 10.2）。
     """
 
-    kind: str                       # runtime | plugin
+    kind: str                       # runtime | plugin | package
     release_id: str
     version: str = ""
     tool_id: str = ""
@@ -77,7 +77,11 @@ class InstallPlan:
     files: Sequence[tuple] = ()
     allowed_prefixes: Sequence[str] = ()
     requires_runtime: bool = True
-    stub_path: Optional[Path] = None   # 已下载并校验过的 zip
+    stub_path: Optional[Path] = None   # 已下载并校验过的 zip（runtime/plugin）
+    # game_relative_files：签名清单声明的游戏内相对目录
+    target_dir: str = ""
+    # game_relative_files：[(清单相对路径, 已下载并校验的本地文件), ...]
+    file_sources: Sequence[tuple[str, Path]] = ()
 
 
 def _now_iso() -> str:
@@ -350,6 +354,148 @@ def install_plugin(
     }
 
 
+def install_package(
+    game_root: os.PathLike | str,
+    plan: InstallPlan,
+    *,
+    progress: Optional[Callable[[str, int, int], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> Dict[str, object]:
+    """安装/更新一个 ``game_relative_files`` 文件包。
+
+    ``plan.target_dir`` 来自**已验签的安装清单**；``plan.file_sources`` 是
+    ``[(清单相对路径, 已下载并校验的本地文件), ...]``。所有写入都经过
+    ``paths.package_dir`` / ``resolve_within`` 校验，并在 journal 中登记，
+    失败或崩溃可回滚。
+
+    与插件不同：包没有 BepInEx 加载树概念，因此不提供启用/停用；更新时
+    会清理旧版本中不再存在的受管文件（只删除哈希仍匹配的文件）。
+    """
+    root = paths.validate_game_root(game_root)
+    _assert_runtime_present(root, plan)
+
+    tool_id = paths._safe_id(plan.tool_id)
+    if not plan.target_dir:
+        raise InstallError(E_MANIFEST_INVALID, "安装清单缺少 target_dir")
+    if not plan.file_sources:
+        raise InstallError(E_MANIFEST_INVALID, "安装清单没有可写入的文件")
+
+    package_root = paths.package_dir(root, plan.target_dir)
+    needed = 0
+    for _rel, src in plan.file_sources:
+        try:
+            needed += Path(src).stat().st_size
+        except OSError:
+            raise InstallError(E_MANIFEST_INVALID, f"安装文件不可读：{src}") from None
+    _require_disk_space(root, max(needed * 2, needed + 32 * 1024 * 1024))
+
+    manifest = state.Manifest.load(root)
+    existing = manifest.packages.get(tool_id)
+
+    # 两个包不能写到重叠目录：否则卸载 A 可能删到 B 的文件。
+    for other_id, other in manifest.packages.items():
+        if other_id == tool_id:
+            continue
+        try:
+            other_root = paths.package_dir(root, other.target_dir)
+        except paths.UnsafePathError:
+            continue
+        if paths.is_within(package_root, other_root) or paths.is_within(other_root, package_root):
+            raise InstallError(
+                E_PATH_UNSAFE,
+                f"目标目录与已安装的包 {other_id} 重叠：{plan.target_dir}",
+            )
+
+    journal = state.Journal(root)
+    written: List[state.ManagedFile] = []
+    seen: set[str] = set()
+
+    with runtime.game_lock(root):
+        runtime.assert_can_install(root)
+        try:
+            journal.begin("install_package", tool_id)
+            for rel, src in plan.file_sources:
+                clean = paths.sanitize_member_name(rel)
+                key = clean.casefold()
+                if key in seen:
+                    raise InstallError(E_MANIFEST_INVALID, f"安装清单存在重复路径：{clean}")
+                seen.add(key)
+                target = paths.resolve_within(package_root, clean)
+                existed = target.exists()
+                backup_rel = f"package/{tool_id}/{plan.release_id}/{clean.replace('/', '__')}"
+                backup = state.backup_file(root, target, backup_rel) if existed else None
+                journal.add_entry(
+                    target, backup_rel=backup, existed=existed, allowed_root=package_root
+                )
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(src), str(target))
+                written.append(
+                    state.ManagedFile(
+                        relative_path=clean,
+                        sha256=paths.short_hash(target),
+                        backup_path=backup,
+                        existed_before=existed,
+                    )
+                )
+
+            # 旧版本有、新版本没有的文件：只清理哈希仍匹配的受管文件
+            if existing:
+                for old in existing.files:
+                    if old.relative_path.casefold() in seen:
+                        continue
+                    try:
+                        old_target = paths.resolve_within(package_root, old.relative_path)
+                    except paths.UnsafePathError:
+                        continue
+                    if not old_target.exists():
+                        continue
+                    if old.sha256 and paths.short_hash(old_target) != old.sha256:
+                        logger.warning("包 %s 的旧文件被用户修改，保留不删：%s", tool_id, old_target)
+                        continue
+                    backup_rel = (
+                        f"package/{tool_id}/{plan.release_id}/removed__"
+                        f"{old.relative_path.replace('/', '__')}"
+                    )
+                    backup = state.backup_file(root, old_target, backup_rel)
+                    journal.add_entry(
+                        old_target, backup_rel=backup, existed=True, allowed_root=package_root
+                    )
+                    old_target.unlink()
+
+            manifest.packages[tool_id] = state.PackageEntry(
+                tool_id=tool_id,
+                release_id=plan.release_id,
+                version=plan.version,
+                target_dir=plan.target_dir,
+                files=written,
+                installed_at=_now_iso(),
+                requires_runtime=bool(plan.requires_runtime),
+            )
+            journal.set_state(state.STATE_COMMITTING)
+            manifest.save()
+            journal.set_state(state.STATE_DONE)
+            journal.clear()
+        except BaseException as exc:
+            logger.exception("文件包安装失败，回滚")
+            result = state.restore_from_journal(root, journal)
+            journal.clear()
+            if isinstance(exc, InstallError):
+                raise
+            raise InstallError(
+                E_UNKNOWN,
+                f"文件包安装失败并已回滚（恢复 {len(result['restored'])} 个文件）：{exc}",
+            ) from exc
+
+    return {
+        "ok": True,
+        "kind": "package",
+        "tool_id": tool_id,
+        "release_id": plan.release_id,
+        "target_dir": plan.target_dir,
+        "files": len(written),
+    }
+
+
 def set_enabled(game_root: os.PathLike | str, tool_id: str, enabled: bool) -> Dict[str, object]:
     """启用/停用插件。
 
@@ -494,6 +640,131 @@ def uninstall_plugin(
     return {"ok": True, "tool_id": tool_id, "removed": removed, "skipped": skipped}
 
 
+def uninstall_package(game_root: os.PathLike | str, tool_id: str) -> Dict[str, object]:
+    """卸载 ``game_relative_files`` 文件包（只删哈希仍匹配的受管文件）。"""
+    root = paths.validate_game_root(game_root)
+    tool_id = paths._safe_id(tool_id)
+    manifest = state.Manifest.load(root)
+    entry = manifest.packages.get(tool_id)
+    if entry is None:
+        raise InstallError(E_NOT_MANAGED, f"文件包 {tool_id} 不在 LCTA 受管清单内")
+
+    package_root = paths.package_dir(root, entry.target_dir)
+    removed = 0
+    skipped: List[str] = []
+    with runtime.game_lock(root):
+        runtime.assert_can_install(root)
+        journal = state.Journal(root)
+        journal.begin("uninstall_package", tool_id)
+        for f in entry.files:
+            try:
+                target = paths.resolve_within(package_root, f.relative_path)
+            except paths.UnsafePathError:
+                skipped.append(f.relative_path)
+                continue
+            if not target.exists():
+                continue
+            if f.sha256 and paths.short_hash(target) != f.sha256:
+                skipped.append(str(target))
+                continue
+            try:
+                paths.assert_managed_target(root, target, extra_roots=[package_root])
+                backup_rel = f"package/{tool_id}/{entry.release_id}/uninstall__{f.relative_path.replace('/', '__')}"
+                backup = state.backup_file(root, target, backup_rel)
+                journal.add_entry(target, backup_rel=backup, existed=True, allowed_root=package_root)
+                target.unlink()
+                removed += 1
+            except (OSError, paths.UnsafePathError):
+                skipped.append(str(target))
+
+        # 只清空包根下的空目录，保留用户自己放进去的内容
+        _prune_empty_dirs(package_root)
+        del manifest.packages[tool_id]
+        manifest.save()
+        journal.set_state(state.STATE_DONE)
+        journal.clear()
+
+    return {"ok": True, "tool_id": tool_id, "removed": removed, "skipped": skipped}
+
+
+def _prune_empty_dirs(root: Path) -> None:
+    """自底向上删除空目录（不删 root 本身之外的任何非空目录）。"""
+    if not root.is_dir():
+        return
+    for path in sorted(root.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if path.is_dir():
+            try:
+                path.rmdir()
+            except OSError:
+                pass
+
+
+def verify_integrity_package(game_root: os.PathLike | str, tool_id: str) -> Dict[str, object]:
+    """校验文件包的文件哈希与布局。"""
+    root = paths.validate_game_root(game_root)
+    tool_id = paths._safe_id(tool_id)
+    manifest = state.Manifest.load(root)
+    entry = manifest.packages.get(tool_id)
+    if entry is None:
+        raise InstallError(E_NOT_MANAGED, f"文件包 {tool_id} 不在受管清单内")
+
+    package_root = paths.package_dir(root, entry.target_dir)
+    missing: List[str] = []
+    modified: List[str] = []
+    for f in entry.files:
+        target = paths.resolve_within(package_root, f.relative_path)
+        if not target.exists():
+            missing.append(f.relative_path)
+            continue
+        if f.sha256 and paths.short_hash(target) != f.sha256:
+            modified.append(f.relative_path)
+
+    return {
+        "ok": not (missing or modified),
+        "kind": "package",
+        "tool_id": tool_id,
+        "target_dir": entry.target_dir,
+        "missing": missing,
+        "modified": modified,
+        "needs_repair": bool(missing or modified),
+    }
+
+
+def rollback_package(game_root: os.PathLike | str, tool_id: str) -> Dict[str, object]:
+    """回滚文件包到本地备份（离线可用）。"""
+    root = paths.validate_game_root(game_root)
+    tool_id = paths._safe_id(tool_id)
+    manifest = state.Manifest.load(root)
+    entry = manifest.packages.get(tool_id)
+    if entry is None:
+        raise InstallError(E_NOT_MANAGED, f"文件包 {tool_id} 不在受管清单内")
+
+    package_root = paths.package_dir(root, entry.target_dir)
+    restored: List[str] = []
+    missing: List[str] = []
+    with runtime.game_lock(root):
+        for f in entry.files:
+            if not f.backup_path:
+                continue
+            backup = paths.resolve_within(paths.backups_dir(root), f.backup_path)
+            if not backup.exists():
+                missing.append(f.relative_path)
+                continue
+            target = paths.resolve_within(package_root, f.relative_path)
+            paths.assert_managed_target(root, target, extra_roots=[package_root])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(backup), str(target))
+            restored.append(f.relative_path)
+
+    return {
+        "ok": bool(restored) or not missing,
+        "kind": "package",
+        "tool_id": tool_id,
+        "restored": restored,
+        "missing_backup": missing,
+    }
+
+
 def rollback_plugin(game_root: os.PathLike | str, tool_id: str) -> Dict[str, object]:
     """回滚到本地备份（离线可用，不需要在线资格）。
 
@@ -562,6 +833,18 @@ def list_installed(game_root: os.PathLike | str) -> Dict[str, object]:
             if dll.name.lower() not in managed_names:
                 unmanaged.append(str(dll.relative_to(root).as_posix()))
 
+    packages = [
+        {
+            "tool_id": p.tool_id,
+            "release_id": p.release_id,
+            "version": p.version,
+            "target_dir": p.target_dir,
+            "installed_at": p.installed_at,
+            "requires_runtime": p.requires_runtime,
+        }
+        for p in manifest.packages.values()
+    ]
+
     return {
         "game_root": str(root),
         "runtime": (
@@ -569,5 +852,6 @@ def list_installed(game_root: os.PathLike | str) -> Dict[str, object]:
             if manifest.runtime else None
         ),
         "plugins": plugins,
+        "packages": packages,
         "unmanaged": unmanaged,
     }

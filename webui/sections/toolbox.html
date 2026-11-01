@@ -5,6 +5,8 @@
   ⚠️ 本层**刻意不依赖**旧 cheat_core.bin 解密门：
   过季后用户仍必须能停用、卸载、回滚已下载的插件 —— 否则「过季就卸不掉」。
   因此本区块由 toolbox-manager.js 独立初始化，不经 cheatPage.init() 的门控。
+  2026-11-01：旧「作弊工具箱」侧边栏入口移除，改为本页内按钮；本机授权卡片
+  也从作弊页迁入本页（与订阅工具语义一致）。
 -->
 <div class="disclaimer-overlay" data-risk-overlay="cheat" style="display:none;"></div>
 
@@ -16,7 +18,8 @@
         </h2>
         <p class="section-subtitle">
             使用资源站（mods.lcta.top）账号登录：原创内容需有效订阅（按月 / 按赛季），
-            转载内容登录即可下载；一键安装由签名安装清单驱动。
+            转载内容登录即可下载。目录条目可先预览文件、目标位置与说明，再按签名安装清单
+            一键安装；支持底座、BepInEx 插件、游戏目录文件包与仅下载四种类型。
             本地管理（停用/卸载/回滚）不需要联网，也不依赖旧版密钥解锁。
         </p>
         <a href="javascript:void(0)" class="risk-reread-link" onclick="RiskGate.showNoticeModal('cheat')">
@@ -39,6 +42,37 @@
             <div id="tb-runtime-body">
                 <p class="form-hint">正在读取状态…</p>
             </div>
+        </div>
+
+        <!-- 订阅工具 · 本机授权（TPM 绑定，2026-10-27；2026-11-01 作弊工具箱入口合并后移入本页） -->
+        <div class="setting-card" id="authz-device-card">
+            <h3 class="setting-title">
+                <i class="fas fa-fingerprint"></i> 订阅工具 · 本机授权
+            </h3>
+            <p class="form-hint">
+                授权后可直接通过 Steam 启动游戏（无需本启动器）。私钥由本机 TPM 生成且不可导出，
+                换台电脑无法使用；每账号最多授权 <span id="authz-max-devices">2</span> 台。
+            </p>
+
+            <div id="authz-local-state" class="form-group">
+                <label>本机状态</label>
+                <p id="authz-local-msg" class="form-hint">正在检查…</p>
+            </div>
+
+            <div style="margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap;">
+                <button id="authz-enable-btn" class="primary-btn">
+                    <i class="fas fa-shield-alt"></i> 授权本机
+                </button>
+                <button id="authz-disable-btn" class="secondary-btn" style="display:none;">
+                    <i class="fas fa-ban"></i> 撤销本机授权
+                </button>
+                <button id="authz-refresh-btn" class="secondary-btn">
+                    <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+            </div>
+
+            <div id="authz-device-list" style="margin-top: 1rem;"></div>
+            <p id="authz-msg" class="form-hint"></p>
         </div>
     </div>
 
@@ -63,7 +97,22 @@
             <button id="tb-open-folder-btn" class="secondary-btn">
                 <i class="fas fa-folder-open"></i> 打开受管目录
             </button>
+            <button id="tb-open-downloads-btn" class="secondary-btn">
+                <i class="fas fa-download"></i> 打开下载目录
+            </button>
         </div>
+    </div>
+
+    <!-- 旧「作弊工具箱」入口（2026-11-01 从侧边栏移到这里） -->
+    <div class="setting-card" id="tb-cheat-entry-card">
+        <h3 class="setting-title"><i class="fas fa-toolbox"></i> 作弊工具箱（旧版功能）</h3>
+        <p class="form-hint">
+            基于 MinHook 的原生游戏作弊工具集，功能代码以加密形式随程序分发，需要单独输入解密密钥解锁。
+            该功能与订阅工具相互独立；过季后仍可停用、卸载已下载的订阅插件。
+        </p>
+        <button class="secondary-btn" onclick="goAndShow('cheat')">
+            <i class="fas fa-arrow-right"></i> 打开作弊工具箱
+        </button>
     </div>
 
     <!-- 游戏目录配置 -->

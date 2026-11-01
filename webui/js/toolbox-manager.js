@@ -45,14 +45,19 @@ let toolboxManager = {
         // 首次进入时 preload.js 的 onSectionLoaded 与 utils.js 的导航生命周期
         // 都会调 init()：800ms 内合并成一次，避免重复打服务端。
         const now = Date.now();
-        if (now - (this._lastInitAt || 0) < 800 && this._local) return;
-        this._lastInitAt = now;
-
+        // 先恢复可渲染状态：快速「切走→切回」时下面会提前 return，
+        // 若此时 _stopped 还是 true，页面会一直空白到下一次导航。
         this._stopped = false;
         const root = document.getElementById('toolbox-public');
         if (!root) return;
-        this._bindOnce();
         this._show();
+        if (now - (this._lastInitAt || 0) < 800) {
+            this._render();
+            return;
+        }
+        this._lastInitAt = now;
+
+        this._bindOnce();
 
         // 本地快照立即渲染；在线部分避免来回切页时反复打服务端
         this.refreshLocal();
@@ -296,6 +301,9 @@ let toolboxManager = {
         this._renderSettings(ctx);
         this._renderTaskDock();
         this._syncBadge(ctx);
+        // 账号视图里本机授权状态依赖在线登录态：在线数据晚到时补刷一次，
+        // 否则卡片会一直停在「未登录」。
+        if (this._tab === 'account') this.authzRefresh();
     },
 
     _renderStatusbar(ctx) {

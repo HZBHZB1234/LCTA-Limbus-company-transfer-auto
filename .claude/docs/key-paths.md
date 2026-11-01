@@ -1640,16 +1640,24 @@ Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.m
 ## 订阅工具安装管理（P6；2026-10-30 更名并接入订阅语义）
 
 点击「订阅工具」导航（原「工具箱」）→ `toolboxManager.init()`（webui/js/toolbox-manager.js）
-  → 风险门控（RiskGate.gatePage('cheat')，与作弊工具箱共用同一风险须知）
-  → `toolbox_status()` 一次性取回本地状态 + 在线状态 + 赛季/目录
-    · 本地：`webutils.toolbox.state.recover_if_needed(game_root)`（崩溃恢复）
-      → `install.list_installed(game_root)`（受管插件 + 非受管 DLL）
-    · 在线（`_toolbox_fill_online`，各项独立失败不影响其它）：
-      `season()`（公开价格/谜题开关）/ `access()`（登录时，失败只标 online_error，
-      过季/断网仍必须能停用、卸载、回滚）/ `catalog()`（**名单对游客公开**，
-      条目带 access_kind/downloadable/files）/ `current_user()`+`afdian_status()`（登录时）
-    · 未登录 → 页面渲染登录表单（`toolbox_login` → `/api/auth/client/login`），
-      注册引导外链到站点 /register
+  → **无整页风险门控**（2026-11-01）：作弊入口在「设置与诊断」页，点击时
+    先 `RiskGate.getConsent('cheat')`，未同意就地 `showConsentModal`，同意后
+    `goAndShow('cheat')`；作弊页自身仍由 `cheat.html` + `cheat-shell.js` 门控
+  → 页面骨架：状态条（账号/赛季/底座/游戏 + 上下文主操作，三态自动切换）
+    + 四个子视图（目录 / 已安装 / 账号与订阅 / 设置与诊断）；HTML 生成全部在
+    `webui/js/toolbox-views.js`（纯函数），事件用 `data-tb-action` 委托回 manager
+  → 两段式状态（首屏毫秒级；在线分片失败不拖垮本地）：
+    · `toolbox_status_local()`：`state.recover_if_needed(game_root)`（崩溃恢复）
+      + `runtime.is_game_running()` + `install.list_installed()`（插件/文件包/非受管）
+    · `toolbox_status_online()`：`season()`（公开价格/谜题开关）→ `access()`
+      （登录时）→ `catalog()`（**名单对游客公开**，条目带 access_kind/
+      downloadable/files）→ `current_user()` + `afdian_status()`；
+      各项失败只进 `errors[part]`，前端按区域提示 + 重试
+      ⚠️ **access 必须先于 catalog**：catalog 用 `get_optional_user`，过期 token
+      会被降级为游客视图（downloadable 全 False）且不触发单飞刷新
+    · 未登录 → 账号视图渲染登录表单（`toolbox_login` → `/api/auth/client/login`）；
+      注册 / 找回密码经 `toolbox_open_site('/register'|'/forgot-password')`
+      （白名单 + 系统浏览器，客户端不内嵌表单）
 
 本地操作（**不需要联网、不需要赛季资格**）
   `toolbox_set_enabled`  → `install.set_enabled`
@@ -1676,26 +1684,43 @@ Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.m
       → journal 事务提交 → manifest 原子写
   任何失败 → `state.restore_from_journal()` 回滚，不留半安装
 
-订阅语义（页面）
-  账号卡：登录表单 / 用户名+登出 / 订阅来源（按月（至 expires_at 日期）/按赛季）
-    / 未解锁 reason 文案（订阅语义，解谜仅站点 PUZZLE_ENABLED=true 时显示）
-  爱发电：未绑定 →「关联爱发电账号」（`toolbox_afdian_bind_url` 取授权地址后
-    **系统浏览器**打开，pywebview 内会 404）；已绑定 →「刷新订阅状态」
-    （`toolbox_afdian_refresh` → POST /api/integrations/afdian/refresh，幂等）+
-    手填订单号折叠区（`toolbox_verify_order`）
-  目录卡：逐条 原创·订阅专享 / 转载·免费 标签；downloadable 决定
-    「安装/更新」/「安装底座」按钮，锁定原创显示订阅引导；名单游客可见
+订阅语义（页面，2026-11-01 重排为子视图）
+  状态条：账号（用户名/未登录）· 赛季（名称/已解锁/未订阅）· 底座（版本/未安装）
+    · 游戏目录（已就绪/运行中/未配置）；主操作三态：登录 → 刷新订阅 → 安装底座
+  「目录」视图：工具条（搜索/筛选：全部·原创·转载·当前可下载·有新版本/排序：
+    推荐·名称·版本序号/在网站查看/刷新）+ 卡片瀑布（封面、原创·订阅专享 /
+    转载·免费徽标、安装类型、作者/分类/版本、已安装/可更新/需底座状态）
+    + 详情抽屉（封面、图集、完整描述、文件清单与大小、target_dir、兼容与版本说明）
+  「已安装」视图：底座卡（可更新提示与一键更新）+ 插件/文件包统一行列表
+    （启停/目录/检查/回滚/卸载，卸载可勾选「同时删配置」）+ 非受管插件区
+    （只列出，不自动删除或升级）+ 批量全部启用/停用 + 受管/下载目录直达
+  「账号与订阅」视图：登录表单 / 用户名+登出 / 订阅来源（按月（至 expires_at
+    日期）/按赛季）/ 未解锁 reason 文案；爱发电未绑定 →「关联账号」（
+    `toolbox_afdian_bind_url` 取授权地址后**系统浏览器**打开，pywebview 内会 404），
+    已绑定 →「刷新订阅状态」（`toolbox_afdian_refresh`，幂等）+ 手填订单号折叠区
+    （`toolbox_verify_order`）；解谜仅站点 `PUZZLE_ENABLED=true` 时显示；
+    「本机授权（TPM）」卡片在同一视图
+  「设置与诊断」视图：游戏目录（保存 / 检查目录 `toolbox_validate_game_root`，
+    只校验不落盘）+ 诊断 KV（桥协议版本/资源站地址/目录条目/已安装数/上次刷新
+    + 分片错误）+ 全量完整性检查 + 旧版作弊工具箱入口 + Launcher 配置跳转
+  更新检测：本地 manifest 的 `release_id`（含底座）≠ 目录 `release_id` → 「可更新」
+    （版本字符串只展示，避免同版本重编译误判）
+  任务坞：`toolbox_task_status` 快照（当前任务进度 + 最近 5 条历史），安装/下载
+    期间 700ms 轮询；离开页面收起、回来重新拉取，关掉进度窗任务仍在后台完成
 
 登录凭据：`session.CredentialStore`（Windows DPAPI 当前用户加密 + 原子写），
   检测到旧明文凭据时迁移后**删除**原文件
 
 Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
+      `webui/js/toolbox-views.js`（2026-11-01 新增渲染层）,
+      `webui/css/components.css`（订阅工具样式段）,
       `webui/app_api/toolbox.py`, `webutils/toolbox/{paths,archive,state,runtime,
       install,ed25519,session,api,download}.py`, `webui/app.py`（LCTA_API 混入）,
       `webui/js/utils.js`（导航生命周期）, `webui/sections/preload.js`（section 分发）,
-      `webui/index.html`（#toolbox-btn / #toolbox-section / script）,
+      `webui/index.html`（#toolbox-btn / #toolbox-section / script 顺序）,
       `.github/InitCode.py`（js_files）, `webui/assets/update.md`,
-      `tests/test_toolbox_{paths,state,install,ed25519,session,api,bridge,packaging}.py`
+      `tests/test_toolbox_{paths,state,install,ed25519,session,api,bridge,packaging}.py`,
+      `docs/plans/2026-11-01-toolbox-tab-refactor.md`（重构计划）
 
 ### 2026-11-01 扩展：安装预览 / 文件包 / 仅下载 / 镜像站安装
 
@@ -1720,3 +1745,32 @@ Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
   toolboxOpenDownloads`；安装请求只转发 `tool_id/release_id/action`，主窗口
   `toolboxManager.installFromMirror()` 重新走签名清单/票据/哈希校验。
   未登录时可把镜像站 access token 同步到 DPAPI（不导入 refresh token）。
+
+### 2026-11-01 重构：两段式状态 / 子视图 / 任务坞
+
+- 页面骨架重写（`webui/sections/toolbox.html`）：状态条 + 四个子视图
+  （目录 / 已安装 / 账号与订阅 / 设置与诊断），去掉整页
+  `data-risk-overlay="cheat"`；作弊入口改为点击时 `RiskGate.getConsent`
+  就地门控（作弊页自身仍门控）。
+- 渲染拆到 `webui/js/toolbox-views.js`（纯函数 `ToolboxViews.*`），
+  `toolbox-manager.js` 只保留状态机/动作/事件；事件统一 `data-tb-action`
+  委托，重绘不丢监听。新增 `<script>` 已同步 `webui/index.html` 与
+  `.github/InitCode.py` 的 `js_files`（顺序：views 在 manager 之前）。
+- 状态拆两段：`toolbox_status_local`（毫秒级、离线可用）+ `toolbox_status_online`
+  （分片错误 `errors[part]`、`fetched_at`、`generation`）；`toolbox_status`
+  保留为组合（旧字段 `online`/`online_error`/`catalog_error` 不变）。
+- 错误统一 `{success:false, code, message}`，文案保持历史原文；新增错误码
+  `no_game_root` / `manifest_unsigned` / `signature_invalid` / `install_kind_*` /
+  `in_progress` / `invalid_target` 等，前端可据此分支（重试/引导/打开设置）。
+- `toolbox_open_site(path)`：站点内部路径**白名单**（`/`、`/login`、`/register`、
+  `/forgot-password`、`/toolbox`、`/me`）→ 系统浏览器；注册与找回密码不在客户端
+  内嵌（2026-11-01 决策）。`toolbox_validate_game_root(path)` 只校验不落盘。
+- `toolbox_task_status` 任务坞：`_ToolboxTaskRegistry` 记录当前任务与最近 5 条
+  历史（`_toolbox_progress` 写入），安装/下载结束仍保留结果；切页/重开页面
+  经 `init()` 重新拉取。抽屉与任务坞在 `init()` 时移到 `<body>`：`.content-section`
+  的 `fadeInUp ... forwards` 会长期持有 transform，内部 `position:fixed` 会
+  相对区块而非视口定位。
+- 目录卡片化：封面/原创·转载徽标/类型/作者/版本 + 搜索/筛选/排序 + 详情抽屉
+  （图集、完整描述、文件清单、target_dir、兼容与版本说明）；「可更新」按
+  本地与目录的 `release_id` 比对（含底座）。已安装视图支持批量启停与卸载时
+  「同时删配置」（`toolbox_uninstall(tool_id, remove_config)`）。

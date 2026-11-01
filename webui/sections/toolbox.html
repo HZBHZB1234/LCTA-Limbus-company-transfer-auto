@@ -1,148 +1,229 @@
 <!--
   订阅工具（原「工具箱」，2026-10-30 更名并对齐站点订阅语义）：
-  资源站账号登录 + 月/赛季订阅资格 + 本地安装管理。
+  资源站账号登录 + 月/赛季订阅资格 + 内容目录 + 本地安装管理。
 
   ⚠️ 本层**刻意不依赖**旧 cheat_core.bin 解密门：
   过季后用户仍必须能停用、卸载、回滚已下载的插件 —— 否则「过季就卸不掉」。
-  因此本区块由 toolbox-manager.js 独立初始化，不经 cheatPage.init() 的门控。
-  2026-11-01：旧「作弊工具箱」侧边栏入口移除，改为本页内按钮；本机授权卡片
-  也从作弊页迁入本页（与订阅工具语义一致）。
+
+  2026-11-01 重构（docs/plans/2026-11-01-toolbox-tab-refactor.md）：
+  1) 去掉整页「作弊工具箱」风险门控 —— 作弊页自身已门控，入口按钮点击时就地
+     弹同意框；订阅工具本身不该被作弊协议拦在门外。
+  2) 页面骨架改为「状态条 + 页内子视图（目录/已安装/账号/设置）」，
+     渲染交给 toolbox-views.js，状态与动作留在 toolbox-manager.js。
+  3) 首屏先渲染本地快照（toolbox_status_local，毫秒级），在线分片再补齐。
 -->
-<div class="disclaimer-overlay" data-risk-overlay="cheat" style="display:none;"></div>
-
 <div id="toolbox-public" style="display:none;">
-    <div class="section-header">
-        <h2 class="section-title">
-            <i class="fas fa-box-open"></i>
-            订阅工具
-        </h2>
-        <p class="section-subtitle">
-            使用资源站（mods.lcta.top）账号登录：原创内容需有效订阅（按月 / 按赛季），
-            转载内容登录即可下载。目录条目可先预览文件、目标位置与说明，再按签名安装清单
-            一键安装；支持底座、BepInEx 插件、游戏目录文件包与仅下载四种类型。
-            本地管理（停用/卸载/回滚）不需要联网，也不依赖旧版密钥解锁。
-        </p>
-        <a href="javascript:void(0)" class="risk-reread-link" onclick="RiskGate.showNoticeModal('cheat')">
-            <i class="fas fa-exclamation-triangle"></i> 查看风险须知与使用协议
-        </a>
-    </div>
-
-    <div class="settings-grid">
-        <!-- 账号 / 订阅状态（登录表单与订阅展示由 JS 渲染） -->
-        <div class="setting-card" id="tb-account-card">
-            <h3 class="setting-title"><i class="fas fa-user"></i> 账号与订阅</h3>
-            <div id="tb-account-body">
-                <p class="form-hint">正在读取状态…</p>
-            </div>
-        </div>
-
-        <!-- 底座 -->
-        <div class="setting-card" id="tb-runtime-card">
-            <h3 class="setting-title"><i class="fas fa-layer-group"></i> 底座</h3>
-            <div id="tb-runtime-body">
-                <p class="form-hint">正在读取状态…</p>
-            </div>
-        </div>
-
-        <!-- 订阅工具 · 本机授权（TPM 绑定，2026-10-27；2026-11-01 作弊工具箱入口合并后移入本页） -->
-        <div class="setting-card" id="authz-device-card">
-            <h3 class="setting-title">
-                <i class="fas fa-fingerprint"></i> 订阅工具 · 本机授权
-            </h3>
-            <p class="form-hint">
-                授权后可直接通过 Steam 启动游戏（无需本启动器）。私钥由本机 TPM 生成且不可导出，
-                换台电脑无法使用；每账号最多授权 <span id="authz-max-devices">2</span> 台。
+    <div class="tb-page">
+        <div class="section-header">
+            <h2 class="section-title">
+                <i class="fas fa-box-open"></i>
+                订阅工具
+            </h2>
+            <p class="section-subtitle">
+                使用资源站（mods.lcta.top）账号登录：原创内容需有效订阅（按月 / 按赛季），
+                转载内容登录即可下载。目录条目可先预览文件、目标位置与说明，再按签名安装清单
+                一键安装；支持底座、BepInEx 插件、游戏目录文件包与仅下载四种类型。
+                本地管理（停用/卸载/回滚）不需要联网，也不依赖旧版密钥解锁。
             </p>
+        </div>
 
-            <div id="authz-local-state" class="form-group">
-                <label>本机状态</label>
-                <p id="authz-local-msg" class="form-hint">正在检查…</p>
+        <!-- 状态条：账号 / 赛季 / 底座 / 游戏（由 JS 渲染，见 toolbox-views.js） -->
+        <div class="tb-statusbar" id="tb-statusbar" aria-live="polite"></div>
+
+        <!-- 页内子视图 -->
+        <div class="tb-tabs" role="tablist" aria-label="订阅工具视图">
+            <button class="tb-tab is-active" data-tb-tab="catalog" role="tab" aria-selected="true">
+                <i class="fas fa-compass"></i> 内容目录
+            </button>
+            <button class="tb-tab" data-tb-tab="installed" role="tab" aria-selected="false">
+                <i class="fas fa-puzzle-piece"></i> 已安装
+                <span class="tb-tab-badge" id="tb-badge-installed" hidden></span>
+            </button>
+            <button class="tb-tab" data-tb-tab="account" role="tab" aria-selected="false">
+                <i class="fas fa-user"></i> 账号与订阅
+            </button>
+            <button class="tb-tab" data-tb-tab="settings" role="tab" aria-selected="false">
+                <i class="fas fa-sliders-h"></i> 设置与诊断
+            </button>
+        </div>
+
+        <!-- 目录 -->
+        <section class="tb-view" data-tb-view="catalog">
+            <div class="tb-toolbar">
+                <div class="tb-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="tb-search" placeholder="搜索名称、作者、分类…" autocomplete="off">
+                </div>
+                <select id="tb-filter" title="筛选">
+                    <option value="all">全部内容</option>
+                    <option value="original">原创 · 订阅专享</option>
+                    <option value="repost">转载 · 免费</option>
+                    <option value="downloadable">当前可下载</option>
+                    <option value="update">有新版本</option>
+                </select>
+                <select id="tb-sort" title="排序">
+                    <option value="recommended">推荐优先</option>
+                    <option value="name">按名称</option>
+                    <option value="recent">按版本序号</option>
+                </select>
+                <span class="tb-grow"></span>
+                <button id="tb-open-site-btn" class="tb-btn tb-btn--sm" title="用系统浏览器打开资源站">
+                    <i class="fas fa-external-link-alt"></i> 在网站查看
+                </button>
+                <button id="tb-refresh-btn" class="tb-icon-btn" title="刷新目录与订阅状态">
+                    <i class="fas fa-sync"></i>
+                </button>
+            </div>
+            <div id="tb-catalog-body" class="tb-grid"></div>
+        </section>
+
+        <!-- 已安装 -->
+        <section class="tb-view" data-tb-view="installed" hidden>
+            <div id="tb-runtime-body"></div>
+            <div class="tb-toolbar">
+                <span id="tb-installed-summary" class="tb-muted"></span>
+                <span class="tb-grow"></span>
+                <button id="tb-enable-all-btn" class="tb-btn tb-btn--sm">
+                    <i class="fas fa-toggle-on"></i> 全部启用
+                </button>
+                <button id="tb-disable-all-btn" class="tb-btn tb-btn--sm">
+                    <i class="fas fa-toggle-off"></i> 全部停用
+                </button>
+                <button id="tb-open-folder-btn" class="tb-btn tb-btn--sm">
+                    <i class="fas fa-folder-open"></i> 受管目录
+                </button>
+                <button id="tb-open-downloads-btn" class="tb-btn tb-btn--sm">
+                    <i class="fas fa-download"></i> 下载目录
+                </button>
+            </div>
+            <div id="tb-installed-body"></div>
+        </section>
+
+        <!-- 账号与订阅（含本机授权） -->
+        <section class="tb-view" data-tb-view="account" hidden>
+            <div id="tb-account-body"></div>
+
+            <!-- 订阅工具 · 本机授权（TPM 绑定，2026-10-27） -->
+            <div class="tb-card" id="authz-device-card">
+                <div class="tb-card-head">
+                    <h3 class="tb-card-title">
+                        <i class="fas fa-fingerprint"></i> 本机授权（TPM）
+                    </h3>
+                    <button id="authz-refresh-btn" class="tb-btn tb-btn--sm">
+                        <i class="fas fa-sync-alt"></i> 刷新
+                    </button>
+                </div>
+                <p class="form-hint">
+                    授权后可直接通过 Steam 启动游戏（无需本启动器）。私钥由本机 TPM 生成且不可导出，
+                    换台电脑无法使用；每账号最多授权 <span id="authz-max-devices">2</span> 台。
+                </p>
+
+                <div id="authz-local-state" class="form-group">
+                    <label>本机状态</label>
+                    <p id="authz-local-msg" class="form-hint">正在检查…</p>
+                </div>
+
+                <div style="margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button id="authz-enable-btn" class="tb-btn tb-btn--primary">
+                        <i class="fas fa-shield-alt"></i> 授权本机
+                    </button>
+                    <button id="authz-disable-btn" class="tb-btn tb-btn--danger" style="display:none;">
+                        <i class="fas fa-ban"></i> 撤销本机授权
+                    </button>
+                </div>
+
+                <div id="authz-device-list" style="margin-top: 1rem;"></div>
+                <p id="authz-msg" class="form-hint"></p>
+            </div>
+        </section>
+
+        <!-- 设置与诊断 -->
+        <section class="tb-view" data-tb-view="settings" hidden>
+            <div class="tb-card">
+                <div class="tb-card-head">
+                    <h3 class="tb-card-title"><i class="fas fa-folder"></i> 游戏目录</h3>
+                </div>
+                <div class="form-group">
+                    <label for="tb-game-root">Limbus Company 安装目录</label>
+                    <input type="text" id="tb-game-root" placeholder="例如 D:\Steam\steamapps\common\Limbus Company">
+                    <small class="form-hint">
+                        安装/更新/停用/卸载前请先关闭游戏。路径会做安全校验（拒绝盘符根、不可写目录）。
+                    </small>
+                </div>
+                <div class="tb-inline" style="margin-top: 10px;">
+                    <button id="tb-save-root-btn" class="tb-btn tb-btn--primary">
+                        <i class="fas fa-save"></i> 保存游戏目录
+                    </button>
+                    <button id="tb-validate-root-btn" class="tb-btn">
+                        <i class="fas fa-stethoscope"></i> 检查目录
+                    </button>
+                </div>
+                <div id="tb-root-status" style="margin-top: 10px;"></div>
             </div>
 
-            <div style="margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap;">
-                <button id="authz-enable-btn" class="primary-btn">
-                    <i class="fas fa-shield-alt"></i> 授权本机
-                </button>
-                <button id="authz-disable-btn" class="secondary-btn" style="display:none;">
-                    <i class="fas fa-ban"></i> 撤销本机授权
-                </button>
-                <button id="authz-refresh-btn" class="secondary-btn">
-                    <i class="fas fa-sync-alt"></i> 刷新
+            <div class="tb-card">
+                <div class="tb-card-head">
+                    <h3 class="tb-card-title"><i class="fas fa-microscope"></i> 诊断信息</h3>
+                    <button id="tb-check-all-btn" class="tb-btn tb-btn--sm">
+                        <i class="fas fa-shield-alt"></i> 检查全部完整性
+                    </button>
+                </div>
+                <div id="tb-diagnostics"></div>
+            </div>
+
+            <div class="tb-card">
+                <div class="tb-card-head">
+                    <h3 class="tb-card-title"><i class="fas fa-toolbox"></i> 旧版功能（作弊工具箱）</h3>
+                    <a href="javascript:void(0)" class="form-hint" onclick="RiskGate.showNoticeModal('cheat')">
+                        查看风险须知与协议
+                    </a>
+                </div>
+                <p class="form-hint">
+                    基于 MinHook 的原生游戏作弊工具集，功能代码以加密形式随程序分发，需要单独输入解密密钥解锁。
+                    该功能与订阅工具相互独立；过季后仍可停用、卸载已下载的订阅插件。
+                </p>
+                <button id="tb-open-cheat-btn" class="tb-btn">
+                    <i class="fas fa-box-open"></i> 打开作弊工具箱
                 </button>
             </div>
 
-            <div id="authz-device-list" style="margin-top: 1rem;"></div>
-            <p id="authz-msg" class="form-hint"></p>
-        </div>
-    </div>
-
-    <!-- 订阅目录（名单公开：游客可见，逐条按 downloadable 决定可否安装） -->
-    <div class="setting-card" id="tb-catalog-card">
-        <h3 class="setting-title"><i class="fas fa-download"></i> 本赛季内容目录</h3>
-        <div id="tb-catalog-body">
-            <p class="form-hint">正在读取目录…</p>
-        </div>
-    </div>
-
-    <!-- 已安装（本地管理，离线可用） -->
-    <div class="setting-card" id="tb-installed-card">
-        <h3 class="setting-title"><i class="fas fa-puzzle-piece"></i> 已安装</h3>
-        <div id="tb-installed-body">
-            <p class="form-hint">正在读取本地状态…</p>
-        </div>
-        <div style="margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap;">
-            <button id="tb-refresh-btn" class="secondary-btn">
-                <i class="fas fa-sync"></i> 刷新
-            </button>
-            <button id="tb-open-folder-btn" class="secondary-btn">
-                <i class="fas fa-folder-open"></i> 打开受管目录
-            </button>
-            <button id="tb-open-downloads-btn" class="secondary-btn">
-                <i class="fas fa-download"></i> 打开下载目录
-            </button>
-        </div>
-    </div>
-
-    <!-- 旧「作弊工具箱」入口（2026-11-01 从侧边栏移到这里） -->
-    <div class="setting-card" id="tb-cheat-entry-card">
-        <h3 class="setting-title"><i class="fas fa-toolbox"></i> 作弊工具箱（旧版功能）</h3>
-        <p class="form-hint">
-            基于 MinHook 的原生游戏作弊工具集，功能代码以加密形式随程序分发，需要单独输入解密密钥解锁。
-            该功能与订阅工具相互独立；过季后仍可停用、卸载已下载的订阅插件。
-        </p>
-        <button class="secondary-btn" onclick="goAndShow('cheat')">
-            <i class="fas fa-arrow-right"></i> 打开作弊工具箱
-        </button>
-    </div>
-
-    <!-- 游戏目录配置 -->
-    <div class="setting-card">
-        <h3 class="setting-title"><i class="fas fa-folder"></i> 游戏目录</h3>
-        <div class="form-group">
-            <label for="tb-game-root">Limbus Company 安装目录</label>
-            <input type="text" id="tb-game-root" placeholder="例如 D:\Steam\steamapps\common\Limbus Company">
-            <small class="form-hint">
-                安装/更新/停用/卸载前请先关闭游戏。路径会做安全校验（拒绝盘符根、不可写目录）。
-            </small>
-        </div>
-        <button id="tb-save-root-btn" class="primary-btn">
-            <i class="fas fa-save"></i> 保存游戏目录
-        </button>
+            <!--
+              Launcher 集成：按 AGENTS.md，集成复选框**只能**放在
+              launcher-config.html 的「工作模式配置」区，源页面只放介绍 + 跳转按钮。
+            -->
+            <div class="tb-card">
+                <div class="tb-card-head">
+                    <h3 class="tb-card-title"><i class="fas fa-rocket"></i> Launcher 集成</h3>
+                </div>
+                <p class="form-hint">
+                    可让 Launcher 启动游戏前自动检查并准备订阅工具底座与插件。
+                    该集成开关位于「工作模式配置」中，请在 Launcher 配置页开启。
+                </p>
+                <button class="tb-btn" onclick="goAndShow('launcher-config')">
+                    <i class="fas fa-arrow-right"></i> 前往 Launcher 配置
+                </button>
+            </div>
+        </section>
     </div>
 
     <!--
-      Launcher 集成：按 AGENTS.md，集成复选框**只能**放在
-      launcher-config.html 的「工作模式配置」区，源页面只放介绍 + 跳转按钮。
-      在源页面重复放置开关会导致双份配置、状态不同步。
+      详情抽屉与任务坞在 init() 时被移到 <body>：
+      .content-section 的 fadeInUp 动画带 forwards 填充，元素会长期持有
+      transform，导致内部 position:fixed 相对于该区块定位而不是视口。
     -->
-    <div class="setting-card">
-        <h3 class="setting-title"><i class="fas fa-rocket"></i> Launcher 集成</h3>
-        <p class="form-hint">
-            可让 Launcher 启动游戏前自动检查并准备订阅工具底座与插件。
-            该集成开关位于「工作模式配置」中，请在 Launcher 配置页开启。
-        </p>
-        <button class="secondary-btn" onclick="goAndShow('launcher-config')">
-            <i class="fas fa-arrow-right"></i> 前往 Launcher 配置
-        </button>
+    <div id="tb-drawer" class="tb-drawer" hidden>
+        <div class="tb-drawer-overlay" data-tb-drawer-close></div>
+        <aside class="tb-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="tb-drawer-title">
+            <header class="tb-drawer-head">
+                <h3 class="tb-drawer-title" id="tb-drawer-title">内容详情</h3>
+                <button class="tb-icon-btn" data-tb-drawer-close title="关闭">
+                    <i class="fas fa-times"></i>
+                </button>
+            </header>
+            <div class="tb-drawer-body" id="tb-drawer-body"></div>
+            <footer class="tb-drawer-foot" id="tb-drawer-foot"></footer>
+        </aside>
     </div>
+
+    <div id="tb-taskdock" class="tb-taskdock" hidden></div>
 </div>

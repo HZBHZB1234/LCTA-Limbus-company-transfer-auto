@@ -1121,3 +1121,21 @@ class ToolboxMixin:
             if payload["code"] == "error":
                 payload["code"] = "invalid_game_root"
             return payload
+
+    def toolbox_validate_game_root(self, path):
+        """只校验目录是否可用，**不**写入配置（设置页「检查目录」按钮）。
+
+        与 ``toolbox_set_game_root`` 共用 ``paths.validate_game_root``
+        这一条判定，避免「检查通过但保存失败」的两套口径。
+        """
+        try:
+            from webutils.toolbox import paths
+
+            resolved = paths.validate_game_root(str(path or ""))
+            return {"success": True, "data": {"game_root": str(resolved)}}
+        except Exception as e:  # noqa: BLE001
+            self.log_error(e)
+            payload = _error_payload(e)
+            if payload["code"] == "error":
+                payload["code"] = "invalid_game_root"
+            return payload

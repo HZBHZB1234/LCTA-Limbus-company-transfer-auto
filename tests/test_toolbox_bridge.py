@@ -684,3 +684,31 @@ class TestTaskDock:
         r = b.toolbox_install(1, "r1")
         assert r["code"] == "manifest_unsigned"
         assert "签名" in r["message"]
+
+
+class TestGameRootValidate:
+    """设置页「检查目录」：只校验、不落盘（与保存共用同一条判定）。"""
+
+    def test_validate_accepts_writable_dir_without_saving(self, tmp_path, monkeypatch):
+        from globalManagers.ConfigManager import ConfigManager
+
+        game = tmp_path / "game-ok"
+        game.mkdir()
+        written = {}
+        monkeypatch.setattr(
+            ConfigManager, "get", classmethod(lambda cls, key, default=None: {})
+        )
+        monkeypatch.setattr(
+            ConfigManager, "set", classmethod(lambda cls, key, value: written.update({key: value}))
+        )
+        b = _make_bridge(tmp_path)
+        r = b.toolbox_validate_game_root(str(game))
+        assert r["success"] is True
+        assert r["data"]["game_root"]
+        assert written == {}, "检查目录不应写入配置"
+
+    def test_validate_rejects_missing_dir(self, tmp_path):
+        b = _make_bridge(tmp_path)
+        r = b.toolbox_validate_game_root(str(tmp_path / "not-exists"))
+        assert r["success"] is False
+        assert r["code"] == "invalid_game_root"

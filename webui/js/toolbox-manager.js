@@ -1,42 +1,77 @@
 // ============================
-// 订阅工具页（原「工具箱」，2026-10-30 对齐站点订阅语义）：
-// 账号登录 + 月/赛季订阅 + 名单公开目录 + 安装预览 + 本地安装管理
-// 2026-11-01：新增文件包/仅下载、Mod 镜像站安装入口、本机授权卡迁入
+// 订阅工具页（原「工具箱」，2026-10-30 对齐站点订阅语义）
+// 账号登录 + 月/赛季订阅 + 名单公开目录 + 预览 + 本地安装管理
+// 2026-11-01 重构：状态拆本地/在线两段、目录卡片化、已安装更新检测、任务坞
 // ============================
 // 设计约束（plan 10.1 / 10.6 / 2026-10-30 一键安装契约）：
 //   1) **不依赖**旧 cheat_core.bin 解密门。过季后用户仍必须能停用/卸载/回滚
 //      已下载的插件 —— 否则「过季就卸不掉」，等于把用户锁死。
-//   2) 本地管理与在线资格**解耦**：在线查询失败只提示，不影响本地列表与操作。
+//   2) 本地管理与在线资格**解耦**：先渲染本地快照（毫秒级），在线分片再补齐；
+//      在线失败只在对应区域提示，不影响本地列表与操作。
 //   3) 所有安装/启停都由 Python 侧重新校验（权限、签名、哈希、路径、游戏是否运行）；
 //      JS 只传 tool_id/release_id/action，不传 URL、路径或命令。
 //   4) 目录名单对游客公开（与站点一致）：逐条 access_kind/downloadable 决定
 //      「安装/更新」按钮，锁定原创显示订阅引导；一键安装由签名清单驱动。
+//
+// 本文件只做「状态 + 动作 + 事件」；HTML 生成全部在 toolbox-views.js。
 
 let toolboxManager = {
     _bound: false,
+    _escBound: false,
     _stopped: false,
-    _state: null,
+
+    // 状态
+    _local: null,
+    _online: null,
+    _tasks: null,
+    _tab: 'catalog',
+    _query: '',
+    _filter: 'all',
+    _sort: 'recommended',
+    _loading: { local: false, online: false },
+    _seq: { local: 0, online: 0 },
+    _lastOnlineAt: 0,
+    _drawerItem: null,
+    _dockDismissed: false,
+    _challengeId: '',
+    _recoveredShown: false,
+    _timers: { poll: null, search: null },
+
+    // ------------------------------------------------------------------
+    // 生命周期
+    // ------------------------------------------------------------------
 
     init() {
+        // 首次进入时 preload.js 的 onSectionLoaded 与 utils.js 的导航生命周期
+        // 都会调 init()：800ms 内合并成一次，避免重复打服务端。
+        const now = Date.now();
+        if (now - (this._lastInitAt || 0) < 800 && this._local) return;
+        this._lastInitAt = now;
+
         this._stopped = false;
         const root = document.getElementById('toolbox-public');
         if (!root) return;
         this._bindOnce();
-        // 与 cheat 风险门控一致：未同意风险须知时不显示内容
-        if (typeof RiskGate !== 'undefined' && RiskGate.gatePage
-            && document.querySelector('[data-risk-overlay="cheat"]')) {
-            RiskGate.gatePage('cheat', {
-                onAccepted: () => this._show(),
-                onRejected: () => this._hide(),
-            });
+        this._show();
+
+        // 本地快照立即渲染；在线部分避免来回切页时反复打服务端
+        this.refreshLocal();
+        if (!this._online || Date.now() - this._lastOnlineAt > 15000) {
+            this.refreshOnline();
         } else {
-            this._show();
+            this._render();
         }
-        this.refresh();
+        this._pollTaskOnce();
     },
 
     stop() {
         this._stopped = true;
+        this._stopTaskPoll();
+        clearTimeout(this._timers.search);
+        this._closeDrawer();
+        // 抽屉/任务坞已挂到 body，不会随 section 隐藏而消失 —— 离开页面时主动收起
+        const dock = document.getElementById('tb-taskdock');
+        if (dock) dock.hidden = true;
     },
 
     _show() {
@@ -44,217 +79,711 @@ let toolboxManager = {
         if (el) el.style.display = '';
     },
 
-    _hide() {
-        const el = document.getElementById('toolbox-public');
-        if (el) el.style.display = 'none';
-    },
-
-    _esc(s) {
-        return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-        }[c]));
-    },
+    // ------------------------------------------------------------------
+    // 事件绑定（一次性；重绘只换 innerHTML，监听器活在容器上）
+    // ------------------------------------------------------------------
 
     _bindOnce() {
         if (this._bound) return;
         this._bound = true;
-        const bind = (id, fn) => {
-            const el = document.getElementById(id);
-            if (el) el.addEventListener('click', fn);
-        };
-        bind('tb-refresh-btn', () => this.refresh());
-        bind('tb-open-folder-btn', () => this.openFolder());
-        bind('tb-open-downloads-btn', () => this.openDownloads());
-        bind('tb-save-root-btn', () => this.saveGameRoot());
-        // 订阅工具 · 本机授权（2026-11-01 从作弊页迁入）
-        bind('authz-refresh-btn', () => this.authzRefresh());
-        bind('authz-enable-btn', () => this.authzEnable());
-        bind('authz-disable-btn', () => this.authzDisable());
+
+        // 抽屉与任务坞是 fixed 定位，必须挂在 body 下：
+        // .content-section 的 fadeInUp 动画带 forwards，元素长期持有 transform，
+        // 会让内部的 position:fixed 相对于该区块而不是视口定位。
+        this._reparent('tb-drawer');
+        this._reparent('tb-taskdock');
+
+        const root = document.getElementById('toolbox-public');
+        const drawer = document.getElementById('tb-drawer');
+        const dock = document.getElementById('tb-taskdock');
+
+        [root, drawer, dock].forEach((host) => {
+            if (host) host.addEventListener('click', (e) => this._onClick(e));
+        });
+
+        if (root) {
+            root.querySelectorAll('[data-tb-tab]').forEach((btn) => {
+                btn.addEventListener('click', () => this._setTab(btn.dataset.tbTab));
+            });
+            const search = document.getElementById('tb-search');
+            if (search) {
+                search.addEventListener('input', (e) => {
+                    const value = e.target.value;
+                    clearTimeout(this._timers.search);
+                    this._timers.search = setTimeout(() => {
+                        this._query = value;
+                        this._renderCatalog(this._ctx());
+                    }, 180);
+                });
+            }
+            const filter = document.getElementById('tb-filter');
+            if (filter) {
+                filter.addEventListener('change', (e) => {
+                    this._filter = e.target.value;
+                    this._renderCatalog(this._ctx());
+                });
+            }
+            const sort = document.getElementById('tb-sort');
+            if (sort) {
+                sort.addEventListener('change', (e) => {
+                    this._sort = e.target.value;
+                    this._renderCatalog(this._ctx());
+                });
+            }
+        }
+
+        if (!this._escBound) {
+            this._escBound = true;
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && this._drawerItem) this._closeDrawer();
+            });
+        }
+    },
+
+    _reparent(id) {
+        const el = document.getElementById(id);
+        if (el && el.parentElement !== document.body) document.body.appendChild(el);
+    },
+
+    /** 统一委托：data-tb-action + data-* 参数，避免重绘后需要重新绑定。 */
+    _onClick(e) {
+        const el = e.target.closest && e.target.closest('[data-tb-action]');
+        if (!el) return;
+        const action = el.dataset.tbAction;
+        const d = el.dataset;
+        switch (action) {
+            case 'refresh': this.refresh(); break;
+            case 'refresh-online': this.refreshOnline(true); break;
+            case 'retry': this.refreshOnline(true); break;
+            case 'go-account': this._setTab('account'); break;
+            case 'go-runtime': this._installRuntimeFromCatalog(); break;
+            case 'go-updates': this._showUpdates(); break;
+            case 'preview': this._openDrawer(d.tool, d.release); break;
+            case 'drawer-close': this._closeDrawer(); break;
+            case 'install': this.install(d.tool, d.release, d.kind); break;
+            case 'toggle': this.setEnabled(d.tool, d.enable === '1'); break;
+            case 'verify': this.verify(d.tool); break;
+            case 'rollback': this.rollback(d.tool); break;
+            case 'uninstall': this.uninstall(d.tool); break;
+            case 'open-folder': this.openFolder(d.tool); break;
+            case 'open-downloads': this.openDownloads(); break;
+            case 'enable-all': this.setAllEnabled(true); break;
+            case 'disable-all': this.setAllEnabled(false); break;
+            case 'login': this.login(); break;
+            case 'logout': this.logout(); break;
+            case 'sync-login': this.syncMirrorLogin(); break;
+            case 'open-register': this.openSite('/register'); break;
+            case 'open-forgot': this.openSite('/forgot-password'); break;
+            case 'open-site': this.openSite('/toolbox'); break;
+            case 'afdian-bind': this.afdianBind(); break;
+            case 'afdian-refresh': this.afdianRefresh(); break;
+            case 'toggle-order': this._toggleOrderRow(); break;
+            case 'verify-order': this.verifyOrder(); break;
+            case 'puzzle-new': this.newPuzzle(); break;
+            case 'puzzle-solve': this.solvePuzzle(); break;
+            case 'save-root': this.saveGameRoot(); break;
+            case 'validate-root': this.validateGameRoot(); break;
+            case 'check-all': this.checkAll(); break;
+            case 'open-cheat': this.openCheat(); break;
+            case 'task-dismiss': this._dockDismissed = true; this._renderTaskDock(); break;
+            default: break;
+        }
     },
 
     async _call(method, ...args) {
         try {
             const fn = pywebview.api[method];
-            if (typeof fn !== 'function') return { success: false, message: '当前版本不支持该操作' };
+            if (typeof fn !== 'function') {
+                return { success: false, code: 'bridge_missing', message: '当前版本不支持该操作' };
+            }
             return await fn.apply(pywebview.api, args);
         } catch (e) {
-            return { success: false, message: String(e) };
+            return { success: false, code: 'bridge_error', message: String(e) };
         }
     },
+
+    // ------------------------------------------------------------------
+    // 数据刷新：本地（毫秒级）→ 在线（分片）
+    // ------------------------------------------------------------------
 
     async refresh() {
-        const res = await this._call('toolbox_status');
-        if (this._stopped) return;
-        if (!res || !res.success) {
-            this._renderError(res && res.message);
-            return;
-        }
-        this._state = res.data || {};
-        this._render();
+        await this.refreshLocal();
+        await this.refreshOnline(true);
     },
 
-    _renderError(msg) {
-        const body = document.getElementById('tb-installed-body');
-        if (body) body.innerHTML = `<p class="form-hint">读取失败：${this._esc(msg || '未知错误')}</p>`;
+    async refreshLocal() {
+        const token = ++this._seq.local;
+        this._loading.local = true;
+        this._render();
+        const res = await this._call('toolbox_status_local');
+        if (this._stopped || token !== this._seq.local) return;
+        this._loading.local = false;
+        if (res && res.success) {
+            this._local = res.data || {};
+        } else {
+            this._local = { local_error: (res && res.message) || '读取本地状态失败' };
+        }
+        this._render();
+        this._maybeShowRecovered();
+    },
+
+    async refreshOnline(force = false) {
+        const token = ++this._seq.online;
+        this._loading.online = true;
+        this._render();
+        const res = await this._call('toolbox_status_online', !!force);
+        if (this._stopped || token !== this._seq.online) return;
+        this._loading.online = false;
+        if (res && res.success) {
+            this._online = res.data || {};
+            this._lastOnlineAt = Date.now();
+        } else {
+            this._online = { errors: { api: { message: (res && res.message) || '无法获取在线状态' } } };
+        }
+        this._render();
+        this._checkSession();
+    },
+
+    _checkSession() {
+        const errors = (this._online && this._online.errors) || {};
+        const accessErr = errors.access;
+        if (accessErr && accessErr.code === 'auth_required') {
+            this._toast('登录已失效，请重新登录', true);
+        }
+    },
+
+    _maybeShowRecovered() {
+        const recovered = this._local && this._local.recovered;
+        if (!recovered || this._recoveredShown) return;
+        this._recoveredShown = true;
+        const n = (recovered.restored || []).length + (recovered.deleted || []).length;
+        this._toast(`检测到上次安装未完成，已自动恢复到安装前状态（${n} 个文件）`);
+    },
+
+    // ------------------------------------------------------------------
+    // 渲染
+    // ------------------------------------------------------------------
+
+    _ctx() {
+        const local = this._local || {};
+        const online = this._online || {};
+        return {
+            local,
+            online,
+            loading: this._loading,
+            query: this._query,
+            filter: this._filter,
+            sort: this._sort,
+            protocol_version: local.protocol_version || online.protocol_version || 0,
+            game_root: local.game_root,
+            game_running: local.game_running,
+            local_error: local.local_error,
+            mirror_auth_available: local.mirror_auth_available,
+            base_url: online.base_url || '',
+        };
     },
 
     _render() {
-        const d = this._state || {};
-
-        // 崩溃恢复提示：上次安装被中断，已自动回滚
-        if (d.recovered) {
-            const r = d.recovered;
-            const n = (r.restored || []).length + (r.deleted || []).length;
-            this._toast(`检测到上次安装未完成，已自动恢复到安装前状态（${n} 个文件）`);
-        }
-
-        this._renderAccount(d);
-        this._renderRuntime(d);
-        this._renderInstalled(d);
-        this._renderCatalog(d);
-        // 本机授权卡是独立的小面板：读取失败只影响该卡
-        this.authzRefresh();
-
-        const rootInput = document.getElementById('tb-game-root');
-        if (rootInput && d.local && d.local.game_root && !rootInput.value) {
-            rootInput.value = d.local.game_root;
-        }
+        if (this._stopped) return;
+        const ctx = this._ctx();
+        this._renderStatusbar(ctx);
+        this._renderCatalog(ctx);
+        this._renderInstalled(ctx);
+        this._renderAccount(ctx);
+        this._renderSettings(ctx);
+        this._renderTaskDock();
+        this._syncBadge(ctx);
     },
 
-    _renderAccount(d) {
-        const body = document.getElementById('tb-account-body');
-        if (!body) return;
-        const rows = [];
-
-        if (d.local_error) {
-            rows.push(`<p class="form-hint">${this._esc(d.local_error)}</p>`);
-        }
-
-        if (!d.logged_in) {
-            // 登录表单：使用资源站账号（identifier 含 @ 按邮箱，否则按用户名）
-            rows.push('<p class="form-hint">登录后可查看订阅资格；原创内容需有效订阅，转载内容登录即可下载。</p>');
-            rows.push('<div class="tb-login-form">');
-            rows.push('<input type="text" id="tb-login-identifier" placeholder="用户名或邮箱" autocomplete="username">');
-            rows.push('<input type="password" id="tb-login-password" placeholder="密码" autocomplete="current-password">');
-            rows.push('<button id="tb-login-btn" class="primary-btn"><i class="fas fa-sign-in-alt"></i> 登录</button>');
-            rows.push('</div>');
-            const base = this._esc(d.base_url || 'https://mods.lcta.top');
-            rows.push(`<p class="form-hint">没有账号？<a href="${base}/register" target="_blank">前往资源站注册</a>（邮箱验证码注册，回到本页登录即可）。</p>`);
-            if (d.mirror_auth_available) {
-                rows.push('<p class="form-hint">检测到 Mod 镜像站已登录，可直接同步登录态到 LCTA（仅 access token，约 30 分钟有效）。</p>');
-                rows.push('<button id="tb-sync-login-btn" class="secondary-btn"><i class="fas fa-link"></i> 从 Mod 镜像站同步登录</button>');
-            }
-        } else {
-            const user = d.user || {};
-            const who = user.username || user.email || '已登录';
-            rows.push(`<p><i class="fas fa-user-check" style="color:#6cc644"></i> <b>${this._esc(who)}</b>
-                <button id="tb-logout-btn" class="secondary-btn" style="margin-left:8px">登出</button></p>`);
-            rows.push(this._renderSubscription(d));
-            rows.push(this._renderAfdian(d));
-            if (d.season && d.season.puzzle_enabled) {
-                rows.push(this._renderPuzzleEntry());
-            }
-        }
-
-        if (d.game_running === true) {
-            rows.push('<p class="form-hint" style="color:#d29922"><i class="fas fa-exclamation-triangle"></i> 游戏正在运行，安装/启停操作会被拒绝，请先关闭游戏。</p>');
-        }
-        body.innerHTML = rows.join('') || '<p class="form-hint">暂无信息。</p>';
-        this._bindAccountActions();
+    _renderStatusbar(ctx) {
+        const el = document.getElementById('tb-statusbar');
+        if (!el || typeof ToolboxViews === 'undefined') return;
+        el.innerHTML = ToolboxViews.statusbar(ctx);
     },
 
-    // 订阅资格摘要（2026-10-30 站点语义：monthly 带 expires_at，season 随季失效）
-    _renderSubscription(d) {
-        const online = d.online;
-        const seasonName = (d.season && (d.season.name || d.season.slug)) || '当前赛季';
-        const rows = [];
-        if (!online) {
-            if (d.online_error) {
-                rows.push(`<p class="form-hint">订阅状态暂时无法获取：${this._esc(d.online_error)}</p>`);
-                rows.push('<p class="form-hint">本地安装管理不受影响，仍可停用/卸载/回滚。</p>');
-            }
-            return rows.join('');
-        }
-        if (online.unlocked) {
-            rows.push(`<p><i class="fas fa-unlock" style="color:#6cc644"></i> <b>${this._esc(seasonName)}</b>：已解锁</p>`);
-            const src = (online.sources || []).map((s) => {
-                if (s.subscription_kind === 'monthly') {
-                    const end = s.expires_at ? String(s.expires_at).slice(0, 10) : '未知';
-                    return `按月（至 ${this._esc(end)}）`;
-                }
-                return '按赛季';
-            }).join('、');
-            if (src) rows.push(`<p class="form-hint">订阅：${src}</p>`);
-        } else {
-            rows.push(`<p><i class="fas fa-lock" style="color:#d29922"></i> <b>${this._esc(seasonName)}</b>：尚未订阅</p>`);
-            const reason = {
-                account_inactive: '账号已被禁用。',
-                season_inactive: '当前赛季尚未开放。',
-                email_required: '请先绑定并验证邮箱（注册即自动验证）。',
-                entitlement_required: '还没有有效订阅 —— 爱发电订阅后点「刷新订阅状态」即可。',
-                scope_not_allowed: '当前登录方式不能获取订阅资格，请用账号密码登录。',
-            }[online.reason] || '';
-            if (reason) rows.push(`<p class="form-hint">${this._esc(reason)}</p>`);
-            if (d.season && d.season.monthly_price_cents != null) {
-                const m = (d.season.monthly_price_cents / 100).toFixed(2);
-                rows.push(`<p class="form-hint">按月 ¥${this._esc(m)} / 月（跨赛季不中断）；转载内容无需订阅，登录即可下载。</p>`);
-            }
-        }
-        return rows.join('');
+    _renderCatalog(ctx) {
+        const el = document.getElementById('tb-catalog-body');
+        if (!el || typeof ToolboxViews === 'undefined') return;
+        el.innerHTML = ToolboxViews.catalog(ctx);
     },
 
-    // 爱发电订阅核验区（绑定 → 自动核验；之后每月续费点一次刷新）
-    _renderAfdian(d) {
-        const afdian = d.afdian;
-        const rows = [];
-        if (!afdian || !afdian.configured) {
-            rows.push('<p class="form-hint">爱发电自动核验尚未配置：请联系站长人工核验订阅。</p>');
-            return rows.join('');
-        }
-        rows.push('<div class="tb-afdian">');
-        if (!afdian.bound) {
-            rows.push('<p class="form-hint">订阅方式：在爱发电订阅后关联账号，资格自动核验生效。</p>');
-            rows.push('<button id="tb-afdian-bind-btn" class="primary-btn"><i class="fas fa-link"></i> 关联爱发电账号</button>');
-        } else {
-            rows.push(`<p class="form-hint">爱发电：已关联（${this._esc(afdian.provider_user_id || '')}）</p>`);
-            rows.push('<button id="tb-afdian-refresh-btn" class="primary-btn"><i class="fas fa-sync"></i> 刷新订阅状态</button>');
-            rows.push('<details style="margin-top:8px"><summary class="form-hint">订阅后没有自动生效？手动填写订单号</summary>');
-            rows.push('<div class="tb-login-form" style="margin-top:6px">');
-            rows.push('<input type="text" id="tb-order-no" placeholder="爱发电订单号">');
-            rows.push('<button id="tb-verify-order-btn" class="secondary-btn">核验订单</button>');
-            rows.push('</div></details>');
-        }
-        rows.push('</div>');
-        return rows.join('');
+    _renderInstalled(ctx) {
+        const rt = document.getElementById('tb-runtime-body');
+        const body = document.getElementById('tb-installed-body');
+        const summary = document.getElementById('tb-installed-summary');
+        if (!body || typeof ToolboxViews === 'undefined') return;
+        if (rt) rt.innerHTML = ToolboxViews.runtimeCard(ctx);
+        body.innerHTML = ToolboxViews.installed(ctx);
+        if (summary) summary.textContent = ToolboxViews.installedSummary(ctx);
     },
 
-    _renderPuzzleEntry() {
-        // 站点 PUZZLE_ENABLED=true 时才显示（当前默认关闭，资格只走订阅）
-        return '<details style="margin-top:8px"><summary class="form-hint">解谜获取资格（如站点开放）</summary>' +
-            '<div style="margin-top:6px"><button id="tb-puzzle-new-btn" class="secondary-btn">获取我的挑战</button>' +
-            '<div id="tb-puzzle-body"></div></div></details>';
+    _renderAccount(ctx) {
+        const box = document.getElementById('tb-account-body');
+        if (!box || typeof ToolboxViews === 'undefined') return;
+        const keep = this._captureValues([
+            'tb-login-identifier', 'tb-login-password', 'tb-order-no', 'tb-puzzle-answer',
+        ]);
+        // 折叠区状态与谜题题面也要跨重绘保留（否则任何刷新都把用户展开的面板收走）
+        const orderRow = document.getElementById('tb-order-row');
+        const orderOpen = !!(orderRow && orderRow.style.display !== 'none');
+        const puzzleBody = document.getElementById('tb-puzzle-body');
+        const puzzleHTML = puzzleBody ? puzzleBody.innerHTML : '';
+
+        const html = ToolboxViews.account(ctx);
+        if (box.innerHTML !== html) box.innerHTML = html;
+        this._restoreValues(keep);
+
+        const row = document.getElementById('tb-order-row');
+        if (row && orderOpen) row.style.display = '';
+        const body = document.getElementById('tb-puzzle-body');
+        if (body && puzzleHTML) body.innerHTML = puzzleHTML;
     },
 
-    _bindAccountActions() {
-        const bind = (id, fn) => {
+    _renderSettings(ctx) {
+        if (typeof ToolboxViews === 'undefined') return;
+        const diag = document.getElementById('tb-diagnostics');
+        if (diag) diag.innerHTML = ToolboxViews.settings(ctx);
+        const status = document.getElementById('tb-root-status');
+        if (status) status.innerHTML = ToolboxViews.rootStatus(ctx);
+
+        const input = document.getElementById('tb-game-root');
+        if (input && !input.value && ctx.game_root) input.value = ctx.game_root;
+    },
+
+    _renderTaskDock() {
+        const dock = document.getElementById('tb-taskdock');
+        if (!dock || typeof ToolboxViews === 'undefined') return;
+        const snap = this._tasks;
+        const has = !!(snap && (snap.current || (snap.history && snap.history.length)));
+        if (!has || this._dockDismissed) {
+            dock.hidden = true;
+            return;
+        }
+        dock.innerHTML = ToolboxViews.taskDock(snap);
+        dock.hidden = false;
+    },
+
+    _syncBadge(ctx) {
+        const badge = document.getElementById('tb-badge-installed');
+        if (!badge) return;
+        const local = (ctx.local && ctx.local.local) || null;
+        const count = local ? (local.plugins || []).length + (local.packages || []).length : 0;
+        badge.textContent = count ? String(count) : '';
+        badge.hidden = !count;
+    },
+
+    _captureValues(ids) {
+        const out = {};
+        ids.forEach((id) => {
             const el = document.getElementById(id);
-            if (el) el.addEventListener('click', fn);
-        };
-        bind('tb-login-btn', () => this.login());
-        bind('tb-logout-btn', () => this.logout());
-        bind('tb-sync-login-btn', () => this.syncMirrorLogin());
-        bind('tb-afdian-bind-btn', () => this.afdianBind());
-        bind('tb-afdian-refresh-btn', () => this.afdianRefresh());
-        bind('tb-verify-order-btn', () => this.verifyOrder());
-        bind('tb-puzzle-new-btn', () => this.newPuzzle());
-        const pwd = document.getElementById('tb-login-password');
-        if (pwd) pwd.addEventListener('keyup', (e) => { if (e.key === 'Enter') this.login(); });
+            if (el) out[id] = el.value;
+        });
+        return out;
     },
+
+    _restoreValues(values) {
+        Object.keys(values || {}).forEach((id) => {
+            const el = document.getElementById(id);
+            if (el && values[id] != null) el.value = values[id];
+        });
+    },
+
+    _setTab(name) {
+        this._tab = name;
+        const root = document.getElementById('toolbox-public');
+        if (!root) return;
+        root.querySelectorAll('[data-tb-tab]').forEach((btn) => {
+            const on = btn.dataset.tbTab === name;
+            btn.classList.toggle('is-active', on);
+            btn.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        root.querySelectorAll('[data-tb-view]').forEach((view) => {
+            view.hidden = view.dataset.tbView !== name;
+        });
+        // 本机授权状态只在该视图可见时才需要（避免每次刷新都多打一次接口）
+        if (name === 'account') this.authzRefresh();
+    },
+
+    // ------------------------------------------------------------------
+    // 目录：详情 / 主操作
+    // ------------------------------------------------------------------
+
+    _findItem(toolId, releaseId) {
+        const items = (this._online && this._online.catalog && this._online.catalog.items) || [];
+        return items.find((x) => String(x.tool_id) === String(toolId)
+            && (releaseId == null || String(x.release_id) === String(releaseId))) || null;
+    },
+
+    _openDrawer(toolId, releaseId) {
+        const item = this._findItem(toolId, releaseId);
+        if (!item) {
+            this._toast('目录条目已变化，请刷新后重试', true);
+            return;
+        }
+        this._drawerItem = item;
+        const view = ToolboxViews.drawer(item, this._ctx());
+        const drawer = document.getElementById('tb-drawer');
+        const title = document.getElementById('tb-drawer-title');
+        const body = document.getElementById('tb-drawer-body');
+        const foot = document.getElementById('tb-drawer-foot');
+        if (!drawer || !body || !foot) return;
+        if (title) title.textContent = view.title;
+        body.innerHTML = view.body;
+        foot.innerHTML = view.foot;
+        drawer.hidden = false;
+    },
+
+    _closeDrawer() {
+        this._drawerItem = null;
+        const drawer = document.getElementById('tb-drawer');
+        if (drawer) drawer.hidden = true;
+    },
+
+    /** 首屏主操作「安装底座」：直接用目录里的底座条目，避免让用户自己找。 */
+    _installRuntimeFromCatalog() {
+        const items = (this._online && this._online.catalog && this._online.catalog.items) || [];
+        const runtime = items.find((it) => it.install_kind === 'runtime_zip_root'
+            || it.resource_kind === 'runtime');
+        if (runtime && runtime.downloadable) {
+            this.install(runtime.tool_id, runtime.release_id, 'runtime_zip_root');
+            return;
+        }
+        this._setTab('catalog');
+        this._toast(runtime
+            ? '底座条目当前不可下载（需订阅），请先处理订阅'
+            : '目录里暂未发布底座，请稍后刷新', true);
+    },
+
+    _showUpdates() {
+        this._setTab('catalog');
+        this._filter = 'update';
+        const sel = document.getElementById('tb-filter');
+        if (sel) sel.value = 'update';
+        this._renderCatalog(this._ctx());
+    },
+
+    // ------------------------------------------------------------------
+    // 安装 / 下载
+    // ------------------------------------------------------------------
+
+    _newProgress(title) {
+        const modal = new ProgressModal(title);
+        // 安装/下载是不可暂停的后端任务：隐藏暂停按钮；把「取消」换成「关闭」，
+        // 关闭只收起进度窗，任务继续在后台完成（结束后仍有 toast + 任务坞）。
+        const pauseBtn = document.getElementById(`pause-btn-${modal.id}`);
+        if (pauseBtn) pauseBtn.style.display = 'none';
+        const cancelBtn = document.getElementById(`cancel-btn-${modal.id}`);
+        if (cancelBtn) {
+            const closeBtn = cancelBtn.cloneNode(true);
+            closeBtn.textContent = '关闭';
+            closeBtn.addEventListener('click', () => modal.close());
+            cancelBtn.replaceWith(closeBtn);
+        }
+        return modal;
+    },
+
+    async install(toolId, releaseId, installKind) {
+        const item = this._findItem(toolId, releaseId) || {};
+        const label = installKind === 'download_only' ? '下载'
+            : installKind === 'runtime_zip_root' ? '安装底座'
+                : installKind === 'game_relative_files' ? '安装文件包' : '安装/更新';
+        const name = item.name_zh || item.tool_name || toolId;
+        const where = item.target_dir ? `\n安装位置：${item.target_dir}` : '';
+        const body = installKind === 'download_only'
+            ? '只下载到系统「下载」目录，不会写入游戏目录。'
+            : '请确认游戏已关闭。安装由签名清单驱动，逐文件校验后写入。';
+        if (!confirm(`${label}「${name}」？\n${body}${where}`)) return;
+
+        const modal = this._newProgress(`${label}：${name}`);
+        modal.addLog('正在校验清单与下载资格…');
+        this._dockDismissed = false;
+        this._startTaskPoll();
+        try {
+            let res = await this._call('toolbox_install_any', toolId, releaseId, false, modal.id);
+            if (res && !res.success && /非 LCTA 管理的 BepInEx/.test(res.message || '')) {
+                modal.addLog(res.message);
+                if (confirm(`${res.message}\n\n确定继续并覆盖吗？`)) {
+                    res = await this._call('toolbox_install_any', toolId, releaseId, true, modal.id);
+                } else {
+                    res = { success: false, message: '已取消（检测到非 LCTA 管理的 BepInEx）' };
+                }
+            }
+            if (res && res.success) {
+                const saved = res.data && res.data.save_paths;
+                modal.complete(true, saved && saved.length ? `已下载到：${saved[0]}` : '操作完成');
+                this._toast(saved && saved.length ? '已下载到系统下载目录' : '操作完成');
+            } else {
+                modal.complete(false, (res && res.message) || '操作失败');
+                this._toast((res && res.message) || '操作失败', true);
+            }
+        } finally {
+            this._stopTaskPoll();
+            await this._pollTaskOnce();
+            await this.refreshLocal();
+        }
+    },
+
+    async installRuntime(toolId, releaseId) {
+        // 兼容旧调用：统一走通用分发
+        return this.install(toolId, releaseId, 'runtime_zip_root');
+    },
+
+    /** Mod 镜像站 → 主窗口：站点只传 id 与动作，这里重新校验与执行。 */
+    async installFromMirror(payload) {
+        if (!payload) return;
+        const action = payload.action || 'install';
+        const modal = this._newProgress(action === 'download-file' ? '下载订阅工具文件' : '从镜像站安装');
+        modal.addLog('正在校验请求与签名清单…');
+        this._dockDismissed = false;
+        this._startTaskPoll();
+        try {
+            let res;
+            if (action === 'download-file') {
+                res = await this._call(
+                    'toolbox_download_file',
+                    payload.tool_id,
+                    payload.release_id,
+                    payload.file_name,
+                    payload.sha256,
+                    modal.id,
+                );
+            } else {
+                res = await this._call('toolbox_install_any', payload.tool_id, payload.release_id, false, modal.id);
+                if (res && !res.success && /非 LCTA 管理的 BepInEx/.test(res.message || '')) {
+                    modal.addLog(res.message);
+                    if (confirm(`${res.message}\n\n确定继续并覆盖吗？`)) {
+                        res = await this._call(
+                            'toolbox_install_any', payload.tool_id, payload.release_id, true, modal.id,
+                        );
+                    }
+                }
+            }
+            if (res && res.success) {
+                const saved = res.data && res.data.save_paths;
+                modal.complete(true, saved && saved.length ? `已保存到：${saved[0]}` : '操作完成');
+                this._toast(saved && saved.length ? '已保存到系统下载目录' : '操作完成');
+            } else {
+                modal.complete(false, (res && res.message) || '操作失败');
+                this._toast((res && res.message) || '操作失败', true);
+            }
+        } catch (e) {
+            modal.complete(false, String(e));
+            this._toast(String(e), true);
+        } finally {
+            this._stopTaskPoll();
+            await this._pollTaskOnce();
+            await this.refreshLocal();
+        }
+    },
+
+    // ------------------------------------------------------------------
+    // 任务坞
+    // ------------------------------------------------------------------
+
+    _startTaskPoll() {
+        this._stopTaskPoll();
+        this._timers.poll = setInterval(() => this._pollTaskOnce(), 700);
+    },
+
+    _stopTaskPoll() {
+        if (this._timers.poll) {
+            clearInterval(this._timers.poll);
+            this._timers.poll = null;
+        }
+    },
+
+    async _pollTaskOnce() {
+        const res = await this._call('toolbox_task_status');
+        if (this._stopped) return;
+        if (res && res.success) {
+            this._tasks = res.data;
+            this._renderTaskDock();
+        }
+    },
+
+    // ------------------------------------------------------------------
+    // 本地管理
+    // ------------------------------------------------------------------
+
+    async setEnabled(toolId, enabled) {
+        const res = await this._call('toolbox_set_enabled', toolId, !!enabled);
+        this._toast(res && res.success ? (enabled ? '已启用' : '已停用') : (res && res.message),
+            !(res && res.success));
+        await this.refreshLocal();
+    },
+
+    async setAllEnabled(enabled) {
+        const local = (this._local && this._local.local) || {};
+        const plugins = local.plugins || [];
+        if (!plugins.length) return;
+        const targets = plugins.filter((p) => !!p.enabled !== !!enabled);
+        if (!targets.length) {
+            this._toast(enabled ? '所有插件都已启用' : '所有插件都已停用');
+            return;
+        }
+        if (!confirm(`${enabled ? '启用' : '停用'}全部 ${targets.length} 个插件？`)) return;
+        let failed = 0;
+        for (const p of targets) {
+            const res = await this._call('toolbox_set_enabled', p.tool_id, !!enabled);
+            if (!res || !res.success) failed += 1;
+        }
+        this._toast(failed ? `${failed} 个插件操作失败` : '已全部' + (enabled ? '启用' : '停用'), !!failed);
+        await this.refreshLocal();
+    },
+
+    async verify(toolId) {
+        const res = await this._call('toolbox_verify_integrity', toolId);
+        if (res && res.success && res.data) {
+            const d = res.data;
+            if (d.ok) {
+                this._toast('文件完整，未发现问题');
+            } else {
+                const parts = [];
+                if (d.missing && d.missing.length) parts.push(`缺失 ${d.missing.length} 个文件（可能被杀毒隔离）`);
+                if (d.modified && d.modified.length) parts.push(`被修改 ${d.modified.length} 个文件`);
+                this._toast(`需要修复：${parts.join('；')}`, true);
+            }
+        } else {
+            this._toast((res && res.message) || '检查失败', true);
+        }
+    },
+
+    async checkAll() {
+        const local = (this._local && this._local.local) || {};
+        const targets = [
+            ...(local.plugins || []).map((p) => ({ id: p.tool_id, label: p.tool_id, kind: '插件' })),
+            ...(local.packages || []).map((p) => ({ id: p.tool_id, label: p.tool_id, kind: '文件包' })),
+        ];
+        if (!targets.length) {
+            this._toast('没有已安装内容可检查');
+            return;
+        }
+        const modal = new ModalWindow('完整性检查', {
+            showProgress: false, showCancelButton: false, showMinimizeButton: false, showLog: true,
+        });
+        const statusEl = document.getElementById(`modal-status-${modal.id}`);
+        if (statusEl) statusEl.textContent = `正在检查 ${targets.length} 项…`;
+        modal.addLog(`开始检查 ${targets.length} 项已安装内容`);
+        let bad = 0;
+        for (const t of targets) {
+            const res = await this._call('toolbox_verify_integrity', t.id);
+            if (res && res.success && res.data && res.data.ok) {
+                modal.addLog(`✓ ${t.kind} ${t.label}：完整`);
+            } else {
+                bad += 1;
+                const detail = res && res.data
+                    ? [
+                        (res.data.missing || []).length ? `缺失 ${res.data.missing.length}` : '',
+                        (res.data.modified || []).length ? `被修改 ${res.data.modified.length}` : '',
+                    ].filter(Boolean).join('；')
+                    : ((res && res.message) || '检查失败');
+                modal.addLog(`✗ ${t.kind} ${t.label}：${detail || '异常'}`);
+            }
+        }
+        const footer = document.getElementById(`modal-footer-${modal.id}`);
+        if (footer) {
+            footer.innerHTML = '<button class="tb-btn" id="tb-check-close">关闭</button>';
+            const btn = document.getElementById('tb-check-close');
+            if (btn) btn.addEventListener('click', () => modal.close());
+        }
+        if (statusEl) {
+            statusEl.textContent = bad ? `${bad} 项需要修复，其余正常` : '全部完整，未发现问题';
+        }
+        this._toast(bad ? `${bad} 项需要修复` : '全部完整，未发现问题', !!bad);
+    },
+
+    async rollback(toolId) {
+        if (!confirm('回滚到本地备份？当前文件会被替换为备份内容。')) return;
+        const res = await this._call('toolbox_rollback', toolId);
+        this._toast(res && res.success ? '已回滚到本地备份' : (res && res.message), !(res && res.success));
+        await this.refreshLocal();
+    },
+
+    async uninstall(toolId) {
+        const modal = new ModalWindow('卸载内容', {
+            showProgress: false, showCancelButton: false, showMinimizeButton: false, showLog: false,
+        });
+        const statusEl = document.getElementById(`modal-status-${modal.id}`);
+        if (statusEl) {
+            statusEl.innerHTML = `<p style="margin:0 0 8px">只移除 LCTA 管理的文件，你自己的文件与配置会保留。</p>
+                <label class="checkbox-container">
+                    <input type="checkbox" id="tb-uninstall-cfg-${modal.id}">
+                    <span class="checkmark"></span> 同时删除该插件在 BepInEx 里的配置
+                </label>`;
+        }
+        const footer = document.getElementById(`modal-footer-${modal.id}`);
+        if (footer) {
+            footer.innerHTML = `<button class="tb-btn tb-btn--danger" id="tb-uninstall-ok-${modal.id}">确认卸载</button>
+                <button class="tb-btn" id="tb-uninstall-no-${modal.id}">取消</button>`;
+            const cancel = document.getElementById(`tb-uninstall-no-${modal.id}`);
+            if (cancel) cancel.addEventListener('click', () => modal.close());
+            const ok = document.getElementById(`tb-uninstall-ok-${modal.id}`);
+            if (ok) {
+                ok.addEventListener('click', async () => {
+                    const cfg = document.getElementById(`tb-uninstall-cfg-${modal.id}`);
+                    const removeConfig = !!(cfg && cfg.checked);
+                    modal.close();
+                    const res = await this._call('toolbox_uninstall', toolId, removeConfig);
+                    this._toast(res && res.success ? '已卸载' : (res && res.message), !(res && res.success));
+                    await this.refreshLocal();
+                });
+            }
+        }
+    },
+
+    async openFolder(toolId) {
+        const res = await this._call('toolbox_open_folder', toolId || '');
+        if (!res || !res.success) this._toast((res && res.message) || '打开失败', true);
+    },
+
+    async openDownloads() {
+        const res = await this._call('toolbox_open_downloads');
+        if (!res || !res.success) this._toast((res && res.message) || '打开失败', true);
+    },
+
+    async saveGameRoot() {
+        const input = document.getElementById('tb-game-root');
+        if (!input) return;
+        const value = (input.value || '').trim();
+        if (!value) {
+            this._toast('请填写 Limbus Company 安装目录', true);
+            return;
+        }
+        const res = await this._call('toolbox_set_game_root', value);
+        if (res && res.success) {
+            const saved = (res.data && res.data.game_root) || value;
+            input.value = saved;
+            this._toast('游戏目录已保存');
+            await this.refreshLocal();
+        } else {
+            this._toast((res && res.message) || '目录无效', true);
+        }
+    },
+
+    async validateGameRoot() {
+        const input = document.getElementById('tb-game-root');
+        if (!input) return;
+        const value = (input.value || '').trim();
+        if (!value) {
+            this._toast('请填写 Limbus Company 安装目录', true);
+            return;
+        }
+        const res = await this._call('toolbox_validate_game_root', value);
+        if (res && res.success) {
+            this._toast('目录有效，可以保存');
+        } else {
+            this._toast((res && res.message) || '目录无效', true);
+        }
+    },
+
+    // ------------------------------------------------------------------
+    // 账号 / 订阅
+    // ------------------------------------------------------------------
 
     async login() {
         const idEl = document.getElementById('tb-login-identifier');
         const pwdEl = document.getElementById('tb-login-password');
-        const identifier = (idEl && idEl.value || '').trim();
+        const identifier = ((idEl && idEl.value) || '').trim();
         const password = (pwdEl && pwdEl.value) || '';
         if (!identifier || !password) {
             this._toast('请输入用户名/邮箱与密码', true);
@@ -262,8 +791,13 @@ let toolboxManager = {
         }
         this._toast('正在登录…');
         const res = await this._call('toolbox_login', identifier, password);
-        this._toast(res && res.success ? '登录成功' : (res && res.message), !(res && res.success));
-        await this.refresh();
+        if (res && res.success) {
+            this._toast('登录成功');
+            if (pwdEl) pwdEl.value = '';
+            await this.refresh();
+        } else {
+            this._toast((res && res.message) || '登录失败', true);
+        }
     },
 
     async logout() {
@@ -274,13 +808,22 @@ let toolboxManager = {
     },
 
     async syncMirrorLogin() {
-        const res = await this._call('toolbox_sync_mirror_login');
+        const res = await this._call('toolbox_sync_mirror_login', true);
         if (res && res.success) {
             const d = res.data || {};
             this._toast(d.message || (d.synced ? '已从镜像站同步登录' : '客户端已有登录会话'));
             await this.refresh();
         } else {
-            this._toast(res && res.message, true);
+            this._toast((res && res.message) || '同步失败', true);
+        }
+    },
+
+    async openSite(path) {
+        const res = await this._call('toolbox_open_site', path);
+        if (res && res.success) {
+            this._toast('已在系统浏览器打开资源站');
+        } else {
+            this._toast((res && res.message) || '打开失败', true);
         }
     },
 
@@ -289,7 +832,7 @@ let toolboxManager = {
         if (res && res.success) {
             this._toast('已在系统浏览器打开爱发电授权页，完成授权后回到本页点「刷新订阅状态」');
         } else {
-            this._toast(res && res.message, true);
+            this._toast((res && res.message) || '打开授权页失败', true);
         }
     },
 
@@ -299,53 +842,64 @@ let toolboxManager = {
             const s = res.data || {};
             this._toast(s.verified ? `已核验 ${s.verified} 笔有效订阅` : '暂未查询到新的有效订阅');
         } else {
-            this._toast(res && res.message, true);
+            this._toast((res && res.message) || '刷新失败', true);
         }
-        await this.refresh();
+        await this.refreshOnline(true);
+    },
+
+    _toggleOrderRow() {
+        const row = document.getElementById('tb-order-row');
+        if (!row) return;
+        row.style.display = row.style.display === 'none' ? '' : 'none';
+        if (row.style.display !== 'none') {
+            const input = document.getElementById('tb-order-no');
+            if (input) input.focus();
+        }
     },
 
     async verifyOrder() {
         const el = document.getElementById('tb-order-no');
-        const orderNo = (el && el.value || '').trim();
+        const orderNo = ((el && el.value) || '').trim();
         if (!orderNo) {
             this._toast('请填写爱发电订单号', true);
             return;
         }
         const res = await this._call('toolbox_verify_order', orderNo);
         this._toast(res && res.success ? '订单已核验' : (res && res.message), !(res && res.success));
-        await this.refresh();
+        await this.refreshOnline(true);
     },
 
     async newPuzzle() {
         const res = await this._call('toolbox_new_challenge');
         const body = document.getElementById('tb-puzzle-body');
         if (!res || !res.success) {
-            if (body) body.innerHTML = `<p class="form-hint">${this._esc(res && res.message || '获取失败')}</p>`;
+            if (body) body.innerHTML = `<p class="form-hint" style="margin:0">${this._esc((res && res.message) || '获取失败')}</p>`;
             return;
         }
         const ch = res.data || {};
         this._challengeId = ch.challenge_id || '';
         if (body) {
-            body.innerHTML = '<textarea id="tb-puzzle-material" class="form-hint" readonly style="width:100%;height:180px">' +
-                this._esc(ch.material || '') + '</textarea>' +
-                '<div class="tb-login-form" style="margin-top:6px">' +
-                '<input type="text" id="tb-puzzle-answer" placeholder="序列号答案">' +
-                '<button id="tb-puzzle-solve-btn" class="primary-btn">提交答案</button></div>';
-            document.getElementById('tb-puzzle-solve-btn').addEventListener('click', () => this.solvePuzzle());
+            body.innerHTML = `<textarea id="tb-puzzle-material" readonly
+                style="width:100%;height:160px;font-family:monospace;font-size:12px">${this._esc(ch.material || '')}</textarea>
+                <div class="tb-inline" style="margin-top:6px">
+                    <input type="text" id="tb-puzzle-answer" placeholder="序列号答案" style="max-width:240px"
+                           data-tb-enter="puzzle">
+                    <button class="tb-btn tb-btn--sm tb-btn--primary" data-tb-action="puzzle-solve">提交答案</button>
+                </div>`;
         }
     },
 
     async solvePuzzle() {
         const el = document.getElementById('tb-puzzle-answer');
-        const answer = (el && el.value || '').trim();
+        const answer = ((el && el.value) || '').trim();
         if (!this._challengeId || !answer) return;
         const res = await this._call('toolbox_solve', this._challengeId, answer);
-        this._toast(res && res.success ? '答案正确' : (res && res.message), !(res && res.success));
-        await this.refresh();
+        this._toast(res && res.success ? '答案已提交' : (res && res.message), !(res && res.success));
+        await this.refreshOnline(true);
     },
 
     // ------------------------------------------------------------------
-    // 订阅工具 · 本机授权（TPM，2026-10-27；2026-11-01 从作弊页迁入）
+    // 本机授权（TPM）
     // ------------------------------------------------------------------
 
     async authzRefresh() {
@@ -356,7 +910,7 @@ let toolboxManager = {
         const disableBtn = document.getElementById('authz-disable-btn');
         if (!msg || !listEl) return;
 
-        if (!this._state || !this._state.logged_in) {
+        if (!this._online || !this._online.logged_in) {
             msg.textContent = '登录资源站账号后可授权本机。';
             if (localMsg) localMsg.textContent = '未登录。';
             if (enableBtn) enableBtn.disabled = true;
@@ -367,6 +921,7 @@ let toolboxManager = {
 
         msg.textContent = '';
         const res = await this._call('toolbox_authz_devices');
+        if (this._stopped) return;
         if (!res || !res.success) {
             msg.textContent = (res && res.message) || '读取授权状态失败';
             return;
@@ -409,14 +964,14 @@ let toolboxManager = {
                 ? this._esc(String(x.last_used_at).slice(0, 19).replace('T', ' '))
                 : '从未使用';
             const isLocal = x.device_id === localId;
-            return `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06);">
+            return `<div style="padding:8px 0;border-bottom:1px solid var(--color-border-light);">
                 <strong>${name}${isLocal ? '（本机）' : ''}</strong>
                 <div class="form-hint">指纹 ${fp} · 最近使用 ${last}</div>
-                ${isLocal ? '' : `<button class="secondary-btn" data-revoke="${this._esc(x.device_id)}">撤销</button>`}
+                ${isLocal ? '' : `<button class="tb-btn tb-btn--sm tb-btn--danger" data-tb-authz-revoke="${this._esc(x.device_id)}">撤销</button>`}
             </div>`;
         }).join('');
-        listEl.querySelectorAll('[data-revoke]').forEach((btn) => {
-            btn.addEventListener('click', () => this.authzRevoke(btn.dataset.revoke));
+        listEl.querySelectorAll('[data-tb-authz-revoke]').forEach((btn) => {
+            btn.addEventListener('click', () => this.authzRevoke(btn.dataset.tbAuthzRevoke));
         });
     },
 
@@ -448,399 +1003,37 @@ let toolboxManager = {
     async authzRevoke(deviceId) {
         if (!deviceId || !confirm('确定撤销这台设备的授权？')) return;
         const res = await this._call('toolbox_authz_revoke', deviceId);
-        if (res && res.success) {
-            this._toast('已撤销该设备');
-        } else {
-            this._toast((res && res.message) || '撤销失败', true);
-        }
+        this._toast(res && res.success ? '已撤销该设备' : ((res && res.message) || '撤销失败'), !(res && res.success));
         await this.authzRefresh();
     },
 
-    _renderRuntime(d) {
-        const body = document.getElementById('tb-runtime-body');
-        if (!body) return;
-        const rt = d.local && d.local.runtime;
-        if (rt) {
-            body.innerHTML = `<p>已安装底座：<b>${this._esc(rt.version || rt.release_id)}</b></p>
-                <p class="form-hint">由 LCTA 管理。卸载插件不会影响底座；更新请在下方目录安装 runtime 条目。</p>`;
-        } else {
-            body.innerHTML = '<p class="form-hint">尚未安装订阅工具底座。</p>'
-                + '<p class="form-hint">请在下方目录安装 runtime 条目（需要相应资格且游戏未运行）；插件安装前必须先装底座。</p>';
-        }
-    },
+    // ------------------------------------------------------------------
+    // 旧版作弊工具箱入口（门控只在点击时就地弹，不覆盖整个订阅页）
+    // ------------------------------------------------------------------
 
-    _renderInstalled(d) {
-        const body = document.getElementById('tb-installed-body');
-        if (!body) return;
-        const plugins = (d.local && d.local.plugins) || [];
-        const packages = (d.local && d.local.packages) || [];
-        const unmanaged = (d.local && d.local.unmanaged) || [];
-
-        if (!plugins.length && !packages.length && !unmanaged.length) {
-            body.innerHTML = '<p class="form-hint">还没有安装任何插件或文件包。</p>';
-            return;
-        }
-
-        const rows = [];
-        if (plugins.length) {
-            rows.push('<p class="form-hint" style="margin:0 0 6px">BepInEx 插件</p>');
-            rows.push('<table class="tb-table"><thead><tr><th>插件</th><th>版本</th><th>状态</th><th>操作</th></tr></thead><tbody>');
-            for (const p of plugins) {
-                rows.push(`<tr>
-                    <td>${this._esc(p.tool_id)}${p.guid ? `<br><small class="form-hint">${this._esc(p.guid)}</small>` : ''}</td>
-                    <td>${this._esc(p.version || p.release_id)}</td>
-                    <td>${p.enabled ? '已启用' : '已停用'}</td>
-                    <td>
-                        <button class="secondary-btn tb-toggle" data-tool="${this._esc(p.tool_id)}" data-enable="${p.enabled ? '0' : '1'}">
-                            ${p.enabled ? '停用' : '启用'}
-                        </button>
-                        <button class="secondary-btn tb-verify" data-tool="${this._esc(p.tool_id)}">检查</button>
-                        <button class="secondary-btn tb-rollback" data-tool="${this._esc(p.tool_id)}">回滚</button>
-                        <button class="secondary-btn tb-uninstall" data-tool="${this._esc(p.tool_id)}">卸载</button>
-                    </td>
-                </tr>`);
-            }
-            rows.push('</tbody></table>');
-        }
-        if (packages.length) {
-            rows.push('<p class="form-hint" style="margin:1rem 0 6px">游戏目录文件包</p>');
-            rows.push('<table class="tb-table"><thead><tr><th>文件包</th><th>版本</th><th>安装位置</th><th>操作</th></tr></thead><tbody>');
-            for (const p of packages) {
-                rows.push(`<tr>
-                    <td>${this._esc(p.tool_id)}</td>
-                    <td>${this._esc(p.version || p.release_id)}</td>
-                    <td><small class="form-hint">${this._esc(p.target_dir || '')}</small></td>
-                    <td>
-                        <button class="secondary-btn tb-open-pkg" data-tool="${this._esc(p.tool_id)}">打开目录</button>
-                        <button class="secondary-btn tb-verify" data-tool="${this._esc(p.tool_id)}">检查</button>
-                        <button class="secondary-btn tb-rollback" data-tool="${this._esc(p.tool_id)}">回滚</button>
-                        <button class="secondary-btn tb-uninstall" data-tool="${this._esc(p.tool_id)}">卸载</button>
-                    </td>
-                </tr>`);
-            }
-            rows.push('</tbody></table>');
-        }
-        if (unmanaged.length) {
-            rows.push('<p class="form-hint" style="margin-top:1rem">检测到非 LCTA 管理的插件（不会被自动删除或升级）：</p><ul>');
-            for (const u of unmanaged) rows.push(`<li class="form-hint">${this._esc(u)}</li>`);
-            rows.push('</ul>');
-        }
-        body.innerHTML = rows.join('');
-        this._bindRowActions();
-    },
-
-    _bindRowActions() {
-        const on = (cls, fn) => {
-            document.querySelectorAll(cls).forEach((btn) => {
-                btn.addEventListener('click', () => fn(btn));
-            });
-        };
-        on('.tb-toggle', (b) => this.setEnabled(b.dataset.tool, b.dataset.enable === '1'));
-        on('.tb-verify', (b) => this.verify(b.dataset.tool));
-        on('.tb-rollback', (b) => this.rollback(b.dataset.tool));
-        on('.tb-uninstall', (b) => this.uninstall(b.dataset.tool));
-        on('.tb-open-pkg', (b) => this.openFolder(b.dataset.tool));
-    },
-
-    _installKindLabel(kind) {
-        return {
-            runtime_zip_root: '底座',
-            bepinex_plugin_dll: '插件',
-            game_relative_files: '文件包',
-            download_only: '仅下载',
-        }[kind] || '未知类型';
-    },
-
-    _accessLabel(item) {
-        return item.access_kind === 'repost' ? '转载 · 免费' : '原创 · 订阅专享';
-    },
-
-    _renderCatalog(d) {
-        const card = document.getElementById('tb-catalog-card');
-        const body = document.getElementById('tb-catalog-body');
-        if (!card || !body) return;
-        if (d.catalog_error) {
-            body.innerHTML = `<p class="form-hint">目录暂时无法获取：${this._esc(d.catalog_error)}</p>`;
-            return;
-        }
-        const items = (d.catalog && d.catalog.items) || [];
-        if (!items.length) {
-            body.innerHTML = '<p class="form-hint">本赛季暂未发布内容。</p>';
-            return;
-        }
-        const rows = ['<table class="tb-table"><thead><tr><th>名称</th><th>版本</th><th>类型</th><th>访问</th><th>操作</th></tr></thead><tbody>'];
-        for (const it of items) {
-            const kindLabel = this._accessLabel(it);
-            const kindColor = it.access_kind === 'repost' ? '#6cc644' : '#d29922';
-            const installKind = it.install_kind || (it.resource_kind === 'runtime' ? 'runtime_zip_root' : 'bepinex_plugin_dll');
-            const resLabel = this._installKindLabel(installKind);
-            const targetNote = it.target_dir ? `<br><small class="form-hint">→ ${this._esc(it.target_dir)}</small>` : '';
-            let action = `<button class="secondary-btn tb-preview" data-tool="${this._esc(it.tool_id)}" data-release="${this._esc(it.release_id)}">查看</button>`;
-            if (it.downloadable) {
-                const btnLabel = installKind === 'download_only' ? '下载'
-                    : installKind === 'runtime_zip_root' ? '安装底座'
-                    : installKind === 'game_relative_files' ? '安装'
-                    : '安装/更新';
-                action += ` <button class="primary-btn tb-install" data-tool="${this._esc(it.tool_id)}" data-release="${this._esc(it.release_id)}" data-kind="${this._esc(installKind)}">${btnLabel}</button>`;
-            } else if (!d.logged_in) {
-                action += ' <span class="form-hint">登录后可下载</span>';
-            } else {
-                action += ' <span class="form-hint"><i class="fas fa-lock"></i> 需订阅解锁</span>';
-            }
-            const fileCount = (it.files || []).length;
-            rows.push(`<tr>
-                <td>${this._esc(it.name_zh || it.tool_name)}${it.name_zh && it.name_zh !== it.tool_name ? `<br><small class="form-hint">${this._esc(it.tool_name)}</small>` : ''}${it.recommended ? ' <span class="form-hint">(推荐)</span>' : ''}</td>
-                <td>${this._esc(it.version)}</td>
-                <td>${this._esc(resLabel)}${targetNote}</td>
-                <td><span style="color:${kindColor}">${this._esc(kindLabel)}</span></td>
-                <td>${action}${fileCount ? `<br><small class="form-hint">${fileCount} 个文件</small>` : ''}</td>
-            </tr>`);
-        }
-        rows.push('</tbody></table>');
-        if (!d.logged_in) {
-            rows.push('<p class="form-hint">名单对游客公开；下载/安装需要登录（原创另需有效订阅）。</p>');
-        }
-        body.innerHTML = rows.join('');
-        document.querySelectorAll('.tb-preview').forEach((btn) => {
-            btn.addEventListener('click', () => this.preview(btn.dataset.tool, btn.dataset.release));
-        });
-        document.querySelectorAll('.tb-install').forEach((btn) => {
-            btn.addEventListener('click', () => this.install(btn.dataset.tool, btn.dataset.release, btn.dataset.kind));
-        });
-    },
-
-    _findCatalogItem(toolId, releaseId) {
-        const items = (this._state && this._state.catalog && this._state.catalog.items) || [];
-        return items.find((x) => String(x.tool_id) === String(toolId)
-            && String(x.release_id) === String(releaseId)) || null;
-    },
-
-    _fmtBytes(n) {
-        if (n == null || n === '') return '';
-        let v = Number(n) || 0;
-        const units = ['B', 'KB', 'MB', 'GB'];
-        let i = 0;
-        while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
-        return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-    },
-
-    preview(toolId, releaseId) {
-        const it = this._findCatalogItem(toolId, releaseId);
-        if (!it) {
-            this._toast('目录条目已变化，请刷新后重试', true);
-            return;
-        }
-        const installKind = it.install_kind || (it.resource_kind === 'runtime' ? 'runtime_zip_root' : 'bepinex_plugin_dll');
-        const kindLabel = this._installKindLabel(installKind);
-        const files = it.files || [];
-        const total = files.reduce((n, f) => n + (Number(f.size) || 0), 0);
-        const actionLabel = installKind === 'download_only' ? '下载到下载目录'
-            : installKind === 'runtime_zip_root' ? '安装底座'
-            : installKind === 'game_relative_files' ? '安装到游戏目录'
-            : '安装/更新';
-
-        const fileRows = files.length
-            ? `<table class="tb-table" style="margin-top:6px"><thead><tr><th>文件</th><th>大小</th></tr></thead><tbody>
-                ${files.map((f) => `<tr><td><small>${this._esc(f.path)}</small></td><td><small>${this._esc(this._fmtBytes(f.size))}</small></td></tr>`).join('')}
-               </tbody></table>`
-            : '<p class="form-hint">当前账号无文件元数据（原创内容需订阅，或登录后查看）。</p>';
-
-        const html = `
-            <div style="max-height:52vh;overflow:auto;line-height:1.65">
-                <h3 style="margin:0 0 6px">${this._esc(it.name_zh || it.tool_name)}</h3>
-                ${it.name_zh && it.name_zh !== it.tool_name ? `<p class="form-hint" style="margin:0 0 8px">${this._esc(it.tool_name)}</p>` : ''}
-                <p style="margin:0 0 8px">
-                    <span class="form-hint">${this._esc(kindLabel)}</span> ·
-                    <span style="color:${it.access_kind === 'repost' ? '#6cc644' : '#d29922'}">${this._esc(this._accessLabel(it))}</span> ·
-                    <span class="form-hint">v${this._esc(it.version)}</span>
-                </p>
-                ${it.author ? `<p class="form-hint" style="margin:0 0 6px">作者：${this._esc(it.author)}</p>` : ''}
-                ${it.summary ? `<p style="margin:0 0 8px">${this._esc(it.summary)}</p>` : ''}
-                ${it.target_dir ? `<p class="form-hint" style="margin:0 0 6px">安装到：<code>${this._esc(it.target_dir)}</code></p>` : ''}
-                ${installKind === 'download_only' ? '<p class="form-hint" style="margin:0 0 6px">只下载到系统「下载」目录，不会写入游戏目录。</p>' : ''}
-                ${it.requires_runtime ? '<p class="form-hint" style="margin:0 0 6px">需要先安装订阅工具底座。</p>' : ''}
-                ${it.compat_note ? `<p class="form-hint" style="margin:0 0 6px">兼容说明：${this._esc(it.compat_note)}</p>` : ''}
-                ${it.release_notes ? `<p class="form-hint" style="margin:0 0 6px">版本说明：${this._esc(it.release_notes)}</p>` : ''}
-                <p class="form-hint" style="margin:8px 0 0">文件：${files.length} 个${total ? `，共 ${this._esc(this._fmtBytes(total))}` : ''}</p>
-                ${fileRows}
-            </div>`;
-
-        const modal = new ModalWindow('工具预览', {
-            showProgress: false,
-            showCancelButton: false,
-            showMinimizeButton: false,
-            showLog: false,
-        });
-        const statusEl = document.getElementById(`modal-status-${modal.id}`);
-        if (statusEl) statusEl.innerHTML = html;
-        const footer = document.getElementById(`modal-footer-${modal.id}`);
-        if (footer) {
-            const action = it.downloadable
-                ? `<button class="primary-btn" id="preview-install-${modal.id}">${actionLabel}</button>`
-                : `<span class="form-hint">${it.access_kind === 'repost' ? '登录后可下载' : '需订阅解锁'}</span>`;
-            footer.innerHTML = `${action}
-                ${installKind === 'download_only' ? `<button class="secondary-btn" id="preview-downloads-${modal.id}">打开下载目录</button>` : ''}
-                <button class="secondary-btn" id="preview-close-${modal.id}">关闭</button>`;
-            const closeBtn = document.getElementById(`preview-close-${modal.id}`);
-            if (closeBtn) closeBtn.addEventListener('click', () => modal.close());
-            const downloadsBtn = document.getElementById(`preview-downloads-${modal.id}`);
-            if (downloadsBtn) downloadsBtn.addEventListener('click', () => { modal.close(); this.openDownloads(); });
-            const installBtn = document.getElementById(`preview-install-${modal.id}`);
-            if (installBtn) installBtn.addEventListener('click', () => {
-                modal.close();
-                this.install(it.tool_id, it.release_id, installKind);
-            });
-        }
-    },
-
-    async setEnabled(toolId, enabled) {
-        const res = await this._call('toolbox_set_enabled', toolId, enabled);
-        this._toast(res && res.success ? (enabled ? '已启用' : '已停用') : (res && res.message));
-        await this.refresh();
-    },
-
-    async verify(toolId) {
-        const res = await this._call('toolbox_verify_integrity', toolId);
-        if (res && res.success && res.data) {
-            const d = res.data;
-            if (d.ok) {
-                this._toast('文件完整，未发现问题');
-            } else {
-                const parts = [];
-                if (d.missing && d.missing.length) parts.push(`缺失 ${d.missing.length} 个文件（可能被杀毒隔离）`);
-                if (d.modified && d.modified.length) parts.push(`被修改 ${d.modified.length} 个文件`);
-                this._toast(`需要修复：${parts.join('；')}`, true);
-            }
-        } else {
-            this._toast(res && res.message, true);
-        }
-    },
-
-    async rollback(toolId) {
-        if (!confirm('回滚到本地备份？当前文件会被替换为备份内容。')) return;
-        const res = await this._call('toolbox_rollback', toolId);
-        this._toast(res && res.success ? '已回滚到本地备份' : (res && res.message), !(res && res.success));
-        await this.refresh();
-    },
-
-    async uninstall(toolId) {
-        if (!confirm('卸载该内容？只移除 LCTA 管理的文件，你自己的文件与配置会保留。')) return;
-        const res = await this._call('toolbox_uninstall', toolId, false);
-        this._toast(res && res.success ? '已卸载' : (res && res.message), !(res && res.success));
-        await this.refresh();
-    },
-
-    async _installWithConfirm(toolId, releaseId, modal) {
-        let res = await this._call('toolbox_install_any', toolId, releaseId, false, modal ? modal.id : 'false');
-        if (res && !res.success && /非 LCTA 管理的 BepInEx/.test(res.message || '')) {
-            if (modal) modal.addLog(res.message);
-            if (!confirm(`${res.message}\n\n确定继续并覆盖吗？`)) {
-                return { success: false, message: '已取消（检测到非 LCTA 管理的 BepInEx）' };
-            }
-            res = await this._call('toolbox_install_any', toolId, releaseId, true, modal ? modal.id : 'false');
-        }
-        return res || { success: false, message: '未知错误' };
-    },
-
-    async install(toolId, releaseId, installKind) {
-        const it = this._findCatalogItem(toolId, releaseId) || {};
-        const label = installKind === 'download_only' ? '下载'
-            : installKind === 'runtime_zip_root' ? '安装底座'
-            : installKind === 'game_relative_files' ? '安装文件包'
-            : '安装/更新';
-        const name = it.name_zh || it.tool_name || toolId;
-        const where = it.target_dir ? `\n安装位置：${it.target_dir}` : '';
-        const body = installKind === 'download_only'
-            ? '只下载到系统「下载」目录，不会写入游戏目录。'
-            : '请确认游戏已关闭。安装由签名清单驱动，逐文件校验后写入。';
-        if (!confirm(`${label}「${name}」？\n${body}${where}`)) {
-            return;
-        }
-        const modal = this._newProgress(`${label}：${name}`);
-        modal.addLog('正在校验清单与下载资格…');
-        const res = await this._installWithConfirm(toolId, releaseId, modal);
-        if (res && res.success) {
-            const saved = res.data && res.data.save_paths;
-            modal.complete(true, saved && saved.length ? `已下载到：${saved[0]}` : '操作完成');
-            this._toast(saved && saved.length ? '已下载到系统下载目录' : '操作完成');
-        } else {
-            modal.complete(false, (res && res.message) || '操作失败');
-            this._toast((res && res.message) || '操作失败', true);
-        }
-        await this.refresh();
-    },
-
-    async installRuntime(toolId, releaseId) {
-        // 兼容旧调用：统一走通用分发
-        return this.install(toolId, releaseId, 'runtime_zip_root');
-    },
-
-    async installFromMirror(payload) {
-        if (!payload) return;
-        const action = payload.action || 'install';
-        const modal = this._newProgress(action === 'download-file' ? '下载订阅工具文件' : '从镜像站安装');
-        modal.addLog('正在校验请求与签名清单…');
+    async openCheat() {
         try {
-            let res;
-            if (action === 'download-file') {
-                res = await this._call(
-                    'toolbox_download_file',
-                    payload.tool_id,
-                    payload.release_id,
-                    payload.file_name,
-                    payload.sha256,
-                    modal.id,
-                );
-            } else {
-                res = await this._installWithConfirm(payload.tool_id, payload.release_id, modal);
+            const accepted = (typeof RiskGate !== 'undefined')
+                ? await RiskGate.getConsent('cheat')
+                : true;
+            if (accepted) {
+                goAndShow('cheat');
+                return;
             }
-            if (res && res.success) {
-                const saved = res.data && res.data.save_paths;
-                modal.complete(true, saved && saved.length ? `已保存到：${saved[0]}` : '操作完成');
-                this._toast(saved && saved.length ? '已保存到系统下载目录' : '操作完成');
-            } else {
-                modal.complete(false, (res && res.message) || '操作失败');
-                this._toast((res && res.message) || '操作失败', true);
-            }
-            await this.refresh();
+            RiskGate.showConsentModal('cheat', () => goAndShow('cheat'));
         } catch (e) {
-            modal.complete(false, String(e));
             this._toast(String(e), true);
         }
     },
 
-    async openFolder(toolId) {
-        const res = await this._call('toolbox_open_folder', toolId || '');
-        if (!res || !res.success) this._toast(res && res.message, true);
-    },
+    // ------------------------------------------------------------------
+    // 小工具
+    // ------------------------------------------------------------------
 
-    async openDownloads() {
-        const res = await this._call('toolbox_open_downloads');
-        if (!res || !res.success) this._toast(res && res.message, true);
-    },
-
-    async saveGameRoot() {
-        const input = document.getElementById('tb-game-root');
-        if (!input) return;
-        const res = await this._call('toolbox_set_game_root', input.value.trim());
-        this._toast(res && res.success ? '游戏目录已保存' : (res && res.message), !(res && res.success));
-        await this.refresh();
-    },
-
-    _newProgress(title) {
-        const modal = new ProgressModal(title);
-        // 安装/下载是不可暂停的后端任务：隐藏暂停按钮；把「取消」换成「关闭」，
-        // 关闭只收起进度窗，任务继续在后台完成（结束后仍有 toast 提示）。
-        const pauseBtn = document.getElementById(`pause-btn-${modal.id}`);
-        if (pauseBtn) pauseBtn.style.display = 'none';
-        const cancelBtn = document.getElementById(`cancel-btn-${modal.id}`);
-        if (cancelBtn) {
-            const closeBtn = cancelBtn.cloneNode(true);
-            closeBtn.textContent = '关闭';
-            closeBtn.addEventListener('click', () => modal.close());
-            cancelBtn.replaceWith(closeBtn);
-        }
-        return modal;
+    _esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+        }[c]));
     },
 
     _toast(msg, isError) {
@@ -852,6 +1045,15 @@ let toolboxManager = {
         }
     },
 };
+
+// 账号/解谜输入框回车提交（重绘后依然生效：事件委托在 document 上）
+document.addEventListener('keydown', (e) => {
+    const el = e.target;
+    if (!el || !el.dataset || !el.dataset.tbEnter) return;
+    if (e.key !== 'Enter') return;
+    if (el.dataset.tbEnter === 'login') toolboxManager.login();
+    if (el.dataset.tbEnter === 'puzzle') toolboxManager.solvePuzzle();
+});
 
 // Mod 镜像站 → 主窗口：与页面是否已打开无关，脚本加载即监听。
 // （用户可能先开镜像站安装，再进入订阅工具页；不能依赖 init() 里的绑定。）

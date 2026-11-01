@@ -112,3 +112,42 @@
 - 不做「回滚到服务器历史版本」（服务端无历史版本端点）；
 - 不做非受管插件「接管」（只列出、打开目录、提示）；
 - 不动 Launcher 集成开关位置（AGENTS.md：只能在 `launcher-config.html`）。
+
+## 8. 实施记录（2026-11-01）
+
+按 P0–P6 全部完成，提交顺序：
+
+| 提交 | 内容 |
+| --- | --- |
+| `docs(toolbox)` | 本计划落盘（P0） |
+| `feat(toolbox)` P1 | 桥接层：`toolbox_status_local/online` 拆分、错误码、`toolbox_open_site`、`toolbox_task_status`、`toolbox_validate_game_root`、协议版本 3；新增 17 项单测 |
+| `feat(toolbox)` P2–P6 | 页面骨架与样式、`toolbox-views.js` 渲染层、`toolbox-manager.js` 状态机、卡片目录/详情抽屉、已安装更新检测与批量操作、任务坞、镜像站事件复用 |
+
+落地时与计划的差异：
+
+1. **未内嵌注册/找回密码**（按确认的决策 3）：账号视图只保留登录，「注册账号 /
+   忘记密码」经 `toolbox_open_site` 走系统浏览器；桥接层因此没有
+   `toolbox_register` / `toolbox_request_email_code`，避免留下不可达接口。
+2. 新增 `toolbox_validate_game_root(path)`：设置页「检查目录」需要「只校验不落盘」，
+   与保存共用 `paths.validate_game_root` 同一判定。
+3. 任务坞只做**展示与恢复**，不提供中断：安装/下载本来就是不可暂停的同步任务
+   （旧进度窗也只是把「取消」换成「关闭」），凭空给一个取消按钮会骗人。
+4. 「已安装」行标题优先显示目录里的中文名（回退 tool_id），因为本地 manifest
+   只存 id；「有新版本」筛选与状态条计数统一把底座算进去（避免两边数字不一致）。
+
+验证：
+
+- `pytest tests/test_toolbox_api.py tests/test_toolbox_bridge.py` —— 69 passed；
+- `pytest tests/test_toolbox_html_wiring.py` —— 6 passed（静态接线：每个按钮都有
+  动作、动作都有处理分支、渲染层不碰桥、关键字段转义、打包顺序与
+  `index.html` 一致、整页作弊门控已移除）；
+- 真实渲染：以本地 no-store 静态服务 + 注入 `pywebview` 桩在浏览器里跑通
+  亮/暗主题、窄窗口（540px 重排）、游客与已登录两态、四个子视图、详情抽屉、
+  搜索/筛选/排序（「有新版本」与状态条计数一致）、任务坞收起、卸载确认框、
+  TPM 授权三按钮、作弊入口跳转，全程无 JS 运行时错误；
+- 打包接线：`webui/index.html` 与 `.github/InitCode.py` 均新增
+  `js/toolbox-views.js` 且置于 `js/toolbox-manager.js` 之前（AGENTS.md 硬规则）。
+
+已知限制（沿用旧行为，不在本次范围）：安装/下载任务不可中断；非受管插件只
+展示不接管；无「回滚到服务器历史版本」入口。
+

@@ -1,4 +1,4 @@
-<!--
+﻿<!--
   订阅工具（原「工具箱」，2026-10-30 更名并对齐站点订阅语义）：
   资源站账号登录 + 月/赛季订阅资格 + 内容目录 + 本地安装管理。
 
@@ -67,10 +67,10 @@
                     <option value="recent">按版本序号</option>
                 </select>
                 <span class="tb-grow"></span>
-                <button id="tb-open-site-btn" class="tb-btn tb-btn--sm" title="用系统浏览器打开资源站">
+                <button id="tb-open-site-btn" data-tb-action="open-site" class="tb-btn tb-btn--sm" title="用系统浏览器打开资源站">
                     <i class="fas fa-external-link-alt"></i> 在网站查看
                 </button>
-                <button id="tb-refresh-btn" class="tb-icon-btn" title="刷新目录与订阅状态">
+                <button id="tb-refresh-btn" data-tb-action="refresh" class="tb-icon-btn" title="刷新目录与订阅状态">
                     <i class="fas fa-sync"></i>
                 </button>
             </div>
@@ -83,16 +83,16 @@
             <div class="tb-toolbar">
                 <span id="tb-installed-summary" class="tb-muted"></span>
                 <span class="tb-grow"></span>
-                <button id="tb-enable-all-btn" class="tb-btn tb-btn--sm">
+                <button id="tb-enable-all-btn" data-tb-action="enable-all" class="tb-btn tb-btn--sm">
                     <i class="fas fa-toggle-on"></i> 全部启用
                 </button>
-                <button id="tb-disable-all-btn" class="tb-btn tb-btn--sm">
+                <button id="tb-disable-all-btn" data-tb-action="disable-all" class="tb-btn tb-btn--sm">
                     <i class="fas fa-toggle-off"></i> 全部停用
                 </button>
-                <button id="tb-open-folder-btn" class="tb-btn tb-btn--sm">
+                <button id="tb-open-folder-btn" data-tb-action="open-folder" class="tb-btn tb-btn--sm">
                     <i class="fas fa-folder-open"></i> 受管目录
                 </button>
-                <button id="tb-open-downloads-btn" class="tb-btn tb-btn--sm">
+                <button id="tb-open-downloads-btn" data-tb-action="open-downloads" class="tb-btn tb-btn--sm">
                     <i class="fas fa-download"></i> 下载目录
                 </button>
             </div>
@@ -109,7 +109,7 @@
                     <h3 class="tb-card-title">
                         <i class="fas fa-fingerprint"></i> 本机授权（TPM）
                     </h3>
-                    <button id="authz-refresh-btn" class="tb-btn tb-btn--sm">
+                    <button id="authz-refresh-btn" data-tb-action="authz-refresh" class="tb-btn tb-btn--sm">
                         <i class="fas fa-sync-alt"></i> 刷新
                     </button>
                 </div>
@@ -124,10 +124,10 @@
                 </div>
 
                 <div style="margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button id="authz-enable-btn" class="tb-btn tb-btn--primary">
+                    <button id="authz-enable-btn" data-tb-action="authz-enable" class="tb-btn tb-btn--primary">
                         <i class="fas fa-shield-alt"></i> 授权本机
                     </button>
-                    <button id="authz-disable-btn" class="tb-btn tb-btn--danger" style="display:none;">
+                    <button id="authz-disable-btn" data-tb-action="authz-disable" class="tb-btn tb-btn--danger" style="display:none;">
                         <i class="fas fa-ban"></i> 撤销本机授权
                     </button>
                 </div>
@@ -151,10 +151,10 @@
                     </small>
                 </div>
                 <div class="tb-inline" style="margin-top: 10px;">
-                    <button id="tb-save-root-btn" class="tb-btn tb-btn--primary">
+                    <button id="tb-save-root-btn" data-tb-action="save-root" class="tb-btn tb-btn--primary">
                         <i class="fas fa-save"></i> 保存游戏目录
                     </button>
-                    <button id="tb-validate-root-btn" class="tb-btn">
+                    <button id="tb-validate-root-btn" data-tb-action="validate-root" class="tb-btn">
                         <i class="fas fa-stethoscope"></i> 检查目录
                     </button>
                 </div>
@@ -164,7 +164,7 @@
             <div class="tb-card">
                 <div class="tb-card-head">
                     <h3 class="tb-card-title"><i class="fas fa-microscope"></i> 诊断信息</h3>
-                    <button id="tb-check-all-btn" class="tb-btn tb-btn--sm">
+                    <button id="tb-check-all-btn" data-tb-action="check-all" class="tb-btn tb-btn--sm">
                         <i class="fas fa-shield-alt"></i> 检查全部完整性
                     </button>
                 </div>
@@ -182,7 +182,7 @@
                     基于 MinHook 的原生游戏作弊工具集，功能代码以加密形式随程序分发，需要单独输入解密密钥解锁。
                     该功能与订阅工具相互独立；过季后仍可停用、卸载已下载的订阅插件。
                 </p>
-                <button id="tb-open-cheat-btn" class="tb-btn">
+                <button id="tb-open-cheat-btn" data-tb-action="open-cheat" class="tb-btn">
                     <i class="fas fa-box-open"></i> 打开作弊工具箱
                 </button>
             </div>

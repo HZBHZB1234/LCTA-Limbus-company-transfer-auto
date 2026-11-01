@@ -185,6 +185,9 @@ let toolboxManager = {
             case 'validate-root': this.validateGameRoot(); break;
             case 'check-all': this.checkAll(); break;
             case 'open-cheat': this.openCheat(); break;
+            case 'authz-refresh': this.authzRefresh(); break;
+            case 'authz-enable': this.authzEnable(); break;
+            case 'authz-disable': this.authzDisable(); break;
             case 'task-dismiss': this._dockDismissed = true; this._renderTaskDock(); break;
             default: break;
         }

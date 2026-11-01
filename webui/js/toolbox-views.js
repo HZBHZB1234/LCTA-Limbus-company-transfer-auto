@@ -219,6 +219,14 @@ const ToolboxViews = {
             if (filter === 'repost') return it.access_kind === 'repost';
             if (filter === 'downloadable') return !!it.downloadable;
             if (filter === 'update') {
+                // 底座也参与「可更新」：否则状态条说 2 项、筛选只给出 1 项
+                const isRuntime = it.install_kind === 'runtime_zip_root'
+                    || it.resource_kind === 'runtime';
+                if (isRuntime) {
+                    const rt = local && local.runtime;
+                    return !!(rt && rt.release_id && it.release_id
+                        && String(rt.release_id) !== String(it.release_id));
+                }
                 const installed = map.get(String(it.tool_id));
                 return !!(installed && installed.release_id
                     && String(installed.release_id) !== String(it.release_id));
@@ -424,11 +432,13 @@ const ToolboxViews = {
                 const cat = byTool.get(String(p.tool_id));
                 const hasUpdate = !!(cat && p.release_id
                     && String(cat.release_id) !== String(p.release_id));
+                const title = cat ? (cat.name_zh || cat.tool_name || p.tool_id) : p.tool_id;
                 return `<div class="tb-row">
                     <div class="tb-row-main">
-                        ${ToolboxViews._rowTitle(p.tool_id, p.guid)}
+                        ${ToolboxViews._rowTitle(title, p.guid)}
                         <div class="tb-row-meta">
                             版本 ${ToolboxViews.esc(p.version || p.release_id || '')}
+                            · ID ${ToolboxViews.esc(p.tool_id)}
                             ${p.installed_at ? ` · 安装于 ${ToolboxViews.esc(ToolboxViews.fmtDateTime(p.installed_at))}` : ''}
                         </div>
                         <div class="tb-item-meta" style="margin-top:4px">
@@ -464,11 +474,13 @@ const ToolboxViews = {
                 const cat = byTool.get(String(p.tool_id));
                 const hasUpdate = !!(cat && p.release_id
                     && String(cat.release_id) !== String(p.release_id));
+                const title = cat ? (cat.name_zh || cat.tool_name || p.tool_id) : p.tool_id;
                 return `<div class="tb-row">
                     <div class="tb-row-main">
-                        ${ToolboxViews._rowTitle(p.tool_id, '')}
+                        ${ToolboxViews._rowTitle(title, '')}
                         <div class="tb-row-meta">
                             版本 ${ToolboxViews.esc(p.version || p.release_id || '')}
+                            · ID ${ToolboxViews.esc(p.tool_id)}
                             ${p.target_dir ? ` → <code>${ToolboxViews.esc(p.target_dir)}</code>` : ''}
                         </div>
                         <div class="tb-item-meta" style="margin-top:4px">

@@ -14,6 +14,21 @@
 - 本地管理（列出/启停/卸载/回滚/完整性）**不需要**在线资格：过季后用户
   仍必须能停用与卸载，只有「新下载/安装」需要在线资格。
 
+## 状态查询拆两段（2026-11-01 重构）
+
+旧版 `toolbox_status` 一次串行抓 season/access/catalog/afdian，单请求超时
+20s，首屏最坏要等 60–80 秒。现在拆成：
+
+- ``toolbox_status_local()``：纯本地快照（毫秒级，断网可用）；
+- ``toolbox_status_online()``：在线分片，逐片上报 ``errors``；
+- ``toolbox_status()``：两者组合，保留旧字段以兼容既有调用方与镜像站桥。
+
+⚠️ 在线分片的**顺序**是契约：``access`` 必须在 ``catalog`` 之前调用。
+服务端 ``/toolbox/catalog`` 用 ``get_optional_user``（过期 token 降级为游客
+视图，``downloadable`` 全 False 且不触发刷新），而 ``/toolbox/access`` 用
+``get_current_user``（401 会触发单飞刷新）。顺序反了会出现「已登录却整页
+显示需要订阅」的假象。
+
 ## 安全边界（plan 12.3）
 
 - JS **只**传 ``tool_id`` / ``release_id`` / ``action`` 与用户确认信息；
@@ -21,19 +36,35 @@
   自己从可信 API 获取；
 - 即使网页被改成直接调用 ``toolbox_install``，也必须经过本层的权限、
   签名、哈希与路径校验；
-- ``game_root`` 只接受**用户已配置的**游戏路径，不由 JS 指定任意目录。
+- ``game_root`` 只接受**用户已配置的**游戏路径，不由 JS 指定任意目录；
+- ``toolbox_open_site`` 只接受**固定白名单**的站点路径，不接受任意 URL。
 """
 from __future__ import annotations
 
 import logging
 import threading
+import time
+from datetime import datetime, timezone
 
 from globalManagers.ConfigManager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
 CONFIG_KEY = "ui_default.toolbox"
-BRIDGE_PROTOCOL_VERSION = 2
+BRIDGE_PROTOCOL_VERSION = 3
+
+# 在线快照的短缓存：同一轮刷新里 status 与 catalog 都取时避免重复打服务端。
+ONLINE_CACHE_TTL = 5.0
+
+# 允许经系统浏览器打开的站点页面（**白名单**，不是任意 URL 拼接）
+SITE_PATHS = frozenset({
+    "/",
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/toolbox",
+    "/me",
+})
 
 # 官方资源站签名清单公钥（公开信息，非密钥）。写入代码而不是只放
 # config_default.json：已有用户的 config.json 不会自动合并新增默认项，
@@ -60,6 +91,108 @@ INSTALL_KINDS = frozenset({
 _task_lock = threading.Lock()
 
 
+def _now_iso() -> str:
+    """UTC ISO 时间戳（与本地 manifest 的时间口径一致）。"""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+class ToolboxBridgeError(RuntimeError):
+    """带机器可读 ``code`` 的桥接层错误。
+
+    ``message`` 是可直接展示的中文文案（历史文案保持不变：现有测试与用户
+    认知都依赖它）；``code`` 供前端分支（重试 / 引导登录 / 打开设置）。
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def _error_payload(exc: BaseException) -> dict:
+    """把任意异常收敛成 ``{success, code, message}``。
+
+    API 客户端（``ApiError``）与下载层（``DownloadError``）自带 ``code``，
+    直接小写沿用；其余异常回落为 ``error``。
+    """
+    raw = str(getattr(exc, "code", "") or "").strip()
+    code = raw.lower().replace(" ", "_") or "error"
+    message = str(getattr(exc, "message", "") or exc or "未知错误")
+    return {"success": False, "code": code, "message": message}
+
+
+class _ToolboxTaskRegistry:
+    """安装/下载任务记录（任务坞）。
+
+    安装与下载在桥接层同步执行（JS 侧 await），所以任务记录不是用来「继续
+    或取消」任务的，而是让用户切到别的页面、再回到订阅工具页时仍能看到
+    刚才发生了什么（前端规范 §7.3：正交状态，不堆一条超长状态机）。
+    """
+
+    def __init__(self, limit: int = 5) -> None:
+        self._lock = threading.Lock()
+        self._seq = 0
+        self._limit = limit
+        self._current: dict | None = None
+        self._history: list[dict] = []
+
+    def start(self, kind: str, tool_id, release_id, label: str) -> dict:
+        with self._lock:
+            self._seq += 1
+            task = {
+                "task_id": f"t{self._seq}",
+                "kind": str(kind),
+                "tool_id": str(tool_id or ""),
+                "release_id": str(release_id or ""),
+                "label": str(label or ""),
+                "status": "running",
+                "percent": 0,
+                "text": "准备中…",
+                "started_at": _now_iso(),
+                "finished_at": None,
+                "message": None,
+            }
+            self._current = task
+            return dict(task)
+
+    def progress(self, percent, text: str = "") -> None:
+        with self._lock:
+            if self._current is None:
+                return
+            try:
+                self._current["percent"] = max(0, min(100, int(percent)))
+            except (TypeError, ValueError):
+                pass
+            if text:
+                self._current["text"] = str(text)
+
+    def finish(self, ok: bool, message: str = "") -> dict | None:
+        with self._lock:
+            task = self._current
+            if task is None:
+                return None
+            task["status"] = "done" if ok else "failed"
+            if ok:
+                task["percent"] = 100
+            if message:
+                task["text"] = str(message)
+                task["message"] = str(message)
+            task["finished_at"] = _now_iso()
+            self._history.append(task)
+            if len(self._history) > self._limit:
+                self._history = self._history[-self._limit:]
+            self._current = None
+            return dict(task)
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {
+                "running": self._current is not None,
+                "current": dict(self._current) if self._current else None,
+                "history": [dict(t) for t in self._history],
+            }
+
+
 class ToolboxMixin:
     """工具箱桥方法集合（由 API 组装处混入）。"""
 
@@ -75,102 +208,135 @@ class ToolboxMixin:
         cfg = ConfigManager().get(CONFIG_KEY, {}) or {}
         root = (cfg.get("game_root") if isinstance(cfg, dict) else "") or ""
         if not root:
-            raise ValueError("尚未配置游戏目录，请先在设置中选择 Limbus Company 安装目录")
+            raise ToolboxBridgeError(
+                "no_game_root", "尚未配置游戏目录，请先在设置中选择 Limbus Company 安装目录"
+            )
         return root
 
-    # -- 状态 --------------------------------------------------------------
+    def _toolbox_task_registry(self) -> _ToolboxTaskRegistry:
+        reg = getattr(self, "_toolbox_task_reg", None)
+        if reg is None:
+            reg = _ToolboxTaskRegistry()
+            self._toolbox_task_reg = reg
+        return reg
 
-    def toolbox_status(self):
-        """本地状态 + 在线资格 + 赛季/目录（三部分分开返回，互不拖垮）。
+    # -- 状态：本地快照（离线可用）------------------------------------------
 
-        ⚠️ 网络不可达时**不能**让本地状态也消失：用户过季或断网仍要能
-        停用/卸载。因此在线部分失败只标 ``online_error``，本地照常返回。
-        ``season``（公开信息）与 ``catalog``（2026-10-30 起名单对游客可见）
-        独立获取 —— 之前目录数据从未被填充，页面永远显示「暂无可获取内容」。
+    def toolbox_status_local(self):
+        """纯本地快照：毫秒级返回，断网/过季都能用。
+
+        只读本地 manifest 与进程列表，**不**访问网络 —— 首屏先渲染这一份，
+        在线部分再异步补齐（旧实现是等 4 个网络请求跑完才出第一屏）。
         """
+        data = {
+            "protocol_version": BRIDGE_PROTOCOL_VERSION,
+            "game_root": None,
+            "game_running": None,
+            "local": None,
+            "local_error": None,
+            "recovered": None,
+            "mirror_auth_available": False,
+        }
         try:
-            from webutils.toolbox import install, runtime, state
+            from webutils.function_mod_mirror import mod_mirror_get_auth
 
-            data = {
-                "protocol_version": BRIDGE_PROTOCOL_VERSION,
-                "logged_in": False,
-                "online": None,
-                "online_error": None,
-                "season": None,
-                "catalog": None,
-                "catalog_error": None,
-                "user": None,
-                "afdian": None,
-                "local": None,
-                "game_running": None,
-                "recovered": None,
-                "mirror_auth_available": False,
-            }
-            try:
-                from webutils.function_mod_mirror import mod_mirror_get_auth
+            data["mirror_auth_available"] = bool(mod_mirror_get_auth())
+        except Exception:  # noqa: BLE001 — 镜像站不可用不应影响本地状态
+            pass
 
-                data["mirror_auth_available"] = bool(mod_mirror_get_auth())
-            except Exception:  # noqa: BLE001
-                pass
-
-            try:
-                root = self._toolbox_game_root()
-            except ValueError as exc:
-                data["local_error"] = str(exc)
-                self._toolbox_fill_online(data)
-                return {"success": True, "data": data}
-
-            # 启动时先恢复未完成事务（崩溃可恢复）
-            try:
-                recovered = state.recover_if_needed(root)
-                if recovered:
-                    data["recovered"] = recovered
-            except Exception as exc:  # noqa: BLE001
-                self.log_error(exc)
-                data["online_error"] = None
-
-            try:
-                data["game_running"] = runtime.is_game_running(root)
-            except Exception:  # noqa: BLE001
-                data["game_running"] = None
-
-            try:
-                data["local"] = install.list_installed(root)
-            except Exception as exc:  # noqa: BLE001
-                self.log_error(exc)
-                data["local_error"] = str(exc)
-
-            self._toolbox_fill_online(data)
-
+        try:
+            root = self._toolbox_game_root()
+        except Exception as exc:  # noqa: BLE001
+            data["local_error"] = str(exc)
             return {"success": True, "data": data}
-        except Exception as e:  # noqa: BLE001
-            self.log_error(e)
-            return {"success": False, "message": str(e)}
 
-    def _toolbox_fill_online(self, data):
-        """填充在线部分（season/access/catalog）：任何一项失败不影响其它。"""
+        data["game_root"] = root
+
+        try:
+            from webutils.toolbox import state
+
+            recovered = state.recover_if_needed(root)
+            if recovered:
+                data["recovered"] = recovered
+        except Exception as exc:  # noqa: BLE001
+            self.log_error(exc)
+
+        try:
+            from webutils.toolbox import runtime
+
+            data["game_running"] = runtime.is_game_running(root)
+        except Exception:  # noqa: BLE001
+            data["game_running"] = None
+
+        try:
+            from webutils.toolbox import install
+
+            data["local"] = install.list_installed(root)
+        except Exception as exc:  # noqa: BLE001
+            self.log_error(exc)
+            data["local_error"] = str(exc)
+
+        return {"success": True, "data": data}
+
+    # -- 状态：在线分片 -----------------------------------------------------
+
+    def toolbox_status_online(self, force=False):
+        """在线分片：season / access / catalog / afdian，逐片上报失败。
+
+        任何一片失败都只记进 ``errors[part]``，不影响其它片 —— 断网时用户
+        仍然能看到本地状态与上一次的目录（JS 侧保留旧快照）。
+        """
+        cache = getattr(self, "_toolbox_online_cache", None)
+        if not force and cache and (time.monotonic() - cache[0]) < ONLINE_CACHE_TTL:
+            return {"success": True, "data": cache[1]}
+
+        data = {
+            "protocol_version": BRIDGE_PROTOCOL_VERSION,
+            "logged_in": False,
+            "base_url": "",
+            "user": None,
+            "season": None,
+            "access": None,
+            "catalog": None,
+            "afdian": None,
+            "errors": {},
+            "generation": None,
+            "fetched_at": _now_iso(),
+        }
+        errors = data["errors"]
+
         try:
             api = self._toolbox_api()
         except Exception as exc:  # noqa: BLE001
-            data["online_error"] = str(exc)
-            return
-        data["logged_in"] = api.is_logged_in()
+            errors["api"] = _error_payload(exc)
+            return {"success": True, "data": data}
+
         data["base_url"] = getattr(api, "base_url", "") or ""
+        try:
+            data["logged_in"] = bool(api.is_logged_in())
+        except Exception:  # noqa: BLE001
+            data["logged_in"] = False
+
         try:
             data["season"] = api.season()
         except Exception as exc:  # noqa: BLE001
             logger.info("订阅工具：赛季公开信息获取失败 %s", exc)
-        try:
-            data["online"] = api.access() if api.is_logged_in() else None
-        except Exception as exc:  # noqa: BLE001
-            # 在线失败不影响本地管理能力
-            data["online_error"] = str(exc)
+            errors["season"] = _error_payload(exc)
+
+        if data["logged_in"]:
+            # ⚠️ access 必须先于 catalog：见模块 docstring 的刷新顺序说明。
+            try:
+                data["access"] = api.access()
+            except Exception as exc:  # noqa: BLE001
+                errors["access"] = _error_payload(exc)
+
         try:
             # 名单公开（2026-10-30）：未登录也能看，逐条 downloadable 决定可否安装
             data["catalog"] = api.catalog()
         except Exception as exc:  # noqa: BLE001
-            data["catalog_error"] = str(exc)
-        if api.is_logged_in():
+            errors["catalog"] = _error_payload(exc)
+
+        if data["logged_in"]:
             try:
                 data["user"] = api.current_user()
             except Exception:  # noqa: BLE001
@@ -180,6 +346,58 @@ class ToolboxMixin:
             except Exception:  # noqa: BLE001
                 data["afdian"] = None
 
+        access = data["access"] if isinstance(data["access"], dict) else {}
+        catalog = data["catalog"] if isinstance(data["catalog"], dict) else {}
+        generation = access.get("generation")
+        if generation is None:
+            generation = catalog.get("generation")
+        data["generation"] = generation
+
+        self._toolbox_online_cache = (time.monotonic(), data)
+        return {"success": True, "data": data}
+
+    def toolbox_status(self):
+        """本地快照 + 在线分片的组合（保留旧字段，兼容既有调用方）。
+
+        旧字段映射：``online``←access、``online_error``←access 错误、
+        ``catalog_error``←catalog 错误。新调用方应改用
+        ``toolbox_status_local`` / ``toolbox_status_online`` 两段式。
+        """
+        try:
+            local = self.toolbox_status_local()
+            data = dict(local.get("data") or {})
+            online_res = self.toolbox_status_online()
+            online = online_res.get("data") or {}
+            errors = online.get("errors") or {}
+            data.update({
+                "logged_in": online.get("logged_in", False),
+                "base_url": online.get("base_url", ""),
+                "season": online.get("season"),
+                "online": online.get("access"),
+                "catalog": online.get("catalog"),
+                "user": online.get("user"),
+                "afdian": online.get("afdian"),
+                "online_error": (errors.get("access") or {}).get("message"),
+                "catalog_error": (errors.get("catalog") or {}).get("message"),
+                "errors": errors,
+                "generation": online.get("generation"),
+                "fetched_at": online.get("fetched_at"),
+            })
+            return {"success": True, "data": data}
+        except Exception as e:  # noqa: BLE001
+            self.log_error(e)
+            return _error_payload(e)
+
+    # -- 任务坞 -------------------------------------------------------------
+
+    def toolbox_task_status(self):
+        """安装/下载任务快照（切页、重开页面后仍可恢复展示）。"""
+        try:
+            return {"success": True, "data": self._toolbox_task_registry().snapshot()}
+        except Exception as e:  # noqa: BLE001
+            self.log_error(e)
+            return _error_payload(e)
+
     # -- 登录 --------------------------------------------------------------
 
     def toolbox_login(self, identifier, password):
@@ -188,26 +406,61 @@ class ToolboxMixin:
             api = self._toolbox_api()
             api.login(str(identifier or ""), str(password or ""))
             self.log_ui("订阅工具：已登录资源站")
+            self._toolbox_online_cache = None
             return {"success": True, "message": "登录成功"}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_logout(self):
         try:
             self._toolbox_api().logout()
             self.log_ui("订阅工具：已登出（服务端会话已撤销）")
+            self._toolbox_online_cache = None
             return {"success": True}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_current_user(self):
         try:
             return {"success": True, "data": self._toolbox_api().current_user()}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
+
+    # -- 站点跳转（注册 / 找回密码走系统浏览器）-----------------------------
+
+    def toolbox_open_site(self, path="/"):
+        """用系统浏览器打开资源站页面（只接受白名单路径）。
+
+        注册与找回密码**不在客户端内嵌**（2026-11-01 决策）：它们涉及邮件
+        往返，交给站点页面更直接。``redirect_uri`` 与域名都来自本地配置，
+        不接受调用方传入主机 —— 与「JS 不传 URL」的边界一致。
+        """
+        try:
+            target = str(path or "/").strip() or "/"
+            if target not in SITE_PATHS:
+                return {
+                    "success": False,
+                    "code": "invalid_target",
+                    "message": "只支持打开资源站的内置页面",
+                }
+            base = str(getattr(self._toolbox_api(), "base_url", "") or "").rstrip("/")
+            if not base.startswith(("https://", "http://")):
+                return {
+                    "success": False,
+                    "code": "invalid_target",
+                    "message": "资源站地址无效，请检查配置",
+                }
+            url = base + ("" if target == "/" else target)
+            import webbrowser
+
+            webbrowser.open(url)
+            return {"success": True, "data": {"url": url}}
+        except Exception as e:  # noqa: BLE001
+            self.log_error(e)
+            return _error_payload(e)
 
     # -- 解锁（赛季资格）---------------------------------------------------
 
@@ -217,7 +470,7 @@ class ToolboxMixin:
             return {"success": True, "data": self._toolbox_api().season()}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_new_challenge(self):
         """获取个人当季谜题（响应**不含答案**，需用户自己解出）。"""
@@ -225,7 +478,7 @@ class ToolboxMixin:
             return {"success": True, "data": self._toolbox_api().new_challenge()}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_solve(self, challenge_id, answer):
         try:
@@ -233,14 +486,14 @@ class ToolboxMixin:
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_afdian_status(self):
         try:
             return {"success": True, "data": self._toolbox_api().afdian_status()}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_afdian_bind_url(self):
         """取爱发电授权地址并用**系统浏览器**打开（redirect_uri 只来自服务端配置）。
@@ -260,12 +513,13 @@ class ToolboxMixin:
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_afdian_refresh(self):
         """刷新订阅状态：服务端重新拉取该赞助者全部订单并自动核验（幂等）。"""
         try:
             data = self._toolbox_api().afdian_refresh()
+            self._toolbox_online_cache = None
             self.log_ui(
                 "订阅工具：订阅状态已刷新（扫描 {scanned}，核验 {verified}）".format(
                     scanned=data.get("scanned", 0), verified=data.get("verified", 0)
@@ -274,23 +528,24 @@ class ToolboxMixin:
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_verify_order(self, order_no):
         try:
             data = self._toolbox_api().verify_order(str(order_no or ""))
+            self._toolbox_online_cache = None
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_catalog(self):
-        """当前季可获取内容（需已解锁）。"""
+        """当前季可获取内容（游客可浏览；逐条 downloadable 决定可否安装）。"""
         try:
             return {"success": True, "data": self._toolbox_api().catalog()}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     # -- 启动鉴权：设备授权（TPM，2026-10-27）--------------------------------
 
@@ -311,7 +566,7 @@ class ToolboxMixin:
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_authz_enable(self, display_name=""):
         """启用本机（生成/复用 TPM 密钥并注册）。
@@ -324,7 +579,7 @@ class ToolboxMixin:
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_authz_disable(self):
         """撤销本机授权并清除本地凭据。"""
@@ -332,7 +587,7 @@ class ToolboxMixin:
             return {"success": True, "data": self._toolbox_api().disable_device()}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_authz_revoke(self, device_id):
         """撤销指定设备（管理另一台机器时用）。"""
@@ -341,7 +596,7 @@ class ToolboxMixin:
                     "data": self._toolbox_api().revoke_device(str(device_id or ""))}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     # -- 安装管理 ----------------------------------------------------------
 
@@ -353,7 +608,7 @@ class ToolboxMixin:
             return {"success": True, "data": install.list_installed(self._toolbox_game_root())}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_set_enabled(self, tool_id, enabled):
         """启用/停用（本地操作，**不需要**在线资格）。"""
@@ -365,10 +620,13 @@ class ToolboxMixin:
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_uninstall(self, tool_id, remove_config=False):
-        """卸载受管插件/文件包（本地操作，离线可用）。"""
+        """卸载受管插件/文件包（本地操作，离线可用）。
+
+        ``remove_config``：插件卸载后是否一并清理其 BepInEx 配置（默认保留）。
+        """
         try:
             from webutils.toolbox import install, state
 
@@ -383,7 +641,7 @@ class ToolboxMixin:
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_rollback(self, tool_id):
         """回滚到本地备份（离线可用）。"""
@@ -400,7 +658,7 @@ class ToolboxMixin:
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_verify_integrity(self, tool_id):
         try:
@@ -416,7 +674,7 @@ class ToolboxMixin:
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_open_folder(self, tool_id=""):
         """在资源管理器中打开受管目录（只打开受管区，不接受任意路径）。"""
@@ -443,7 +701,7 @@ class ToolboxMixin:
             return {"success": True, "data": {"path": str(target)}}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_open_downloads(self):
         """打开系统「下载」目录（仅下载类工具的落点）。"""
@@ -460,7 +718,7 @@ class ToolboxMixin:
             return {"success": True, "data": {"path": target}}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_sync_mirror_login(self, force=False):
         """把 Mod 镜像站当前保存的登录态同步为 LCTA 订阅工具会话。
@@ -478,7 +736,7 @@ class ToolboxMixin:
             data = mod_mirror_get_auth() or {}
             token = str(data.get("access_token") or "")
             if not token:
-                return {"success": False, "message": "镜像站尚未登录，无法同步"}
+                return {"success": False, "code": "not_logged_in", "message": "镜像站尚未登录，无法同步"}
             api = self._toolbox_api()
             if api.is_logged_in() and not force:
                 return {"success": True, "data": {"synced": False, "message": "客户端已有登录会话"}}
@@ -489,11 +747,12 @@ class ToolboxMixin:
                 except (ValueError, TypeError):
                     user = None
             api.save_auth({"access_token": token, "user": user if isinstance(user, dict) else None})
+            self._toolbox_online_cache = None
             self.log_ui("订阅工具：已从 Mod 镜像站同步登录态（仅 access token）")
             return {"success": True, "data": {"synced": True}}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
 
     def toolbox_install(self, tool_id, release_id, confirm_foreign=False, modal_id="false"):
         """一键安装/更新插件、文件包或仅下载（清单驱动，需要下载资格）。"""
@@ -524,7 +783,10 @@ class ToolboxMixin:
     def toolbox_download_file(self, tool_id, release_id, file_name, sha256, modal_id="false"):
         """下载清单内的单个文件到系统「下载」目录（镜像站嵌入模式用）。"""
         if not _task_lock.acquire(blocking=False):
-            return {"success": False, "message": "已有下载/安装任务在进行中，请稍候"}
+            return {"success": False, "code": "in_progress", "message": "已有下载/安装任务在进行中，请稍候"}
+        task = self._toolbox_task_registry().start(
+            "download", tool_id, release_id, f"下载文件 {file_name}"
+        )
         try:
             from webutils.toolbox import download
 
@@ -539,43 +801,56 @@ class ToolboxMixin:
                 None,
             )
             if meta is None:
-                return {"success": False, "message": "该文件不在当前版本的签名清单内"}
+                raise ToolboxBridgeError("file_not_in_manifest", "该文件不在当前版本的签名清单内")
             ticket = api.download_ticket(int(tool_id), str(release_id), name, sha)
             url = ticket.get("download_url")
             if not url:
-                return {"success": False, "message": "服务端未返回下载地址"}
+                raise ToolboxBridgeError("ticket_no_url", "服务端未返回下载地址")
             self._toolbox_progress(modal_id, 10, f"下载 {name}…")
             stub = download.fetch_or_reuse(url, sha, expected_size=meta.get("size"))
             folder = str(manifest.get("tool_dir") or tool_id)
             saved = download.save_to_downloads([(name, stub)], folder)
             self._toolbox_progress(modal_id, 100, "下载完成")
+            self._toolbox_task_registry().finish(True, "下载完成")
             return {"success": True, "data": {"save_paths": [str(p) for p in saved]}}
         except Exception as e:  # noqa: BLE001
+            self._toolbox_task_registry().finish(False, str(getattr(e, "message", "") or e))
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
         finally:
             _task_lock.release()
 
     def _toolbox_install_guarded(self, tool_id, release_id, *, allowed_kinds,
                                  confirm_foreign=False, modal_id="false"):
         if not _task_lock.acquire(blocking=False):
-            return {"success": False, "message": "已有安装任务在进行中，请稍候"}
+            return {"success": False, "code": "in_progress", "message": "已有安装任务在进行中，请稍候"}
+        task = self._toolbox_task_registry().start(
+            "install", tool_id, release_id, f"安装 {tool_id}"
+        )
         try:
-            return self._toolbox_install_impl(
+            result = self._toolbox_install_impl(
                 tool_id, release_id,
                 allowed_kinds=allowed_kinds,
                 confirm_foreign=confirm_foreign,
                 modal_id=modal_id,
             )
+            ok = bool(result.get("success"))
+            self._toolbox_task_registry().finish(
+                ok, str(result.get("message") or ("安装完成" if ok else "安装失败"))
+            )
+            return result
         except Exception as e:  # noqa: BLE001
+            self._toolbox_task_registry().finish(
+                False, str(getattr(e, "message", "") or e)
+            )
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            return _error_payload(e)
         finally:
             _task_lock.release()
 
     def _toolbox_install_impl(self, tool_id, release_id, *, allowed_kinds,
                               confirm_foreign=False, modal_id="false"):
-        from webutils.toolbox import install
+        from webutils.toolbox import install  # noqa: F401 — 保持导入失败可被上层捕获
 
         api = self._toolbox_api()
         manifest, kind, files = self._toolbox_fetch_verified_manifest(api, tool_id, release_id)
@@ -586,10 +861,10 @@ class ToolboxMixin:
                 INSTALL_KIND_PACKAGE: "文件包",
                 INSTALL_KIND_DOWNLOAD: "仅下载",
             }.get(kind, kind)
-            return {
-                "success": False,
-                "message": f"该版本是{label}（install_kind={kind}），请使用对应入口",
-            }
+            raise ToolboxBridgeError(
+                "install_kind_mismatch",
+                f"该版本是{label}（install_kind={kind}），请使用对应入口",
+            )
 
         if kind == INSTALL_KIND_DOWNLOAD:
             return self._toolbox_install_download_impl(
@@ -636,7 +911,7 @@ class ToolboxMixin:
 
         stubs = self._toolbox_download_all_files(api, tool_id, release_id, files, modal_id)
         if len(stubs) != 1:
-            raise ValueError("底座清单必须恰好声明一个整包文件")
+            raise ToolboxBridgeError("manifest_bad_runtime", "底座清单必须恰好声明一个整包文件")
         self._toolbox_progress(modal_id, 90, "安装底座…")
         plan = install.InstallPlan(
             kind="runtime",
@@ -656,7 +931,7 @@ class ToolboxMixin:
 
         target_dir = str(manifest.get("target_dir") or "")
         if not target_dir:
-            raise ValueError("文件包清单缺少 target_dir，拒绝安装")
+            raise ToolboxBridgeError("manifest_bad_target", "文件包清单缺少 target_dir，拒绝安装")
         stubs = self._toolbox_download_all_files(api, tool_id, release_id, files, modal_id)
         sources = [
             (str(meta.get("path") or ""), stub)
@@ -712,26 +987,35 @@ class ToolboxMixin:
         signature = manifest_out.get("signature")
 
         if not signature:
-            raise ValueError("该版本没有签名清单，拒绝安装（一键安装契约）")
+            raise ToolboxBridgeError(
+                "manifest_unsigned", "该版本没有签名清单，拒绝安装（一键安装契约）"
+            )
         pub = self._manifest_public_key()
         if not pub or not ed25519.verify_from_der_public_key(
             pub, self._b64(signature), ed25519.canonical_bytes(manifest)
         ):
-            raise ValueError("清单签名校验失败，拒绝安装")
+            raise ToolboxBridgeError("signature_invalid", "清单签名校验失败，拒绝安装")
 
         kind = str(manifest.get("install_kind") or "")
         if kind not in INSTALL_KINDS:
-            raise ValueError(f"未知的安装类型（install_kind={kind or '缺失'}），拒绝安装")
+            raise ToolboxBridgeError(
+                "install_kind_unknown",
+                f"未知的安装类型（install_kind={kind or '缺失'}），拒绝安装",
+            )
         if kind == INSTALL_KIND_PACKAGE:
             target_dir = str(manifest.get("target_dir") or "")
             if not target_dir:
-                raise ValueError("文件包清单缺少 target_dir，拒绝安装")
+                raise ToolboxBridgeError(
+                    "manifest_bad_target", "文件包清单缺少 target_dir，拒绝安装"
+                )
         if kind == INSTALL_KIND_DOWNLOAD and manifest.get("target_dir"):
-            raise ValueError("仅下载清单不应包含 target_dir，拒绝安装")
+            raise ToolboxBridgeError(
+                "manifest_bad_target", "仅下载清单不应包含 target_dir，拒绝安装"
+            )
 
         files = manifest.get("files") or []
         if not files:
-            raise ValueError("清单没有文件，拒绝安装")
+            raise ToolboxBridgeError("manifest_no_files", "清单没有文件，拒绝安装")
         return manifest, kind, files
 
     def _toolbox_download_all_files(self, api, tool_id, release_id, files, modal_id="false"):
@@ -744,11 +1028,13 @@ class ToolboxMixin:
             name = str(f.get("path") or "")
             sha = str(f.get("sha256") or "").lower()
             if not name or len(sha) != 64:
-                raise ValueError(f"清单文件项缺少 path/sha256：{name or '未知'}")
+                raise ToolboxBridgeError(
+                    "manifest_bad_file", f"清单文件项缺少 path/sha256：{name or '未知'}"
+                )
             ticket = api.download_ticket(int(tool_id), str(release_id), name, sha)
             url = ticket.get("download_url")
             if not url:
-                raise ValueError(f"服务端未返回下载地址：{name}")
+                raise ToolboxBridgeError("ticket_no_url", f"服务端未返回下载地址：{name}")
 
             base_pct = 5 + int(80 * idx / total)
 
@@ -764,7 +1050,11 @@ class ToolboxMixin:
         return paths
 
     def _toolbox_progress(self, modal_id, percent, text):
-        """更新进度模态框；modal_id 无效/空时静默（主页面可直接用 toast）。"""
+        """更新任务坞与进度模态框；两者失败都只静默。"""
+        try:
+            self._toolbox_task_registry().progress(percent, text)
+        except Exception:  # noqa: BLE001 - 任务记录失败不影响安装
+            pass
         try:
             if modal_id and str(modal_id) != "false" and hasattr(self, "update_modal_progress"):
                 self.update_modal_progress(percent, text, modal_id)
@@ -827,4 +1117,7 @@ class ToolboxMixin:
             return {"success": True, "data": {"game_root": str(resolved)}}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
-            return {"success": False, "message": str(e)}
+            payload = _error_payload(e)
+            if payload["code"] == "error":
+                payload["code"] = "invalid_game_root"
+            return payload

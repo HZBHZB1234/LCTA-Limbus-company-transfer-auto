@@ -567,3 +567,120 @@ class TestStatusSeasonAndCatalog:
         assert d["online"] is None
         assert d["catalog"] is not None
         assert d["user"] is None and d["afdian"] is None
+
+
+class TestStatusSplit:
+    """2026-11-01 重构：状态拆两段 —— 本地毫秒级、在线分片报错。"""
+
+    def test_status_local_does_not_touch_network(self, game):
+        """本地快照必须**零在线请求**：断网也要秒出首屏。"""
+        api = _FakeApi(raise_on={"season", "access", "catalog"})
+        b = _make_bridge(game, api=api)
+        r = b.toolbox_status_local()
+        assert r["success"] is True
+        assert r["data"]["local"] is not None
+        assert api.calls == [], "本地快照不应发起任何在线请求"
+        assert r["data"]["protocol_version"] >= 3
+
+    def test_status_local_reports_missing_root_without_failing(self, tmp_path):
+        """没有游戏目录是**可展示的状态**，不是异常（首屏仍要能渲染）。"""
+        b = _make_bridge(tmp_path, game_root=False)
+        r = b.toolbox_status_local()
+        assert r["success"] is True
+        assert "游戏目录" in r["data"]["local_error"]
+
+    def test_status_online_isolates_part_failures(self, game):
+        """一片失败不影响其它片：season/access 正常，catalog 单独报错。"""
+
+        def _catalog_boom():
+            api.calls.append("catalog")
+            raise RuntimeError("catalog 失败（模拟网络错误）")
+
+        api = _FakeApi()
+        api.catalog = _catalog_boom
+        b = _make_bridge(game, api=api)
+        d = b.toolbox_status_online()["data"]
+        assert d["season"]["name"] == "S1"
+        assert d["access"] is not None
+        assert d["catalog"] is None
+        assert "catalog" in d["errors"] and d["errors"]["catalog"]["message"]
+
+    def test_status_online_always_carries_timestamp(self, game):
+        b = _make_bridge(game)
+        d = b.toolbox_status_online()["data"]
+        assert d["fetched_at"], "前端需要「最后更新时间」来区分缓存与实时"
+        assert d["protocol_version"] >= 3
+
+    def test_access_precedes_catalog(self, game):
+        """catalog 走 get_optional_user：access 先跑才能刷新过期 token。
+
+        顺序反了会出现「已登录却整页显示需要订阅」的假象（见桥接层 docstring）。
+        """
+        api = _FakeApi()
+        b = _make_bridge(game, api=api)
+        b.toolbox_status_online(force=True)
+        assert api.calls.index("access") < api.calls.index("catalog")
+
+
+class TestOpenSite:
+    """站点跳转：只走**白名单** + 系统浏览器，不接受任意 URL。"""
+
+    def _bridge(self, game, monkeypatch):
+        opened = []
+        import webbrowser
+
+        monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
+        return _make_bridge(game), opened
+
+    @pytest.mark.parametrize("path", ["/register", "/forgot-password", "/toolbox", "/"])
+    def test_allowed_paths_open_in_browser(self, game, monkeypatch, path):
+        b, opened = self._bridge(game, monkeypatch)
+        r = b.toolbox_open_site(path)
+        assert r["success"] is True
+        assert len(opened) == 1
+        assert opened[0].startswith("https://mods.lcta.test")
+        assert not opened[0].endswith("//")
+
+    @pytest.mark.parametrize("path", [
+        "https://evil.example/steal",
+        "//evil.example",
+        "/admin",
+        "/register?next=https://evil.example",
+        "javascript:alert(1)",
+    ])
+    def test_arbitrary_targets_refused(self, game, monkeypatch, path):
+        b, opened = self._bridge(game, monkeypatch)
+        r = b.toolbox_open_site(path)
+        assert r["success"] is False
+        assert r["code"] == "invalid_target"
+        assert opened == [], "非法目标一律不许交给浏览器"
+
+
+class TestTaskDock:
+    """任务坞：切页/重开页面后仍能看到刚才的安装结果。"""
+
+    def test_snapshot_empty_by_default(self, game):
+        b = _make_bridge(game)
+        d = b.toolbox_task_status()["data"]
+        assert d["running"] is False
+        assert d["current"] is None
+        assert d["history"] == []
+
+    def test_failed_install_recorded_in_history(self, game):
+        b = _make_bridge(game)  # _FakeApi.manifest 无签名 → 拒绝安装
+        r = b.toolbox_install(1, "r1")
+        assert r["success"] is False
+        d = b.toolbox_task_status()["data"]
+        assert d["running"] is False
+        assert d["history"], "失败的任务也应留下记录"
+        last = d["history"][-1]
+        assert last["status"] == "failed"
+        assert last["tool_id"] == "1"
+        assert last["message"]
+
+    def test_manifest_errors_carry_codes(self, game):
+        """错误码供前端分支（重试 / 引导登录 / 打开设置），文案保持不变。"""
+        b = _make_bridge(game)
+        r = b.toolbox_install(1, "r1")
+        assert r["code"] == "manifest_unsigned"
+        assert "签名" in r["message"]

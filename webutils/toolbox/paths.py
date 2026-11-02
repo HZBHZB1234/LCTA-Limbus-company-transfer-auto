@@ -381,6 +381,44 @@ def assert_managed_target(
     assert_not_link(t)
 
 
+def assert_runtime_target(
+    game_root: os.PathLike | str,
+    target: os.PathLike | str,
+) -> None:
+    """底座的删除/恢复前断言：允许游戏根下的底座文件，但守住两条底线。
+
+    ``assert_managed_target`` 只认 ``.lcta-toolbox`` / ``BepInEx/plugins/LCTA``，
+    而底座按设计就落在游戏根（``winhttp.dll``、``doorstop_config.ini``、
+    ``BepInEx/core/*``、``dotnet/*``）—— 直接复用它会把这些文件全部拒之门外，
+    "装了底座就卸不掉"。所以底座单独一条断言：
+
+    - 目标必须在游戏目录内，且不能是目录根本身；
+    - 不能是链接（防符号链接穿越）；
+    - **永远拒绝**游戏本体文件（``LimbusCompany.exe`` / ``GameAssembly.dll`` /
+      ``UnityPlayer.dll``）：即便清单被篡改，也不允许动游戏本体。
+
+    真正防误删的是调用方：只处理 ``RuntimeEntry.files`` 登记过、且哈希仍匹配
+    的文件。
+    """
+    root = Path(game_root).resolve()
+    t = Path(target)
+    if not is_within(t, root):
+        raise UnsafePathError(f"拒绝操作游戏目录外的路径：{t}")
+    if Path(t).resolve() == root:
+        raise UnsafePathError("拒绝把游戏目录本身当作目标")
+    assert_not_link(t)
+    if t.name.casefold() in _GAME_OWN_FILES:
+        raise UnsafePathError(f"拒绝改动游戏本体文件：{t.name}")
+
+
+# 游戏本体文件（底座永远不该包含、删除时一律拒绝）
+_GAME_OWN_FILES = frozenset({
+    "limbuscompany.exe",
+    "gameassembly.dll",
+    "unityplayer.dll",
+})
+
+
 def safe_join_under(base: os.PathLike | str, *parts: str) -> Path:
     """在 base 下安全拼接（每段都按成员名规则净化）。"""
     rel = "/".join(sanitize_member_name(p) for p in parts)

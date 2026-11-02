@@ -105,6 +105,14 @@ def detect_conflicts(game_root: os.PathLike | str) -> Dict[str, object]:
 
     识别「受管旧版 / 其他框架 / 未知修改」，供界面提示用户确认，
     **不**静默覆盖别人的文件。
+
+    ## LimiNex 遗留（2026-11-02）
+
+    旧版把 BepInEx 挂载做在 cheat core 里（``BepInEx/lcta-liminex.json``
+    标记 + 游戏根 ``il2cpp_mappings.txt`` / ``BepInEx/mapping-source.dat``）。
+    该实现已被 Zylarnex 底座取代并移除，但存量用户的磁盘上还留着这些痕迹。
+    这里只**识别并上报**（``liminex_legacy``），不删除任何东西 —— 接管由用户
+    在订阅工具页显式确认（覆盖安装会 journal 备份原文件，不会丢）。
     """
     root = Path(game_root)
     manifest = state.Manifest.load(root)
@@ -117,6 +125,12 @@ def detect_conflicts(game_root: os.PathLike | str) -> Dict[str, object]:
         "doorstop_config": (root / "doorstop_config.ini").exists(),
         "dotnet_dir": (root / "dotnet").is_dir(),
     }
+    # LimiNex 遗留痕迹：标记文件或它独有的两个 mapping 产物
+    liminex_marker = (root / "BepInEx" / "lcta-liminex.json").exists()
+    liminex_artifacts = (root / "il2cpp_mappings.txt").exists() or (
+        root / "BepInEx" / "mapping-source.dat"
+    ).exists()
+    out["liminex_legacy"] = bool(liminex_marker or (liminex_artifacts and out["bepinex_dir"]))
     # 有 BepInEx 但没有受管记录 → 可能是外部安装，需要用户确认
     out["foreign_loader"] = bool(out["bepinex_dir"]) and not out["managed_runtime"]
     return out
@@ -315,6 +329,19 @@ def install_plugin(
                     )
                 )
 
+            # 旧版本有、新版本没有的文件：**只删哈希仍匹配的受管文件**（2026-11-02）
+            #
+            # 不清理会怎样：旧版 DLL 留在 BepInEx/plugins/LCTA/<tool> 里，BepInEx
+            # 照样扫描加载 —— 轻则双版本共存（改的是旧 DLL），重则类型冲突直接崩。
+            # 文件包安装早就有这段逻辑，插件一直没有。
+            if existing:
+                stale = _remove_stale_plugin_files(
+                    root, journal, existing=existing, keep_rels=set(),
+                    new_files=new_files,
+                )
+                if stale:
+                    logger.info("插件 %s 更新后清理旧文件 %d 个", tool_id, len(stale))
+
             manifest.plugins[tool_id] = state.PluginEntry(
                 tool_id=tool_id,
                 release_id=plan.release_id,
@@ -352,6 +379,59 @@ def install_plugin(
         "enabled": was_enabled,
         "files": len(new_files),
     }
+
+
+def _remove_stale_plugin_files(
+    root: Path,
+    journal: "state.Journal",
+    *,
+    existing: "state.PluginEntry",
+    keep_rels: set,
+    new_files: List["state.ManagedFile"],
+) -> List[str]:
+    """删除旧版本残留的插件文件（哈希仍匹配才删）。
+
+    ``keep_rels`` 显式保留的相对路径集合（当前实现传空集：新清单里的文件
+    已经在写入阶段覆盖过，旧条目若同名会被 ``new_files`` 覆盖，不需要保留）。
+    用户改过的文件（哈希不符）保留并告警 —— 与文件包卸载同一口径。
+    """
+    keep = {str(r).casefold() for r in keep_rels}
+    keep |= {f.relative_path.casefold() for f in new_files}
+    removed: List[str] = []
+    bases = (
+        paths.plugin_dir(root, existing.tool_id),
+        paths.disabled_dir(root, existing.tool_id, existing.release_id),
+    )
+    for old in existing.files:
+        rel = str(old.relative_path or "")
+        if not rel or rel.casefold() in keep:
+            continue
+        for base in bases:
+            try:
+                stale = paths.resolve_within(base, rel)
+            except paths.UnsafePathError:
+                continue
+            if not stale.exists():
+                continue
+            if old.sha256 and paths.short_hash(stale) != old.sha256:
+                logger.warning("插件 %s 的旧文件被用户修改，保留不删：%s", existing.tool_id, stale)
+                continue
+            try:
+                paths.assert_managed_target(root, stale)
+            except paths.UnsafePathError:
+                continue
+            backup_rel = (
+                f"plugin/{existing.tool_id}/{existing.release_id}/removed__"
+                f"{rel.replace('/', '__')}"
+            )
+            backup = state.backup_file(root, stale, backup_rel)
+            journal.add_entry(stale, backup_rel=backup, existed=True)
+            try:
+                stale.unlink()
+                removed.append(str(stale))
+            except OSError:
+                logger.warning("删除旧插件文件失败：%s", stale, exc_info=True)
+    return removed
 
 
 def install_package(
@@ -493,6 +573,147 @@ def install_package(
         "release_id": plan.release_id,
         "target_dir": plan.target_dir,
         "files": len(written),
+    }
+
+
+def uninstall_runtime(
+    game_root: os.PathLike | str,
+    *,
+    restore_originals: bool = True,
+) -> Dict[str, object]:
+    """卸载工具箱底座（Zylarnex）：**只动自己登记过的文件**。
+
+    ## 为什么必须有这个函数（2026-11-02）
+
+    底座是插件的前置（``requires_runtime``），历史上只有 ``install_runtime``
+    没有卸载入口：一旦装上就再也回不到裸跑。旧版 LimiNex 挂载有 ``unmount``
+    作对照，迁移到订阅工具底座后这个能力不能丢。
+
+    ## 语义
+
+    - 只处理 ``RuntimeEntry.files`` 登记过、且**哈希仍匹配**的文件；
+      被用户改过的文件跳过并上报（不静默覆盖用户改动）；
+    - ``restore_originals=True``（默认）：安装时被覆盖过的原始文件（
+      ``existed_before`` + ``backup_path``）**还原回去**，其余删除 ——
+      效果等于"回到装底座之前"；
+    - ``BepInEx/plugins`` 下的用户插件**一律不动**（它们不在底座清单里，
+      这与旧 LimiNex 整目录删除的做法不同）；
+    - 全程 journal + 备份，失败可回滚。
+
+    游戏运行中拒绝（文件被锁）。
+    """
+    root = paths.validate_game_root(game_root)
+    manifest = state.Manifest.load(root)
+    entry = manifest.runtime
+    if entry is None:
+        raise InstallError(E_NOT_MANAGED, "本机没有受管的工具箱底座")
+
+    removed = 0
+    restored = 0
+    skipped: List[str] = []
+    with runtime.game_lock(root):
+        runtime.assert_can_install(root)
+
+        journal = state.Journal(root)
+        journal.begin("uninstall_runtime", "runtime")
+        try:
+            for f in entry.files:
+                try:
+                    target = paths.resolve_within(root, f.relative_path)
+                except paths.UnsafePathError:
+                    skipped.append(f.relative_path)
+                    continue
+                if not target.exists():
+                    continue
+                if f.sha256 and paths.short_hash(target) != f.sha256:
+                    # 用户改过 → 不删不还原，交由用户决定
+                    skipped.append(f.relative_path)
+                    continue
+                try:
+                    paths.assert_runtime_target(root, target)
+                except paths.UnsafePathError:
+                    skipped.append(f.relative_path)
+                    continue
+
+                backup_rel = None
+                if restore_originals and f.existed_before and f.backup_path:
+                    backup = paths.resolve_within(paths.backups_dir(root), f.backup_path)
+                    if backup.exists():
+                        # 先登记、再改写：中断后 journal 能把它恢复成"删除前"
+                        current = state.backup_file(
+                            root, target,
+                            f"runtime/{entry.release_id}/uninstall__"
+                            f"{f.relative_path.replace('/', '__')}",
+                        )
+                        journal.add_entry(target, backup_rel=current, existed=True)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(str(backup), str(target))
+                        restored += 1
+                        continue
+                current = state.backup_file(
+                    root, target,
+                    f"runtime/{entry.release_id}/uninstall__"
+                    f"{f.relative_path.replace('/', '__')}",
+                )
+                journal.add_entry(target, backup_rel=current, existed=True)
+                target.unlink()
+                removed += 1
+
+            _prune_empty_dirs(root / "BepInEx" / "core")
+            _prune_empty_dirs(root / "dotnet")
+            manifest.runtime = None
+            manifest.save()
+            journal.set_state(state.STATE_DONE)
+            journal.clear()
+        except BaseException:
+            logger.exception("底座卸载失败，回滚")
+            state.restore_from_journal(root, journal)
+            journal.clear()
+            raise
+
+    return {
+        "ok": True,
+        "kind": "runtime",
+        "release_id": entry.release_id,
+        "removed": removed,
+        "restored": restored,
+        "skipped": skipped,
+    }
+
+
+def rollback_runtime(game_root: os.PathLike | str) -> Dict[str, object]:
+    """把底座文件还原为安装前的内容（保留受管记录，由卸载负责清空）。
+
+    与 ``rollback_plugin`` 同语义：只按 ``backup_path`` 还原，找不到备份的
+    文件列入 ``missing_backup``。
+    """
+    root = paths.validate_game_root(game_root)
+    manifest = state.Manifest.load(root)
+    entry = manifest.runtime
+    if entry is None:
+        raise InstallError(E_NOT_MANAGED, "本机没有受管的工具箱底座")
+
+    restored: List[str] = []
+    missing: List[str] = []
+    with runtime.game_lock(root):
+        runtime.assert_can_install(root)
+        for f in entry.files:
+            if not f.backup_path:
+                continue
+            backup = paths.resolve_within(paths.backups_dir(root), f.backup_path)
+            if not backup.exists():
+                missing.append(f.relative_path)
+                continue
+            target = paths.resolve_within(root, f.relative_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(backup), str(target))
+            restored.append(f.relative_path)
+
+    return {
+        "ok": bool(restored) or not missing,
+        "kind": "runtime",
+        "restored": restored,
+        "missing_backup": missing,
     }
 
 

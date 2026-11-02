@@ -623,9 +623,13 @@ class ToolboxMixin:
             return _error_payload(e)
 
     def toolbox_uninstall(self, tool_id, remove_config=False):
-        """卸载受管插件/文件包（本地操作，离线可用）。
+        """卸载受管插件/文件包/底座（本地操作，离线可用）。
 
         ``remove_config``：插件卸载后是否一并清理其 BepInEx 配置（默认保留）。
+
+        ``tool_id`` 传空字符串或 ``"runtime"`` 表示卸载**底座**：底座是插件的
+        前置，历史版本只有安装没有卸载入口，装上就回不到裸跑。卸载只动底座
+        清单登记过且哈希仍匹配的文件，``BepInEx/plugins`` 里的用户插件保留。
         """
         try:
             from webutils.toolbox import install, state
@@ -633,10 +637,16 @@ class ToolboxMixin:
             root = self._toolbox_game_root()
             tool_id = str(tool_id or "")
             manifest = state.Manifest.load(root)
+            if tool_id in ("", "runtime"):
+                data = install.uninstall_runtime(root)
+                self.log_ui("订阅工具：已卸载底座（用户插件保留）")
+                return {"success": True, "data": data}
             if tool_id in manifest.packages:
                 data = install.uninstall_package(root, tool_id)
-            else:
+            elif tool_id in manifest.plugins:
                 data = install.uninstall_plugin(root, tool_id, remove_config=bool(remove_config))
+            else:
+                raise ToolboxBridgeError("not_managed", f"{tool_id} 不在本机受管清单内")
             self.log_ui(f"订阅工具：已卸载 {tool_id}")
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
@@ -644,17 +654,26 @@ class ToolboxMixin:
             return _error_payload(e)
 
     def toolbox_rollback(self, tool_id):
-        """回滚到本地备份（离线可用）。"""
+        """回滚到本地备份（离线可用）。
+
+        ``tool_id`` 传空字符串或 ``"runtime"`` 表示回滚底座文件。
+        """
         try:
             from webutils.toolbox import install, state
 
             root = self._toolbox_game_root()
             tool_id = str(tool_id or "")
             manifest = state.Manifest.load(root)
+            if tool_id in ("", "runtime"):
+                data = install.rollback_runtime(root)
+                self.log_ui("订阅工具：已还原底座文件到安装前")
+                return {"success": True, "data": data}
             if tool_id in manifest.packages:
                 data = install.rollback_package(root, tool_id)
-            else:
+            elif tool_id in manifest.plugins:
                 data = install.rollback_plugin(root, tool_id)
+            else:
+                raise ToolboxBridgeError("not_managed", f"{tool_id} 不在本机受管清单内")
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
@@ -890,13 +909,16 @@ class ToolboxMixin:
         stubs = self._toolbox_download_all_files(api, tool_id, release_id, files, modal_id)
         stub = self._toolbox_pack_plugin_stub(stubs, files)
         self._toolbox_progress(modal_id, 90, "安装插件…")
+        # 主 DLL 以签名清单为准：多文件工具用 files[0] 猜会让"发布方调顺序"
+        # 变成"所有客户端装错文件"。清单没有 main_dll（早期发布）才回退。
+        main_dll = str(manifest.get("main_dll") or (files[0].get("path") if files else ""))
         plan = install.InstallPlan(
             kind="plugin",
             release_id=str(release_id),
             version=str(manifest.get("version") or ""),
             tool_id=str(tool_id),
             guid=manifest.get("guid"),
-            main_dll=str(files[0].get("path") or ""),
+            main_dll=main_dll,
             requires_runtime=True,
             stub_path=stub,
         )

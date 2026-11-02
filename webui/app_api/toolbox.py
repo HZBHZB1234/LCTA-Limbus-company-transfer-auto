@@ -249,12 +249,22 @@ class ToolboxMixin:
             "local_error": None,
             "recovered": None,
             "mirror_auth_available": False,
+            # 上次「启动前自动更新」的结果（启动器写盘，这里只读）
+            "last_update": None,
         }
         try:
             from webutils.function_mod_mirror import mod_mirror_get_auth
 
             data["mirror_auth_available"] = bool(mod_mirror_get_auth())
         except Exception:  # noqa: BLE001 — 镜像站不可用不应影响本地状态
+            pass
+
+        try:
+            from launcher.toolbox_update import read_last_report
+
+            report = read_last_report()
+            data["last_update"] = report or None
+        except Exception:  # noqa: BLE001 - 启动器模块不可用时不影响本地状态
             pass
 
         try:

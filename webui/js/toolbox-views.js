@@ -126,6 +126,13 @@ const ToolboxViews = {
         let runtimeText = runtime ? (runtime.version || runtime.release_id) : '未安装';
         let runtimeSub = runtime ? '由 LCTA 管理' : '插件安装前需先装底座';
 
+        // 上次「启动前自动更新」的结果（启动器写盘，本地快照带过来）
+        const lastUpdate = (local.last_update || (ctx.local && ctx.local.last_update)) || null;
+        const autoText = lastUpdate
+            ? `上次开局前：更新 ${Number(lastUpdate.updated ? lastUpdate.updated.length : 0)
+                + Number(lastUpdate.repaired ? lastUpdate.repaired.length : 0)} 项`
+            : '尚未自动更新';
+
         let gameText = '未配置';
         let gameSub = '';
         if (local.game_root) {
@@ -138,6 +145,7 @@ const ToolboxViews = {
             { label: '账号', value: accountText, sub: accountSub },
             { label: '赛季', value: seasonText, sub: seasonSub },
             { label: '底座', value: runtimeText, sub: runtimeSub },
+            { label: '自动更新', value: autoText, sub: lastUpdate ? '启动游戏前自动检查' : '' },
             { label: '游戏目录', value: gameText, sub: gameSub },
         ].map((c) => `<div class="tb-status-cell">
                 <span class="tb-status-label">${ToolboxViews.esc(c.label)}</span>

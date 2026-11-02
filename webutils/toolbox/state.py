@@ -37,7 +37,10 @@ from . import paths
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+# v3（2026-11-02）：条目补 ``version_sort``（服务端算的可比较版本序）与
+# ``dependencies``（该版本声明的工具间依赖）。v2 旧清单读进来按空值处理，
+# 不需要迁移脚本 —— 下一次安装/更新会把新字段写进去。
 
 # 事务状态
 STATE_IDLE = "idle"
@@ -130,6 +133,10 @@ class PluginEntry:
     tool_id: str
     release_id: str
     version: str = ""
+    # 服务端下发的可比较版本序（v3）；空 = 升级前的旧记录，未知版本
+    version_sort: str = ""
+    # 该版本声明依赖的工具 id（v3）：卸载/停用前反查谁依赖自己
+    dependencies: List[Dict[str, Any]] = field(default_factory=list)
     guid: Optional[str] = None
     enabled: bool = True
     main_dll: str = ""
@@ -142,6 +149,8 @@ class PluginEntry:
             "tool_id": self.tool_id,
             "release_id": self.release_id,
             "version": self.version,
+            "version_sort": self.version_sort,
+            "dependencies": list(self.dependencies),
             "guid": self.guid,
             "enabled": self.enabled,
             "main_dll": self.main_dll,
@@ -156,6 +165,8 @@ class PluginEntry:
             tool_id=str(d.get("tool_id", "")),
             release_id=str(d.get("release_id", "")),
             version=str(d.get("version", "")),
+            version_sort=str(d.get("version_sort", "") or ""),
+            dependencies=list(d.get("dependencies") or []),
             guid=d.get("guid"),
             enabled=bool(d.get("enabled", True)),
             main_dll=str(d.get("main_dll", "")),
@@ -176,6 +187,8 @@ class PackageEntry:
     tool_id: str
     release_id: str
     version: str = ""
+    version_sort: str = ""
+    dependencies: List[Dict[str, Any]] = field(default_factory=list)
     target_dir: str = ""
     files: List[ManagedFile] = field(default_factory=list)
     installed_at: str = ""
@@ -186,6 +199,8 @@ class PackageEntry:
             "tool_id": self.tool_id,
             "release_id": self.release_id,
             "version": self.version,
+            "version_sort": self.version_sort,
+            "dependencies": list(self.dependencies),
             "target_dir": self.target_dir,
             "files": [f.to_dict() for f in self.files],
             "installed_at": self.installed_at,
@@ -198,6 +213,8 @@ class PackageEntry:
             tool_id=str(d.get("tool_id", "")),
             release_id=str(d.get("release_id", "")),
             version=str(d.get("version", "")),
+            version_sort=str(d.get("version_sort", "") or ""),
+            dependencies=list(d.get("dependencies") or []),
             target_dir=str(d.get("target_dir", "")),
             files=[ManagedFile.from_dict(x) for x in (d.get("files") or [])],
             installed_at=str(d.get("installed_at", "")),
@@ -211,6 +228,7 @@ class RuntimeEntry:
 
     release_id: str
     version: str = ""
+    version_sort: str = ""
     files: List[ManagedFile] = field(default_factory=list)
     installed_at: str = ""
     allowed_prefixes: List[str] = field(default_factory=list)
@@ -219,6 +237,7 @@ class RuntimeEntry:
         return {
             "release_id": self.release_id,
             "version": self.version,
+            "version_sort": self.version_sort,
             "files": [f.to_dict() for f in self.files],
             "installed_at": self.installed_at,
             "allowed_prefixes": list(self.allowed_prefixes),
@@ -229,6 +248,7 @@ class RuntimeEntry:
         return cls(
             release_id=str(d.get("release_id", "")),
             version=str(d.get("version", "")),
+            version_sort=str(d.get("version_sort", "") or ""),
             files=[ManagedFile.from_dict(x) for x in (d.get("files") or [])],
             installed_at=str(d.get("installed_at", "")),
             allowed_prefixes=list(d.get("allowed_prefixes") or []),

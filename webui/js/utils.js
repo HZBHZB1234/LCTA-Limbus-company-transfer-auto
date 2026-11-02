@@ -491,6 +491,7 @@ const TOOLTIP_DATA = {
     'launcher-work-mod': '启动游戏时自动加载 MOD 支持。启用后可使用各类游戏模组。',
     'launcher-work-mod-threads': '模组准备阶段（carra2 转换/解压与 bundle 重打包）使用的最大线程数，1 为串行处理。线程越多模组准备越快，但占用更多 CPU 与磁盘。',
     'launcher-work-staticmod': '启用后，通过 Launcher 启动游戏前会自动应用模组目录中的 .staticmod 静态数据包（修改官方人格/技能等数值，退出游戏后自动还原）。默认关闭；首次勾选需阅读并同意风险须知（未同意时就地弹出）。',
+    'launcher-work-toolbox': '启动游戏前自动检查并更新已安装的订阅工具（需已登录且有订阅资格）。只升级已安装的工具、不装新工具，底座始终手动更新；失败只记日志，不影响游戏启动。',
     'launcher-work-fancy': '更新汉化包后自动进行文本美化处理。相关美化选项请在"文本美化"页面配置。',
     'launcher-work-tiaozhua': '更新汉化包后自动下载导入调爪文本修改包。相关设置请在"汉化包下载"页面配置。',
     'launcher-work-cdn-optimize': '启动游戏前自动测试Cloudflare和CloudFront CDN节点速度，选择最快的IP用于游戏下载和API连接。',

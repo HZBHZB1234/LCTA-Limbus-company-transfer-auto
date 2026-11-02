@@ -10,6 +10,7 @@ PHASE_CHECK_UPDATE     = "check_update"
 PHASE_RESOURCE_UPDATE  = "resource_update"
 PHASE_CDN              = "cdn_optimize"
 PHASE_PREPARE_MOD      = "prepare_mod"
+PHASE_TOOLBOX_UPDATE   = "toolbox_update"
 PHASE_LAUNCH           = "launch_game"
 PHASE_RUNNING          = "game_running"
 PHASE_EXIT             = "game_exit"
@@ -20,6 +21,9 @@ _PHASE_ORDER = [
     PHASE_CDN,
     PHASE_RESOURCE_UPDATE,
     PHASE_PREPARE_MOD,
+    # 订阅工具更新放在「模组准备」之后、「启动游戏」之前：此时文件所有权
+    # 已确定（模组/挂载处理不会再来抢），且游戏进程尚未创建（DLL 未被占用）。
+    PHASE_TOOLBOX_UPDATE,
     PHASE_LAUNCH,
     PHASE_RUNNING,
     PHASE_EXIT,

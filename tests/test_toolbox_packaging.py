@@ -146,9 +146,17 @@ class TestToolboxManagerSafety:
             assert method in src
 
     def test_escapes_rendered_values(self):
-        """所有插入 innerHTML 的插件/工具名都要转义（名字来自服务端与文件名）。"""
-        src = (REPO / "webui" / "js" / "toolbox-manager.js").read_text(encoding="utf-8")
-        assert "_esc(" in src
-        # 模板里使用 this._esc(...) 包裹插值
-        assert "this._esc(p.tool_id)" in src
-        assert "this._esc(it.tool_name)" in src
+        """所有插入 innerHTML 的插件/工具名都要转义（名字来自服务端与文件名）。
+
+        2026-11-01 目录渲染拆到 ``toolbox-views.js`` 之后，管理器只保留自己的
+        插值（``this._esc``），列表/卡片一律走 ``ToolboxViews.esc``。断言随之
+        改为"两个渲染入口都用了转义函数"，而不是写死某个插值表达式。
+        """
+        manager = (REPO / "webui" / "js" / "toolbox-manager.js").read_text(encoding="utf-8")
+        assert "this._esc(" in manager
+
+        views = (REPO / "webui" / "js" / "toolbox-views.js").read_text(encoding="utf-8")
+        assert "ToolboxViews.esc(" in views
+        # 服务端/目录字段（名称、作者、封面、标识）必须经 esc 才能进 HTML
+        for field in ("author", "cover_url", "tool_id", "release_id"):
+            assert f"ToolboxViews.esc(item.{field}" in views or f"ToolboxViews.esc(it.{field}" in views

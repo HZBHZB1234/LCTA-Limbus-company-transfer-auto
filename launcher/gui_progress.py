@@ -43,7 +43,7 @@ from globalManagers.LogManager import LogManager
 from launcher import modstatus
 from launcher.pipeline import (
     PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN,
-    PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
+    PHASE_PREPARE_MOD, PHASE_TOOLBOX_UPDATE, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
 )
 
 _window: Optional["LauncherProgressWindow"] = None
@@ -56,11 +56,15 @@ _PHASE_LABELS = {
     PHASE_CDN: "CDN优选",
     PHASE_RESOURCE_UPDATE: "游戏资源更新",
     PHASE_PREPARE_MOD: "模组准备",
+    PHASE_TOOLBOX_UPDATE: "订阅工具更新",
     PHASE_LAUNCH: "启动游戏",
     PHASE_RUNNING: "游戏运行中",
     PHASE_EXIT: "游戏已退出",
 }
-_PHASE_ORDER = [PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN, PHASE_RESOURCE_UPDATE, PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING]
+_PHASE_ORDER = [
+    PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN, PHASE_RESOURCE_UPDATE,
+    PHASE_PREPARE_MOD, PHASE_TOOLBOX_UPDATE, PHASE_LAUNCH, PHASE_RUNNING,
+]
 
 _PHASE_STATUS_TEXT = {
     PHASE_INIT: "正在初始化...",
@@ -68,6 +72,7 @@ _PHASE_STATUS_TEXT = {
     PHASE_CDN: "正在进行CDN优选...",
     PHASE_RESOURCE_UPDATE: "正在检查游戏资源更新...",
     PHASE_PREPARE_MOD: "正在准备模组...",
+    PHASE_TOOLBOX_UPDATE: "正在检查订阅工具更新...",
     PHASE_LAUNCH: "正在启动游戏...",
     PHASE_RUNNING: "游戏运行中",
     PHASE_EXIT: "游戏已退出",
@@ -91,6 +96,9 @@ def _get_visible_phases() -> list:
                 visible.append(ph)
         elif ph == PHASE_PREPARE_MOD:
             if config.get("launcher.work.mod", False):
+                visible.append(ph)
+        elif ph == PHASE_TOOLBOX_UPDATE:
+            if config.get("launcher.work.toolbox", True):
                 visible.append(ph)
     return visible
 
@@ -181,6 +189,7 @@ class LauncherProgressWindow:
         pipeline.on(PHASE_RESOURCE_UPDATE, lambda **kw: self._show_phase(PHASE_RESOURCE_UPDATE))
         pipeline.on(PHASE_CDN, lambda **kw: self._show_phase(PHASE_CDN))
         pipeline.on(PHASE_PREPARE_MOD, lambda **kw: self._show_phase(PHASE_PREPARE_MOD))
+        pipeline.on(PHASE_TOOLBOX_UPDATE, lambda **kw: self._show_phase(PHASE_TOOLBOX_UPDATE))
         pipeline.on(PHASE_LAUNCH, lambda **kw: self._show_phase(PHASE_LAUNCH))
         pipeline.on(PHASE_RUNNING, lambda **kw: self._show_game_running(**kw))
         pipeline.on(PHASE_EXIT, lambda **kw: self._show_game_exited(**kw))

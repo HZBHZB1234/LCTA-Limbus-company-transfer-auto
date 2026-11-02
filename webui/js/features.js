@@ -1334,6 +1334,7 @@ async function oneClickSetup() {
         const updates = {
             'launcher-work-update': 'LM-G',                     // Launcher 更新模式（零协 + LCTA-AU）
             'launcher-work-mod': true,                          // MOD支持
+            'launcher-work-toolbox': true,                      // 启动前自动更新订阅工具
             'launcher-work-fancy': true,                        // 文本美化
             'launcher-work-tiaozhua': true,                     // 调爪文本
             'launcher-work-cdn-optimize': true,                 // CDN优选

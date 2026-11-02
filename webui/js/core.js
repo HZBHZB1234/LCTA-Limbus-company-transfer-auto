@@ -286,6 +286,7 @@ class ConfigManager {
             'launcher-work-mod': 'launcher.work.mod',
             'launcher-work-mod-threads': 'launcher.work.mod_threads',
             'launcher-work-staticmod': 'launcher.work.staticmod',
+            'launcher-work-toolbox': 'launcher.work.toolbox',
             'launcher-work-tiaozhua': 'launcher.work.tiaozhua',
             'launcher-work-fancy': 'launcher.work.fancy',
             'launcher-work-cdn-optimize': 'launcher.work.cdn_optimize',

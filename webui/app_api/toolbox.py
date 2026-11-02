@@ -110,15 +110,22 @@ class ToolboxBridgeError(RuntimeError):
 
 
 def _error_payload(exc: BaseException) -> dict:
-    """把任意异常收敛成 ``{success, code, message}``。
+    """把任意异常收敛成 ``{success, code, message, data?}``。
 
     API 客户端（``ApiError``）与下载层（``DownloadError``）自带 ``code``，
     直接小写沿用；其余异常回落为 ``error``。
+
+    依赖门禁（``DependencyError``）会带结构化缺口（``data``），前端要逐条
+    显示"缺哪个工具/什么版本"，所以 ``data`` 一并透出。
     """
     raw = str(getattr(exc, "code", "") or "").strip()
     code = raw.lower().replace(" ", "_") or "error"
     message = str(getattr(exc, "message", "") or exc or "未知错误")
-    return {"success": False, "code": code, "message": message}
+    payload = {"success": False, "code": code, "message": message}
+    data = getattr(exc, "data", None)
+    if isinstance(data, dict) and data:
+        payload["data"] = data
+    return payload
 
 
 class _ToolboxTaskRegistry:
@@ -632,23 +639,30 @@ class ToolboxMixin:
         清单登记过且哈希仍匹配的文件，``BepInEx/plugins`` 里的用户插件保留。
         """
         try:
-            from webutils.toolbox import install, state
+            from webutils.toolbox import deps, install, state
 
             root = self._toolbox_game_root()
             tool_id = str(tool_id or "")
             manifest = state.Manifest.load(root)
+            # 反向依赖只警告、不阻止（用户已确认的行为）：卸载后依赖方会加载
+            # 失败，先把受影响工具列出来，让人有心理准备。
+            warnings = [] if tool_id in ("", "runtime") else deps.uninstall_warnings(
+                manifest, tool_id
+            )
             if tool_id in ("", "runtime"):
                 data = install.uninstall_runtime(root)
                 self.log_ui("订阅工具：已卸载底座（用户插件保留）")
-                return {"success": True, "data": data}
+                return {"success": True, "data": data, "warnings": []}
             if tool_id in manifest.packages:
                 data = install.uninstall_package(root, tool_id)
             elif tool_id in manifest.plugins:
                 data = install.uninstall_plugin(root, tool_id, remove_config=bool(remove_config))
             else:
                 raise ToolboxBridgeError("not_managed", f"{tool_id} 不在本机受管清单内")
+            if warnings:
+                self.log_ui(f"订阅工具：{'；'.join(warnings)}")
             self.log_ui(f"订阅工具：已卸载 {tool_id}")
-            return {"success": True, "data": data}
+            return {"success": True, "data": data, "warnings": warnings}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
             return _error_payload(e)
@@ -675,6 +689,21 @@ class ToolboxMixin:
             else:
                 raise ToolboxBridgeError("not_managed", f"{tool_id} 不在本机受管清单内")
             return {"success": True, "data": data}
+        except Exception as e:  # noqa: BLE001
+            self.log_error(e)
+            return _error_payload(e)
+
+    def toolbox_update_report(self):
+        """上次「启动前自动更新」的结果（订阅工具页展示用）。
+
+        自动更新跑在启动器进程（游戏启动前），结果落在
+        ``<游戏目录>/.lcta-toolbox/last-update.json`` —— WebUI 只读文件，
+        不重复发请求。读不到（没开过启动器/没更新过）返回空对象。
+        """
+        try:
+            from launcher.toolbox_update import read_last_report
+
+            return {"success": True, "data": read_last_report()}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
             return _error_payload(e)
@@ -891,6 +920,8 @@ class ToolboxMixin:
             )
 
         root = self._toolbox_game_root()
+        # 依赖门禁：写任何文件之前判定（2026-11-02）
+        self._toolbox_assert_dependencies(api, root, tool_id)
         if kind == INSTALL_KIND_RUNTIME:
             return self._toolbox_install_runtime_impl(
                 api, root, tool_id, release_id, manifest, files, confirm_foreign, modal_id
@@ -902,6 +933,40 @@ class ToolboxMixin:
         return self._toolbox_install_plugin_impl(
             api, root, tool_id, release_id, manifest, files, modal_id
         )
+
+    def _toolbox_catalog_items(self, api):
+        """目录条目（优先复用在线快照缓存，避免安装前多打一次站点）。"""
+        cache = getattr(self, "_toolbox_online_cache", None)
+        if cache and (time.monotonic() - cache[0]) < ONLINE_CACHE_TTL:
+            catalog = (cache[1] or {}).get("catalog") or {}
+            items = catalog.get("items")
+            if isinstance(items, list):
+                return items
+        try:
+            catalog = api.catalog() or {}
+        except Exception:  # noqa: BLE001 - 目录不可用不应阻止安装（服务端仍会判权限）
+            logger.info("订阅工具：依赖门禁取目录失败，跳过本地预检", exc_info=True)
+            return []
+        items = catalog.get("items")
+        return items if isinstance(items, list) else []
+
+    def _toolbox_assert_dependencies(self, api, root, tool_id):
+        """依赖不满足时抛 ``ToolboxBridgeError``（携带结构化缺口）。
+
+        服务端已保证"发布时依赖齐备、无环"，这里再判一次是因为**本地磁盘**
+        才决定依赖是否真的可用（没装/版本旧/被停用/换机）。写文件前拦住，
+        避免装到一半才发现缺依赖。
+        """
+        from webutils.toolbox import deps, state
+
+        manifest = state.Manifest.load(root)
+        items = self._toolbox_catalog_items(api)
+        try:
+            return deps.assert_ready(manifest, items, tool_id)
+        except deps.DependencyError as exc:
+            error = ToolboxBridgeError(exc.code, exc.message)
+            error.data = getattr(exc, "data", {}) or {}
+            raise error from exc
 
     def _toolbox_install_plugin_impl(self, api, root, tool_id, release_id, manifest, files, modal_id):
         from webutils.toolbox import install
@@ -916,6 +981,8 @@ class ToolboxMixin:
             kind="plugin",
             release_id=str(release_id),
             version=str(manifest.get("version") or ""),
+            version_sort=str(manifest.get("version_sort") or ""),
+            dependencies=tuple(manifest.get("dependencies") or ()),
             tool_id=str(tool_id),
             guid=manifest.get("guid"),
             main_dll=main_dll,
@@ -939,6 +1006,7 @@ class ToolboxMixin:
             kind="runtime",
             release_id=str(release_id),
             version=str(manifest.get("version") or ""),
+            version_sort=str(manifest.get("version_sort") or ""),
             tool_id=str(tool_id),
             requires_runtime=False,
             stub_path=stubs[0],
@@ -964,6 +1032,8 @@ class ToolboxMixin:
             kind="package",
             release_id=str(release_id),
             version=str(manifest.get("version") or ""),
+            version_sort=str(manifest.get("version_sort") or ""),
+            dependencies=tuple(manifest.get("dependencies") or ()),
             tool_id=str(tool_id),
             target_dir=target_dir,
             requires_runtime=bool(manifest.get("requires_runtime", False)),

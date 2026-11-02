@@ -20,6 +20,7 @@ from launcher.pipeline import (
     PHASE_RESOURCE_UPDATE,
     PHASE_CDN,
     PHASE_PREPARE_MOD,
+    PHASE_TOOLBOX_UPDATE,
     PHASE_LAUNCH,
     PHASE_RUNNING,
     PHASE_EXIT,
@@ -603,7 +604,7 @@ class TestEnsureClrWithLog:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestGetVisiblePhases:
-    def test_default_config_shows_four_phases(self):
+    def test_default_config_shows_five_phases(self):
         from launcher.gui_progress import _get_visible_phases
 
         with patch("launcher.gui_progress.ConfigManager") as mock_cm:
@@ -615,8 +616,11 @@ class TestGetVisiblePhases:
             instance.get.side_effect = _mock_get
             result = _get_visible_phases()
 
-        assert len(result) == 4
-        assert result == [PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_LAUNCH, PHASE_RUNNING]
+        # 订阅工具更新默认开启（launcher.work.toolbox=True）
+        assert len(result) == 5
+        assert result == [
+            PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_TOOLBOX_UPDATE, PHASE_LAUNCH, PHASE_RUNNING
+        ]
 
     def test_update_no_removes_check_update(self):
         from launcher.gui_progress import _get_visible_phases
@@ -630,8 +634,8 @@ class TestGetVisiblePhases:
             instance.get.side_effect = _mock_get
             result = _get_visible_phases()
 
-        assert len(result) == 3
-        assert result == [PHASE_INIT, PHASE_LAUNCH, PHASE_RUNNING]
+        assert len(result) == 4
+        assert result == [PHASE_INIT, PHASE_TOOLBOX_UPDATE, PHASE_LAUNCH, PHASE_RUNNING]
 
     def test_cdn_enabled_includes_cdn(self):
         from launcher.gui_progress import _get_visible_phases
@@ -705,6 +709,31 @@ class TestGetVisiblePhases:
 
         assert PHASE_RESOURCE_UPDATE not in result
 
+    def test_toolbox_disabled_excludes_phase(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            def _mock_get(key, default):
+                if key == "launcher.work.toolbox":
+                    return False
+                return default
+            instance.get.side_effect = _mock_get
+            result = _get_visible_phases()
+
+        assert PHASE_TOOLBOX_UPDATE not in result
+
+    def test_toolbox_enabled_ordered_before_launch(self):
+        from launcher.gui_progress import _get_visible_phases
+
+        with patch("launcher.gui_progress.ConfigManager") as mock_cm:
+            instance = mock_cm.return_value
+            instance.get.side_effect = lambda key, default=None: default
+            result = _get_visible_phases()
+
+        assert PHASE_TOOLBOX_UPDATE in result
+        assert result.index(PHASE_TOOLBOX_UPDATE) < result.index(PHASE_LAUNCH)
+
     def test_all_enabled_shows_all_seven(self):
         from launcher.gui_progress import _get_visible_phases
 
@@ -721,10 +750,10 @@ class TestGetVisiblePhases:
             instance.get.side_effect = _mock_get
             result = _get_visible_phases()
 
-        assert len(result) == 7
+        assert len(result) == 8
         assert result == [
             PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN, PHASE_RESOURCE_UPDATE,
-            PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING,
+            PHASE_PREPARE_MOD, PHASE_TOOLBOX_UPDATE, PHASE_LAUNCH, PHASE_RUNNING,
         ]
 
     def test_all_enabled_shows_all_six(self):
@@ -741,10 +770,10 @@ class TestGetVisiblePhases:
             instance.get.side_effect = _mock_get
             result = _get_visible_phases()
 
-        assert len(result) == 6
+        assert len(result) == 7
         assert result == [
             PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_CDN,
-            PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING,
+            PHASE_PREPARE_MOD, PHASE_TOOLBOX_UPDATE, PHASE_LAUNCH, PHASE_RUNNING,
         ]
 
 

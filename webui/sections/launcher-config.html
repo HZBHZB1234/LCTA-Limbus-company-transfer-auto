@@ -67,6 +67,16 @@
 
         <div class="form-group">
             <label class="checkbox-container">
+                <input type="checkbox" id="launcher-work-toolbox" checked>
+                <span class="checkmark"></span>
+                启动游戏前自动更新订阅工具
+            </label>
+            <small class="form-hint">在游戏启动前检查已安装的订阅工具是否有新版并自动更新（需要已登录且有订阅资格）。只升级**已安装**的工具，不会替你装新工具，底座（Zylarnex）也始终手动更新；失败只记录日志，不影响游戏启动。</small>
+            <small class="form-hint">检查频率默认 6 小时一次，同一工具失败后 1 小时内不重试；上次结果可在「订阅工具」页查看。</small>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-container">
                 <input type="checkbox" id="launcher-work-gui-mode">
                 <span class="checkmark"></span>
                 启用GUI进度窗口

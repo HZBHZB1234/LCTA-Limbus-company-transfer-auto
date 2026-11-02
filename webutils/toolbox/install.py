@@ -71,6 +71,10 @@ class InstallPlan:
     kind: str                       # runtime | plugin | package
     release_id: str
     version: str = ""
+    # 服务端下发的可比较版本序（v3 清单）；空 = 老站点/旧清单，按未知处理
+    version_sort: str = ""
+    # 该版本声明的工具间依赖（原样保存，供卸载/停用前反查）
+    dependencies: Sequence[dict] = ()
     tool_id: str = ""
     guid: Optional[str] = None
     main_dll: str = ""
@@ -226,6 +230,7 @@ def install_runtime(
             manifest.runtime = state.RuntimeEntry(
                 release_id=plan.release_id,
                 version=plan.version,
+                version_sort=plan.version_sort,
                 files=new_files,
                 installed_at=_now_iso(),
                 allowed_prefixes=list(plan.allowed_prefixes),
@@ -346,6 +351,8 @@ def install_plugin(
                 tool_id=tool_id,
                 release_id=plan.release_id,
                 version=plan.version,
+                version_sort=plan.version_sort,
+                dependencies=list(plan.dependencies or []),
                 guid=plan.guid,
                 enabled=was_enabled,
                 main_dll=plan.main_dll,
@@ -546,6 +553,8 @@ def install_package(
                 tool_id=tool_id,
                 release_id=plan.release_id,
                 version=plan.version,
+                version_sort=plan.version_sort,
+                dependencies=list(plan.dependencies or []),
                 target_dir=plan.target_dir,
                 files=written,
                 installed_at=_now_iso(),
@@ -1037,6 +1046,8 @@ def list_installed(game_root: os.PathLike | str) -> Dict[str, object]:
             "tool_id": p.tool_id,
             "release_id": p.release_id,
             "version": p.version,
+            "version_sort": p.version_sort,
+            "dependencies": list(p.dependencies or []),
             "guid": p.guid,
             "enabled": p.enabled,
             "main_dll": p.main_dll,
@@ -1059,6 +1070,8 @@ def list_installed(game_root: os.PathLike | str) -> Dict[str, object]:
             "tool_id": p.tool_id,
             "release_id": p.release_id,
             "version": p.version,
+            "version_sort": p.version_sort,
+            "dependencies": list(p.dependencies or []),
             "target_dir": p.target_dir,
             "installed_at": p.installed_at,
             "requires_runtime": p.requires_runtime,
@@ -1069,7 +1082,11 @@ def list_installed(game_root: os.PathLike | str) -> Dict[str, object]:
     return {
         "game_root": str(root),
         "runtime": (
-            {"release_id": manifest.runtime.release_id, "version": manifest.runtime.version}
+            {
+                "release_id": manifest.runtime.release_id,
+                "version": manifest.runtime.version,
+                "version_sort": manifest.runtime.version_sort,
+            }
             if manifest.runtime else None
         ),
         "plugins": plugins,

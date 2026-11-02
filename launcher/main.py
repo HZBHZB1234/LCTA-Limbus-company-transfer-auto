@@ -30,7 +30,7 @@ from launcher.cdn import run_cdn_optimization
 from launcher.pipeline import (
     LaunchPipeline,
     PHASE_INIT, PHASE_CHECK_UPDATE, PHASE_RESOURCE_UPDATE, PHASE_CDN,
-    PHASE_PREPARE_MOD, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
+    PHASE_PREPARE_MOD, PHASE_TOOLBOX_UPDATE, PHASE_LAUNCH, PHASE_RUNNING, PHASE_EXIT,
 )
 
 
@@ -173,6 +173,56 @@ def _stop_cheat_plugins_handler(**kw):
         _log_manager.log_error(e)
 
 
+def _toolbox_update_enabled() -> bool:
+    """订阅工具自动更新开关（默认开：只升级已安装工具，不装新工具、不碰底座）。"""
+    try:
+        return bool(ConfigManager().get("launcher.work.toolbox", True))
+    except Exception:  # noqa: BLE001 - 配置读取异常按开启处理（有节流兜底）
+        return True
+
+
+def _toolbox_update_handler(**kw):
+    """PHASE_TOOLBOX_UPDATE：订阅工具自动更新（游戏启动前、文件未被占用时）。
+
+    无人值守：失败只记日志并标记阶段失败，**不阻塞**游戏启动。进度映射到
+    阶段的百分数，取消由 ``cancel_event`` 在每个工具之间生效。
+    """
+    progress = kw.get('progress')
+    cancel_event = kw.get('cancel_event')
+    try:
+        from launcher.toolbox_update import run_toolbox_update
+
+        progress_cb = (
+            progress.update_phase_progress
+            if progress is not None and progress.is_alive()
+            else None
+        )
+        report = run_toolbox_update(cancel_event=cancel_event, progress_callback=progress_cb)
+        if report.get("skipped"):
+            _log_manager.log("订阅工具更新已跳过: {}".format(report["skipped"]))
+            if progress is not None and progress.is_alive():
+                progress.update_phase_progress(100, "订阅工具更新已跳过")
+            return
+        updated = len(report.get("updated") or [])
+        failed = len(report.get("failed") or [])
+        repaired = len(report.get("repaired") or [])
+        _log_manager.log(
+            "订阅工具更新结果: 更新 {} 个，补装依赖 {} 个，失败 {} 个".format(
+                updated, repaired, failed
+            )
+        )
+        if failed:
+            logging.getLogger("launcher.toolbox").warning(
+                "订阅工具更新失败项: %s", report.get("failed")
+            )
+            if progress is not None and progress.is_alive():
+                progress.mark_phase_failed(PHASE_TOOLBOX_UPDATE)
+    except Exception as e:
+        _log_manager.log_error(e)
+        if progress is not None and progress.is_alive():
+            progress.mark_phase_failed(PHASE_TOOLBOX_UPDATE)
+
+
 def _prepare_notice_handler(**kw):
     try:
         from launcher.notice import run_notice_sync
@@ -274,6 +324,7 @@ def main():
         pipeline.on(PHASE_PREPARE_MOD, _prepare_mod_handler)
     pipeline.on(PHASE_PREPARE_MOD, _prepare_cheat_plugins_handler)
     pipeline.on(PHASE_PREPARE_MOD, _prepare_notice_handler)
+    pipeline.on(PHASE_TOOLBOX_UPDATE, _toolbox_update_handler)
     pipeline.on(PHASE_RESOURCE_UPDATE, _resource_update_handler)
     pipeline.on(PHASE_EXIT, _cleanup_mod_handler)
     pipeline.on(PHASE_RUNNING, _register_speed_hotkey_handler)
@@ -363,6 +414,17 @@ def main():
                     if progress and progress.is_alive()
                     else None
                 ),
+            )
+
+        # 订阅工具更新：模组/挂载准备完之后、创建游戏进程之前
+        if not pipeline.cancel_event.is_set() and _toolbox_update_enabled():
+            if progress and progress.is_alive():
+                progress.set_progress(0)
+                progress.update_status("正在检查订阅工具更新...")
+            pipeline.emit(
+                PHASE_TOOLBOX_UPDATE,
+                cancel_event=pipeline.cancel_event,
+                progress=progress,
             )
     except Exception as e:
         _log_manager.log_error(e)

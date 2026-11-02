@@ -175,25 +175,78 @@ const ToolboxViews = {
         const local = ctx.local && ctx.local.local;
         if (!local) return 0;
         const items = (ctx.online && ctx.online.catalog && ctx.online.catalog.items) || [];
+        const latest = ToolboxViews._catalogLatest(items);
         const map = ToolboxViews._installedByTool(local);
         let count = 0;
-        for (const item of items) {
-            const installed = map.get(String(item.tool_id));
-            if (installed && installed.release_id && item.release_id
-                && String(installed.release_id) !== String(item.release_id)) {
-                count += 1;
-            }
+        for (const [toolId, item] of latest) {
+            const installed = map.get(toolId);
+            if (ToolboxViews.hasUpdate(item, installed)) count += 1;
         }
         // 底座也参与「可更新」统计（状态条与实际可更新数必须一致）
         const rt = local.runtime;
-        const rtItem = items.find(
-            (it) => it.install_kind === 'runtime_zip_root' || it.resource_kind === 'runtime',
-        );
-        if (rt && rtItem && rt.release_id && rtItem.release_id
-            && String(rt.release_id) !== String(rtItem.release_id)) {
-            count += 1;
-        }
+        const rtItem = latest.get(ToolboxViews._runtimeToolId(latest, items));
+        if (rt && rtItem && ToolboxViews.hasUpdate(rtItem, rt)) count += 1;
         return count;
+    },
+
+    /**
+     * 目录里的「每个工具一行」索引（2026-11-02）。
+     *
+     * 服务端目录是**按发布版本**一行的：同一工具可能同时有多个版本（历史版本
+     * 保留供显式降级）。旧实现直接 set() 覆盖，等于"最后一行说了算"，于是
+     * 卡片会来回跳、还会假报"可更新"。这里统一按 is_latest 选行；老站点没有
+     * is_latest 时退化为按 version_sort 取最大（好过比 release_id 字符串）。
+     */
+    _catalogLatest(items) {
+        const map = new Map();
+        for (const it of (items || [])) {
+            if (!it) continue;
+            const key = String(it.tool_id);
+            const cur = map.get(key);
+            if (!cur) { map.set(key, it); continue; }
+            const itLatest = !!it.is_latest;
+            const curLatest = !!cur.is_latest;
+            if (itLatest !== curLatest) {
+                if (itLatest) map.set(key, it);
+                continue;
+            }
+            if (String(it.version_sort || '') > String(cur.version_sort || '')) {
+                map.set(key, it);
+            }
+        }
+        return map;
+    },
+
+    /** 目录里底座（runtime_zip_root）的 tool_id（没有则返回空串）。 */
+    _runtimeToolId(latest, items) {
+        for (const [toolId, it] of latest) {
+            if (it.install_kind === 'runtime_zip_root' || it.resource_kind === 'runtime') {
+                return toolId;
+            }
+        }
+        for (const it of (items || [])) {
+            if (it.install_kind === 'runtime_zip_root' || it.resource_kind === 'runtime') {
+                return String(it.tool_id);
+            }
+        }
+        return '';
+    },
+
+    /**
+     * 是否「有新版本」。判定只信服务端：
+     * - 目标必须是目录里的最新版（旧版行不参与）；
+     * - release 相同 → 没变化；
+     * - 已装版本序缺失（升级前的旧记录）→ 有更新，让用户装一次把版本记下来；
+     * - 否则严格比较 version_sort（正式版 > 同号预发布，由服务端归一化）。
+     */
+    hasUpdate(item, installed) {
+        if (!item || !installed) return false;
+        if (!installed.release_id || !item.release_id) return false;
+        if (String(installed.release_id) === String(item.release_id)) return false;
+        const target = String(item.version_sort || '');
+        const current = String(installed.version_sort || '');
+        if (!current || !target) return true;
+        return target > current;
     },
 
     _installedByTool(local) {
@@ -208,7 +261,12 @@ const ToolboxViews = {
     filterCatalog(items, { query, filter, sort }, local) {
         const q = String(query || '').trim().toLowerCase();
         const map = ToolboxViews._installedByTool(local);
+        // 同工具多版本：列表只保留最新那一行（历史版本进详情抽屉），
+        // 否则一个工具会重复成多张卡、还会互相"假更新"。
+        const latestMap = ToolboxViews._catalogLatest(items);
+        const latestRows = new Set(Array.from(latestMap.values()));
         let list = (items || []).filter((it) => {
+            if (!latestRows.has(it)) return false;
             if (q) {
                 const hay = [
                     it.name_zh, it.tool_name, it.author, it.category, it.tags, it.summary,
@@ -219,17 +277,15 @@ const ToolboxViews = {
             if (filter === 'repost') return it.access_kind === 'repost';
             if (filter === 'downloadable') return !!it.downloadable;
             if (filter === 'update') {
-                // 底座也参与「可更新」：否则状态条说 2 项、筛选只给出 1 项
+                // 统一口径：只看「目录最新版」与「本地已装」，见 hasUpdate()
                 const isRuntime = it.install_kind === 'runtime_zip_root'
                     || it.resource_kind === 'runtime';
                 if (isRuntime) {
                     const rt = local && local.runtime;
-                    return !!(rt && rt.release_id && it.release_id
-                        && String(rt.release_id) !== String(it.release_id));
+                    return ToolboxViews.hasUpdate(it, rt);
                 }
                 const installed = map.get(String(it.tool_id));
-                return !!(installed && installed.release_id
-                    && String(installed.release_id) !== String(it.release_id));
+                return ToolboxViews.hasUpdate(it, installed);
             }
             return true;
         });
@@ -239,8 +295,9 @@ const ToolboxViews = {
         if (sort === 'name') {
             list = list.slice().sort(byName);
         } else if (sort === 'recent') {
-            list = list.slice().sort((a, b) => String(b.release_id || '')
-                .localeCompare(String(a.release_id || '')));
+            // 版本序而非 release_id：后者是随机串，排序没有意义
+            list = list.slice().sort((a, b) => String(b.version_sort || '')
+                .localeCompare(String(a.version_sort || '')));
         } else {
             list = list.slice().sort((a, b) => {
                 const ra = a.recommended ? 1 : 0;
@@ -258,8 +315,7 @@ const ToolboxViews = {
         const installed = localState
             ? ToolboxViews._installedByTool(localState).get(String(item.tool_id))
             : null;
-        const hasUpdate = !!(installed && installed.release_id
-            && String(installed.release_id) !== String(item.release_id));
+        const hasUpdate = ToolboxViews.hasUpdate(item, installed);
 
         const installKind = item.install_kind
             || (item.resource_kind === 'runtime' ? 'runtime_zip_root'
@@ -304,6 +360,20 @@ const ToolboxViews = {
             ? ToolboxViews.chip('可更新', 'warn', 'arrow-circle-up')
             : (installed ? ToolboxViews.chip('已安装', 'ok', 'check') : '');
 
+        // 依赖提示（2026-11-02）：服务端在目录里下发了依赖解析结果，
+        // 这里只做展示——真正拦截在客户端安装门禁与桥接层。
+        const deps = Array.isArray(item.dependencies) ? item.dependencies : [];
+        const hardDeps = deps.filter((d) => d && !d.optional);
+        const unmet = hardDeps.filter((d) => !d.in_catalog || d.version_satisfied === false);
+        let depChip = '';
+        if (hardDeps.length) {
+            const names = hardDeps.map((d) => d.tool_name || `#${d.tool_id}`).join('、');
+            depChip = unmet.length
+                ? ToolboxViews.chip(`缺依赖 ${unmet.length}`, 'warn', 'triangle-exclamation')
+                : ToolboxViews.chip(`依赖 ${hardDeps.length}`, 'info', 'link');
+            depChip = `<span title="需要：${ToolboxViews.esc(names)}">${depChip}</span>`;
+        }
+
         const meta = [
             item.author ? ToolboxViews.esc(item.author) : '',
             item.category ? ToolboxViews.esc(item.category) : '',
@@ -324,7 +394,7 @@ const ToolboxViews = {
                 ${en ? `<div class="tb-item-en" title="${ToolboxViews.esc(en)}">${ToolboxViews.esc(en)}</div>` : ''}
                 <div class="tb-item-summary">${ToolboxViews.esc(item.summary || '暂无简介')}</div>
                 <div class="tb-item-meta">${meta}</div>
-                <div class="tb-item-meta">${stateChip}${needsRuntime ? ToolboxViews.chip('需底座', 'warn', 'layer-group') : ''}</div>
+                <div class="tb-item-meta">${stateChip}${depChip}${needsRuntime ? ToolboxViews.chip('需底座', 'warn', 'layer-group') : ''}</div>
             </div>
             <div class="tb-item-foot">${action}</div>
         </article>`;
@@ -368,16 +438,21 @@ const ToolboxViews = {
         const local = (ctx.local && ctx.local.local) || {};
         const rt = local.runtime;
         const catalogItems = (ctx.online && ctx.online.catalog && ctx.online.catalog.items) || [];
-        const runtimeItem = catalogItems.find(
-            (it) => (it.install_kind === 'runtime_zip_root') || it.resource_kind === 'runtime',
-        );
-        const hasUpdate = !!(rt && runtimeItem && rt.release_id
-            && String(rt.release_id) !== String(runtimeItem.release_id));
+        const latest = ToolboxViews._catalogLatest(catalogItems);
+        const runtimeItem = latest.get(ToolboxViews._runtimeToolId(latest, catalogItems));
+        const hasUpdate = ToolboxViews.hasUpdate(runtimeItem, rt);
 
         const body = rt
             ? `<div class="tb-row-meta">版本 ${ToolboxViews.esc(rt.version || rt.release_id || '')}
-                ${hasUpdate ? ` · 目录已发布新版本 ${ToolboxViews.esc(runtimeItem.version || '')}` : ''}</div>`
+                ${hasUpdate ? ` · 目录已发布新版本 ${ToolboxViews.esc(runtimeItem.version || '')}` : ''}</div>
+               <div class="tb-row-meta">底座独立于插件：更新它会影响所有插件的加载环境，因此不参与「启动前自动更新」，只在这里手动操作。</div>`
             : '<div class="tb-row-meta">尚未安装订阅工具底座。插件安装前必须先装底座。</div>';
+        const lifecycle = rt
+            ? `<button class="tb-btn tb-btn--sm" data-tb-action="rollback" data-tool="runtime">
+                   回滚底座</button>
+               <button class="tb-btn tb-btn--sm tb-btn--danger" data-tb-action="uninstall" data-tool="runtime">
+                   卸载底座</button>`
+            : '';
 
         const action = runtimeItem && runtimeItem.downloadable
             ? `<button class="tb-btn tb-btn--sm ${hasUpdate || !rt ? 'tb-btn--primary' : ''}"
@@ -394,7 +469,7 @@ const ToolboxViews = {
                     <i class="fas fa-layer-group"></i> 底座
                     ${rt ? ToolboxViews.chip('已安装', 'ok', 'check') : ToolboxViews.chip('未安装', 'warn', 'exclamation')}
                 </h3>
-                <div class="tb-row-actions">${action}</div>
+                <div class="tb-row-actions">${action}${lifecycle}</div>
             </div>
             ${body}
         </div>`;
@@ -418,8 +493,8 @@ const ToolboxViews = {
                 : ToolboxViews.empty('folder-open', '尚未配置游戏目录。');
         }
         const catalogItems = (ctx.online && ctx.online.catalog && ctx.online.catalog.items) || [];
-        const byTool = new Map();
-        for (const it of catalogItems) byTool.set(String(it.tool_id), it);
+        // 只按「最新版」配对：旧实现 set() 覆盖 = 同工具多版本时"最后一行说了算"
+        const byTool = ToolboxViews._catalogLatest(catalogItems);
 
         const plugins = local.plugins || [];
         const packages = local.packages || [];
@@ -430,8 +505,7 @@ const ToolboxViews = {
         if (plugins.length) {
             const rows = plugins.map((p) => {
                 const cat = byTool.get(String(p.tool_id));
-                const hasUpdate = !!(cat && p.release_id
-                    && String(cat.release_id) !== String(p.release_id));
+                const hasUpdate = ToolboxViews.hasUpdate(cat, p);
                 const title = cat ? (cat.name_zh || cat.tool_name || p.tool_id) : p.tool_id;
                 return `<div class="tb-row">
                     <div class="tb-row-main">
@@ -472,8 +546,7 @@ const ToolboxViews = {
         if (packages.length) {
             const rows = packages.map((p) => {
                 const cat = byTool.get(String(p.tool_id));
-                const hasUpdate = !!(cat && p.release_id
-                    && String(cat.release_id) !== String(p.release_id));
+                const hasUpdate = ToolboxViews.hasUpdate(cat, p);
                 const title = cat ? (cat.name_zh || cat.tool_name || p.tool_id) : p.tool_id;
                 return `<div class="tb-row">
                     <div class="tb-row-main">
@@ -851,8 +924,7 @@ const ToolboxViews = {
 
         const localState = (ctx.local && ctx.local.local) || {};
         const installed = ToolboxViews._installedByTool(localState).get(String(item.tool_id));
-        const hasUpdate = !!(installed && installed.release_id
-            && String(installed.release_id) !== String(item.release_id));
+        const hasUpdate = ToolboxViews.hasUpdate(item, installed);
 
         let foot = '<button class="tb-btn" data-tb-action="drawer-close">关闭</button>';
         if (installKind === 'download_only') {

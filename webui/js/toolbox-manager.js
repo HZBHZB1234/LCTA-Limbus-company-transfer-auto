@@ -704,7 +704,11 @@ let toolboxManager = {
     },
 
     async rollback(toolId) {
-        if (!confirm('回滚到本地备份？当前文件会被替换为备份内容。')) return;
+        const isRuntime = !toolId || toolId === 'runtime';
+        const tip = isRuntime
+            ? '还原底座文件到安装前的内容？（不影响你自己的插件）'
+            : '回滚到本地备份？当前文件会被替换为备份内容。';
+        if (!confirm(tip)) return;
         const res = await this._call('toolbox_rollback', toolId);
         this._toast(res && res.success ? '已回滚到本地备份' : (res && res.message), !(res && res.success));
         await this.refreshLocal();
@@ -714,13 +718,18 @@ let toolboxManager = {
         const modal = new ModalWindow('卸载内容', {
             showProgress: false, showCancelButton: false, showMinimizeButton: false, showLog: false,
         });
+        const isRuntime = !toolId || toolId === 'runtime';
         const statusEl = document.getElementById(`modal-status-${modal.id}`);
         if (statusEl) {
-            statusEl.innerHTML = `<p style="margin:0 0 8px">只移除 LCTA 管理的文件，你自己的文件与配置会保留。</p>
-                <label class="checkbox-container">
-                    <input type="checkbox" id="tb-uninstall-cfg-${modal.id}">
-                    <span class="checkmark"></span> 同时删除该插件在 BepInEx 里的配置
-                </label>`;
+            statusEl.innerHTML = isRuntime
+                ? `<p style="margin:0 0 8px">底座是所有插件的前置。卸载只移除底座清单登记且未被改动的文件，
+                       安装时被覆盖的原始文件会还原；<b>BepInEx/plugins 里你自己的插件会保留</b>。</p>
+                   <p style="margin:0">卸载后插件将无法加载，直到重新安装底座。</p>`
+                : `<p style="margin:0 0 8px">只移除 LCTA 管理的文件，你自己的文件与配置会保留。</p>
+                   <label class="checkbox-container">
+                       <input type="checkbox" id="tb-uninstall-cfg-${modal.id}">
+                       <span class="checkmark"></span> 同时删除该插件在 BepInEx 里的配置
+                   </label>`;
         }
         const footer = document.getElementById(`modal-footer-${modal.id}`);
         if (footer) {
@@ -735,7 +744,12 @@ let toolboxManager = {
                     const removeConfig = !!(cfg && cfg.checked);
                     modal.close();
                     const res = await this._call('toolbox_uninstall', toolId, removeConfig);
-                    this._toast(res && res.success ? '已卸载' : (res && res.message), !(res && res.success));
+                    if (res && res.success && res.warnings && res.warnings.length) {
+                        // 反向依赖只警告、不阻止（用户确认的行为）
+                        this._toast(res.warnings.join('；'), true, 6000);
+                    } else {
+                        this._toast(res && res.success ? '已卸载' : (res && res.message), !(res && res.success));
+                    }
                     await this.refreshLocal();
                 });
             }

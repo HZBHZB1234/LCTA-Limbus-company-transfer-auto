@@ -160,3 +160,18 @@ class TestToolboxManagerSafety:
         # 服务端/目录字段（名称、作者、封面、标识）必须经 esc 才能进 HTML
         for field in ("author", "cover_url", "tool_id", "release_id"):
             assert f"ToolboxViews.esc(item.{field}" in views or f"ToolboxViews.esc(it.{field}" in views
+    def test_update_detection_uses_server_version_order(self):
+        """「可更新」判定必须走服务端版本序（2026-11-02）。
+
+        旧实现是 ``installed.release_id !== item.release_id``：release_id 是随机
+        串，且同工具多版本的目录里"最后一行"说了算 —— 会出现卡片来回跳、假更新、
+        甚至把旧版本提示成"可更新"。现在统一由 ``hasUpdate()`` 判定（只对目录
+        最新版比 version_sort）。
+        """
+        views = (REPO / "webui" / "js" / "toolbox-views.js").read_text(encoding="utf-8")
+        assert "hasUpdate(item, installed)" in views
+        assert "_catalogLatest(" in views
+        # 不允许再出现按 release_id 字符串比较新旧版本的写法
+        assert "release_id) !== String(" not in views
+        # 排序也不能按随机 release_id
+        assert "sort((a, b) => String(b.release_id" not in views

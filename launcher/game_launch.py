@@ -254,9 +254,10 @@ def start_cheat_plugins() -> None:
 def prepare_cheat_plugins() -> None:
     """PHASE_PREPARE_MOD 回调：分发给各插件 on_prepare（游戏启动前准备）。
 
-    挂载型集成（如 BepInEx/LimiNex）的文件必须先于游戏进程就位（winhttp.dll
-    在进程加载期被劫持），故在 prepare 阶段同步执行。未解锁静默跳过——大多数
-    用户不使用工具箱，避免每次启动刷日志。
+    需要先于游戏进程就位的文件必须在 prepare 阶段同步写入（winhttp.dll 在进程
+    加载期就被劫持）。BepInEx 框架本身已移交「订阅工具」底座（Zylarnex）管理，
+    cheat core 不再自己挂载 —— 这里只剩各插件自己的 prepare 逻辑。未解锁静默
+    跳过：大多数用户不使用工具箱，避免每次启动刷日志。
     """
     try:
         from webutils import cheat_core

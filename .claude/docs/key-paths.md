@@ -589,7 +589,15 @@ Files: `webutils/cheat_core.py`, `webutils/cheat_plugins.py`（插件宿主）, 
 
 Key files: `webui/plugin-window.html`, `webui/js/plugin-window.js`, `webui/plugin_window_api.py`, `webui/app_api/cheat_core.py`（pw_open/sync_theme_to_plugin_windows）, `webutils/cheat_plugins.py`（find_window/is_empty）, `.github/InitCode.py`（HTML_RESOURCE_TRANSFERS['plugin-window.html']）, `tests/test_plugin_window.py`, `launcher/staticmod.py`（应用链 container 精确匹配）, `tests/test_staticmod_apply.py`；私有仓库：`webui/windows/staticmod-editor.js`, `webui/sections/cheat.html`（入口卡）, `webui/js/cheat.js`（initStaticModEntry）, `cheatcore/cheat_staticmod_editor.py`（classmethod 化 + 缓存 + 容器路径索引 + search_content/get_export_targets）, `cheatcore/registry.py`（windows[] + 白名单扩容）, `manifest.json`, `tests/test_staticmod_editor.py`
 
-## 6.6.2 BepInEx 挂载（LimiNex，干净版框架 + 游戏更新本机重建 mapping）
+## 6.6.2 BepInEx 挂载（LimiNex）——**已于 2026-11-02 移除**
+
+> ⚠️ 本节仅作历史记录。BepInEx 框架（含 mapping 维护）已统一由「订阅工具」的
+> 底座 **Zylarnex** 接管（签名清单 + 季目录 + 版本化，mapping 由底座自愈），
+> `cheatcore/liminex_mount.py` / `cheatcore/il2cpp_mapping_a4.py` 已删除，
+> `launcher_extras` 现为空列表。存量用户磁盘上的 `BepInEx/lcta-liminex.json`
+> 等遗留痕迹由 `webutils/toolbox/install.detect_conflicts()["liminex_legacy"]`
+> 识别，由用户在订阅工具页显式接管（覆盖安装会 journal 备份原文件）。
+> 客户端生命周期见 `webutils/toolbox/install.uninstall_runtime`。
 
 ```
 WebUI（作弊工具箱页「BepInEx 挂载（LimiNex）」卡片，命名空间 liminex-*）:

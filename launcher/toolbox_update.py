@@ -277,10 +277,15 @@ def run_toolbox_update(
         return report
 
     try:
+        from webui.app_api.toolbox import BRIDGE_PROTOCOL_VERSION
+
         catalog = api.catalog() or {}
         items = catalog.get("items") or []
         manifest = toolbox_state.Manifest.load(game_root)
-        plan = deps.plan_updates(manifest, items)
+        # 协议太旧的目标版本直接跳过（否则会被记成安装失败并触发退避）
+        plan = deps.plan_updates(
+            manifest, items, client_protocol=BRIDGE_PROTOCOL_VERSION
+        )
         repairs = deps.missing_installed_dependencies(manifest, items)
     except Exception as exc:  # noqa: BLE001
         _log_manager.log_error(exc)

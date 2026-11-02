@@ -329,6 +329,8 @@ def uninstall_warnings(manifest: "state.Manifest", tool_id) -> List[str]:
 def plan_updates(
     manifest: "state.Manifest",
     catalog_items: Iterable[dict],
+    *,
+    client_protocol: int | None = None,
 ) -> Dict[str, list]:
     """算出"哪些已装工具有新版"（启动器自动更新的输入，纯函数）。
 
@@ -341,7 +343,9 @@ def plan_updates(
     4. 目标版本不高于已装（``version_sort`` 比较）→ 跳过，**绝不自动降级**；
     5. 底座（``runtime_zip_root``）→ 跳过（由用户手动更新：doorstop 原生层
        更新失败 = 游戏起不来）；
-    6. 当前请求者没资格下载 → 跳过并上报（界面给引导）。
+    6. 当前请求者没资格下载 → 跳过并上报（界面给引导）；
+    7. 目标版本要求更高的客户端协议 → 跳过并上报 ``client_outdated``
+       （不该让"客户端太旧"被记成一次安装失败）。
 
     返回 ``{"updates": [...], "skipped": [...]}``，``updates`` 已按依赖拓扑序
     排好（被依赖者先）。
@@ -371,6 +375,14 @@ def plan_updates(
         if not item.get("downloadable", True):
             skip(tool_id, "no_entitlement")
             continue
+        if client_protocol is not None:
+            try:
+                required = int(item.get("min_client_protocol") or 1)
+            except (TypeError, ValueError):
+                required = 1
+            if required > int(client_protocol):
+                skip(tool_id, "client_outdated", f"需要协议 {required}")
+                continue
         target_sort = _sort_value(item.get("version_sort"))
         current_sort = _sort_value(have["version_sort"])
         if current_sort and target_sort and target_sort <= current_sort:
@@ -382,6 +394,7 @@ def plan_updates(
             "from_version": have["version"],
             "to_version": str(item.get("version") or ""),
             "install_kind": item.get("install_kind"),
+            "min_client_protocol": item.get("min_client_protocol") or 1,
             "kind": have["kind"],
         })
 

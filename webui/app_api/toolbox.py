@@ -51,7 +51,13 @@ from globalManagers.ConfigManager import ConfigManager
 logger = logging.getLogger(__name__)
 
 CONFIG_KEY = "ui_default.toolbox"
-BRIDGE_PROTOCOL_VERSION = 3
+# 桥协议版本（2026-11-02：4）
+# 4 = 支持清单 v2（version_sort / min_client_protocol / main_dll）、
+#     依赖门禁与缺口上报、底座卸载/回滚、启动器更新报告。
+# 服务端 min_client_protocol 会与本值比较，低于要求的版本必须拒绝安装。
+BRIDGE_PROTOCOL_VERSION = 4
+# 本客户端能解析的最高清单 schema（未知更高版本一律拒绝，避免误装）
+SUPPORTED_MANIFEST_SCHEMA = 2
 
 # 在线快照的短缓存：同一轮刷新里 status 与 catalog 都取时避免重复打服务端。
 ONLINE_CACHE_TTL = 5.0
@@ -1087,6 +1093,30 @@ class ToolboxMixin:
             pub, self._b64(signature), ed25519.canonical_bytes(manifest)
         ):
             raise ToolboxBridgeError("signature_invalid", "清单签名校验失败，拒绝安装")
+
+        # 版本门禁（2026-11-02）：清单格式与客户端协议都必须够新。
+        # 旧客户端遇到带新字段的清单会按老逻辑装错（例如不认 main_dll 的
+        # 多文件工具），所以这里 fail-closed，而不是"尽力而为"。
+        try:
+            schema_version = int(manifest.get("schema_version") or 1)
+        except (TypeError, ValueError):
+            schema_version = 1
+        if schema_version > SUPPORTED_MANIFEST_SCHEMA:
+            raise ToolboxBridgeError(
+                "client_outdated",
+                f"该版本使用了更新的清单格式（schema {schema_version}），"
+                f"当前客户端仅支持到 {SUPPORTED_MANIFEST_SCHEMA}；请先更新 LCTA",
+            )
+        try:
+            required_protocol = int(manifest.get("min_client_protocol") or 1)
+        except (TypeError, ValueError):
+            required_protocol = 1
+        if required_protocol > BRIDGE_PROTOCOL_VERSION:
+            raise ToolboxBridgeError(
+                "client_outdated",
+                f"该版本要求客户端协议 {required_protocol}，"
+                f"当前为 {BRIDGE_PROTOCOL_VERSION}；请先更新 LCTA",
+            )
 
         kind = str(manifest.get("install_kind") or "")
         if kind not in INSTALL_KINDS:

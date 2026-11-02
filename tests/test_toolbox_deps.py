@@ -320,3 +320,21 @@ class TestMissingInstalledDependencies:
             _item(3),
         ]
         assert deps.missing_installed_dependencies(m, catalog) == []
+
+class TestClientProtocolGate:
+    def test_client_outdated_skipped_not_failed(self, tmp_path):
+        m = _manifest(tmp_path, plugins=[_plugin(1, "0001.0000.0000~")])
+        catalog = [_item(1, version_sort="0002.0000.0000~")]
+        catalog[0]["release_id"] = "r1-new"
+        catalog[0]["min_client_protocol"] = 9
+        plan = deps.plan_updates(m, catalog, client_protocol=4)
+        assert plan["updates"] == []
+        assert plan["skipped"][0]["reason"] == "client_outdated"
+
+    def test_within_protocol_planned(self, tmp_path):
+        m = _manifest(tmp_path, plugins=[_plugin(1, "0001.0000.0000~")])
+        catalog = [_item(1, version_sort="0002.0000.0000~")]
+        catalog[0]["release_id"] = "r1-new"
+        catalog[0]["min_client_protocol"] = 4
+        plan = deps.plan_updates(m, catalog, client_protocol=4)
+        assert [u["tool_id"] for u in plan["updates"]] == ["1"]

@@ -712,3 +712,57 @@ class TestGameRootValidate:
         r = b.toolbox_validate_game_root(str(tmp_path / "not-exists"))
         assert r["success"] is False
         assert r["code"] == "invalid_game_root"
+
+class TestManifestVersionGates:
+    """清单版本门禁（2026-11-02）：宁可拒绝安装，也不能按老逻辑装错。"""
+
+    def _bridge_with(self, game, manifest):
+        from tests.test_toolbox_bridge import _ContractApi, _make_bridge
+
+        signed = TestManifestDrivenInstall()._signed(manifest)
+        api = _ContractApi(signed["manifest_out"])
+        b = _make_bridge(game, api=api)
+        import base64  # noqa: F401 - 仅用于构造签名后的清单
+        return b, signed
+
+    def _manifest(self, **overrides):
+        manifest = {
+            "schema_version": 2,
+            "tool_id": 1000001,
+            "release_id": "r1",
+            "version": "1.0.0",
+            "version_sort": "0001.0000.0000~",
+            "min_client_protocol": 1,
+            "resource_kind": "plugin",
+            "install_kind": "bepinex_plugin_dll",
+            "tool_dir": "gate",
+            "files": [{"path": "A.dll", "sha256": "a" * 64}],
+        }
+        manifest.update(overrides)
+        return manifest
+
+    def test_current_manifest_passes(self, game):
+        b, signed = self._bridge_with(game, self._manifest())
+        b._manifest_public_key = lambda: signed["pub_der"]
+        manifest, kind, files = b._toolbox_fetch_verified_manifest(
+            b._toolbox_api(), 1000001, "r1"
+        )
+        assert kind == "bepinex_plugin_dll" and files
+
+    def test_future_schema_refused(self, game):
+        b, signed = self._bridge_with(game, self._manifest(schema_version=99))
+        b._manifest_public_key = lambda: signed["pub_der"]
+        with pytest.raises(Exception) as ei:
+            b._toolbox_fetch_verified_manifest(b._toolbox_api(), 1000001, "r1")
+        assert getattr(ei.value, "code", "") == "client_outdated"
+
+    def test_min_client_protocol_too_high_refused(self, game):
+        from webui.app_api import toolbox as bridge_mod
+
+        b, signed = self._bridge_with(
+            game, self._manifest(min_client_protocol=bridge_mod.BRIDGE_PROTOCOL_VERSION + 1)
+        )
+        b._manifest_public_key = lambda: signed["pub_der"]
+        with pytest.raises(Exception) as ei:
+            b._toolbox_fetch_verified_manifest(b._toolbox_api(), 1000001, "r1")
+        assert getattr(ei.value, "code", "") == "client_outdated"

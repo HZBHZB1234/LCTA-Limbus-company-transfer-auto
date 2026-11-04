@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from webutils.toolbox import api as api_mod
 from webutils.toolbox import install, paths, state
 
 
@@ -597,6 +598,196 @@ class TestAuthChangedNotification:
         b = _make_bridge(game)
         assert not hasattr(b, "_window")
         assert b.toolbox_login("alice", "pw")["success"] is True
+
+
+class TestDeviceKeyConflict:
+    """「本机密钥已被另一个账号授权」→ 询问是否覆盖（2026-11-05）。
+
+    历史行为：服务端按公钥判定设备归属，而密钥名是固定常量 —— 同一台机器上
+    无论哪个账号登录，导出的都是同一个公钥，第二个账号注册必然被拒，报
+    「请先在另一账号取消授权」。那个账号往往已经登录不上，机器就此锁死。
+    现在改为：冲突回可识别的 code，前端弹窗询问，同意后带 overwrite 重试。
+    """
+
+    class _ConflictApi(_FakeApi):
+        """第一次注册抛冲突，带 overwrite 时成功 —— 记录实际收到的参数。"""
+
+        def __init__(self):
+            super().__init__()
+            self.enable_calls = []
+
+        def enable_device(self, display_name="", overwrite=False):
+            self.enable_calls.append(bool(overwrite))
+            if not overwrite:
+                raise api_mod.ApiError(
+                    "device_conflict", "该密钥已在另一账号下授权，请先在另一账号取消授权"
+                )
+            return {"device_id": "dev-new", "ok": True}
+
+    def test_conflict_returns_actionable_code(self, game):
+        api = self._ConflictApi()
+        r = _make_bridge(game, api=api).toolbox_authz_enable()
+        assert r["success"] is False
+        # 必须是前端能分支的 code，而不是一句无从下手的文案
+        assert r["code"] == "device_key_conflict"
+        assert r["data"]["need_overwrite"] is True
+        assert api.enable_calls == [False], "冲突时不能自动覆盖"
+
+    def test_overwrite_retries_with_flag(self, game):
+        api = self._ConflictApi()
+        b = _make_bridge(game, api=api)
+        assert b.toolbox_authz_enable()["code"] == "device_key_conflict"
+        r = b.toolbox_authz_enable(overwrite=True)
+        assert r["success"] is True
+        assert api.enable_calls == [False, True]
+
+    def test_js_false_string_is_not_truthy(self, game):
+        """pywebview 有时把 ``"false"`` 当字符串传过来：不能当 True 覆盖密钥。"""
+        api = self._ConflictApi()
+        b = _make_bridge(game, api=api)
+        r = b.toolbox_authz_enable(overwrite="false")
+        assert r["code"] == "device_key_conflict"
+        assert api.enable_calls == [False]
+
+    def test_other_errors_are_not_treated_as_conflict(self, game):
+        """TPM 不可用等错误必须原样上报，不能被误判成「密钥冲突」。"""
+
+        class _NoTpmApi(_FakeApi):
+            def enable_device(self, display_name="", overwrite=False):
+                raise api_mod.ApiError("tpm_unavailable", "本机没有可用的 TPM，无法启用订阅工具")
+
+        r = _make_bridge(game, api=_NoTpmApi()).toolbox_authz_enable()
+        assert r["success"] is False
+        assert r["code"] == "tpm_unavailable"
+        assert "need_overwrite" not in (r.get("data") or {})
+
+    def test_conflict_detected_by_message_without_code(self, game):
+        """服务端只给文案（没有 code）时也要认出来，否则仍然死锁。"""
+
+        class _MsgOnlyApi(_FakeApi):
+            def enable_device(self, display_name="", overwrite=False):
+                raise api_mod.ApiError("error", "请先在另一账号取消授权")
+
+        r = _make_bridge(game, api=_MsgOnlyApi()).toolbox_authz_enable()
+        assert r["code"] == "device_key_conflict"
+
+
+class TestTpmKeyRotation:
+    """覆盖本机密钥 = 换一把新密钥（新设备身份），而不是复用同一把。"""
+
+    def test_key_name_defaults_for_legacy_record(self):
+        from webutils.toolbox import authz_tpm
+
+        # 旧版 device.json 没有 tpm_key_name 字段
+        assert authz_tpm.key_name_for({"device_id": "x"}) == authz_tpm.DEFAULT_KEY_NAME
+        assert authz_tpm.key_name_for(None) == authz_tpm.DEFAULT_KEY_NAME
+        assert authz_tpm.key_name_for({"tpm_key_name": " custom "}) == "custom"
+
+    def test_new_key_name_is_unique(self):
+        from webutils.toolbox import authz_tpm
+
+        names = {authz_tpm.new_key_name() for _ in range(20)}
+        assert len(names) == 20, "轮换名必须唯一，否则又回到同一把密钥"
+        assert all(n.startswith(authz_tpm.DEFAULT_KEY_NAME) for n in names)
+
+    def test_prepare_new_key_reuses_base_when_free(self, monkeypatch):
+        """默认名空着 → 用回默认名（保持历史路径不变，TPM 里不留垃圾）。"""
+        from webutils.toolbox import authz_tpm
+
+        monkeypatch.setattr(authz_tpm, "load_device", lambda: {"device_id": "d1"})
+        monkeypatch.setattr(authz_tpm, "key_exists", lambda name: False)
+        assert authz_tpm.prepare_new_key() == authz_tpm.DEFAULT_KEY_NAME
+
+    def test_prepare_new_key_rotates_when_base_taken(self, monkeypatch):
+        """默认名已被旧密钥占用 → 必须换随机名（复用同名 = 同一把钥匙 = 没覆盖）。"""
+        from webutils.toolbox import authz_tpm
+
+        monkeypatch.setattr(authz_tpm, "load_device", lambda: {"device_id": "d1"})
+        monkeypatch.setattr(authz_tpm, "key_exists", lambda name: True)
+        name = authz_tpm.prepare_new_key()
+        assert name != authz_tpm.DEFAULT_KEY_NAME
+
+    def test_prepare_new_key_deletes_nothing(self, monkeypatch):
+        """⚠️ 挑名字阶段**绝不能**删密钥：注册失败时必须能回退到旧密钥。"""
+        from webutils.toolbox import authz_tpm
+
+        deleted = []
+        monkeypatch.setattr(authz_tpm, "load_device", lambda: {"device_id": "d1"})
+        monkeypatch.setattr(authz_tpm, "delete_key", lambda name: deleted.append(name) or True)
+        monkeypatch.setattr(authz_tpm, "key_exists", lambda name: True)
+        authz_tpm.prepare_new_key()
+        assert deleted == [], "prepare_new_key 只挑名字，不许动 TPM"
+
+    def test_delete_other_keys_keeps_current(self, monkeypatch):
+        """清理时保留正在用的那把，只删默认名与上一个记录名。"""
+        from webutils.toolbox import authz_tpm
+
+        deleted = []
+        monkeypatch.setattr(
+            authz_tpm, "load_device",
+            lambda: {"device_id": "d1", "tpm_key_name": "LCTA-Authz-Device-old"},
+        )
+        monkeypatch.setattr(authz_tpm, "delete_key", lambda name: deleted.append(name) or True)
+        removed = authz_tpm.delete_other_keys(keep="LCTA-Authz-Device-new")
+        assert "LCTA-Authz-Device-new" not in deleted, "不能删掉正在用的密钥"
+        assert "LCTA-Authz-Device-old" in deleted
+        assert "LCTA-Authz-Device" in deleted
+        assert set(removed) == {"LCTA-Authz-Device-old", "LCTA-Authz-Device"}
+
+    def test_enable_overwrite_keeps_old_key_when_registration_fails(self, monkeypatch):
+        """**注册被拒时旧密钥必须还在** —— 否则用户既没新授权又丢了旧的。"""
+        from webutils.toolbox import authz_tpm
+
+        deleted = []
+        monkeypatch.setattr(authz_tpm, "load_device", lambda: {"device_id": "old-id"})
+        monkeypatch.setattr(authz_tpm, "prepare_new_key", lambda: "brand-new-key")
+        monkeypatch.setattr(authz_tpm, "export_public_key_der", lambda name: "pk")
+        monkeypatch.setattr(authz_tpm, "delete_other_keys",
+                            lambda keep, base=None: deleted.append(keep) or [])
+
+        class _Api(api_mod.ToolboxApi):
+            def __init__(self):
+                self.base_url = "https://mods.test"
+
+            def register_device(self, device_id, public_key_b64, display_name=""):
+                raise api_mod.ApiError("device_limit_reached", "已达授权上限")
+
+        api = _Api()
+        with pytest.raises(api_mod.ApiError):
+            api.enable_device(overwrite=True)
+        assert deleted == [], "注册失败后不得清理旧密钥"
+
+    def test_enable_overwrite_rotates_device_id(self, game, monkeypatch):
+        """覆盖后 device_id 必须重新生成：服务端可能按它判重，两边都换才稳。"""
+        from webutils.toolbox import authz_tpm
+
+        monkeypatch.setattr(authz_tpm, "load_device", lambda: {"device_id": "old-id"})
+        monkeypatch.setattr(authz_tpm, "prepare_new_key", lambda: "new-key")
+        monkeypatch.setattr(authz_tpm, "key_name_for", lambda dev: "old-key")
+        monkeypatch.setattr(authz_tpm, "export_public_key_der", lambda name: f"pk:{name}")
+        saved = {}
+        monkeypatch.setattr(
+            authz_tpm, "save_device",
+            lambda device_id, api_base=None, key_name=None: saved.update(
+                {"device_id": device_id, "key_name": key_name}
+            ),
+        )
+
+        class _Api(api_mod.ToolboxApi):
+            def __init__(self):
+                self.base_url = "https://mods.test"
+                self.registered = None
+
+            def register_device(self, device_id, public_key_b64, display_name=""):
+                self.registered = (device_id, public_key_b64)
+                return {"ok": True}
+
+        api = _Api()
+        api.enable_device(overwrite=True)
+        device_id, public_key = api.registered
+        assert device_id != "old-id", "覆盖必须换新设备身份"
+        assert public_key == "pk:new-key"
+        assert saved == {"device_id": device_id, "key_name": "new-key"}
 
 
 class TestUnlockBridge:

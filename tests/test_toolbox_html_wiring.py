@@ -53,6 +53,22 @@ def test_no_page_level_cheat_risk_overlay():
     assert "RiskGate.gatePage" not in manager
 
 
+def test_device_key_conflict_prompts_overwrite():
+    """本机密钥属于别的账号时必须弹窗询问覆盖，而不是直接报错（2026-11-05）。
+
+    历史行为只回一句「请先在另一账号取消授权」—— 用户往往已经登录不上那个
+    账号，机器就此锁死。前端必须认 `device_key_conflict` 并走确认弹窗，
+    同意后带 `overwrite=true` 重试。
+    """
+    manager = MANAGER.read_text(encoding="utf-8")
+    assert "device_key_conflict" in manager, "缺少冲突 code 分支"
+    assert "_confirmOverwriteKey" in manager, "缺少覆盖确认弹窗"
+    assert "ConfirmModal" in manager, "必须用应用内确认弹窗（原生 confirm 样式不一致）"
+    assert "toolbox_authz_enable" in manager
+    # 覆盖必须作为独立参数传给后端（否则后端无法区分「用户已同意」）
+    assert "'', overwrite" in manager or "'', true" in manager
+
+
 def test_views_load_before_manager_in_both_places():
     """打包顺序必须与 index.html 一致（AGENTS.md 硬规则）。"""
     index = INDEX.read_text(encoding="utf-8")

@@ -20,6 +20,16 @@ TPM 2.0 标准只保证 **ECDSA P-256**，Ed25519 不是标准算法（多数 TP
       "tpm_key_name": "LCTA-Authz-Device" }
 
 ``device_id`` 是随机公开标识；私钥在 TPM 里，文件里没有任何秘密。
+
+## 密钥名为什么要能轮换（2026-11-05）
+
+密钥名一度是固定常量，于是**同一台机器上无论哪个账号登录，导出的都是同一个
+公钥**。服务端按公钥判定归属，第二个账号注册时只能被拒绝（「请先在另一账号
+取消授权」）—— 而用户常常已经登录不上那个账号，机器就此锁死。
+
+现在 ``new_key_name()`` 会生成带随机后缀的新密钥名，配合 ``delete_key()``
+实现「覆盖本机密钥」：换一把新密钥 = 换一个新的设备身份，当前账号即可直接
+授权。``device.json`` 里始终记录**实际在用**的密钥名，签名方按它取键。
 """
 from __future__ import annotations
 
@@ -70,6 +80,119 @@ def _ncrypt():
 
 def _bcrypt():
     return ctypes.windll.bcrypt
+
+
+def key_name_for(device: Optional[dict]) -> str:
+    """设备凭据里记录的密钥名。
+
+    旧版凭据没有 ``tpm_key_name`` 字段（那时密钥名是固定常量），回落到
+    ``DEFAULT_KEY_NAME``，保证历史安装仍能签名。
+    """
+    if isinstance(device, dict):
+        name = str(device.get("tpm_key_name") or "").strip()
+        if name:
+            return name
+    return DEFAULT_KEY_NAME
+
+
+def new_key_name(base: str = DEFAULT_KEY_NAME) -> str:
+    """生成**新的** TPM 密钥名（带随机后缀）。
+
+    只在「旧密钥删不掉」时作为兜底：同名 ``NCryptCreatePersistedKey`` 会失败，
+    换一个名字才能建出新的密钥（即新的设备身份）。
+    """
+    return f"{base}-{secrets.token_hex(4)}"
+
+
+def delete_key(key_name: str = DEFAULT_KEY_NAME) -> bool:
+    """删除 TPM 里的持久化密钥（幂等；失败返回 False，不抛）。
+
+    「覆盖本机密钥」必须先删掉旧密钥：留着它，同一台机器无论换哪个账号，
+    导出的公钥都是同一个，服务端只会继续认定它属于上一个账号。
+    """
+    if not _is_windows():
+        return False
+    ncrypt = _ncrypt()
+    prov = ctypes.c_void_p()
+    status = ncrypt.NCryptOpenStorageProvider(
+        ctypes.byref(prov), MS_PLATFORM_KEY_STORAGE_PROVIDER, 0
+    )
+    if status != 0:
+        return False
+    key = ctypes.c_void_p()
+    try:
+        if ncrypt.NCryptOpenKey(prov, ctypes.byref(key), key_name, 0, 0) != 0:
+            return True  # 本来就没有 → 视为已删除（幂等）
+        # NCryptDeleteKey 会自行释放 key 句柄，之后不能再 NCryptFreeObject
+        status = ncrypt.NCryptDeleteKey(key, 0)
+        key = ctypes.c_void_p()
+        return status == 0
+    except Exception:  # noqa: BLE001
+        logger.debug("删除 TPM 密钥失败：%s", key_name, exc_info=True)
+        return False
+    finally:
+        if key:
+            ncrypt.NCryptFreeObject(key)
+        if prov:
+            ncrypt.NCryptFreeObject(prov)
+
+
+def key_exists(key_name: str = DEFAULT_KEY_NAME) -> bool:
+    """TPM 里是否已有该名称的持久化密钥。"""
+    if not _is_windows():
+        return False
+    try:
+        ncrypt = _ncrypt()
+    except TpmUnavailable:
+        return False
+    prov = ctypes.c_void_p()
+    if ncrypt.NCryptOpenStorageProvider(
+            ctypes.byref(prov), MS_PLATFORM_KEY_STORAGE_PROVIDER, 0) != 0:
+        return False
+    key = ctypes.c_void_p()
+    try:
+        return ncrypt.NCryptOpenKey(prov, ctypes.byref(key), key_name, 0, 0) == 0
+    except Exception:  # noqa: BLE001
+        return False
+    finally:
+        if key:
+            ncrypt.NCryptFreeObject(key)
+        if prov:
+            ncrypt.NCryptFreeObject(prov)
+
+
+def prepare_new_key(base: str = DEFAULT_KEY_NAME) -> str:
+    """「覆盖本机密钥」用：返回一个**当前不存在**的密钥名（即全新密钥）。
+
+    ⚠️ 这里**只挑名字，不删任何东西**（2026-11-05 顺序修正）。
+    早期实现是「先删旧密钥再注册」，一旦注册被服务端拒掉（设备数已满、网络
+    失败…），用户就既没有新授权、也丢了旧密钥 —— 比原来的死局更糟。
+    正确顺序是：挑一个未占用的名字 → 用新密钥注册 → **成功后才**删旧密钥
+    （见 ``delete_other_keys``）。失败时旧密钥毫发无损。
+
+    名字策略：默认名空着就用默认名（保持历史路径不变、TPM 里不留垃圾）；
+    默认名已被旧密钥占用，说明它就是「上一把钥匙」，必须换带随机后缀的新名字
+    —— 复用同一个名字等于同一把私钥、同一个公钥，服务端照样认定属于旧账号。
+    """
+    if not key_exists(base):
+        return base
+    return new_key_name(base)
+
+
+def delete_other_keys(keep: str, base: str = DEFAULT_KEY_NAME) -> list:
+    """注册**成功后**清理旧密钥，保留 ``keep``（以及不是本次轮换目标的名字）。
+
+    要删两类：默认名（历史安装留下的）与 ``device.json`` 里记录的上一个名字
+    （可能是上一轮轮换出的随机名）。不清理的话 TPM 里会越堆越多，
+    而且旧公钥仍留在芯片里、仍属于上一个账号。
+    """
+    removed = []
+    for name in {base, key_name_for(load_device())}:
+        if not name or name == keep:
+            continue
+        if delete_key(name):
+            removed.append(name)
+    return removed
 
 
 def tpm_available() -> bool:

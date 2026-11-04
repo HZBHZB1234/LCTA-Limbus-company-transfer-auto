@@ -1771,6 +1771,34 @@ Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.m
   镜像站状态卡：`webui/mod_mirror_api.py toolboxStatus()` 的游戏目录同样走
         `webutils.toolbox.config.get_game_path()`（不再读已降级的旧键）
 
+本机授权覆盖（TPM，2026-11-05，修复「本机已有别的账号的授权时报错，无从操作」）：
+  症状：点「授权本机」直接报「请先在另一账号取消授权」，而用户往往已经登录不上
+        那个账号 —— 机器就此锁死，无法自助恢复。
+  根因：TPM 密钥名是**固定常量** `LCTA-Authz-Device`，同一台机器上无论哪个账号
+        登录，`export_public_key_der()` 导出的都是**同一个公钥**。服务端按公钥判定
+        设备归属，于是第二个账号注册必然被拒。
+  后端：`authz_tpm.prepare_new_key()` —— **只挑名字，不删任何东西**（顺序很关键）：
+        默认名空着就用默认名；已被旧密钥占用（= 它就是上一把钥匙）则
+        `new_key_name()` 生成带随机后缀的新名 —— 复用同名等于同一把私钥/公钥，
+        服务端照样认定属于旧账号，等于没覆盖。
+        `api.enable_device(overwrite=True)` 用新密钥注册成功**之后**才调
+        `delete_other_keys(keep=...)` 清理旧密钥（默认名 + `device.json` 记录的上一名字）；
+        ⚠️ 注册失败（设备数已满/网络失败）时旧密钥必须毫发无损 —— 早期实现「先删再注册」
+        一旦被拒，用户既没新授权又丢了旧密钥，比原来的死局更糟。
+        同时重生成 `device_id`（服务端可能按它或按公钥判重，两边都换才稳）。
+        历史凭据没有 `tpm_key_name` 字段 → `key_name_for()` 回落默认名，签名不受影响。
+  识别：`webui/app_api/toolbox.py _is_device_conflict(exc)` —— 同时看 code 片段
+        （conflict/already/in_use/occupied/bound）与中文文案（取消授权/另一账号/
+        已被授权…）。**只按 code 分支必然漏判**：服务端 code 无稳定契约。
+        命中时不直接失败，回 `code = device_key_conflict` + `data.need_overwrite`，
+        由前端决定（后端不替用户做「销毁旧身份」这个不可逆决定）。
+  询问：`toolbox-manager.js authzEnable()` 收到该 code → `_confirmOverwriteKey()`
+        （`ConfirmModal`，正文含服务端原文 + 后果说明 + 不可撤销提醒）→ 同意后
+        带 `overwrite=true` 重试（最多两轮）。取消则 toast「本机密钥保持不变」，
+        不写 `authz-msg`（`finally` 里的 `authzRefresh()` 会清空那段文字）。
+  参数：`_as_bool()` 宽容解析 —— pywebview 有时把 `"false"` 当字符串传，直接
+        `bool("false")` 会变成 True，等于用户没同意就覆盖了密钥。
+
 Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
       `webui/js/toolbox-views.js`（2026-11-01 新增渲染层）,
       `webui/css/components.css`（订阅工具样式段）,

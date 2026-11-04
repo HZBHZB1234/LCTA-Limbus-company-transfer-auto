@@ -281,26 +281,47 @@ class ToolboxApi:
         """票据验签公钥（部署时内嵌进 doorstop）。"""
         return self._request("GET", "/api/toolbox/authz/public-key")
 
-    def enable_device(self, display_name: str = "") -> Dict[str, Any]:
+    def enable_device(self, display_name: str = "", overwrite: bool = False) -> Dict[str, Any]:
         """**一键启用本机**：生成/复用 TPM 密钥 → 注册设备 → 写本地凭据。
 
         这是用户在工具箱里点的那个按钮。成功后 Zylarnex 可脱离启动器自行运行。
+
+        ``overwrite``：**覆盖本机密钥**（2026-11-05）。
+
+        为什么需要它：密钥名曾经是固定常量，同一台机器上无论哪个账号登录，
+        导出的公钥都是同一个。服务端按公钥认定归属，于是第二个账号注册时只能
+        被拒绝 ——「请先在另一账号取消授权」，而用户往往已经登录不上那个账号，
+        机器就此锁死。覆盖时用一把**新密钥**（删不掉旧的就换带随机后缀的名字）
+        并重新生成 ``device_id``，等于换一个**全新的设备身份**，当前账号可直接授权；
+        旧密钥在注册成功后才清理。
         """
         from . import authz_tpm
 
         if not authz_tpm.tpm_available():
             raise ApiError("tpm_unavailable", "本机没有可用的 TPM，无法启用订阅工具")
 
-        key_name = authz_tpm.DEFAULT_KEY_NAME
-        public_key_b64 = authz_tpm.export_public_key_der(key_name)
-
         existing = authz_tpm.load_device()
-        device_id = existing.get("device_id") if existing else None
-        if not device_id:
+
+        if overwrite:
+            # 只挑一个**未被占用**的名字（新名字 = 新私钥 = 新公钥 = 新设备身份）。
+            # 顺序很重要：注册成功后才删旧密钥 —— 注册若被拒（设备数已满/网络失败），
+            # 旧密钥必须毫发无损，否则用户既没有新授权、又丢了旧的，比死局更糟。
+            key_name = authz_tpm.prepare_new_key()
+            # device_id 一并重生成：服务端可能按 device_id 或公钥判重，两边都换才稳。
             device_id = authz_tpm.new_device_id()
+        else:
+            key_name = authz_tpm.key_name_for(existing)
+            device_id = existing.get("device_id") if existing else None
+            if not device_id:
+                device_id = authz_tpm.new_device_id()
+
+        public_key_b64 = authz_tpm.export_public_key_der(key_name)
 
         result = self.register_device(device_id, public_key_b64, display_name)
         authz_tpm.save_device(device_id, api_base=self.base_url, key_name=key_name)
+        if overwrite:
+            # 注册已成功，旧密钥这时才可以丢（失败路径永远走不到这里）
+            authz_tpm.delete_other_keys(keep=key_name)
         return result
 
     def disable_device(self) -> Dict[str, Any]:

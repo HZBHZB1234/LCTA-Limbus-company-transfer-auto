@@ -102,6 +102,32 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _as_bool(value) -> bool:
+    """JS 布尔值宽容解析（pywebview 偶尔把 ``"false"`` 当字符串传过来）。"""
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
+# 「本机密钥已被其他账号占用」的识别词（2026-11-05）。
+# 服务端 code 没有稳定契约（不同版本可能是 device_conflict / already_exists /
+# in_use…），只按 code 分支必然漏判，所以同时看 code 片段与中文文案。
+_DEVICE_CONFLICT_CODE_PARTS = ("conflict", "already", "in_use", "occupied", "bound")
+_DEVICE_CONFLICT_MESSAGE_HINTS = (
+    "取消授权", "另一账号", "另一个账号", "其它账号", "其他账号",
+    "已被授权", "已被绑定", "已绑定", "已被占用", "密钥冲突",
+)
+
+
+def _is_device_conflict(exc: BaseException) -> bool:
+    """注册设备失败是否属于「本机密钥属于另一个账号」。"""
+    code = str(getattr(exc, "code", "") or "").lower()
+    if any(part in code for part in _DEVICE_CONFLICT_CODE_PARTS):
+        return True
+    message = str(getattr(exc, "message", "") or exc or "")
+    return any(hint in message for hint in _DEVICE_CONFLICT_MESSAGE_HINTS)
+
+
 def _login_identity(online: dict) -> str:
     """在线快照的「登录身份」指纹，用来识别登录态**迁移**（换账号/登出/失效）。
 
@@ -709,16 +735,36 @@ class ToolboxMixin:
             self.log_error(e)
             return _error_payload(e)
 
-    def toolbox_authz_enable(self, display_name=""):
+    def toolbox_authz_enable(self, display_name="", overwrite=False):
         """启用本机（生成/复用 TPM 密钥并注册）。
 
         成功后 Zylarnex 可脱离启动器自行运行：doorstop 原生层会读本地
         凭据换票据，决定是否加载 BepInEx。
+
+        ``overwrite``：覆盖本机密钥。用于「本机密钥已被另一个账号授权」的死局 ——
+        密钥名曾经是固定常量，同一台机器上任何账号导出的都是同一个公钥，服务端
+        只会认定它属于上一个账号，于是当前账号永远授权不上（报「请先在另一账号
+        取消授权」），而那个账号往往已经登录不上。覆盖会删掉旧 TPM 密钥、生成
+        新密钥与新 ``device_id``，等于换一个全新设备身份。
+
+        冲突时**不直接失败**，而是回一个 ``code = "device_key_conflict"`` +
+        ``data.need_overwrite = True``，让前端弹窗询问是否覆盖 —— 后端不替用户
+        做「销毁旧身份」这个不可逆的决定。
         """
+        overwrite = _as_bool(overwrite)
         try:
-            data = self._toolbox_api().enable_device(str(display_name or ""))
+            data = self._toolbox_api().enable_device(str(display_name or ""), overwrite=overwrite)
             return {"success": True, "data": data}
         except Exception as e:  # noqa: BLE001
+            if not overwrite and _is_device_conflict(e):
+                self.log_ui("订阅工具：本机密钥已被其他账号授权，等待用户确认是否覆盖")
+                return {
+                    "success": False,
+                    "code": "device_key_conflict",
+                    "message": str(getattr(e, "message", "") or e
+                                   or "本机密钥已被另一个账号授权"),
+                    "data": {"need_overwrite": True, "overwrite_hint": "overwrite"},
+                }
             self.log_error(e)
             return _error_payload(e)
 

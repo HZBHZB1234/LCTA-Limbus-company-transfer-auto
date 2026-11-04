@@ -1087,18 +1087,69 @@ let toolboxManager = {
         const btn = document.getElementById('authz-enable-btn');
         const msg = document.getElementById('authz-msg');
         if (btn) btn.disabled = true;
-        if (msg) msg.textContent = '正在生成 TPM 密钥并注册…';
         try {
-            const res = await this._call('toolbox_authz_enable', '');
-            if (res && res.success) {
-                this._toast('本机已授权，可直接通过 Steam 启动游戏');
-            } else {
+            let overwrite = false;
+            // 最多两轮：首次注册 → 冲突则弹窗询问 → 用户同意后带 overwrite 重试。
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+                if (msg) {
+                    msg.textContent = overwrite
+                        ? '正在覆盖本机密钥并重新注册…'
+                        : '正在生成 TPM 密钥并注册…';
+                }
+                const res = await this._call('toolbox_authz_enable', '', overwrite);
+                if (res && res.success) {
+                    this._toast(overwrite
+                        ? '已覆盖本机密钥，可直接通过 Steam 启动游戏'
+                        : '本机已授权，可直接通过 Steam 启动游戏');
+                    return;
+                }
+                if (!overwrite && res && res.code === 'device_key_conflict') {
+                    // 本机密钥已属于另一个账号：既不静默失败，也不擅自销毁旧身份 ——
+                    // 弹窗让用户明确决定（覆盖 = 旧账号在这台机器上的授权失效）。
+                    const ok = await this._confirmOverwriteKey(res);
+                    if (!ok) {
+                        // 用 toast 而不是 authz-msg：finally 里的 authzRefresh 会清空
+                        // 那段提示文字，写在那里等于用户什么也看不到。
+                        this._toast('已取消：本机密钥保持不变');
+                        return;
+                    }
+                    overwrite = true;
+                    continue;
+                }
                 this._toast((res && res.message) || '授权失败', true);
+                return;
             }
         } finally {
             if (btn) btn.disabled = false;
             await this.authzRefresh();
         }
+    },
+
+    /**
+     * 「本机密钥已被另一个账号授权」的确认弹窗（2026-11-05）。
+     *
+     * 此前这里直接报错「请先在另一账号取消授权」—— 而用户通常已经登录不上
+     * 那个账号，等于机器被锁死。改为询问是否覆盖：覆盖后本机换一把新 TPM
+     * 密钥（新设备身份），当前账号立刻可授权；旧账号在这台机器上失效。
+     */
+    _confirmOverwriteKey(res) {
+        const detail = ((res && res.message) || '').trim();
+        const text = [
+            '本机密钥已被另一个资源站账号授权，当前账号无法直接授权。',
+            detail ? `服务端返回：${detail}` : '',
+            '可以「覆盖本机密钥」：本机会换一把新的 TPM 密钥（等于新的设备身份），'
+                + '当前账号随即可以授权。注意：覆盖后旧账号在这台机器上的授权会失效，'
+                + '若旧账号仍在使用，请先在那边撤销本机授权。',
+            'TPM 里不可导出的旧密钥会被删除，此操作不可撤销。确定覆盖吗？',
+        ].filter(Boolean).join('\n\n');
+
+        if (typeof ConfirmModal === 'undefined') {
+            // 模态层不可用时的兜底（例如极早期初始化阶段）
+            return Promise.resolve(confirm(text));
+        }
+        return new Promise((resolve) => {
+            new ConfirmModal('覆盖本机密钥？', text, () => resolve(true), () => resolve(false));
+        });
     },
 
     async authzDisable() {

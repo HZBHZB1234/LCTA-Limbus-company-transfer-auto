@@ -7,6 +7,7 @@
 - 订阅工具**支持工具间依赖**：发布时可声明「依赖某工具（可带最低版本）」或「锁定某次发布」，可标为可选依赖。服务端在发布与季目录两层校验（依赖存在、版本满足、跨工具环、转载不能硬依赖订阅专享），客户端在写文件前做依赖门禁（没装 / 版本低 / 被停用 / 没资格分类上报），安装按拓扑序先装依赖，卸载被依赖的工具只给警告不阻止
 - **移除作弊工具箱的「BepInEx 挂载（LimiNex）」**：该功能本质是订阅工具底座（Zylarnex）的旧实现，两套并存会争抢 `winhttp.dll` / `doorstop_config.ini` / `BepInEx/`。现已删除 `liminex_mount` 与 `il2cpp_mapping_a4`（mapping 由底座自愈），作弊工具箱只剩伤害倍率与静态数据编辑器；启动器只剩插件自己的 prepare 逻辑。存量用户磁盘上的 LimiNex 痕迹会被识别为「LimiNex 遗留」，在订阅工具页显式接管（覆盖安装会备份原文件），底座的卸载/回滚入口在「订阅工具 · 已安装」里
 - 修复：订阅工具页的「可更新」计数与筛选此前按 `release_id` 字符串比较、且同工具多版本时取"最后一行"，会出现条目来回跳动与假更新；现在统一按服务端 `is_latest` 与版本序判定
+- 修复：订阅工具页报错「The site owner has blocked access based on your browser's signature」（Cloudflare error 1010 / `browser_signature_banned`）导致登录、目录刷新、订阅状态与本机授权全部失败。根因是订阅工具后端所有请求都用裸 `urllib`，未设 `User-Agent` 时被自动补成默认的 `Python-urllib/x.y`，而站点 Cloudflare WAF 把这类脚本默认签名列入黑名单直接 403。现新增 `webutils/toolbox/constants.py` 统一 UA（`LCTA/<版本> (Windows NT 10.0; Win64; x64)`），`api.py` 的 `_request` 与 `download.py` 的下载请求都显式带上该 UA（CDN 域 `dl.mods.lcta.top` 同样受限）；同时下载层把 Cloudflare 1010 单独识别为 `BLOCKED_BY_SITE`，不再误报成「票据无效/过期」
 
 ## v5.0.4版本更新内容
 

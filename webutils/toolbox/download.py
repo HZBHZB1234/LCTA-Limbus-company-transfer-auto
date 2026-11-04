@@ -28,6 +28,8 @@ import urllib.request
 from pathlib import Path
 from typing import Callable, Optional
 
+from .constants import USER_AGENT
+
 logger = logging.getLogger(__name__)
 
 # 单文件上限：底座包通常几十 MB，1 GiB 足够且能防写满磁盘
@@ -75,6 +77,20 @@ def _is_safe_download_url(url: str) -> bool:
     return bool(parsed.netloc)
 
 
+def _is_signature_ban(exc: urllib.error.HTTPError) -> bool:
+    """判断 HTTP 错误是否为 Cloudflare 1010「浏览器签名封禁」。
+
+    站点按客户端签名拦截时返回 ``error code: 1010`` 或
+    ``error_name: browser_signature_banned``。这类 403 与票据失效无关，
+    若混为 ``TICKET_INVALID`` 会让用户/排查误以为票据过期。
+    """
+    try:
+        body = exc.read().decode("utf-8", "replace").lower()
+    except Exception:  # noqa: BLE001
+        return False
+    return "1010" in body or "browser_signature_banned" in body
+
+
 def download_verified(
     url: str,
     dest: Path,
@@ -97,7 +113,9 @@ def download_verified(
     if not expected_sha256:
         raise DownloadError("HASH_MISSING", "缺少预期哈希，拒绝下载（无法校验完整性）")
 
-    request = urllib.request.Request(url, headers={"Accept": "*/*"})
+    # 必须带 User-Agent：CDN 域同样挂在 Cloudflare 后，未设 UA 时 urllib
+    # 默认的 Python-urllib/x.y 会被 WAF 判定为脚本签名并 403（error 1010）。
+    request = urllib.request.Request(url, headers={"Accept": "*/*", "User-Agent": USER_AGENT})
     fd, tmp_name = tempfile.mkstemp(prefix=dest.name + ".", suffix=".part", dir=str(dest.parent))
     os.close(fd)
     tmp = Path(tmp_name)
@@ -125,6 +143,13 @@ def download_verified(
                         progress(total, total_expected)
     except urllib.error.HTTPError as exc:
         tmp.unlink(missing_ok=True)
+        if _is_signature_ban(exc):
+            # Cloudflare 1010：站点按浏览器签名封禁脚本 UA（非票据问题）。
+            # 单独识别，避免被误报为「票据无效/过期」而掩盖真实原因。
+            raise DownloadError(
+                "BLOCKED_BY_SITE",
+                "资源站拒绝了本客户端的请求（Cloudflare 1010 浏览器签名拦截），请更新到最新版本后重试",
+            ) from exc
         # 403/401 = 票据无效/过期；404 = 对象不存在或未授权
         code = {
             401: "TICKET_INVALID",

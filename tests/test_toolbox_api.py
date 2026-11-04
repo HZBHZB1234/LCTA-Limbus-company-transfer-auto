@@ -30,7 +30,9 @@ class _Handler(BaseHTTPRequestHandler):
         pass
 
     def _handle(self, method):
-        _Handler.calls.append((method, self.path, self.headers.get("Authorization")))
+        _Handler.calls.append(
+            (method, self.path, self.headers.get("Authorization"), self.headers.get("User-Agent"))
+        )
         route = _Handler.routes.get((method, self.path.split("?")[0]))
         if route is None:
             self.send_response(404)
@@ -230,6 +232,22 @@ class TestEndpointPaths:
         assert _Handler.calls[-1][2] is None
 
 
+class TestUserAgent:
+    """回归：站点 Cloudflare WAF 按浏览器签名封禁脚本默认 UA（error 1010）。
+
+    订阅工具所有出站请求必须显式带上非 ``Python-urllib/x.y`` 的 UA，
+    否则 urllib 默认值会被 403 拦下（登录/目录/订阅/授权/下载全部失效）。
+    """
+
+    def test_request_sends_non_default_user_agent(self, client):
+        _Handler.routes[("GET", "/api/toolbox/season")] = lambda h: (200, {"ok": True})
+        client.season()
+        ua = _Handler.calls[-1][3]
+        assert ua, "请求必须显式设置 User-Agent"
+        assert not ua.lower().startswith("python-urllib"), f"不能使用 urllib 默认 UA: {ua}"
+        assert ua == api_mod.USER_AGENT
+
+
 # ---------------------------------------------------------------------------
 # 下载
 # ---------------------------------------------------------------------------
@@ -312,6 +330,59 @@ class TestDownload:
         finally:
             httpd.shutdown()
 
+    def _serve_status(self, status, body, headers=None):
+        """假 CDN：返回指定状态码与 body，并记录请求的 User-Agent。"""
+        text = body if isinstance(body, bytes) else body.encode("utf-8")
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                self.server.last_ua = self.headers.get("User-Agent")
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(text)))
+                self.end_headers()
+                self.wfile.write(text)
+
+        httpd = HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        return f"http://127.0.0.1:{httpd.server_port}/f", httpd
+
+    def test_download_sends_non_default_user_agent(self, tmp_path, monkeypatch):
+        """回归：下载请求也必须带非默认 UA（CDN 域同样受 Cloudflare 1010 约束）。"""
+        url, httpd = self._serve_status(200, b"hi")
+        monkeypatch.setattr(dl, "_is_safe_download_url", lambda u: True)
+        try:
+            dl.download_verified(url, tmp_path / "o", expected_sha256=hashlib.sha256(b"hi").hexdigest())
+            ua = httpd.last_ua
+            assert ua and not ua.lower().startswith("python-urllib"), f"默认 UA 会被拦截: {ua}"
+        finally:
+            httpd.shutdown()
+
+    def test_signature_ban_classified(self, tmp_path, monkeypatch):
+        """Cloudflare 1010（browser_signature_banned）应识别为 BLOCKED_BY_SITE，
+        而不是误导性的 TICKET_INVALID。"""
+        url, httpd = self._serve_status(403, "error code: 1010")
+        monkeypatch.setattr(dl, "_is_safe_download_url", lambda u: True)
+        try:
+            with pytest.raises(dl.DownloadError) as ei:
+                dl.download_verified(url, tmp_path / "o", expected_sha256="a" * 64)
+            assert ei.value.code == "BLOCKED_BY_SITE"
+        finally:
+            httpd.shutdown()
+
+    def test_plain_403_still_ticket_invalid(self, tmp_path, monkeypatch):
+        """普通 403（非 1010）仍按票据无效处理，二者不混淆。"""
+        url, httpd = self._serve_status(403, '{"detail":"ticket expired"}')
+        monkeypatch.setattr(dl, "_is_safe_download_url", lambda u: True)
+        try:
+            with pytest.raises(dl.DownloadError) as ei:
+                dl.download_verified(url, tmp_path / "o", expected_sha256="a" * 64)
+            assert ei.value.code == "TICKET_INVALID"
+        finally:
+            httpd.shutdown()
+
 
 class TestCache:
     def test_reuses_valid_cache(self, tmp_path, monkeypatch):
@@ -388,4 +459,4 @@ class TestAfdianRefresh:
         client.save_auth({"access_token": "tok", "refresh_token": "r"})
         data = client.afdian_refresh()
         assert data["verified"] == 1
-        assert ("POST", "/api/integrations/afdian/refresh", "Bearer tok") in _Handler.calls
+        assert ("POST", "/api/integrations/afdian/refresh", "Bearer tok") == _Handler.calls[-1][:3]

@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-11-01 -->
+<!-- Last updated: 2026-11-04 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1719,11 +1719,19 @@ Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.m
 登录凭据：`session.CredentialStore`（Windows DPAPI 当前用户加密 + 原子写），
   检测到旧明文凭据时迁移后**删除**原文件
 
+出站 HTTP（2026-11-04，修复 Cloudflare error 1010）：
+  `webutils/toolbox/constants.py` 统一 `USER_AGENT = "LCTA/<版本> (Windows NT 10.0;
+  Win64; x64)"`；`ToolboxApi._request`（api.py）与 `download_verified`（download.py）
+  都必须显式带该 UA —— 否则 urllib 自动补默认的 `Python-urllib/x.y`，被站点
+  Cloudflare WAF 按「浏览器签名」封禁（403 / `error 1010` / `browser_signature_banned`），
+  导致登录/目录/订阅/授权/下载全部失败。`download.py` 另把 1010 单独识别为
+  `BLOCKED_BY_SITE`（不再误报成 `TICKET_INVALID`）。CDN 域 `dl.mods.lcta.top` 同样受限。
+
 Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
       `webui/js/toolbox-views.js`（2026-11-01 新增渲染层）,
       `webui/css/components.css`（订阅工具样式段）,
       `webui/app_api/toolbox.py`, `webutils/toolbox/{paths,archive,state,runtime,
-      install,ed25519,session,api,download}.py`, `webui/app.py`（LCTA_API 混入）,
+      install,ed25519,session,api,download,constants}.py`, `webui/app.py`（LCTA_API 混入）,
       `webui/js/utils.js`（导航生命周期）, `webui/sections/preload.js`（section 分发）,
       `webui/index.html`（#toolbox-btn / #toolbox-section / script 顺序）,
       `.github/InitCode.py`（js_files）, `webui/assets/update.md`,

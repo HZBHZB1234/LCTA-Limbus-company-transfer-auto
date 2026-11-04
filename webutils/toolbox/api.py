@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from . import session as session_mod
+from .constants import USER_AGENT
 
 logger = logging.getLogger(__name__)
 
@@ -342,7 +343,13 @@ class ToolboxApi:
     ) -> Dict[str, Any]:
         url = self.base_url + path
         data = json.dumps(body).encode("utf-8") if body is not None else None
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        # 必须显式带 User-Agent：urllib 默认的 Python-urllib/x.y 会被站点
+        # Cloudflare WAF 判定为脚本签名并 403（error 1010）。见 constants.py。
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+        }
         if auth:
             token = self.access_token
             if token:

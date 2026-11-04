@@ -482,6 +482,123 @@ class TestSessionExpired:
         assert d["logged_in"] is True
 
 
+class TestAuthChangedNotification:
+    """登录态在别处变化时必须**立即**通知页面刷新（2026-11-04）。
+
+    典型表现：在 Mod 镜像站窗口完成登录 / 点了「同步登录态」后，回到订阅工具页
+    状态条仍写「未登录」，要手动点刷新才对。根因是登录发生在别的窗口，主窗口
+    页面收不到任何通知，只能等下一次 15s 节流后的刷新。
+    """
+
+    class _Win:
+        def __init__(self):
+            self.scripts = []
+
+        def evaluate_js(self, js):
+            self.scripts.append(js)
+
+        def auth_events(self):
+            return [s for s in self.scripts if "lcta-toolbox-auth-changed" in s]
+
+    def _bridge(self, game, api=None):
+        b = _make_bridge(game, api=api)
+        b._window = self._Win()
+        return b
+
+    def test_login_transition_notifies_page(self, game):
+        class _Api(_FakeApi):
+            def __init__(self):
+                super().__init__()
+                self.signed_in = False
+
+            def is_logged_in(self):
+                return self.signed_in
+
+            def access(self):
+                if not self.signed_in:
+                    raise AssertionError("未登录时不该调用 access")
+                return {"unlocked": False, "season_active": True}
+
+            def login(self, identifier, password):
+                self.signed_in = True
+                return {"access_token": "a"}
+
+        api = _Api()
+        b = self._bridge(game, api=api)
+        # 首次观测（游客）只记基线，不推事件
+        b.toolbox_status_online(force=True)
+        assert b._window.auth_events() == []
+        # 登录 → 身份迁移 → 必须推事件
+        assert b.toolbox_login("alice", "pw")["success"] is True
+        events = b._window.auth_events()
+        assert len(events) == 1
+        assert "lcta-toolbox-auth-changed" in events[0]
+
+    def test_repeated_status_does_not_loop(self, game):
+        """同一身份反复查询不能推事件：否则「刷新→查询→再刷新」会自激。"""
+        b = self._bridge(game)
+        for _ in range(4):
+            b.toolbox_status_online(force=True)
+        assert b._window.auth_events() == []
+
+    def test_logout_notifies_page(self, game):
+        b = self._bridge(game)
+        b.toolbox_status_online(force=True)      # 基线：已登录
+        assert b._window.auth_events() == []
+        assert b.toolbox_logout()["success"] is True
+        events = b._window.auth_events()
+        assert len(events) == 1
+        assert "logout" in events[0]
+
+    def test_sync_mirror_login_notifies_page(self, game, monkeypatch):
+        """镜像站窗口里同步登录 → 主窗口页面必须立刻刷新。"""
+        import webutils.function_mod_mirror as fmm
+
+        monkeypatch.setattr(
+            fmm, "mod_mirror_get_auth",
+            lambda: {"access_token": "tok", "user": {"id": 9, "username": "bob"}},
+        )
+        api = _FakeApi()
+        api.is_logged_in = lambda: False
+        saved = {}
+        api.save_auth = lambda data: saved.update(data)
+        b = self._bridge(game, api=api)
+        b.toolbox_status_online(force=True)       # 基线：游客
+        assert b._window.auth_events() == []
+        r = b.toolbox_sync_mirror_login(force=True)
+        assert r["success"] is True
+        events = b._window.auth_events()
+        assert len(events) == 1
+        assert "sync-mirror" in events[0]
+
+    def test_expiry_transition_notifies_page(self, game):
+        from webutils.toolbox.api import AuthRequiredError
+
+        class _Api(_FakeApi):
+            def __init__(self):
+                super().__init__()
+                self.expired = False
+
+            def access(self):
+                if self.expired:
+                    raise AuthRequiredError("invalid_token", "令牌已过期")
+                return {"unlocked": True, "season_active": True}
+
+        api = _Api()
+        b = self._bridge(game, api=api)
+        b.toolbox_status_online(force=True)       # 基线：user:alice
+        assert b._window.auth_events() == []
+        api.expired = True
+        b.toolbox_status_online(force=True)       # user -> expired
+        assert len(b._window.auth_events()) == 1
+
+    def test_missing_window_does_not_break_login(self, game):
+        """无窗口（纯后端/测试环境）时推送事件不能把登录搞失败。"""
+        b = _make_bridge(game)
+        assert not hasattr(b, "_window")
+        assert b.toolbox_login("alice", "pw")["success"] is True
+
+
 class TestUnlockBridge:
     def test_challenge_response_has_no_answer(self, game):
         """桥返回的挑战里**不能**含答案。"""

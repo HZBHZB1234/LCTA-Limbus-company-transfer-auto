@@ -734,3 +734,27 @@ def test_toolbox_sync_login_delegates():
     r = api.toolboxSyncLogin(force=True)
     assert r["success"] is True
     assert main.synced == [True]
+
+
+def test_toolbox_status_reads_shared_game_path(monkeypatch):
+    """镜像站状态必须读**共享** game_path，不能读已降级的旧键（2026-11-04）。"""
+    from webui.mod_mirror_api import ModMirrorWindowAPI
+    import webutils.toolbox.api as tbapi
+    import webutils.toolbox.config as tbcfg
+    import webutils.toolbox.runtime as tbrt
+
+    monkeypatch.setattr(tbcfg, "get_game_path", lambda: "D:/Steam/common/Limbus Company")
+    seen = {}
+
+    def _running(root):
+        seen["root"] = root
+        return True
+
+    monkeypatch.setattr(tbrt, "is_game_running", _running)
+    monkeypatch.setattr(tbapi.ToolboxApi, "is_logged_in", lambda self: True)
+
+    r = ModMirrorWindowAPI().toolboxStatus()
+    assert r["success"] is True
+    assert r["data"]["game_root"] == "D:/Steam/common/Limbus Company"
+    assert seen["root"] == "D:/Steam/common/Limbus Company"
+    assert r["data"]["game_running"] is True

@@ -68,6 +68,22 @@ def test_views_layer_has_no_bridge_calls():
     assert "fetch(" not in views
 
 
+def test_auth_changed_event_is_wired():
+    """登录态在别处变化时必须立即刷新（2026-11-04）。
+
+    后端 `ToolboxMixin._toolbox_notify_auth_changed()` 派发
+    `lcta-toolbox-auth-changed`；manager 必须脚本加载即监听，并实现
+    `onAuthChanged()` 强制重拉 —— 否则在镜像站窗口登录后回到本页仍显示「未登录」。
+    """
+    manager = MANAGER.read_text(encoding="utf-8")
+    assert "lcta-toolbox-auth-changed" in manager, "缺少登录态变更事件监听"
+    assert "onAuthChanged()" in manager, "缺少 onAuthChanged 处理函数"
+    # 监听必须在脚本尾部立即注册（与 lcta-toolbox-install 同样不依赖 init()）
+    assert "bindToolboxAuthEvents" in manager
+    # 事件处理必须强制刷新在线状态（force=true），不能被 15s 节流挡住
+    assert "refreshOnline(true)" in manager
+
+
 def test_text_is_escaped_in_views():
     """服务端文本渲染前必须经 esc()：禁止直接插值关键字段。"""
     views = VIEWS.read_text(encoding="utf-8")

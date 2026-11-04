@@ -72,12 +72,13 @@ class ModMirrorWindowAPI:
     def toolboxStatus(self) -> dict:
         """返回订阅工具在 LCTA 宿主侧的登录/游戏目录/运行状态。"""
         try:
-            from globalManagers.ConfigManager import ConfigManager
             from webutils.toolbox import api as toolbox_api
+            from webutils.toolbox import config as toolbox_config
             from webutils.toolbox import runtime
 
-            cfg = ConfigManager().get("ui_default.toolbox", {}) or {}
-            game_root = (cfg.get("game_root") if isinstance(cfg, dict) else "") or ""
+            # 游戏路径与设置页共用顶层 game_path（2026-11-04 统一），
+            # 不要读已降级为只读回退的 ui_default.toolbox.game_root。
+            game_root = toolbox_config.get_game_path() or ""
             game_running = None
             if game_root:
                 try:

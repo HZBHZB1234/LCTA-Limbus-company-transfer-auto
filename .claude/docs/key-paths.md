@@ -1752,6 +1752,25 @@ Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.m
   → 渲染 `toolbox-views.js statusbar()/account()`：账号格「登录已失效 · 请重新登录」、
       主操作变「重新登录」、账号页顶部 `#tb-session-expired` 横幅。
 
+登录态变更即时刷新（2026-11-04，修复「登录状态更新后没有立即刷新」）：
+  症状：在 Mod 镜像站窗口登录 / 点「同步登录态」/ 在别处登出后回到订阅工具页，
+        状态条仍显示「未登录」，必须手动点刷新才对。
+  根因：① 登录发生在**别的窗口**，主窗口页面收不到任何通知；② 即使收到，
+        `init()` 有 15s 在线刷新节流，且 800ms 内二次 init 只 `_render()` 旧状态。
+  推送：`ToolboxMixin._toolbox_notify_auth_changed(reason)`
+        → `_window.evaluate_js` 派发 `lcta-toolbox-auth-changed` CustomEvent
+  触发点：`toolbox_login` / `toolbox_logout` / `toolbox_sync_mirror_login` 成功后直接推；
+        另有 `toolbox_status_online()` → `_toolbox_track_login_identity()`
+        （`guest` / `user:<id或用户名>` / `expired` 身份**迁移**才推，首次只记基线，
+         防止「刷新→查询→再刷新」自激回环）
+  接收：`toolbox-manager.js` 脚本加载即注册 `bindToolboxAuthEvents`
+        → `onAuthChanged()`：先记 `_authChangedAt`（页面不在前台也记），
+          再 `refreshLocal()` + `refreshOnline(true)` 强制重拉
+  切回：`init()` 发现 `_authChangedAt` 在 15s 内 → 跳过 15s 节流强制 `refreshOnline(true)`
+        （覆盖「切走 → 去镜像站登录 → 切回」这条实际路径）
+  镜像站状态卡：`webui/mod_mirror_api.py toolboxStatus()` 的游戏目录同样走
+        `webutils.toolbox.config.get_game_path()`（不再读已降级的旧键）
+
 Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
       `webui/js/toolbox-views.js`（2026-11-01 新增渲染层）,
       `webui/css/components.css`（订阅工具样式段）,
@@ -1760,7 +1779,8 @@ Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
       `webui/js/utils.js`（导航生命周期）, `webui/sections/preload.js`（section 分发）,
       `webui/index.html`（#toolbox-btn / #toolbox-section / script 顺序）,
       `.github/InitCode.py`（js_files）, `webui/assets/update.md`,
-      `tests/test_toolbox_{paths,state,install,ed25519,session,api,bridge,packaging}.py`,
+      `tests/test_toolbox_{paths,state,install,ed25519,session,api,bridge,packaging,html_wiring}.py`,
+      `tests/test_mod_mirror.py`,
       `docs/plans/2026-11-01-toolbox-tab-refactor.md`（重构计划）
 
 ### 2026-11-01 扩展：安装预览 / 文件包 / 仅下载 / 镜像站安装

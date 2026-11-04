@@ -31,6 +31,7 @@ let toolboxManager = {
     _loading: { local: false, online: false },
     _seq: { local: 0, online: 0 },
     _lastOnlineAt: 0,
+    _authChangedAt: 0,
     _drawerItem: null,
     _dockDismissed: false,
     _challengeId: '',
@@ -59,10 +60,16 @@ let toolboxManager = {
 
         this._bindOnce();
 
-        // 本地快照立即渲染；在线部分避免来回切页时反复打服务端
+        // 本地快照立即渲染；在线部分避免来回切页时反复打服务端。
+        // 但若登录态刚刚在别处变过（onAuthChanged 打过标记），必须重拉 ——
+        // 否则「切走→去镜像站登录→切回」会被 15s 节流挡住，停在旧状态。
         this.refreshLocal();
-        if (!this._online || Date.now() - this._lastOnlineAt > 15000) {
-            this.refreshOnline();
+        const authJustChanged = this._authChangedAt
+            && Date.now() - this._authChangedAt < 15000;
+        if (authJustChanged || !this._online
+            || Date.now() - this._lastOnlineAt > 15000) {
+            this._authChangedAt = 0;
+            this.refreshOnline(true);
         } else {
             this._render();
         }
@@ -218,6 +225,27 @@ let toolboxManager = {
     async refresh() {
         await this.refreshLocal();
         await this.refreshOnline(true);
+    },
+
+    /**
+     * 登录态在**别处**变了（别的窗口登录/登出、镜像站同步登录、令牌失效）：
+     * 后端派发 `lcta-toolbox-auth-changed`，这里立刻强制重拉，不等 15s 节流。
+     *
+     * 为什么要专门一条路径：订阅工具页只在进入时拉一次在线状态，并在 15 秒内
+     * 去重；用户在镜像站窗口完成登录再切回来时，页面既不会重新 init，也还在
+     * 节流窗口里，状态条就一直停在「未登录」——这正是「登录状态更新后没有
+     * 立即刷新」的根因之一。
+     */
+    onAuthChanged() {
+        // 标记必须**先记**（即使页面当前不可见）：用户可能正停留在别的页面，
+        // 事件到达时订阅工具页是 stop 状态；等切回来 init() 时靠这个标记跳过
+        // 15s 节流强制重拉。先记后判，才覆盖「切走 → 去镜像站登录 → 切回」。
+        this._authChangedAt = Date.now();
+        if (this._stopped) return;
+        // refreshLocal/refreshOnline 内部都会 _render()，账号视图的本机授权
+        // 状态也在 _render() 里补刷，这里不重复调用 authzRefresh。
+        this.refreshLocal();
+        this.refreshOnline(true);
     },
 
     async refreshLocal() {
@@ -1144,6 +1172,19 @@ document.addEventListener('keydown', (e) => {
         const payload = e.detail && e.detail.payload;
         if (payload && typeof toolboxManager !== 'undefined') {
             toolboxManager.installFromMirror(payload);
+        }
+    });
+})();
+
+// 登录态在别处变化（登录/登出/镜像站同步登录/令牌失效）→ 立即刷新订阅工具页。
+// 后端 ToolboxMixin._toolbox_notify_auth_changed() 派发该事件（跨窗口可达），
+// 这里只负责「收到就重拉」，状态判定仍以在线快照为准。
+(function bindToolboxAuthEvents() {
+    if (window.__toolboxAuthEventsBound) return;
+    window.__toolboxAuthEventsBound = true;
+    window.addEventListener('lcta-toolbox-auth-changed', () => {
+        if (typeof toolboxManager !== 'undefined' && toolboxManager) {
+            toolboxManager.onAuthChanged();
         }
     });
 })();

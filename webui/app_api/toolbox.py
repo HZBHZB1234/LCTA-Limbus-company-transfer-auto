@@ -102,6 +102,22 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _login_identity(online: dict) -> str:
+    """在线快照的「登录身份」指纹，用来识别登录态**迁移**（换账号/登出/失效）。
+
+    只在身份变化时推送刷新事件（见 ``ToolboxMixin._toolbox_notify_auth_changed``）：
+    定时查询每次返回同样的身份值不会误触发；一旦变了，主窗口页面就必须立刻
+    重拉，否则会停在「已经登录/已经登出，页面还显示旧状态」。
+    """
+    if online.get("session_expired"):
+        return "expired"
+    if not online.get("logged_in"):
+        return "guest"
+    user = online.get("user") or {}
+    ident = user.get("id") or user.get("username") or user.get("email") or ""
+    return f"user:{ident}"
+
+
 class ToolboxBridgeError(RuntimeError):
     """带机器可读 ``code`` 的桥接层错误。
 
@@ -259,6 +275,52 @@ class ToolboxMixin:
 
     def _toolbox_session_was_expired(self) -> bool:
         return bool(getattr(self, "_toolbox_session_expired", False))
+
+    def _toolbox_track_login_identity(self, online: dict) -> None:
+        """登录身份变化时通知页面立即刷新（首次观测只记基线，不通知）。
+
+        只认**迁移**：定时刷新/重复查询拿到同一身份不推事件，避免「刷新→查询→
+        再刷新」的自激回环。真正变化的三类都在这里覆盖：登录（guest→user）、
+        登出（user→guest）、失效（user→expired）。
+        """
+        ident = _login_identity(online)
+        previous = getattr(self, "_toolbox_last_login_identity", None)
+        self._toolbox_last_login_identity = ident
+        if previous is None or previous == ident:
+            return
+        self._toolbox_notify_auth_changed(f"{previous}->{ident}")
+
+    def _toolbox_notify_auth_changed(self, reason: str = "") -> None:
+        """把「登录态变了」推给主窗口页面，让它**立即**刷新。
+
+        为什么必须有这条通道：登录/登出/镜像站同步登录都可能发生在**别的
+        窗口**（Mod 镜像站独立窗口直接调 LCTA_API），主窗口的订阅工具页收不到
+        任何通知，只能等用户手动点刷新 —— 表现成「已经登录了，状态条还写着
+        未登录」。这里派发 ``lcta-toolbox-auth-changed`` CustomEvent，
+        ``toolboxManager.onAuthChanged()`` 收到即强制重拉在线状态。
+
+        只在**状态迁移**时调用（见 ``toolbox_status_online``），否则前端刷新又
+        触发状态查询、状态查询又发事件，会形成回环。
+        """
+        window = getattr(self, "_window", None)
+        if window is None:
+            return
+        import json
+
+        detail = json.dumps({"reason": str(reason or "")}, ensure_ascii=False)
+        js = (
+            "window.dispatchEvent(new CustomEvent("
+            f"'lcta-toolbox-auth-changed', {{detail: {detail}}}));"
+        )
+        for name in ("evaluate_js", "run_js"):
+            fn = getattr(window, name, None)
+            if not callable(fn):
+                continue
+            try:
+                fn(js)
+                return
+            except Exception:  # noqa: BLE001 - 窗口/页面未就绪不应让登录失败
+                logger.debug("派发登录态变更事件失败（%s）", name, exc_info=True)
 
     # -- 状态：本地快照（离线可用）------------------------------------------
 
@@ -423,6 +485,7 @@ class ToolboxMixin:
         data["generation"] = generation
 
         self._toolbox_online_cache = (time.monotonic(), data)
+        self._toolbox_track_login_identity(data)
         return {"success": True, "data": data}
 
     def toolbox_status(self):
@@ -478,6 +541,9 @@ class ToolboxMixin:
             self.log_ui("订阅工具：已登录资源站")
             self._toolbox_online_cache = None
             self._toolbox_mark_session_expired(False)
+            # 登录态变了：立即让页面重拉（含「别的窗口登录、本页未知」的情形）
+            self._toolbox_last_login_identity = None
+            self._toolbox_notify_auth_changed("login")
             return {"success": True, "message": "登录成功"}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
@@ -490,6 +556,8 @@ class ToolboxMixin:
             self._toolbox_online_cache = None
             # 主动登出不是「失效」：不该再显示「请重新登录」
             self._toolbox_mark_session_expired(False)
+            self._toolbox_last_login_identity = None
+            self._toolbox_notify_auth_changed("logout")
             return {"success": True}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
@@ -862,7 +930,12 @@ class ToolboxMixin:
                     user = None
             api.save_auth({"access_token": token, "user": user if isinstance(user, dict) else None})
             self._toolbox_online_cache = None
+            self._toolbox_mark_session_expired(False)
             self.log_ui("订阅工具：已从 Mod 镜像站同步登录态（仅 access token）")
+            # 同步登录发生在**镜像站窗口**里：主窗口订阅工具页必须立刻刷新，
+            # 否则用户已经登录了，页面还停在「未登录 + 登录表单」。
+            self._toolbox_last_login_identity = None
+            self._toolbox_notify_auth_changed("sync-mirror")
             return {"success": True, "data": {"synced": True}}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)

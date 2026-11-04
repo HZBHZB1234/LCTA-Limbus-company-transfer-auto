@@ -1727,11 +1727,36 @@ Files: `webui/sections/notice.html`, `webui/js/notice.js`, `webui/guide/notice.m
   导致登录/目录/订阅/授权/下载全部失败。`download.py` 另把 1010 单独识别为
   `BLOCKED_BY_SITE`（不再误报成 `TICKET_INVALID`）。CDN 域 `dl.mods.lcta.top` 同样受限。
 
+游戏路径（2026-11-04，修复「订阅工具与设置页未共享同一份游戏路径」）：
+  唯一事实来源 = 顶层 `game_path`（`webui/sections/settings.html` 的 `#game-path`）。
+  读：`webutils/toolbox/config.py get_game_path()`（旧键 `ui_default.toolbox.game_root`
+      仅作只读回退，读到即迁移到 `game_path`，之后不再写回）
+    ← `webui/app_api/toolbox.py _toolbox_game_root()`（订阅工具桥全部动作）
+    ← `launcher/toolbox_update.py _resolve_game_root()`（开局前自动更新）
+  写：`config.set_game_path()` ← `toolbox_set_game_root`（订阅工具页「保存游戏目录」）
+    ← 设置页 `#game-path` 的 configKeyMap 自动保存（两条路径都落到同一个键）
+  选目录：`toolbox_pick_game_root()` 只校验不落盘（前端 `browseGameRoot()` 填入输入框，
+  点保存才写）；保存后前端 `_syncGamePathToSettings()` 回填设置页输入框 + 配置缓存。
+
+登录失效（2026-11-04，修复「令牌过期后不要求重新登录，只在设置里留一行小字」）：
+  `ToolboxApi._request` 401 → `_refresh_once()` 失败 → 抛 `AuthRequiredError`
+    （`auth = True` 机器可读标记；`code` 保留服务端 detail 原文便于排查）
+  → `webui/app_api/toolbox.py _error_payload()` 认 `auth` 标记 → 统一 `code = auth_required`
+  → `toolbox_status_online()`：access 片失败且 code=auth_required → `session_expired = True`
+      并把 `logged_in` 改回 False（断网/403 等非 401 错误不会误判）
+      另记 `_toolbox_session_expired` —— `_refresh_once` 失败会**清空 DPAPI 凭据**，
+      下次 `is_logged_in()` 变 False，只靠当次 401 会让提示只闪一次；
+      重新登录或主动登出时清掉该标记。
+  → 前端 `toolbox-manager.js _checkSession()` → toast「登录已失效，请重新登录」+ `_promptRelogin()`
+      （切账号页、聚焦用户名框；每会话一次）
+  → 渲染 `toolbox-views.js statusbar()/account()`：账号格「登录已失效 · 请重新登录」、
+      主操作变「重新登录」、账号页顶部 `#tb-session-expired` 横幅。
+
 Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
       `webui/js/toolbox-views.js`（2026-11-01 新增渲染层）,
       `webui/css/components.css`（订阅工具样式段）,
       `webui/app_api/toolbox.py`, `webutils/toolbox/{paths,archive,state,runtime,
-      install,ed25519,session,api,download,constants}.py`, `webui/app.py`（LCTA_API 混入）,
+      install,ed25519,session,api,download,constants,config}.py`, `webui/app.py`（LCTA_API 混入）,
       `webui/js/utils.js`（导航生命周期）, `webui/sections/preload.js`（section 分发）,
       `webui/index.html`（#toolbox-btn / #toolbox-section / script 顺序）,
       `.github/InitCode.py`（js_files）, `webui/assets/update.md`,

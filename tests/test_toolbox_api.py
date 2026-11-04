@@ -203,6 +203,43 @@ class TestSessionHandling:
             client.access()
         assert count["n"] == 1, "只应刷新一次"
 
+    def test_auth_required_is_flagged_for_ui(self, client):
+        """``AuthRequiredError`` 必须带 ``auth`` 标记。
+
+        前端不能靠 ``code == "auth_required"`` 判断：服务端 detail 的 code 有
+        ``error``/``invalid_token``/``expired`` 等多种形态，按 code 分支必然漏。
+        """
+        _Handler.routes[("GET", "/api/toolbox/access")] = lambda h: (
+            401, {"detail": {"code": "invalid_token", "message": "令牌已过期"}}
+        )
+        _Handler.routes[("POST", "/api/auth/client/refresh")] = lambda h: (401, {"detail": "bad"})
+        client.save_auth({"access_token": "old", "refresh_token": "bad"})
+        with pytest.raises(api_mod.AuthRequiredError) as ei:
+            client.access()
+        assert getattr(ei.value, "auth", False) is True
+        assert ei.value.code == "invalid_token", "code 保留服务端原文便于排查"
+
+    def test_plain_401_without_refresh_is_auth_required(self, client):
+        """没有 refresh token 的 401 同样是「需要登录」，不是普通错误。"""
+        _Handler.routes[("GET", "/api/toolbox/access")] = lambda h: (
+            401, {"detail": {"code": "not_authenticated", "message": "请先登录"}}
+        )
+        client.save_auth({"access_token": "t"})
+        with pytest.raises(api_mod.AuthRequiredError) as ei:
+            client.access()
+        assert getattr(ei.value, "auth", False) is True
+
+    def test_non_401_errors_are_not_flagged_as_auth(self, client):
+        """403/404 不是登录问题，不能引导用户去重新登录。"""
+        _Handler.routes[("GET", "/api/toolbox/access")] = lambda h: (
+            403, {"detail": {"code": "no_entitlement", "message": "需要订阅"}}
+        )
+        client.save_auth({"access_token": "t", "refresh_token": "r"})
+        with pytest.raises(api_mod.ApiError) as ei:
+            client.access()
+        assert not isinstance(ei.value, api_mod.AuthRequiredError)
+        assert getattr(ei.value, "auth", False) is False
+
 
 class TestEndpointPaths:
     def test_manifest_and_ticket_paths(self, client):

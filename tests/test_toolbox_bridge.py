@@ -234,18 +234,252 @@ class TestInstallBoundary:
 
 
 class TestGameRootValidation:
-    def test_set_game_root_rejects_bad_path(self, tmp_path):
+    def test_set_game_root_rejects_bad_path(self, tmp_path, monkeypatch):
+        _patch_config(monkeypatch)
         b = _make_bridge(tmp_path)
         r = b.toolbox_set_game_root(str(tmp_path / "does-not-exist"))
         assert r["success"] is False
 
-    def test_set_game_root_rejects_drive_root(self):
+    def test_set_game_root_rejects_drive_root(self, monkeypatch):
         import os
 
         if os.name != "nt":
             pytest.skip("仅 Windows")
+        _patch_config(monkeypatch)
         b = _make_bridge(Path("."))
         assert b.toolbox_set_game_root("C:\\")["success"] is False
+
+
+def _patch_config(monkeypatch, initial=None):
+    """把 ConfigManager 换成内存字典（避免测试写真实 config.json）。"""
+    from globalManagers.ConfigManager import ConfigManager
+
+    store = dict(initial or {})
+
+    def _get(self, key, default=None):
+        return store.get(key, default)
+
+    def _set(self, key, value, auto_save=True):
+        store[key] = value
+
+    monkeypatch.setattr(ConfigManager, "get", _get)
+    monkeypatch.setattr(ConfigManager, "set", _set)
+    return store
+
+
+def _make_real_bridge(api=None):
+    """不覆盖 ``_toolbox_game_root`` 的桥：用来测真实的配置读取路径。"""
+    from webui.app_api.toolbox import ToolboxMixin
+
+    class Bridge(ToolboxMixin):
+        def __init__(self):
+            self.errors = []
+            self.ui = []
+
+        def log_error(self, exc):
+            self.errors.append(repr(exc))
+
+        def log_ui(self, msg):
+            self.ui.append(msg)
+
+        def _toolbox_api(self):
+            return api or _FakeApi()
+
+    return Bridge()
+
+
+class TestSharedGamePath:
+    """游戏路径只有一份：订阅工具页与「设置」页必须读写同一个键（2026-11-04）。
+
+    历史 bug：订阅工具读 ``ui_default.toolbox.game_root``，设置页写 ``game_path``，
+    两处都"保存成功"却互不可见。
+    """
+
+    def test_reads_shared_game_path(self, tmp_path, monkeypatch):
+        game = tmp_path / "game"
+        game.mkdir()
+        store = _patch_config(monkeypatch, {"game_path": str(game)})
+        r = _make_real_bridge().toolbox_status_local()
+        assert r["data"]["game_root"] == str(game)
+        assert store["game_path"] == str(game), "不应写入订阅工具私有键"
+
+    def test_set_writes_shared_game_path_not_private_key(self, tmp_path, monkeypatch):
+        from webutils.toolbox import config as toolbox_config
+
+        game = tmp_path / "game"
+        game.mkdir()
+        store = _patch_config(monkeypatch)
+        r = _make_real_bridge().toolbox_set_game_root(str(game))
+        assert r["success"] is True
+        assert store.get(toolbox_config.GAME_PATH_KEY), "必须写到共用的 game_path"
+        assert toolbox_config.LEGACY_GAME_ROOT_KEY not in store, "不得再写订阅工具私有键"
+
+    def test_legacy_key_is_migrated(self, tmp_path, monkeypatch):
+        """老用户只配过订阅工具私有键：读到即迁到 game_path，之后统一。"""
+        from webutils.toolbox import config as toolbox_config
+
+        game = tmp_path / "game"
+        game.mkdir()
+        store = _patch_config(
+            monkeypatch, {toolbox_config.LEGACY_GAME_ROOT_KEY: str(game)}
+        )
+        assert _make_real_bridge().toolbox_status_local()["data"]["game_root"] == str(game)
+        assert store.get(toolbox_config.GAME_PATH_KEY) == str(game), "旧值应被迁移"
+
+    def test_game_path_wins_over_legacy(self, tmp_path, monkeypatch):
+        from webutils.toolbox import config as toolbox_config
+
+        new = tmp_path / "new"
+        old = tmp_path / "old"
+        new.mkdir()
+        old.mkdir()
+        _patch_config(monkeypatch, {
+            toolbox_config.GAME_PATH_KEY: str(new),
+            toolbox_config.LEGACY_GAME_ROOT_KEY: str(old),
+        })
+        assert _make_real_bridge().toolbox_status_local()["data"]["game_root"] == str(new)
+
+    def test_missing_root_message_points_to_settings(self, tmp_path, monkeypatch):
+        """未配置时的提示必须指向「设置」页，并说明两处共用同一份路径。"""
+        _patch_config(monkeypatch)
+        r = _make_real_bridge().toolbox_status_local()
+        msg = r["data"]["local_error"]
+        assert "设置" in msg
+        assert "共用" in msg
+
+
+class TestSessionExpired:
+    """令牌失效必须**要求重新登录**，而不是只在设置页留一行小字（2026-11-04）。"""
+
+    def test_expired_session_flips_logged_in_false(self, game):
+        from webutils.toolbox.api import AuthRequiredError
+
+        class _ExpiredApi(_FakeApi):
+            def access(self):
+                self.calls.append("access")
+                raise AuthRequiredError("invalid_token", "令牌已过期")
+
+        b = _make_bridge(game, api=_ExpiredApi())
+        d = b.toolbox_status_online(force=True)["data"]
+        assert d["logged_in"] is False, "本地有 refresh token 也不能显示为已登录"
+        assert d["session_expired"] is True
+        assert d["errors"]["access"]["code"] == "auth_required", (
+            "服务端 detail 的 code 五花八门，桥接层必须统一成 auth_required"
+        )
+
+    def test_network_error_is_not_session_expired(self, game):
+        """断网 ≠ 登录失效：不能把网络错误也引导去重新登录。"""
+        b = _make_bridge(game, api=_FakeApi(raise_on={"access"}))
+        d = b.toolbox_status_online(force=True)["data"]
+        assert d["logged_in"] is True
+        assert d["session_expired"] is False
+
+    def test_composed_status_carries_flag(self, game):
+        from webutils.toolbox.api import AuthRequiredError
+
+        class _ExpiredApi(_FakeApi):
+            def access(self):
+                raise AuthRequiredError("error", "登录已失效，请重新登录")
+
+        b = _make_bridge(game, api=_ExpiredApi())
+        d = b.toolbox_status()["data"]
+        assert d["session_expired"] is True
+        assert d["logged_in"] is False
+
+    def test_no_relogin_required_after_successful_login(self, game):
+        b = _make_bridge(game)
+        d = b.toolbox_status_online(force=True)["data"]
+        assert d["session_expired"] is False
+        assert d["logged_in"] is True
+
+    def test_expired_flag_survives_credential_wipe(self, game):
+        """刷新失败会清空凭据 → 下一次 is_logged_in() 为 False。
+
+        这时仍必须提示「需要重新登录」，否则用户看到的是普通「未登录」，
+        完全不知道刚才是令牌失效导致的（表现成"莫名其妙被登出"）。
+        """
+        from webutils.toolbox.api import AuthRequiredError
+
+        class _WipedApi(_FakeApi):
+            def __init__(self):
+                super().__init__()
+                self.wiped = False
+
+            def is_logged_in(self):
+                return not self.wiped
+
+            def access(self):
+                raise AuthRequiredError("error", "登录已失效，请重新登录")
+
+            def _wipe(self):
+                self.wiped = True
+
+        api = _WipedApi()
+        b = _make_bridge(game, api=api)
+        first = b.toolbox_status_online(force=True)["data"]
+        assert first["session_expired"] is True
+
+        api._wipe()  # 模拟 _refresh_once 失败后清空 DPAPI 凭据
+        second = b.toolbox_status_online(force=True)["data"]
+        assert second["logged_in"] is False
+        assert second["session_expired"] is True, "失效提示不能只闪一次"
+
+    def test_logout_clears_expired_flag(self, game):
+        """用户主动登出后不应再提示「请重新登录」。"""
+        from webutils.toolbox.api import AuthRequiredError
+
+        class _ExpiredApi(_FakeApi):
+            def __init__(self):
+                super().__init__()
+                self.expired = True
+                self.signed_in = True
+
+            def is_logged_in(self):
+                return self.signed_in
+
+            def access(self):
+                if self.expired:
+                    raise AuthRequiredError("error", "登录已失效")
+                return {"unlocked": False, "season_active": True}
+
+            def logout(self):
+                self.calls.append("logout")
+                self.expired = False
+                self.signed_in = False
+
+        api = _ExpiredApi()
+        b = _make_bridge(game, api=api)
+        assert b.toolbox_status_online(force=True)["data"]["session_expired"] is True
+        b.toolbox_logout()
+        d = b.toolbox_status_online(force=True)["data"]
+        assert d["session_expired"] is False
+        assert d["logged_in"] is False
+
+    def test_login_clears_expired_flag(self, game):
+        from webutils.toolbox.api import AuthRequiredError
+
+        class _ExpiredApi(_FakeApi):
+            def __init__(self):
+                super().__init__()
+                self.expired = True
+
+            def access(self):
+                if self.expired:
+                    raise AuthRequiredError("error", "登录已失效")
+                return {"unlocked": True, "season_active": True}
+
+            def login(self, identifier, password):
+                self.calls.append(("login", identifier, password))
+                self.expired = False
+                return {"access_token": "a"}
+
+        api = _ExpiredApi()
+        b = _make_bridge(game, api=api)
+        assert b.toolbox_status_online(force=True)["data"]["session_expired"] is True
+        assert b.toolbox_login("alice", "pw")["success"] is True
+        d = b.toolbox_status_online(force=True)["data"]
+        assert d["session_expired"] is False
+        assert d["logged_in"] is True
 
 
 class TestUnlockBridge:

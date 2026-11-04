@@ -42,7 +42,6 @@ from globalManagers.LogManager import LogManager
 
 _log_manager = LogManager()
 
-TOOLBOX_CONFIG_KEY = "ui_default.toolbox"
 STATE_DIR_NAME = ".lcta-toolbox"
 STATE_FILE_NAME = "update-state.json"
 REPORT_FILE_NAME = "last-update.json"
@@ -101,15 +100,17 @@ def _write_json(path: Path, data: dict) -> None:
 
 
 def _resolve_game_root() -> Optional[str]:
-    """游戏目录：订阅工具配置优先，回退启动器的 ``game_path``。"""
+    """游戏目录：与设置页共用 ``game_path``（唯一事实来源）。
+
+    历史实现优先读 ``ui_default.toolbox.game_root``，于是「在设置页改了游戏
+    路径，开局前自动更新仍用旧目录」。现在统一走
+    ``webutils.toolbox.config.get_game_path``：它自己会做旧键迁移与回退。
+    """
     try:
-        cfg = ConfigManager().get(TOOLBOX_CONFIG_KEY, {}) or {}
-        root = (cfg.get("game_root") if isinstance(cfg, dict) else "") or ""
-        root = str(root or "").strip()
-        if root:
-            return root
-        fallback = str(ConfigManager().get("game_path", "") or "").strip()
-        return fallback or None
+        from webutils.toolbox import config as toolbox_config
+
+        root = str(toolbox_config.get_game_path() or "").strip()
+        return root or None
     except Exception:  # noqa: BLE001 - 配置异常按"未配置"处理
         return None
 

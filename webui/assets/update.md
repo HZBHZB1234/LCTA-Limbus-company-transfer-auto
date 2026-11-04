@@ -7,7 +7,11 @@
 - 订阅工具**支持工具间依赖**：发布时可声明「依赖某工具（可带最低版本）」或「锁定某次发布」，可标为可选依赖。服务端在发布与季目录两层校验（依赖存在、版本满足、跨工具环、转载不能硬依赖订阅专享），客户端在写文件前做依赖门禁（没装 / 版本低 / 被停用 / 没资格分类上报），安装按拓扑序先装依赖，卸载被依赖的工具只给警告不阻止
 - **移除作弊工具箱的「BepInEx 挂载（LimiNex）」**：该功能本质是订阅工具底座（Zylarnex）的旧实现，两套并存会争抢 `winhttp.dll` / `doorstop_config.ini` / `BepInEx/`。现已删除 `liminex_mount` 与 `il2cpp_mapping_a4`（mapping 由底座自愈），作弊工具箱只剩伤害倍率与静态数据编辑器；启动器只剩插件自己的 prepare 逻辑。存量用户磁盘上的 LimiNex 痕迹会被识别为「LimiNex 遗留」，在订阅工具页显式接管（覆盖安装会备份原文件），底座的卸载/回滚入口在「订阅工具 · 已安装」里
 - 修复：订阅工具页的「可更新」计数与筛选此前按 `release_id` 字符串比较、且同工具多版本时取"最后一行"，会出现条目来回跳动与假更新；现在统一按服务端 `is_latest` 与版本序判定
+- 修复：**订阅工具与软件设置未共享同一份游戏路径**——订阅工具读 `ui_default.toolbox.game_root`，而「设置」页写顶层 `game_path`，两处都显示「保存成功」却互不可见（在设置里配好，订阅工具仍提示「尚未配置游戏目录」；在订阅工具页配好，翻译/美化/资源更新等仍认为没配置）。启动器的开局前自动更新还优先读订阅工具那份，导致设置页改动对它不生效。现统一以 **`game_path` 为唯一事实来源**：新增 `webutils/toolbox/config.py`（`get_game_path` / `set_game_path`），订阅工具桥、`toolbox_set_game_root` 与 `launcher/toolbox_update._resolve_game_root` 全部改走它；`ui_default.toolbox.game_root` 降级为**只读旧值回退**（老用户读到即自动迁到 `game_path`，之后不再写回）。订阅工具页「设置与诊断 · 游戏目录」新增「浏览」按钮（`toolbox_pick_game_root`，只校验不落盘），保存后同步回填设置页输入框与前端配置缓存；两处文案都注明「与设置页共用同一份游戏路径」
+- 修复：**令牌失效/过期后不要求重新登录**，只在「设置与诊断」里留一行小字——用户表现为「明明登录了却什么都下不了」。根因是 `AuthRequiredError` 的 `code` 直接用服务端 detail 原文（`error` / `invalid_token` / `expired` 等各种形态），而前端只按 `code === 'auth_required'` 分支，几乎永远匹配不上；且 `logged_in` 在 `access` 调用之前就已定为 True，状态条仍显示「已登录」。现 `AuthRequiredError` 带机器可读的 `auth` 标记，桥接层 `_error_payload` 统一转成 `auth_required`，在线快照新增 `session_expired` 并把 `logged_in` 改回 False（断网等非 401 错误不会误判为失效）。前端三处引导：状态条账号格显示「登录已失效 · 请重新登录」且主操作变成「重新登录」、账号页顶部弹出失效横幅并说明原因（令牌过期/在别处登出）、自动切到账号页并聚焦用户名输入框（每次会话只提示一次）。刷新失败会清空本地凭据，因此桥接层额外记住失效状态直到重新登录或主动登出，避免提示只闪一次
 - 修复：订阅工具页报错「The site owner has blocked access based on your browser's signature」（Cloudflare error 1010 / `browser_signature_banned`）导致登录、目录刷新、订阅状态与本机授权全部失败。根因是订阅工具后端所有请求都用裸 `urllib`，未设 `User-Agent` 时被自动补成默认的 `Python-urllib/x.y`，而站点 Cloudflare WAF 把这类脚本默认签名列入黑名单直接 403。现新增 `webutils/toolbox/constants.py` 统一 UA（`LCTA/<版本> (Windows NT 10.0; Win64; x64)`），`api.py` 的 `_request` 与 `download.py` 的下载请求都显式带上该 UA（CDN 域 `dl.mods.lcta.top` 同样受限）；同时下载层把 Cloudflare 1010 单独识别为 `BLOCKED_BY_SITE`，不再误报成「票据无效/过期」
+
+
 
 ## v5.0.4版本更新内容
 

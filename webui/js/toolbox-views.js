@@ -105,12 +105,18 @@ const ToolboxViews = {
         const runtime = localState.runtime;
 
         const loggedIn = !!online.logged_in;
+        const expired = !!online.session_expired;
         const unlocked = !!access.unlocked;
         const seasonNamed = season.name || season.slug || '';
 
         let accountText = '未登录';
         let accountSub = loggedIn ? '' : '登录后可订阅与下载';
-        if (loggedIn) {
+        if (expired) {
+            // 本地还有令牌但服务端已判失效：**不能**显示成"已登录"，
+            // 否则用户以为一切正常，只在设置页诊断里看到一行小字。
+            accountText = '登录已失效';
+            accountSub = '请重新登录';
+        } else if (loggedIn) {
             const user = online.user || {};
             accountText = user.username || user.email || '已登录';
             accountSub = access.email_verified ? '邮箱已验证' : '';
@@ -156,7 +162,11 @@ const ToolboxViews = {
 
         // 上下文主操作：一个页面只有一个主动作
         let primary = '';
-        if (!loggedIn) {
+        if (expired) {
+            // 失效态优先于一切：先让人重新登录，其它引导都无从谈起
+            primary = `<button class="tb-btn tb-btn--primary" data-tb-action="go-account">
+                <i class="fas fa-sign-in-alt"></i> 重新登录</button>`;
+        } else if (!loggedIn) {
             primary = `<button class="tb-btn tb-btn--primary" data-tb-action="go-account">
                 <i class="fas fa-sign-in-alt"></i> 登录资源站</button>`;
         } else if (!unlocked) {
@@ -774,11 +784,24 @@ const ToolboxViews = {
         }
         const blocks = [];
 
+        // 令牌失效：登录表单照常给，但顶部先摆一条**明确**的失效横幅，
+        // 说清「为什么突然要重新登录」—— 否则用户会以为是客户端出故障。
+        if (online.session_expired) {
+            const reason = ((online.errors || {}).access || {}).message || '';
+            blocks.push(`<div class="tb-error" id="tb-session-expired">
+                <i class="fas fa-key"></i>
+                <span>登录状态已失效，请重新登录后继续。<br>
+                    令牌过期、或在其它设备/网站登出都会导致失效${reason ? `（${ToolboxViews.esc(reason)}）` : ''}。
+                    本地已安装内容不受影响，仍可停用、卸载与回滚。</span>
+            </div>`);
+        }
+
         if (!online.logged_in) {
             const base = ctx.base_url || 'https://mods.lcta.top';
+            const heading = online.session_expired ? '重新登录资源站' : '登录资源站';
             blocks.push(`<div class="tb-card">
                 <div class="tb-card-head">
-                    <h3 class="tb-card-title"><i class="fas fa-user"></i> 登录资源站</h3>
+                    <h3 class="tb-card-title"><i class="fas fa-user"></i> ${heading}</h3>
                 </div>
                 <p class="form-hint" style="margin-top:0">
                     使用资源站（${ToolboxViews.esc(base)}）账号：原创内容需有效订阅，转载内容登录即可下载。

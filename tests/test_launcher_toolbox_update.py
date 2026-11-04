@@ -273,3 +273,50 @@ class TestReportReader:
 
     def test_missing_report_is_empty(self, game):
         assert toolbox_update.read_last_report() == {}
+
+
+class TestSharedGamePath:
+    """启动器与设置页/订阅工具页共用同一个 ``game_path``（2026-11-04）。
+
+    历史 bug：``_resolve_game_root`` 优先读 ``ui_default.toolbox.game_root``，
+    于是「在设置页改了游戏路径，开局前自动更新仍用旧目录」。
+    """
+
+    def _patch(self, monkeypatch, data):
+        from globalManagers.ConfigManager import ConfigManager
+
+        store = dict(data)
+        monkeypatch.setattr(
+            ConfigManager, "get", lambda self, key, default=None: store.get(key, default)
+        )
+        monkeypatch.setattr(
+            ConfigManager, "set", lambda self, key, value, auto_save=True: store.update({key: value})
+        )
+        return store
+
+    def test_uses_shared_game_path(self, tmp_path, monkeypatch):
+        self._patch(monkeypatch, {"game_path": str(tmp_path / "g")})
+        assert toolbox_update._resolve_game_root() == str(tmp_path / "g")
+
+    def test_settings_edit_wins_over_stale_legacy_key(self, tmp_path, monkeypatch):
+        """设置页改过路径后，旧的订阅工具键不得覆盖它。"""
+        from webutils.toolbox import config as toolbox_config
+
+        self._patch(monkeypatch, {
+            toolbox_config.GAME_PATH_KEY: str(tmp_path / "new"),
+            toolbox_config.LEGACY_GAME_ROOT_KEY: str(tmp_path / "old"),
+        })
+        assert toolbox_update._resolve_game_root() == str(tmp_path / "new")
+
+    def test_legacy_only_is_migrated(self, tmp_path, monkeypatch):
+        from webutils.toolbox import config as toolbox_config
+
+        store = self._patch(
+            monkeypatch, {toolbox_config.LEGACY_GAME_ROOT_KEY: str(tmp_path / "legacy")}
+        )
+        assert toolbox_update._resolve_game_root() == str(tmp_path / "legacy")
+        assert store.get(toolbox_config.GAME_PATH_KEY) == str(tmp_path / "legacy")
+
+    def test_unconfigured_returns_none(self, monkeypatch):
+        self._patch(monkeypatch, {})
+        assert toolbox_update._resolve_game_root() is None

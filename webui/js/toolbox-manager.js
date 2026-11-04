@@ -187,6 +187,7 @@ let toolboxManager = {
             case 'puzzle-new': this.newPuzzle(); break;
             case 'puzzle-solve': this.solvePuzzle(); break;
             case 'save-root': this.saveGameRoot(); break;
+            case 'browse-root': this.browseGameRoot(); break;
             case 'validate-root': this.validateGameRoot(); break;
             case 'check-all': this.checkAll(); break;
             case 'open-cheat': this.openCheat(); break;
@@ -253,11 +254,32 @@ let toolboxManager = {
     },
 
     _checkSession() {
-        const errors = (this._online && this._online.errors) || {};
-        const accessErr = errors.access;
-        if (accessErr && accessErr.code === 'auth_required') {
-            this._toast('登录已失效，请重新登录', true);
+        // 登录态失效（令牌过期/在别处登出/refresh 被撤销）必须**主动要求**
+        // 重新登录：只把错误塞进设置页诊断里的一行小字，用户根本不会注意到，
+        // 表现为"明明登录了却什么都下不了"。
+        const online = this._online || {};
+        const errors = online.errors || {};
+        const expired = !!online.session_expired
+            || (errors.access && errors.access.code === 'auth_required')
+            || (errors.catalog && errors.catalog.code === 'auth_required');
+        if (!expired) {
+            this._sessionPrompted = false;
+            return;
         }
+        // 一次会话只提示一次：避免每次刷新都弹（用户可能故意先不登录）
+        if (this._sessionPrompted) return;
+        this._sessionPrompted = true;
+        this._toast('登录已失效，请重新登录', true, 6000);
+        this._promptRelogin();
+    },
+
+    /** 登录失效的就地引导：切到账号页并把焦点放到用户名输入框。 */
+    _promptRelogin() {
+        this._setTab('account');
+        setTimeout(() => {
+            const el = document.getElementById('tb-login-identifier');
+            if (el && typeof el.focus === 'function') el.focus();
+        }, 120);
     },
 
     _maybeShowRecovered() {
@@ -358,7 +380,12 @@ let toolboxManager = {
         if (status) status.innerHTML = ToolboxViews.rootStatus(ctx);
 
         const input = document.getElementById('tb-game-root');
-        if (input && !input.value && ctx.game_root) input.value = ctx.game_root;
+        // 与设置页共用同一份 game_path：只要用户没在输入框里正在编辑，就用
+        // 配置里的值覆盖 —— 否则在设置页改过路径后回到本页仍显示旧路径。
+        if (input && ctx.game_root && input !== document.activeElement
+            && input.value !== ctx.game_root) {
+            input.value = ctx.game_root;
+        }
     },
 
     _renderTaskDock() {
@@ -766,6 +793,18 @@ let toolboxManager = {
         if (!res || !res.success) this._toast((res && res.message) || '打开失败', true);
     },
 
+    async browseGameRoot() {
+        const input = document.getElementById('tb-game-root');
+        const res = await this._call('toolbox_pick_game_root');
+        if (res && res.success) {
+            const picked = (res.data && res.data.game_root) || '';
+            if (input && picked) input.value = picked;
+            this._toast('已选择目录，点「保存游戏目录」生效');
+        } else if (res && res.code !== 'cancelled') {
+            this._toast((res && res.message) || '选择目录失败', true);
+        }
+    },
+
     async saveGameRoot() {
         const input = document.getElementById('tb-game-root');
         if (!input) return;
@@ -778,10 +817,26 @@ let toolboxManager = {
         if (res && res.success) {
             const saved = (res.data && res.data.game_root) || value;
             input.value = saved;
-            this._toast('游戏目录已保存');
+            // 与设置页共用同一份配置：同步设置页输入框与前端配置缓存，
+            // 否则用户在两个页面之间来回切换会看到两份不一致的路径。
+            this._syncGamePathToSettings(saved);
+            this._toast('游戏目录已保存（与「设置」页共用同一份路径）');
             await this.refreshLocal();
         } else {
             this._toast((res && res.message) || '目录无效', true);
+        }
+    },
+
+    /** 把订阅工具页保存的路径回写到设置页输入框与配置缓存。 */
+    _syncGamePathToSettings(path) {
+        try {
+            if (typeof configManager !== 'undefined' && configManager) {
+                configManager.setCachedValue('game_path', path);
+            }
+            const el = document.getElementById('game-path');
+            if (el) el.value = path;
+        } catch (e) {
+            // 设置页未加载时忽略：下次进入设置页会从配置回填
         }
     },
 
@@ -1061,10 +1116,10 @@ let toolboxManager = {
         }[c]));
     },
 
-    _toast(msg, isError) {
+    _toast(msg, isError, duration) {
         if (!msg) return;
         if (typeof window.showToast === 'function') {
-            window.showToast(msg, isError ? 'error' : 'success');
+            window.showToast(msg, isError ? 'error' : 'success', duration || 2800);
         } else {
             console[isError ? 'error' : 'log']('[toolbox]', msg);
         }

@@ -126,6 +126,11 @@ def _error_payload(exc: BaseException) -> dict:
     """
     raw = str(getattr(exc, "code", "") or "").strip()
     code = raw.lower().replace(" ", "_") or "error"
+    # 登录失效统一成 ``auth_required``：服务端 detail 的 code 五花八门
+    # （error / invalid_token / expired），前端按 code 分支就永远匹配不上，
+    # 用户只在诊断里看到一行小字。``auth`` 标记来自 api.AuthRequiredError。
+    if getattr(exc, "auth", False):
+        code = "auth_required"
     message = str(getattr(exc, "message", "") or exc or "未知错误")
     payload = {"success": False, "code": code, "message": message}
     data = getattr(exc, "data", None)
@@ -217,12 +222,19 @@ class ToolboxMixin:
         return toolbox_api.ToolboxApi()
 
     def _toolbox_game_root(self):
-        """用户配置的游戏目录；未配置则报错，**不**猜测。"""
-        cfg = ConfigManager().get(CONFIG_KEY, {}) or {}
-        root = (cfg.get("game_root") if isinstance(cfg, dict) else "") or ""
+        """用户配置的游戏目录；未配置则报错，**不**猜测。
+
+        与设置页共用 ``game_path`` 这一个键（见 ``webutils/toolbox/config.py``）：
+        历史上有两份独立配置，导致「设置里改好了，订阅工具仍说没配置」。
+        """
+        from webutils.toolbox import config as toolbox_config
+
+        root = toolbox_config.get_game_path()
         if not root:
             raise ToolboxBridgeError(
-                "no_game_root", "尚未配置游戏目录，请先在设置中选择 Limbus Company 安装目录"
+                "no_game_root",
+                "尚未配置游戏目录：请在「设置」页填写 Limbus Company 安装目录"
+                "（订阅工具与本软件共用同一份游戏路径）",
             )
         return root
 
@@ -232,6 +244,21 @@ class ToolboxMixin:
             reg = _ToolboxTaskRegistry()
             self._toolbox_task_reg = reg
         return reg
+
+    # -- 登录失效标记 -------------------------------------------------------
+
+    def _toolbox_mark_session_expired(self, expired: bool = True) -> None:
+        """记住「登录已失效」直到用户重新登录。
+
+        为什么需要这个标记：``api._refresh_once`` 刷新失败时会**清空本地凭据**
+        （DPAPI 存储里的 refresh token 被撤销，留着也没用），于是下一次
+        ``is_logged_in()`` 变成 False —— 只靠当次 401 判断的话，失效提示只闪
+        一次，之后用户看到的是普通的「未登录」，不知道刚才发生了什么。
+        """
+        self._toolbox_session_expired = bool(expired)
+
+    def _toolbox_session_was_expired(self) -> bool:
+        return bool(getattr(self, "_toolbox_session_expired", False))
 
     # -- 状态：本地快照（离线可用）------------------------------------------
 
@@ -316,6 +343,9 @@ class ToolboxMixin:
         data = {
             "protocol_version": BRIDGE_PROTOCOL_VERSION,
             "logged_in": False,
+            # 登录态失效（令牌过期/在别处登出/refresh 被撤销）：前端据此**要求**
+            # 重新登录，而不是只在诊断里显示一行小字（2026-11-04）
+            "session_expired": False,
             "base_url": "",
             "user": None,
             "season": None,
@@ -346,12 +376,17 @@ class ToolboxMixin:
             logger.info("订阅工具：赛季公开信息获取失败 %s", exc)
             errors["season"] = _error_payload(exc)
 
+        # 本地还留着 refresh token ⇒ is_logged_in() 为 True，但服务端已判失效
+        # （令牌过期、在别处登出、refresh 被撤销）。这时必须把「已登录」改回
+        # False 并置 session_expired，否则状态条仍显示"已登录"，用户以为一切正常。
+        session_expired = False
         if data["logged_in"]:
             # ⚠️ access 必须先于 catalog：见模块 docstring 的刷新顺序说明。
             try:
                 data["access"] = api.access()
             except Exception as exc:  # noqa: BLE001
                 errors["access"] = _error_payload(exc)
+                session_expired = errors["access"].get("code") == "auth_required"
 
         try:
             # 名单公开（2026-10-30）：未登录也能看，逐条 downloadable 决定可否安装
@@ -359,7 +394,14 @@ class ToolboxMixin:
         except Exception as exc:  # noqa: BLE001
             errors["catalog"] = _error_payload(exc)
 
-        if data["logged_in"]:
+        if session_expired:
+            data["logged_in"] = False
+            data["session_expired"] = True
+            data["user"] = None
+            self._toolbox_mark_session_expired(True)
+        elif data["logged_in"]:
+            # 服务端认账了：之前记下的「已失效」应当撤掉
+            self._toolbox_mark_session_expired(False)
             try:
                 data["user"] = api.current_user()
             except Exception:  # noqa: BLE001
@@ -368,6 +410,10 @@ class ToolboxMixin:
                 data["afdian"] = api.afdian_status()
             except Exception:  # noqa: BLE001
                 data["afdian"] = None
+        elif self._toolbox_session_was_expired():
+            # 凭据已被刷新失败清空（见 _toolbox_mark_session_expired）：
+            # 仍要让用户知道「需要重新登录」，而不是无声无息变成未登录。
+            data["session_expired"] = True
 
         access = data["access"] if isinstance(data["access"], dict) else {}
         catalog = data["catalog"] if isinstance(data["catalog"], dict) else {}
@@ -394,6 +440,7 @@ class ToolboxMixin:
             errors = online.get("errors") or {}
             data.update({
                 "logged_in": online.get("logged_in", False),
+                "session_expired": online.get("session_expired", False),
                 "base_url": online.get("base_url", ""),
                 "season": online.get("season"),
                 "online": online.get("access"),
@@ -430,6 +477,7 @@ class ToolboxMixin:
             api.login(str(identifier or ""), str(password or ""))
             self.log_ui("订阅工具：已登录资源站")
             self._toolbox_online_cache = None
+            self._toolbox_mark_session_expired(False)
             return {"success": True, "message": "登录成功"}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
@@ -440,6 +488,8 @@ class ToolboxMixin:
             self._toolbox_api().logout()
             self.log_ui("订阅工具：已登出（服务端会话已撤销）")
             self._toolbox_online_cache = None
+            # 主动登出不是「失效」：不该再显示「请重新登录」
+            self._toolbox_mark_session_expired(False)
             return {"success": True}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)
@@ -1236,16 +1286,42 @@ class ToolboxMixin:
         return pem.encode("utf-8") if pem else None
 
     def toolbox_set_game_root(self, path):
-        """设置游戏目录（会做校验，拒绝盘符根/不可写/不存在）。"""
+        """设置游戏目录（会做校验，拒绝盘符根/不可写/不存在）。
+
+        写入的是**共用**的 ``game_path``（设置页同一个键），订阅工具页不再
+        维护第二份 ``ui_default.toolbox.game_root`` —— 两份配置是历史 bug 的
+        来源：改一处另一处不生效，而两边都显示"保存成功"。
+        """
+        try:
+            from webutils.toolbox import config as toolbox_config, paths
+
+            resolved = paths.validate_game_root(str(path or ""))
+            toolbox_config.set_game_path(str(resolved))
+            return {"success": True, "data": {"game_root": str(resolved)}}
+        except Exception as e:  # noqa: BLE001
+            self.log_error(e)
+            payload = _error_payload(e)
+            if payload["code"] == "error":
+                payload["code"] = "invalid_game_root"
+            return payload
+
+    def toolbox_pick_game_root(self):
+        """选择游戏目录（弹系统文件夹选择框），**只**返回校验过的路径。
+
+        不落盘：与设置页的浏览按钮一致，用户点「保存」才写入配置。
+        """
         try:
             from webutils.toolbox import paths
 
-            resolved = paths.validate_game_root(str(path or ""))
-            cfg = ConfigManager().get(CONFIG_KEY, {}) or {}
-            if not isinstance(cfg, dict):
-                cfg = {}
-            cfg["game_root"] = str(resolved)
-            ConfigManager().set(CONFIG_KEY, cfg)
+            window = getattr(self, "_window", None)
+            if window is None:
+                return {"success": False, "code": "window_missing", "message": "窗口尚未初始化"}
+            import webview
+
+            selected = window.create_file_dialog(webview.FileDialog.FOLDER)
+            if not selected:
+                return {"success": False, "code": "cancelled", "message": "已取消选择"}
+            resolved = paths.validate_game_root(str(selected[0]))
             return {"success": True, "data": {"game_root": str(resolved)}}
         except Exception as e:  # noqa: BLE001
             self.log_error(e)

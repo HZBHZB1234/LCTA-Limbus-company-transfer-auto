@@ -53,7 +53,17 @@ class ApiError(RuntimeError):
 
 
 class AuthRequiredError(ApiError):
-    """未登录/登录已失效（界面应引导登录，而不是显示「操作失败」）。"""
+    """未登录/登录已失效（界面应引导登录，而不是显示「操作失败」）。
+
+    ``auth = True`` 是**机器可读标记**：``code`` 保留服务端原文（便于排查，
+    也避免把「密码错误」这类 401 说成「会话过期」），而桥接层/前端统一用
+    这个标记判断「需要重新登录」。只看 ``code`` 是历史 bug 的根源 ——
+    服务端 detail 里的 code 五花八门（``error``/``invalid_token``/``expired``），
+    前端按 ``code == "auth_required"`` 分支就永远匹配不上，用户只在设置页
+    诊断里看到一行小字，没有任何重新登录的引导。
+    """
+
+    auth = True
 
 
 def _detail_message(detail: Any, fallback: str) -> Tuple[str, str]:

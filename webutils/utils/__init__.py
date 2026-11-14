@@ -18,6 +18,7 @@ from .motw import (
     remove_zone_identifier,
     clear_motw,
     cleanup_app_on_startup,
+    critical_assembly_paths,
 )
 from .net import download_with, download_with_github
 from .shell import _move_folders, get_downloads_dir
@@ -40,6 +41,7 @@ __all__ = [
     'remove_zone_identifier',
     'clear_motw',
     'cleanup_app_on_startup',
+    'critical_assembly_paths',
     '_move_folders',
     'get_downloads_dir',
 ]

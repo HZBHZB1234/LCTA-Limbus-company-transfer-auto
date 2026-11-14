@@ -269,13 +269,48 @@ def _run_pending_pip_ops_with_prompt():
         )
 
 
-def _cleanup_motw_on_startup():
-    """启动早期清除程序目录的「来自互联网」标记（MOTW）。
+def _append_app_log(text):
+    """把文本追加到 logs/app.log(UTF-8);失败静默。
 
-    策略：只探测一个必然存在的探针文件；未标记则跳过（零目录遍历），
-    标记则对整个程序目录递归清除一次（下载标记必然整目录同步）。
-    经 importlib 按文件路径直接加载 motw 模块，避免触发 webutils/__init__.py
-    的重型第三方导入（init_env 阶段应只加载标准库）。
+    启动早期日志系统可能不可用(pending 依赖操作、CLR 初始化都在
+    LogManager 之前),这些阶段的失败信息必须能直接落盘,否则打包版
+    (无控制台)里用户与开发者都看不到任何线索。
+    """
+    try:
+        _log = Path(os.getcwd()) / 'logs' / 'app.log'
+        _log.parent.mkdir(parents=True, exist_ok=True)
+        with open(_log, '+a' if _log.exists() else '+w', encoding='utf-8') as f:
+            f.write(text)
+        return True
+    except Exception:
+        return False
+
+
+def _fatal_startup_dialog(title, text):
+    """打包版无控制台时的兜底错误提示(原生 MessageBox,不依赖 GUI 栈)。"""
+    if os.name != 'nt':
+        return
+    try:
+        import ctypes
+        user32 = ctypes.WinDLL("user32")
+        user32.MessageBoxW.restype = ctypes.c_int
+        user32.MessageBoxW.argtypes = [
+            ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint,
+        ]
+        user32.MessageBoxW(None, text, title, 0x10 | 0x10000)  # MB_ICONERROR|MB_SETFOREGROUND
+    except Exception:
+        pass
+
+
+def _cleanup_motw_on_startup():
+    """启动早期清除程序目录与 venv 内关键程序集的「来自互联网」标记(MOTW)。
+
+    策略见 webutils/utils/motw.py:
+    - 主程序探针(start_webui.py)未标记 → 不遍历目录(快路径);
+    - venv 内的致命程序集(pythonnet / clr_loader)单独确认,命中即定向清除
+      ——venv 常与主程序目录来源不同,探针看不到它的标记,而带标记的
+      Python.Runtime.dll 会让 CLR 永远初始化失败(HRESULT 0x80131515)。
+    清理失败原因一并落盘(此前只有 print,打包版不可见)。
     """
     try:
         import importlib.util
@@ -285,15 +320,14 @@ def _cleanup_motw_on_startup():
         spec = importlib.util.spec_from_file_location('_lcta_motw_cleanup', motw_path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        count = module.cleanup_app_on_startup()
+        count = module.cleanup_app_on_startup(
+            on_error=lambda exc: _append_app_log(f"清除互联网标记失败: {exc}\n"))
         if count:
-            _log = Path(os.getcwd()) / 'logs' / 'app.log'
-            _log.parent.mkdir(exist_ok=True)
-            with open(_log, '+a' if _log.exists() else '+w', encoding='utf-8') as f:
-                f.write(f"检测到程序文件带「来自互联网」标记，已清除 {count} 个文件的标记\n")
+            _append_app_log(f"检测到程序文件带「来自互联网」标记，已清除 {count} 个文件的标记\n")
         return count
     except Exception as e:
         print(f"清除互联网标记失败: {e}")
+        _append_app_log(f"清除互联网标记失败: {e}\n")
         return 0
 
 
@@ -388,10 +422,19 @@ def start_webui():
             # ensure_clr 的异常已包含真实异常、PowerShell 反射探针输出与修复指引，
             # 完整落盘 logs/app.log（与 Launcher GUI 模式行为一致），
             # 避免控制台隐藏/未捕获时日志里只剩 webview 层的无信息量报错。
-            _log = Path(os.getcwd()) / 'logs' / 'app.log'
-            _log.parent.mkdir(exist_ok=True)
-            with open(_log, '+a' if _log.exists() else '+w', encoding='utf-8') as f:
-                f.write(f"clr 初始化失败: {e}\n")
+            _append_app_log(f"clr 初始化失败: {e}\n")
+            # CLR 不可用时 webview.start() 必然在同一处再崩一次，且抛出的
+            # 「Failed to resolve Python.Runtime.Loader.Initialize」会盖住上面
+            # 的真实原因(用户此前看到的正是这条无信息量报错)。这里直接给出
+            # 可读提示并终止启动,不再继续。
+            _fatal_startup_dialog(
+                "LCTA 启动失败",
+                "WebUI 无法启动：.NET 运行时（pythonnet）初始化失败。\n\n"
+                "常见原因：程序或 venv 目录带「来自互联网」标记、安全软件拦截、"
+                ".NET Framework 安装异常。\n\n"
+                "真实异常与修复指引已写入 logs/app.log。",
+            )
+            return
         
         from webui.app import main
         print("正在启动LCTA WebUI...")
@@ -403,13 +446,9 @@ def start_webui():
         exc = traceback.format_exc()
         print(exc)
         print(e)
-        _log = Path(os.getcwd()) / 'logs'
-        _log.mkdir(exist_ok=True)
-        _log = _log / 'app.log'
         # 与 LogManager 文件 handler 保持一致用 UTF-8，避免 GBK 字节混入
         # UTF-8 日志文件导致乱码
-        with open(_log, '+a' if _log.exists() else '+w', encoding='utf-8') as f:
-            f.write(exc)
+        _append_app_log(exc)
         print(os.getenv('__debug_exe__', 'false'))
         if os.getenv('__debug_exe__', 'false') == 'true':
             import webutils.debug_environ_test as test
@@ -435,7 +474,10 @@ def start_launcher():
     except Exception as e:
         print(f"启动Launcher时发生错误: {e}")
         import traceback
-        traceback.print_exc()
+        exc = traceback.format_exc()
+        print(exc)
+        # 打包版控制台可能被隐藏（GUI 模式），失败原因必须落盘才有线索
+        _append_app_log(exc)
 
 if __name__ == "__main__":
     # 检查命令行参数

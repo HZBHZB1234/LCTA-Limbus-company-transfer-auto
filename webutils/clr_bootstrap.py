@@ -12,6 +12,11 @@
   coreclr 对 edgechromium 是必然死路(WebView2.WinForms 引用 .NET Core
   WinForms 不存在的 ContextMenu),对 WinForms 直接引用同样是死路。
   因此这里**只**使用 netfx,失败时输出真实异常与修复指引,不再静默切换。
+- 「来自互联网」标记(MOTW)是另一类高频成因:从浏览器下载的压缩包经资源
+  管理器解压后,目录内每个文件都带 Zone.Identifier(ZoneId=3),.NET 会
+  拒绝 LoadFrom(HRESULT 0x80131515),而 clr_loader 只报无信息量的
+  "Failed to resolve ...Loader.Initialize"。故加载前先定向清除关键程序集
+  的标记,失败后再清一次并重试,最后才输出诊断。
 
 用法
 ----
@@ -32,12 +37,15 @@ from pathlib import Path
 NETFX_MIN_RELEASE = 461808
 
 _FIX_HINT = """修复指引:
-  1) 重新安装已固定版本的依赖组合:
+  1) 若程序目录或 venv 是从网上下载的压缩包解压而来, 先清除「来自互联网」标记
+     (带标记的 Python.Runtime.dll 会被 .NET 拒绝加载, 报 0x80131515「不支持操作」):
+       Get-ChildItem -LiteralPath "<程序目录>" -Recurse -File | Unblock-File
+  2) 重新安装已固定版本的依赖组合:
        pip install --force-reinstall --no-cache-dir pythonnet==3.0.5 clr_loader==0.2.10
-  2) 检查杀毒/安全软件是否拦截了 venv 目录或 .NET 进程,将其加入白名单
-  3) 确认系统已安装 .NET Framework 4.7.2 及以上版本
+  3) 检查杀毒/安全软件是否拦截了 venv 目录或 .NET 进程,将其加入白名单
+  4) 确认系统已安装 .NET Framework 4.7.2 及以上版本
      (Windows 10 一般已带 4.8/4.8.1;缺失可安装后再试)
-  4) 若以上均无效,请将本错误信息完整提供给开发人员"""
+  5) 若以上均无效,请将本错误信息完整提供给开发人员"""
 
 _PS_PROBE = r"""
 $ErrorActionPreference = 'Continue'
@@ -72,6 +80,57 @@ try {{
 def _version_tuple(version):
     """'0.2.10' -> (0, 2, 10);忽略非数字段。"""
     return tuple(int(x) for x in re.split(r"[.\-+]", version) if x.isdigit())
+
+
+# ---------------------------------------------------------------
+# 「来自互联网」标记(MOTW)自愈
+# ---------------------------------------------------------------
+# 带 Zone.Identifier(ZoneId=3) 的程序集会被 .NET Framework 拒绝 LoadFrom:
+#   FileLoadException: ... Operation is not supported. (HRESULT: 0x80131515)
+# 内层 NotSupportedException 提示启用 loadFromRemoteSources,但**改配置无效**:
+# clr_loader 用自带原生库(pyclr_*)托管 CLR 并自建 AppDomain(config_file=NULL),
+# 进程级 python.exe.config 与 PYTHONNET_NETFX_CONFIG_FILE 都不会生效(实测)。
+# 因此唯一可靠的修法是清掉文件标记本身。
+# 通用实现见 webutils/utils/motw.py;此处刻意保持纯标准库、零包内导入,
+# 保证在 CLR/日志系统可用之前就能执行。
+
+
+def _clear_zone_identifier(path):
+    """删除单个文件的 Zone.Identifier 备用数据流;返回是否真的删除过。"""
+    if os.name != "nt":
+        return False
+    for candidate in (str(path) + ":Zone.Identifier",
+                      "\\\\?\\" + str(path) + ":Zone.Identifier"):
+        try:
+            os.remove(candidate)
+            return True
+        except FileNotFoundError:
+            return False
+        except OSError:
+            continue
+    return False
+
+
+def _clear_assembly_motw(dll_path):
+    """清除 pythonnet 主程序集与 clr_loader 原生库的 MOTW;返回已清除的文件。
+
+    第 4 段:两者任一被标记都会让 CLR 初始化失败,故一并处理。
+    全程 best-effort,永不抛错。
+    """
+    cleared = []
+    paths = [Path(dll_path)]
+    site_packages = Path(dll_path).parent.parent.parent
+    try:
+        paths.extend(sorted(site_packages.glob("clr_loader/ffi/dlls/*/ClrLoader.dll")))
+    except OSError:
+        pass
+    for path in paths:
+        try:
+            if _clear_zone_identifier(path):
+                cleared.append(path)
+        except Exception:
+            continue
+    return cleared
 
 
 def _site_packages():
@@ -186,13 +245,30 @@ def ensure_clr():
     if fw_issue:
         issues.append(fw_issue)
 
+    # 预自愈:资源管理器解压下载包会给整个目录盖上 MOTW,带标记的程序集
+    # 必然加载失败。这里先定向清一次(单文件,成本极低),命中即无需再走
+    # 失败-探测-报错的长路径。
+    _clear_assembly_motw(dll_path)
+
     try:
         return _import_clr()
     except Exception as exc:
+        # 导入失败后再次清除并重试一次:clr_loader 自己会加载 clr_loader 的
+        # 原生库,首次清理可能只命中了已存在标记的一部分。
+        healed = _clear_assembly_motw(dll_path)
+        if healed:
+            try:
+                return _import_clr()
+            except Exception:
+                pass
         probe = get_real_exception(str(dll_path))
         parts = ["pythonnet(netfx) 初始化失败: %s" % exc]
         if probe:
             parts.append("clr_loader 原生层真实异常:\n%s" % probe)
+        if healed:
+            parts.append(
+                "已清除「来自互联网」标记后重试,仍失败:%s"
+                % "、".join(str(p) for p in healed))
         if issues:
             parts.append("环境检查:\n- " + "\n- ".join(issues))
         parts.append(_FIX_HINT)

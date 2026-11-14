@@ -10,13 +10,7 @@
 
 from __future__ import annotations
 
-try:
-    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
-    _CAPSTONE_OK = True
-except ImportError:  # capstone 未安装时保持模块可导入（页面提示一键安装）
-    CS_ARCH_X86 = CS_MODE_64 = Cs = None
-    _CAPSTONE_OK = False
-
+from . import capstone_env
 from .pe_loader import PEImage
 from .xorshift_scan import RE_TEMPLATE, scan_pe
 
@@ -30,10 +24,8 @@ PADDING_RUN = 4           # CC 填充判定阈值
 
 
 def _require_capstone():
-    if not _CAPSTONE_OK:
-        raise RuntimeError(
-            "缺少 capstone 反汇编库：请先在 Metadata 恢复页「步骤 1」一键安装"
-            "（或 pip install capstone）")
+    """capstone 必须可用（惰性探测：页面内安装后立即可用，无需重启）。"""
+    capstone_env.require()
 
 
 def function_start_of(hit_va: int, image: PEImage, back_window: int = BACK_WINDOW) -> int:
@@ -52,7 +44,7 @@ def function_start_of(hit_va: int, image: PEImage, back_window: int = BACK_WINDO
     idx = hit_va - base
     lo = max(0, idx - back_window)
 
-    md = Cs(CS_ARCH_X86, CS_MODE_64)
+    md = capstone_env.new_disassembler()
 
     def has_fileload(lo_off: int, hi_off: int) -> bool:
         """[lo, hi) 内是否存在文件加载签名：
@@ -112,8 +104,7 @@ def disasm_func(image: PEImage, start_va: int, window: int = FUNC_WINDOW) -> lis
     off = start_va - base
     if off < 0 or off >= len(raw):
         return []
-    md = Cs(CS_ARCH_X86, CS_MODE_64)
-    md.detail = False
+    md = capstone_env.new_disassembler(detail=False)
     out = []
     for insn in md.disasm(raw[off:off + window], start_va):
         out.append((insn.address, insn.size, insn.mnemonic, insn.op_str))

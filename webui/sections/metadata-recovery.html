@@ -13,11 +13,14 @@
             <span class="step-badge" id="metadata-recovery-badge-1">步骤 1</span>
             <i class="fas fa-plug"></i> 环境检查
         </h3>
-        <p class="form-hint">恢复流水线需要 <code>capstone</code> 反汇编库（解析 GameAssembly.dll 中的解密代码）。首次使用请先安装。</p>
+        <p class="form-hint">恢复流水线需要 <code>capstone</code> 反汇编库（解析 GameAssembly.dll 中的解密代码）。首次使用请先安装；安装完成后当前页面即可直接运行，无需重启应用。</p>
         <small class="form-hint" id="metadata-recovery-capstone-status">正在检测 capstone...</small>
         <div style="margin-top: 0.5rem; display: flex; gap: 8px; flex-wrap: wrap;">
             <button id="metadata-recovery-btn-install-capstone" class="action-btn primary" style="display:none;">
                 <i class="fas fa-download"></i> 一键安装 capstone
+            </button>
+            <button id="metadata-recovery-btn-recheck-capstone" class="action-btn secondary">
+                <i class="fas fa-sync-alt"></i> 重新检测
             </button>
         </div>
     </div>

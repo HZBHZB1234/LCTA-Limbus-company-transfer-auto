@@ -1,6 +1,6 @@
 # LCTA Development Guide
 
-<!-- Last updated: 2026-10-03 -->
+<!-- Last updated: 2026-11-14 (Metadata 恢复测试说明：capstone 可选依赖 + slow 求解用例) -->
 
 ## How to Run
 
@@ -67,11 +67,16 @@ pytest tests/test_cheat_core.py
 # Run 公告汉化服务端测试（需要先装服务端依赖，否则整文件自动跳过）
 pip install -r tools/notice_server/requirements.txt
 pytest tests/test_notice_server.py
+
+# Run Metadata 恢复测试（capstone 为可选依赖：未装时只跑包装层，核心用例自动跳过）
+pytest tests/test_metadata_recovery.py
 ```
 
 Key test files: `tests/test_config.py`, `tests/test_translate.py`, `tests/test_webui.py`, `tests/test_validator.py`, `tests/test_fancy_conditions.py`, `tests/test_fancy_v2.py`, `tests/test_fancy_performance.py`, `tests/test_llm_fancy.py`, `tests/test_resource_updater.py`, `tests/test_input_bypass.py`, `tests/test_cheat_core.py`, `tests/test_notice_server.py`
 
 > 公告汉化服务端测试（`tests/test_notice_server.py`）覆盖 FastAPI HTTP 层、json_repair 容错解析、定时预热（`refresher.py`：清单枚举 / 过期过滤 / 未缓存排队 / 间隔下限）与端到端（真实客户端打真实 Uvicorn 端口），因此需要 `fastapi` / `uvicorn` / `json-repair`（`tools/notice_server/requirements.txt`）；未安装时 `pytest.importorskip` 会让整个文件跳过而非报错。
+
+> Metadata 恢复测试（`tests/test_metadata_recovery.py`）里标了 `@requires_capstone` 的用例（universal 核心）需要本机装有 `capstone`（开发机可用 `pip install capstone` 或直接走页面「一键安装 capstone」，装完**无需重启**应用）；未装时这些用例跳过、包装层与 `TestCapstoneRuntimeHealing` / `TestInstallCapstoneFlow` 仍全跑。注意：装了 capstone 后 `TestSolveRebuildSynthetic`（标 `slow`）会在无参考 31 节求解的 DFS 上长时间运行，排查时用 `-k "not TestSolveRebuildSynthetic"` 跳过。
 
 > 作弊工具箱管理器测试（`tests/test_cheat_damage_hook.py`）已随实现迁往私有仓库，在私有仓库内运行 `pytest tests/`（需要 Windows）。公共仓库侧 `tests/test_cheat_core.py` 覆盖加密/解密/解锁/锁定全链路（纯逻辑，跨平台）。
 

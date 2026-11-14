@@ -23,15 +23,21 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from .universal import capstone_env
 from .universal.pipeline import run as run_universal
 
 VERSION_DEFAULT = 39
 
 
-def capstone_available() -> bool:
-    """capstone 反汇编库是否可用。"""
-    import importlib.util
-    return importlib.util.find_spec("capstone") is not None
+def capstone_available(force: bool = False) -> bool:
+    """capstone 反汇编库是否**真的可用**（真实导入探测）。
+
+    不能用 importlib.util.find_spec()：pip 刚装完 find_spec 立刻为真，
+    但进程内 init_locator/extract_disasm 若已在模块级冻结了"缺失"状态，
+    反汇编仍然不可用——那正是"装完还得重启一次"的根因。这里做真实导入，
+    与流水线实际能力保持一致。
+    """
+    return capstone_env.available(force=force)
 
 
 # ------------------------------------------------------------- 输出目录
@@ -88,9 +94,11 @@ def run_recovery(
     if not game_dll or not Path(game_dll).is_file():
         raise ValueError("请选择 GameAssembly.dll（定位/提取需要反汇编它）")
     if not capstone_available():
+        detail = capstone_env.last_error()
         raise RuntimeError(
-            "缺少 capstone 反汇编库：请先在页面「步骤 1」点击安装，"
-            "或运行 pip install capstone")
+            "缺少 capstone 反汇编库：请先在页面「步骤 1」点击「一键安装 capstone」，"
+            "安装完成后可直接重试（无需重启应用）"
+            + (f"。\n真实错误：{detail}" if detail else ""))
 
     run_dir = Path(out_dir) if out_dir else new_run_dir()
     run_dir.mkdir(parents=True, exist_ok=True)

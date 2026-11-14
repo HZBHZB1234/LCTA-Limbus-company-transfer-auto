@@ -8,8 +8,10 @@
 依赖 capstone（缺失时跳过 universal 核心测试，包装层测试不受影响）。
 """
 import hashlib
+import importlib.util
 import json
 import struct
+import sys
 from pathlib import Path
 
 import pytest
@@ -20,7 +22,11 @@ from webutils.metadata_recovery import (
     output_dir,
     run_recovery,
 )
+from webutils.metadata_recovery import install_capstone
 from webutils.metadata_recovery.pipeline import capstone_available as _pipeline_capstone
+from webutils.metadata_recovery.universal import capstone_env
+from webutils.metadata_recovery.universal import extract_disasm
+from webutils.metadata_recovery.universal import init_locator
 from webutils.metadata_recovery.universal.layouts import (
     decrypt_bytes,
     detect_layout,
@@ -533,5 +539,250 @@ class TestDeriveGameFiles:
     def test_empty_game_path(self):
         d = derive_game_files("")
         assert not d["derived"] and not d["metadata_path"]
+
+
+# ------------------------------------------------- capstone 运行时自愈回归
+#
+# 历史 bug：init_locator / extract_disasm 在模块级 `from capstone import ...`
+# 并把缺失状态冻结进 _CAPSTONE_OK。应用启动时 capstone 未装 → 页面一键
+# pip 安装后 find_spec 立刻为真（页面显示"已就绪"），但反汇编仍不可用，
+# 用户必须重启应用才能解密。下面这组用例把"启动后安装"这一过程固化为回归。
+
+
+class _CapstoneBlocker:
+    """模拟「应用启动时 capstone 未安装」：阻断 capstone 导入。"""
+
+    def __init__(self):
+        self.blocked = True
+
+    def find_spec(self, fullname, path=None, target=None):
+        if self.blocked and (fullname == "capstone"
+                             or fullname.startswith("capstone.")):
+            raise ImportError(f"blocked capstone import for test: {fullname}")
+        return None
+
+
+def _write_fake_capstone(tmp_path, body):
+    """在临时目录写一个假 capstone 包（用于模拟安装结果）。"""
+    pkg = tmp_path / "capstone"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text(body, encoding="utf-8")
+    return pkg
+
+
+_FAKE_CAPSTONE_BROKEN_NATIVE = (
+    "CS_ARCH_X86 = 3\n"
+    "CS_MODE_64 = 8\n"
+    "__version__ = '9.9.9'\n"
+    "class Cs:\n"
+    "    def __init__(self, arch, mode):\n"
+    "        raise OSError('DLL load failed while importing capstone')\n"
+)
+
+
+class TestCapstoneRuntimeHealing:
+    """capstone 在应用启动后才安装时，必须**同一进程内**立即可用。"""
+
+    @pytest.fixture(autouse=True)
+    def _clean_capstone_state(self):
+        capstone_env.reset()
+        yield
+        capstone_env.reset()
+
+    def test_missing_capstone_reports_real_error(self, monkeypatch):
+        blocker = _CapstoneBlocker()
+        monkeypatch.setattr(sys, "meta_path", [blocker] + list(sys.meta_path))
+        capstone_env.reset()
+
+        assert capstone_env.available(force=True) is False
+        assert not capstone_env.smoke_test()
+        assert capstone_env.version() == ""
+        with pytest.raises(RuntimeError) as excinfo:
+            init_locator._require_capstone()
+        msg = str(excinfo.value)
+        assert "capstone" in msg
+        # 报错必须带真实异常，便于用户/日志定位（历史文案只写"请先安装"）
+        assert "真实错误" in msg and "ImportError" in msg
+        assert capstone_env.last_error()
+
+    @requires_capstone
+    def test_install_after_startup_usable_without_restart(self, monkeypatch):
+        # 1) 应用启动时 capstone 缺失（模块级不再固化状态）
+        blocker = _CapstoneBlocker()
+        monkeypatch.setattr(sys, "meta_path", [blocker] + list(sys.meta_path))
+        capstone_env.reset()
+        assert capstone_env.available(force=True) is False
+        with pytest.raises(RuntimeError):
+            init_locator._require_capstone()
+        with pytest.raises(RuntimeError):
+            extract_disasm._require_capstone()
+
+        # 2) 模拟页面内一键安装完成（pip 已写入 site-packages）
+        blocker.blocked = False
+        capstone_env.reset()
+
+        # 3) 不重启：状态、自检、反汇编路径全部立即可用
+        assert capstone_env.available(force=True) is True
+        assert capstone_env.smoke_test() is True
+        assert capstone_env.version()
+        init_locator._require_capstone()
+        extract_disasm._require_capstone()
+        md = capstone_env.new_disassembler()
+        assert list(md.disasm(b"\x90", 0x1000))
+
+    def test_available_uses_real_import_not_find_spec(self, tmp_path, monkeypatch):
+        _write_fake_capstone(tmp_path, "raise ImportError('模拟原生库缺失')\n")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        capstone_env.reset()
+
+        # find_spec 认为"已安装"，但导入实际失败：必须判定为不可用，
+        # 否则页面会显示"已就绪"而运行时仍然报缺少 capstone。
+        assert importlib.util.find_spec("capstone") is not None
+        assert capstone_available() is False
+        assert _pipeline_capstone(force=True) is False
+        assert "模拟原生库缺失" in capstone_env.last_error()
+
+    def test_broken_native_library_detected(self, tmp_path, monkeypatch):
+        _write_fake_capstone(tmp_path, _FAKE_CAPSTONE_BROKEN_NATIVE)
+        monkeypatch.syspath_prepend(str(tmp_path))
+        capstone_env.reset()
+
+        # 导入成功但原生库加载失败：自检必须失败，且错误可读
+        assert capstone_env.smoke_test() is False
+        assert capstone_env.available(force=True) is False
+        assert "DLL load failed" in capstone_env.last_error()
+
+    def test_run_recovery_gate_mentions_install_without_restart(self, tmp_path,
+                                                               monkeypatch):
+        blocker = _CapstoneBlocker()
+        monkeypatch.setattr(sys, "meta_path", [blocker] + list(sys.meta_path))
+        capstone_env.reset()
+        metadata = tmp_path / "global-metadata.dat"
+        dll = tmp_path / "GameAssembly.dll"
+        metadata.write_bytes(b"enc")
+        dll.write_bytes(b"dll")
+        with pytest.raises(RuntimeError) as excinfo:
+            run_recovery(metadata_path=str(metadata), game_dll=str(dll),
+                         out_dir=str(tmp_path / "out"))
+        msg = str(excinfo.value)
+        assert "一键安装 capstone" in msg and "无需重启" in msg
+
+
+class TestInstallCapstoneFlow:
+    """install_capstone：幂等 / 镜像回退 / ensurepip / 装后同进程验证。"""
+
+    @pytest.fixture(autouse=True)
+    def _clean_capstone_state(self):
+        import webutils.metadata_recovery as pkg
+        self.pkg = pkg
+        capstone_env.reset()
+        yield
+        capstone_env.reset()
+
+    def _patch_probe(self, monkeypatch, results, last_error=""):
+        """smoke_test 依次返回 results（安装前检查 → 安装后验证）。"""
+        seq = list(results)
+        state = {"n": 0}
+
+        def _next():
+            idx = min(state["n"], len(seq) - 1)
+            state["n"] += 1
+            return seq[idx]
+
+        monkeypatch.setattr(capstone_env, "smoke_test", _next)
+        monkeypatch.setattr(capstone_env, "reset", lambda: None)
+        monkeypatch.setattr(capstone_env, "last_error", lambda: last_error)
+        monkeypatch.setattr(capstone_env, "version", lambda: "5.0.9")
+
+    def test_already_available_skips_pip(self, monkeypatch):
+        self._patch_probe(monkeypatch, [True])
+        calls = []
+        monkeypatch.setattr(self.pkg, "_run_pip",
+                            lambda args, on_log: calls.append(args) or (0, []))
+        result = install_capstone()
+        assert result["success"] is True
+        assert result["need_restart"] is False
+        assert calls == []
+
+    def test_success_is_immediately_usable(self, monkeypatch):
+        self._patch_probe(monkeypatch, [False, True])
+        logs = []
+        calls = []
+        monkeypatch.setattr(
+            self.pkg, "_run_pip",
+            lambda args, on_log: calls.append(args) or (0, ["installed"]))
+        result = install_capstone(on_log=logs.append)
+        assert result["success"] is True
+        assert result["need_restart"] is False
+        assert calls and "--upgrade" in calls[0]
+        # 文案必须明确"无需重启"，这是本次修复的用户可见契约
+        assert "无需重启" in result["message"]
+        assert any("无需重启" in line for line in logs)
+
+    def test_network_error_retries_with_mirror(self, monkeypatch):
+        self._patch_probe(monkeypatch, [False, True])
+        calls = []
+
+        def _fake_run_pip(args, on_log):
+            calls.append(args)
+            if "--index-url" in args:
+                return 0, ["Successfully installed capstone-5.0.9"]
+            return 1, ["ERROR: Could not fetch URL https://pypi.org/simple/capstone/",
+                       "Failed to establish a new connection"]
+
+        monkeypatch.setattr(self.pkg, "_run_pip", _fake_run_pip)
+        result = install_capstone()
+        assert result["success"] is True
+        assert len(calls) == 2
+        assert "--index-url" in calls[1]
+
+    def test_missing_pip_bootstraps_ensurepip(self, monkeypatch):
+        self._patch_probe(monkeypatch, [False, True])
+        runs = []
+        ensurepip_calls = []
+        state = {"n": 0}
+
+        def _fake_run_pip(args, on_log):
+            runs.append(args)
+            state["n"] += 1
+            if state["n"] == 1:
+                return 1, ["No module named pip"]
+            return 0, ["Successfully installed capstone-5.0.9"]
+
+        def _fake_run(cmd, **kwargs):
+            ensurepip_calls.append(cmd)
+            return None
+
+        monkeypatch.setattr(self.pkg, "_run_pip", _fake_run_pip)
+        monkeypatch.setattr(self.pkg.subprocess, "run", _fake_run)
+        result = install_capstone()
+        assert result["success"] is True
+        assert any("ensurepip" in " ".join(cmd) for cmd in ensurepip_calls)
+        assert len(runs) == 2
+
+    def test_pip_failure_reports_output(self, monkeypatch):
+        self._patch_probe(monkeypatch, [False])
+        monkeypatch.setattr(
+            self.pkg, "_run_pip",
+            lambda args, on_log: (1, ["ERROR: No matching distribution found"]))
+        result = install_capstone()
+        assert result["success"] is False
+        assert result["need_restart"] is False
+        assert "No matching distribution found" in result["message"]
+
+    def test_pip_ok_but_unloadable_requires_restart(self, monkeypatch):
+        self._patch_probe(monkeypatch, [False, False],
+                          last_error="OSError: DLL load failed")
+        monkeypatch.setattr(self.pkg, "_run_pip", lambda args, on_log: (0, ["ok"]))
+        scheduled = []
+        monkeypatch.setattr(self.pkg, "_schedule_pending_install",
+                            lambda: scheduled.append(True) or True)
+        result = install_capstone()
+        assert result["success"] is False
+        assert result["need_restart"] is True
+        assert scheduled == [True]
+        assert "重启" in result["message"]
+        assert "DLL load failed" in result["message"]
+
 
 

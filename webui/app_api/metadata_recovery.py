@@ -11,17 +11,24 @@ from webutils.metadata_recovery import (
     output_dir,
     run_recovery,
 )
+from webutils.metadata_recovery.universal import capstone_env
 from webui.app_api.exceptions import CancelRunning
 
 
 class MetadataRecoveryMixin:
 
-    def metadata_recovery_status(self):
-        """返回页面初始状态：输出目录、capstone 可用性、游戏文件自动推导。"""
+    def metadata_recovery_status(self, force=False):
+        """返回页面初始状态：输出目录、capstone 可用性、游戏文件自动推导。
+
+        force=True 时强制执行一次真实探测（页面「重新检测」按钮使用：
+        用户可能在应用外手动 pip 安装，需要不重启即可刷新状态）。
+        """
         try:
             return {"success": True, "data": {
                 "out_dir": str(output_dir()),
-                "capstone_available": capstone_available(),
+                "capstone_available": capstone_available(force=bool(force)),
+                "capstone_version": capstone_env.version(),
+                "capstone_error": capstone_env.last_error(),
                 "derived": derive_game_files(ConfigManager().get("game_path", "")),
             }}
         except Exception as e:
@@ -29,7 +36,11 @@ class MetadataRecoveryMixin:
             return {"success": False, "message": str(e)}
 
     def metadata_recovery_install_capstone(self, modal_id=""):
-        """用当前解释器 pip 安装 capstone（模态窗口实时日志）。"""
+        """用当前解释器 pip 安装 capstone（模态窗口实时日志）。
+
+        安装完成后会在**当前进程**内重新探测并做反汇编自检：通过则页面
+        直接可用（无需重启），仅在进程内加载失败时返回 need_restart。
+        """
         try:
             self.add_modal_log("开始安装 capstone...", modal_id)
 
@@ -39,7 +50,10 @@ class MetadataRecoveryMixin:
             result = install_capstone(on_log=on_log)
             self.add_modal_log(result["message"], modal_id)
             if result.get("success"):
-                self.log_ui("capstone 安装成功，Metadata 恢复功能可用")
+                self.log_ui("capstone 安装成功，Metadata 恢复功能可用（无需重启）")
+            elif result.get("need_restart"):
+                self.add_modal_log("capstone 需重启应用后生效", modal_id)
+                self.log_ui("capstone 已安装，但需重启应用后才能加载，已排入重试队列")
             return result
         except Exception as e:
             self.log_error(e)

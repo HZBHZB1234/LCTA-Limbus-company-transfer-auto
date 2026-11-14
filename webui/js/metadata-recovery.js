@@ -82,15 +82,17 @@ class MetadataRecoveryPage {
         this._bound = true;
         const installBtn = document.getElementById('metadata-recovery-btn-install-capstone');
         if (installBtn) installBtn.addEventListener('click', () => this.installCapstone());
+        const recheckBtn = document.getElementById('metadata-recovery-btn-recheck-capstone');
+        if (recheckBtn) recheckBtn.addEventListener('click', () => this.recheckCapstone());
         const runBtn = document.getElementById('metadata-recovery-btn-run');
         if (runBtn) runBtn.addEventListener('click', () => this.run());
     }
 
     // ---- 步骤 1：环境检查（capstone） -----------------------------------
 
-    refreshStatus() {
+    refreshStatus(force = false) {
         if (!pywebview || !pywebview.api || !pywebview.api.metadata_recovery_status) return;
-        pywebview.api.metadata_recovery_status().then((result) => {
+        pywebview.api.metadata_recovery_status(force).then((result) => {
             const statusEl = document.getElementById('metadata-recovery-capstone-status');
             const installBtn = document.getElementById('metadata-recovery-btn-install-capstone');
             const outEl = document.getElementById('metadata-recovery-out-dir');
@@ -103,17 +105,36 @@ class MetadataRecoveryPage {
             }
             if (!statusEl || !result || !result.success) return;
             if (result.data.capstone_available) {
+                const ver = result.data.capstone_version
+                    ? `（版本 ${result.data.capstone_version}）` : '';
                 statusEl.innerHTML = '<i class="fas fa-check" style="color:#27ae60;"></i> '
-                    + 'capstone 已就绪，可直接运行恢复。';
+                    + `capstone 已就绪${ver}，可直接运行恢复。`;
                 if (installBtn) installBtn.style.display = 'none';
                 this.updateStepBadges(2);
             } else {
+                const err = (result.data.capstone_error || '').trim();
                 statusEl.innerHTML = '<i class="fas fa-times" style="color:#e74c3c;"></i> '
                     + '缺少 capstone 反汇编库（定位/提取需要）。点击下方按钮一键安装，'
-                    + '或手动运行 <code>pip install capstone</code>。';
+                    + '安装完成后立即可用（无需重启），或手动运行 <code>pip install capstone</code> 后点「重新检测」。'
+                    + (err ? `<br><small style="color:#95a5a6;">检测详情：${this._escapeHtml(err)}</small>` : '');
                 if (installBtn) installBtn.style.display = '';
             }
         }).catch(() => {});
+    }
+
+    // 「重新检测」：用户可能在应用外手动 pip 安装了 capstone，
+    // 无需重启即可刷新状态（真实导入探测 + 解除节流）。
+    recheckCapstone() {
+        const statusEl = document.getElementById('metadata-recovery-capstone-status');
+        if (statusEl) statusEl.textContent = '正在重新检测 capstone...';
+        this.refreshStatus(true);
+    }
+
+    _escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
 
     installCapstone() {
@@ -129,20 +150,24 @@ class MetadataRecoveryPage {
                 this._installing = false;
                 if (!result) {
                     modal.complete(false, '安装失败：无返回结果');
+                    this.refreshStatus(true);
                     return;
                 }
                 if (result.success) {
-                    modal.complete(true, 'capstone 安装完成');
-                    this.refreshStatus();
+                    modal.complete(true, result.message || 'capstone 安装完成，可直接运行恢复');
+                    this.refreshStatus(true);
+                } else if (result.need_restart) {
+                    modal.complete(false, result.message || 'capstone 需重启应用后生效');
+                    this.refreshStatus(true);
                 } else {
                     modal.complete(false, '安装失败：' + (result.message || '未知错误'));
-                    this.refreshStatus();
+                    this.refreshStatus(true);
                 }
             })
             .catch((error) => {
                 this._installing = false;
                 modal.complete(false, '安装过程中发生错误：' + error);
-                this.refreshStatus();
+                this.refreshStatus(true);
             });
     }
 

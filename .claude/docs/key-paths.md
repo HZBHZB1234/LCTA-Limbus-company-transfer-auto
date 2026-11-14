@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-11-14 -->
+<!-- Last updated: 2026-11-14 (Metadata 恢复 capstone 安装链路：惰性加载 + 装后同进程可用) -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1184,10 +1184,12 @@ JS: user opens 侧边栏「Metadata 恢复」页（首次导航懒加载）
       (utils.js initNavigation 每次进入页面时再次 init)
 
 步骤 1（环境检查）：JS refreshStatus() -> metadata_recovery_status()
-  -> capstone_available() 探测；缺失时显示「一键安装 capstone」
+  -> capstone_available(force) = universal/capstone_env 真实导入 + 反汇编自检
+     （不再用 find_spec：装完但进程内加载不了时必须判定为不可用）；缺失时
+     显示「一键安装 capstone」与检测详情；「重新检测」按钮走 refreshStatus(true)
   -> pywebview.api.metadata_recovery_install_capstone(modal.id)
   -> webui/app_api/metadata_recovery.py  -> webutils.metadata_recovery.install_capstone()
-      当前解释器 subprocess pip install capstone，逐行日志进模态窗口
+      ① 已可用则幂等跳过；② 当前解释器 subprocess pip install --upgrade capstone（逐行日志进模态窗口）；③ 缺 pip -> ensurepip 引导后重试；④ 网络失败 -> 清华源重试；⑤ 装完 capstone_env.reset() + smoke_test() 当场验证：成功 = success 且 need_restart=False（同一进程立即可用，无需重启）；pip 成功但进程内加载不了 -> 排入 pending_pip_ops + need_restart=True（下次启动自动重试）
   -> derive_game_files(ConfigManager().get('game_path')) 推导
      <游戏>/LimbusCompany_Data/il2cpp_data/Metadata/global-metadata.dat 与
      <游戏>/GameAssembly.dll，输入框为空时自动回填（可手动覆盖）

@@ -30,7 +30,8 @@
 ## 三、快速上手（三步）
 
 ```
-步骤 1  环境检查：确认 capstone 可用（缺失时点「一键安装 capstone」）
+步骤 1  环境检查：确认 capstone 可用（缺失时点「一键安装 capstone」，装完立即可用、无需重启；
+        在应用外手动装过的话点「重新检测」刷新）
 步骤 2  输入文件：global-metadata.dat 与 GameAssembly.dll 已从游戏目录自动推导，
         确认存在后即可（可选填写期望重建 SHA-256 用于自检）
 步骤 3  点「开始恢复」→ 五阶段流水线自动执行 → 查看各阶段裁决与产物
@@ -127,7 +128,7 @@ python -m webutils.metadata_recovery.pipeline `
 ## 十二、常见问题
 
 **Q: 提示缺少 capstone？**  
-A: 点「一键安装 capstone」用当前应用的解释器自动 pip 安装；也可手动 `pip install capstone` 后重启应用。安装失败时日志会显示 pip 的完整输出。
+A: 点「一键安装 capstone」用当前应用的解释器自动 pip 安装，**安装完成后当前页面即可直接运行恢复，无需重启应用**（装完会自动重新探测并做一次反汇编自检）。已手动 `pip install capstone` 的话，回到本页点「重新检测」即可刷新状态。检测详情会显示真实报错（如原生库加载失败），安装失败时日志里有 pip 的完整输出。
 
 **Q: 定位阶段失败（locate FAIL）？**  
 A: 常见原因：GameAssembly.dll 与 metadata 不是同一游戏版本、DLL 文件不完整、或未来算法变更（非 xorshift64(13,7,17) 时定位阶段会断言失败并大声报错）。

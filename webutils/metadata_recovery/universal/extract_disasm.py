@@ -20,13 +20,7 @@ from __future__ import annotations
 
 import re
 
-try:
-    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
-    _CAPSTONE_OK = True
-except ImportError:  # capstone 未安装时保持模块可导入（页面提示一键安装）
-    CS_ARCH_X86 = CS_MODE_64 = Cs = None
-    _CAPSTONE_OK = False
-
+from . import capstone_env
 from .init_locator import disasm_func
 from .pe_loader import PEImage
 
@@ -38,10 +32,8 @@ FUNC_WINDOW = 0x4000    # 函数反汇编窗口（与 init_locator 一致）
 
 
 def _require_capstone():
-    if not _CAPSTONE_OK:
-        raise RuntimeError(
-            "缺少 capstone 反汇编库：请先在 Metadata 恢复页「步骤 1」一键安装"
-            "（或 pip install capstone）")
+    """capstone 必须可用（惰性探测：页面内安装后立即可用，无需重启）。"""
+    capstone_env.require()
 
 
 class Extraction:
@@ -124,7 +116,7 @@ def extract_from_disasm(image: PEImage, func_va: int, insns: list[tuple[int, int
         insns = disasm_func(image, func_va)
     insns = _trim_to_function(image, func_va, insns)
 
-    md = Cs(CS_ARCH_X86, CS_MODE_64)
+    md = capstone_env.new_disassembler()
     _ = md  # 保留未来扩展
 
     # ---- 1. file_base 全局 ------------------------------------------------

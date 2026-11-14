@@ -1018,6 +1018,102 @@ class TestManifestDrivenInstall:
         assert (game / "BepInEx" / "plugins" / "PkgTest" / "PkgTest.dll").read_bytes() == content
         assert state.Manifest.load(game).packages["7"].target_dir == "BepInEx/plugins/PkgTest"
 
+    def test_package_zip_install_via_bridge(self, game, tmp_path, monkeypatch):
+        """game_relative_zip：下一个 .zip，客户端解压到签名清单的 target_dir。"""
+        import hashlib
+        import io
+        import zipfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("Pack.dll", b"ZIPPED-DLL")
+            zf.writestr("sub/data.json", b'{"v":1}')
+        zip_bytes = buf.getvalue()
+        sha = hashlib.sha256(zip_bytes).hexdigest()
+        fp = tmp_path / "pack-dl.zip"
+        fp.write_bytes(zip_bytes)
+
+        manifest = {
+            "schema_version": 2, "tool_id": 7, "release_id": "rzp1", "version": "1.0.0",
+            "version_sort": "0001.0000.0000~", "min_client_protocol": 1,
+            "resource_kind": "package", "install_kind": "game_relative_zip",
+            "tool_dir": "zip-pack", "target_dir": "BepInEx/plugins/ZipPack",
+            "requires_runtime": False,
+            "files": [{"path": "pack.zip", "sha256": sha, "size": len(zip_bytes)}],
+            "dependencies": [], "conflict_guids": [],
+        }
+        signed = self._signed(manifest)
+        monkeypatch.setattr(
+            "webutils.toolbox.download.fetch_or_reuse",
+            lambda url, sha_, expected_size=None, progress=None: fp,
+        )
+        api = _ContractApi(signed["manifest_out"])
+        b = _make_bridge(game, api=api)
+        b._manifest_public_key = lambda: signed["pub_der"]
+        r = b.toolbox_install_any(7, "rzp1")
+        assert r["success"] is True, r
+        assert r["data"]["kind"] == "package_zip"
+        root = game / "BepInEx" / "plugins" / "ZipPack"
+        assert (root / "Pack.dll").read_bytes() == b"ZIPPED-DLL"
+        assert (root / "sub" / "data.json").read_bytes() == b'{"v":1}'
+        # 只取了一张票据（清单只有一个工件），不是按包内成员逐个下载
+        tickets = [c for c in api.calls if isinstance(c, tuple) and c[0] == "ticket"]
+        assert len(tickets) == 1 and tickets[0][1] == "pack.zip"
+        entry = state.Manifest.load(game).packages["7"]
+        assert entry.target_dir == "BepInEx/plugins/ZipPack"
+        assert {f.relative_path for f in entry.files} == {"Pack.dll", "sub/data.json"}
+
+    def test_package_zip_multi_artifact_refused(self, game, tmp_path):
+        """解压型清单声明多个工件 → 拒绝（无法决定解哪个）。"""
+        manifest = {
+            "schema_version": 2, "tool_id": 7, "release_id": "rzp2", "version": "1.0.0",
+            "resource_kind": "package", "install_kind": "game_relative_zip",
+            "tool_dir": "zip-pack", "target_dir": "BepInEx/plugins/ZipPack",
+            "files": [
+                {"path": "a.zip", "sha256": "a" * 64},
+                {"path": "b.zip", "sha256": "b" * 64},
+            ],
+            "dependencies": [], "conflict_guids": [],
+        }
+        signed = self._signed(manifest)
+        b = _make_bridge(game, api=_ContractApi(signed["manifest_out"]))
+        b._manifest_public_key = lambda: signed["pub_der"]
+        r = b.toolbox_install_any(7, "rzp2")
+        assert r["success"] is False
+        assert r["code"] == "manifest_bad_archive"
+
+    def test_package_zip_non_zip_artifact_refused(self, game, tmp_path):
+        """解压型清单工件不是 .zip → 拒绝（不在解压阶段才炸）。"""
+        manifest = {
+            "schema_version": 2, "tool_id": 7, "release_id": "rzp3", "version": "1.0.0",
+            "resource_kind": "package", "install_kind": "game_relative_zip",
+            "tool_dir": "zip-pack", "target_dir": "BepInEx/plugins/ZipPack",
+            "files": [{"path": "pack.7z", "sha256": "a" * 64}],
+            "dependencies": [], "conflict_guids": [],
+        }
+        signed = self._signed(manifest)
+        b = _make_bridge(game, api=_ContractApi(signed["manifest_out"]))
+        b._manifest_public_key = lambda: signed["pub_der"]
+        r = b.toolbox_install_any(7, "rzp3")
+        assert r["success"] is False
+        assert r["code"] == "manifest_bad_archive"
+
+    def test_package_zip_missing_target_dir_refused(self, game, tmp_path):
+        """解压型清单缺 target_dir → 拒绝（不猜落点）。"""
+        manifest = {
+            "schema_version": 2, "tool_id": 7, "release_id": "rzp4", "version": "1.0.0",
+            "resource_kind": "package", "install_kind": "game_relative_zip",
+            "tool_dir": "zip-pack",
+            "files": [{"path": "pack.zip", "sha256": "a" * 64}],
+            "dependencies": [], "conflict_guids": [],
+        }
+        signed = self._signed(manifest)
+        b = _make_bridge(game, api=_ContractApi(signed["manifest_out"]))
+        b._manifest_public_key = lambda: signed["pub_der"]
+        r = b.toolbox_install_any(7, "rzp4")
+        assert r["success"] is False
+        assert r["code"] == "manifest_bad_target"
+
     def test_download_only_works_without_game_root(self, tmp_path, monkeypatch):
         """download_only 不要求配置游戏目录，只落系统下载目录。"""
         import hashlib

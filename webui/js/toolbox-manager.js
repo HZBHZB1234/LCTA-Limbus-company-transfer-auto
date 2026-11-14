@@ -552,12 +552,16 @@ let toolboxManager = {
         const item = this._findItem(toolId, releaseId) || {};
         const label = installKind === 'download_only' ? '下载'
             : installKind === 'runtime_zip_root' ? '安装底座'
-                : installKind === 'game_relative_files' ? '安装文件包' : '安装/更新';
+                : installKind === 'game_relative_files' ? '安装文件包'
+                    : installKind === 'game_relative_zip' ? '解压安装'
+                        : '安装/更新';
         const name = item.name_zh || item.tool_name || toolId;
         const where = item.target_dir ? `\n安装位置：${item.target_dir}` : '';
         const body = installKind === 'download_only'
             ? '只下载到系统「下载」目录，不会写入游戏目录。'
-            : '请确认游戏已关闭。安装由签名清单驱动，逐文件校验后写入。';
+            : installKind === 'game_relative_zip'
+                ? '请确认游戏已关闭。安装由签名清单驱动：下载并校验压缩包后解压到目标目录（事务化，可回滚）。'
+                : '请确认游戏已关闭。安装由签名清单驱动，逐文件校验后写入。';
         if (!confirm(`${label}「${name}」？\n${body}${where}`)) return;
 
         const modal = this._newProgress(`${label}：${name}`);

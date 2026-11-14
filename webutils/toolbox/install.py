@@ -12,7 +12,10 @@ plan 10.2–10.5 的落地。所有文件操作都经过 ``paths`` 的受管区�
 4. **停用 = 移出 BepInEx 加载树**，不是改配置布尔值；
 5. **更新不改变启停状态**（原本停用的更新后仍停用）；
 6. **卸载只删 manifest 记载且校验归属的文件**，用户配置默认保留；
-7. 哈希不符/清单不合法/依赖缺失 → 拒绝安装，不「尽力而为」。
+7. 哈希不符/清单不合法/依赖缺失 → 拒绝安装，不「尽力而为」；
+8. **解压型文件包（``game_relative_zip``）先检查后解压**：成员数/大小/压缩比/
+   路径逃逸全在写字节之前判定，解压到暂存后再走与逐文件包**完全相同**的
+   提交路径（``_apply_package``）—— 交付形态不同，落盘语义一字不差。
 
 ## 依赖关系
 
@@ -57,6 +60,7 @@ E_DEPENDENCY_MISSING = "DEPENDENCY_MISSING"
 E_GUID_CONFLICT = "GUID_CONFLICT"
 E_LOCK_BUSY = "LOCK_BUSY"
 E_NOT_MANAGED = "NOT_MANAGED"
+E_CANCELLED = "CANCELLED"
 E_UNKNOWN = "UNKNOWN"
 
 
@@ -68,7 +72,7 @@ class InstallPlan:
     文件名与 install_kind；不接受任意绝对路径（plan 10.2）。
     """
 
-    kind: str                       # runtime | plugin | package
+    kind: str                       # runtime | plugin | package | package_zip
     release_id: str
     version: str = ""
     # 服务端下发的可比较版本序（v3 清单）；空 = 老站点/旧清单，按未知处理
@@ -81,11 +85,15 @@ class InstallPlan:
     files: Sequence[tuple] = ()
     allowed_prefixes: Sequence[str] = ()
     requires_runtime: bool = True
-    stub_path: Optional[Path] = None   # 已下载并校验过的 zip（runtime/plugin）
-    # game_relative_files：签名清单声明的游戏内相对目录
+    stub_path: Optional[Path] = None   # 已下载并校验过的 zip（runtime/plugin/package_zip）
+    # game_relative_files / game_relative_zip：签名清单声明的游戏内相对目录
     target_dir: str = ""
     # game_relative_files：[(清单相对路径, 已下载并校验的本地文件), ...]
     file_sources: Sequence[tuple[str, Path]] = ()
+    # package_zip：包内成员允许的前缀（空 = 不限，仍受 package_root 约束）。
+    # 语义与 runtime 的 allowed_prefixes 相同：清单若声明了包内布局就强制收窄。
+    # ⚠️ 目前站点不下发该字段（清单无新增字段），保留给未来的收窄场景。
+    archive_prefixes: Sequence[str] = ()
 
 
 def _now_iso() -> str:
@@ -448,7 +456,7 @@ def install_package(
     progress: Optional[Callable[[str, int, int], None]] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, object]:
-    """安装/更新一个 ``game_relative_files`` 文件包。
+    """安装/更新一个 ``game_relative_files`` 文件包（清单逐文件交付）。
 
     ``plan.target_dir`` 来自**已验签的安装清单**；``plan.file_sources`` 是
     ``[(清单相对路径, 已下载并校验的本地文件), ...]``。所有写入都经过
@@ -457,19 +465,118 @@ def install_package(
 
     与插件不同：包没有 BepInEx 加载树概念，因此不提供启用/停用；更新时
     会清理旧版本中不再存在的受管文件（只删除哈希仍匹配的文件）。
+
+    ## 与 ``install_package_zip`` 的关系
+
+    两者只差「文件从哪来」：这里每个文件由清单逐条声明、逐个下载；
+    ``install_package_zip`` 只下一个 .zip 然后自己解压。**落盘语义完全共享**
+    （同一个 ``_apply_package``）：target_dir 校验、重叠检测、备份、journal、
+    旧文件清理、manifest 记录。
+    """
+    if not plan.file_sources:
+        raise InstallError(E_MANIFEST_INVALID, "安装清单没有可写入的文件")
+    return _apply_package(
+        game_root, plan,
+        sources=[(rel, Path(src)) for rel, src in plan.file_sources],
+        progress=progress,
+        should_cancel=should_cancel,
+        label="文件包",
+        kind="package",
+    )
+
+
+def install_package_zip(
+    game_root: os.PathLike | str,
+    plan: InstallPlan,
+    *,
+    progress: Optional[Callable[[str, int, int], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> Dict[str, object]:
+    """安装/更新一个 ``game_relative_zip`` 文件包（**客户端解压**）。
+
+    与 ``install_package`` 的差别只有交付形态：清单只声明**一个 .zip**，
+    客户端下载并校验 sha256 后，由 ``archive.extract_zip_safe`` 解压到暂存
+    目录，再走与逐文件包完全相同的提交路径。
+
+    ## 安全边界（与底座安装同一套，不因「只是文件包」而放松）
+
+    1. ``archive.inspect_archive`` 先检查后解压：成员数/单成员/总大小/压缩比/
+       大小写冲突/CRC 全部在写任何字节之前判定（zip bomb 在这里被拒）；
+    2. ``extract_zip_safe`` 逐成员净化名字并校验落点在**暂存目录**内
+       （Zip Slip / UNC / ADS / 设备名 / 尾点空格一律中止）；
+    3. ``plan.archive_prefixes`` 非空时强制包内布局白名单；
+    4. 暂存目录在 ``.lcta-toolbox`` 内，解压失败只清理暂存，不留半成品；
+    5. 真正落盘时**再**经过 ``paths.package_dir`` / ``resolve_within`` /
+       ``journal`` —— 暂存通过不代表目标通过，两道门都在。
+
+    ``target_dir`` 仍然只来自签名清单，敏感目录（``BepInEx/core`` 等）由
+    ``paths.package_dir`` 独立拒绝。
     """
     root = paths.validate_game_root(game_root)
     _assert_runtime_present(root, plan)
 
-    tool_id = paths._safe_id(plan.tool_id)
     if not plan.target_dir:
         raise InstallError(E_MANIFEST_INVALID, "安装清单缺少 target_dir")
-    if not plan.file_sources:
-        raise InstallError(E_MANIFEST_INVALID, "安装清单没有可写入的文件")
+    if plan.stub_path is None or not Path(plan.stub_path).exists():
+        raise InstallError(E_MANIFEST_INVALID, "安装包缺失，请重新下载")
 
+    stub = _stage_and_verify(plan)
+    # 解压后体积可达压缩包的数倍（zip 允许 200:1），按 4 倍预留
+    _require_disk_space(root, stub.stat().st_size * 4)
+
+    tool_id = paths._safe_id(plan.tool_id)
+    staging = paths.staging_dir(root) / f"pz-{tool_id}-{plan.release_id}-{int(time.time())}"
+    try:
+        try:
+            written = archive.extract_zip_safe(
+                stub, staging,
+                allowed_prefixes=list(plan.archive_prefixes) or None,
+                progress=progress, should_cancel=should_cancel,
+            )
+        except archive.ArchiveError as exc:
+            raise InstallError(E_MANIFEST_INVALID, f"解压失败：{exc}") from exc
+
+        if not written:
+            raise InstallError(E_MANIFEST_INVALID, "压缩包里没有可写入的文件")
+
+        sources = [(path.relative_to(staging).as_posix(), path) for path in written]
+        return _apply_package(
+            game_root, plan, sources=sources,
+            progress=None, should_cancel=should_cancel,
+            label="解压包", kind="package_zip",
+        )
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def _apply_package(
+    game_root: os.PathLike | str,
+    plan: InstallPlan,
+    *,
+    sources: Sequence[tuple[str, Path]],
+    label: str,
+    kind: str,
+    progress: Optional[Callable[[str, int, int], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> Dict[str, object]:
+    """文件包落盘提交（逐文件包与解压包的**唯一**共享实现）。
+
+    ``sources`` 是 ``[(包内相对路径, 已校验的本地文件), ...]`` —— 无论这些
+    文件是清单逐条下载的、还是从 .zip 解出来的，落盘规则一字不差：
+
+    - ``target_dir`` 只来自签名清单，经 ``paths.package_dir`` 校验；
+    - 与已安装的其它包目录重叠 → 拒绝（否则卸载 A 会删到 B）；
+    - 逐文件「先备份 + journal 登记 + 再写」，任何失败整体回滚；
+    - 更新时清理旧版本不再声明的文件（只删哈希仍匹配的）；
+    - 写入 ``manifest.packages[tool_id]``，卸载/回滚/完整性检查全部复用。
+    """
+    root = paths.validate_game_root(game_root)
+    _assert_runtime_present(root, plan)
+    tool_id = paths._safe_id(plan.tool_id)
     package_root = paths.package_dir(root, plan.target_dir)
+
     needed = 0
-    for _rel, src in plan.file_sources:
+    for _rel, src in sources:
         try:
             needed += Path(src).stat().st_size
         except OSError:
@@ -496,12 +603,16 @@ def install_package(
     journal = state.Journal(root)
     written: List[state.ManagedFile] = []
     seen: set[str] = set()
+    total = max(needed, 1)
+    done = 0
 
     with runtime.game_lock(root):
         runtime.assert_can_install(root)
         try:
-            journal.begin("install_package", tool_id)
-            for rel, src in plan.file_sources:
+            journal.begin(f"install_{kind}", tool_id)
+            for rel, src in sources:
+                if should_cancel and should_cancel():
+                    raise InstallError(E_CANCELLED, "已取消")
                 clean = paths.sanitize_member_name(rel)
                 key = clean.casefold()
                 if key in seen:
@@ -524,6 +635,12 @@ def install_package(
                         existed_before=existed,
                     )
                 )
+                try:
+                    done += Path(src).stat().st_size
+                except OSError:
+                    done = 0
+                if progress:
+                    progress(clean, min(done, total), total)
 
             # 旧版本有、新版本没有的文件：只清理哈希仍匹配的受管文件
             if existing:
@@ -554,7 +671,7 @@ def install_package(
                 release_id=plan.release_id,
                 version=plan.version,
                 version_sort=plan.version_sort,
-                dependencies=list(plan.dependencies or []),
+                dependencies=list(plan.dependencies or ()),
                 target_dir=plan.target_dir,
                 files=written,
                 installed_at=_now_iso(),
@@ -565,19 +682,19 @@ def install_package(
             journal.set_state(state.STATE_DONE)
             journal.clear()
         except BaseException as exc:
-            logger.exception("文件包安装失败，回滚")
+            logger.exception("%s安装失败，回滚", label)
             result = state.restore_from_journal(root, journal)
             journal.clear()
             if isinstance(exc, InstallError):
                 raise
             raise InstallError(
                 E_UNKNOWN,
-                f"文件包安装失败并已回滚（恢复 {len(result['restored'])} 个文件）：{exc}",
+                f"{label}安装失败并已回滚（恢复 {len(result['restored'])} 个文件）：{exc}",
             ) from exc
 
     return {
         "ok": True,
-        "kind": "package",
+        "kind": kind,
         "tool_id": tool_id,
         "release_id": plan.release_id,
         "target_dir": plan.target_dir,

@@ -1,6 +1,6 @@
 # LCTA Key Path Tracing
 
-<!-- Last updated: 2026-11-04 -->
+<!-- Last updated: 2026-11-14 -->
 
 
 Feature-to-code call chain traces. Each section maps a user-visible feature to the exact files in execution order.
@@ -1829,6 +1829,17 @@ Files: `webui/sections/toolbox.html`, `webui/js/toolbox-manager.js`,
   供崩溃回滚校验包根。
 - 新增 `download_only`：不要求游戏目录，`download.save_to_downloads()`
   把已校验缓存复制到系统「下载」目录下的 `<tool_dir>/`。
+- **2026-11-06 新增 `game_relative_zip`（解压包）**：清单只声明一个 `.zip`，
+  客户端自己解压到 `target_dir`。桥 `webui/app_api/toolbox.py`
+  `_toolbox_install_package_zip_impl()` → `install.install_package_zip()`：
+  先 `archive.inspect_archive`（成员数/单成员/总大小/压缩比/大小写冲突/CRC）
+  再 `archive.extract_zip_safe`（Zip Slip/UNC/ADS/设备名/尾点空格 + 可选
+  `archive_prefixes` 布局白名单）解到 `.lcta-toolbox` 暂存，随后**与
+  `game_relative_files` 共享** `_apply_package()` 落盘（target_dir 校验、
+  目录重叠检测、逐文件备份 + journal、旧文件清理、manifest 记录）。
+  卸载/回滚/完整性检查/启停全部复用 `install_package` 那一套，无需新代码。
+  清单前置校验在 `_toolbox_fetch_verified_manifest()`：`TARGET_DIR_KINDS`
+  决定 target_dir 必需，`manifest_bad_archive` 兜住「多工件 / 非 .zip」。
 - Mod 镜像站窗口：`webui/mod_mirror_api.py` 新增
   `toolboxStatus/toolboxSyncLogin/toolboxInstallRequest/toolboxOpenToolbox/
   toolboxOpenDownloads`；安装请求只转发 `tool_id/release_id/action`，主窗口

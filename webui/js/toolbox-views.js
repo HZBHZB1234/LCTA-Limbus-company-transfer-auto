@@ -46,6 +46,7 @@ const ToolboxViews = {
             runtime_zip_root: '底座',
             bepinex_plugin_dll: '插件',
             game_relative_files: '文件包',
+            game_relative_zip: '解压包',
             download_only: '仅下载',
         }[kind] || '未知类型';
     },
@@ -942,7 +943,7 @@ const ToolboxViews = {
                 ? `<div class="tb-muted" style="font-size:12px">${ToolboxViews.esc([item.category, item.tags].filter(Boolean).join(' · '))}</div>` : ''}
             ${item.description || item.summary
                 ? `<p style="margin:0;font-size:13px;line-height:1.7;white-space:pre-wrap">${ToolboxViews.esc(item.description || item.summary)}</p>` : ''}
-            ${item.target_dir ? `<div class="tb-muted" style="font-size:12px">安装到：<code>${ToolboxViews.esc(item.target_dir)}</code></div>` : ''}
+            ${item.target_dir ? `<div class="tb-muted" style="font-size:12px">安装到：<code>${ToolboxViews.esc(item.target_dir)}</code>${installKind === 'game_relative_zip' ? '（客户端解压到该目录）' : ''}</div>` : ''}
             ${installKind === 'download_only'
                 ? '<div class="tb-muted" style="font-size:12px">只下载到系统「下载」目录，不会写入游戏目录。</div>' : ''}
             ${item.requires_runtime ? '<div class="tb-muted" style="font-size:12px">需要先安装订阅工具底座。</div>' : ''}
@@ -964,7 +965,10 @@ const ToolboxViews = {
         if (item.downloadable) {
             const label = installKind === 'download_only' ? '下载到下载目录'
                 : installKind === 'runtime_zip_root' ? (installed ? '更新底座' : '安装底座')
-                    : installKind === 'game_relative_files' ? '安装到游戏目录' : (hasUpdate ? '更新' : '安装');
+                    : installKind === 'game_relative_files' ? '安装到游戏目录'
+                        : installKind === 'game_relative_zip'
+                            ? (hasUpdate ? '更新（解压安装）' : '解压安装到游戏目录')
+                            : (hasUpdate ? '更新' : '安装');
             foot = `<button class="tb-btn tb-btn--primary" data-tb-action="install"
                 data-tool="${ToolboxViews.esc(item.tool_id)}"
                 data-release="${ToolboxViews.esc(item.release_id)}"

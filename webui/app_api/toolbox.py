@@ -10,7 +10,10 @@
 - 安装过程完全清单驱动：逐文件取短期票据下载并校验 sha256（不接受网页传
   URL/路径），再按 ``install_kind`` 分发 —— ``bepinex_plugin_dll`` 走
   ``install_plugin``（事务 journal/备份/启停保持），``runtime_zip_root`` 走
-  ``install_runtime``；
+  ``install_runtime``，``game_relative_files`` 走 ``install_package``
+  （逐文件写入清单声明的 ``target_dir``），``game_relative_zip`` 走
+  ``install_package_zip``（**客户端解压**：清单只给一个 .zip，下载校验后
+  解压到同一 ``target_dir``，落盘路径与逐文件包共享 ``_apply_package``）；
 - 本地管理（列出/启停/卸载/回滚/完整性）**不需要**在线资格：过季后用户
   仍必须能停用与卸载，只有「新下载/安装」需要在线资格。
 
@@ -85,13 +88,17 @@ DEFAULT_MANIFEST_PUBLIC_KEY = (
 INSTALL_KIND_PLUGIN = "bepinex_plugin_dll"
 INSTALL_KIND_RUNTIME = "runtime_zip_root"
 INSTALL_KIND_PACKAGE = "game_relative_files"
+INSTALL_KIND_PACKAGE_ZIP = "game_relative_zip"
 INSTALL_KIND_DOWNLOAD = "download_only"
 INSTALL_KINDS = frozenset({
     INSTALL_KIND_PLUGIN,
     INSTALL_KIND_RUNTIME,
     INSTALL_KIND_PACKAGE,
+    INSTALL_KIND_PACKAGE_ZIP,
     INSTALL_KIND_DOWNLOAD,
 })
+# 需要 target_dir 的安装类型（写进游戏目录内某个相对目录）
+TARGET_DIR_KINDS = frozenset({INSTALL_KIND_PACKAGE, INSTALL_KIND_PACKAGE_ZIP})
 
 # 同一时刻只允许一个安装/更新任务（并发安装会互相覆盖文件）
 _task_lock = threading.Lock()
@@ -1092,6 +1099,7 @@ class ToolboxMixin:
                 INSTALL_KIND_RUNTIME: "底座",
                 INSTALL_KIND_PLUGIN: "插件",
                 INSTALL_KIND_PACKAGE: "文件包",
+                INSTALL_KIND_PACKAGE_ZIP: "解压包",
                 INSTALL_KIND_DOWNLOAD: "仅下载",
             }.get(kind, kind)
             raise ToolboxBridgeError(
@@ -1113,6 +1121,10 @@ class ToolboxMixin:
             )
         if kind == INSTALL_KIND_PACKAGE:
             return self._toolbox_install_package_impl(
+                api, root, tool_id, release_id, manifest, files, modal_id
+            )
+        if kind == INSTALL_KIND_PACKAGE_ZIP:
+            return self._toolbox_install_package_zip_impl(
                 api, root, tool_id, release_id, manifest, files, modal_id
             )
         return self._toolbox_install_plugin_impl(
@@ -1229,6 +1241,54 @@ class ToolboxMixin:
         self.log_ui(f"订阅工具：已安装文件包 {tool_id}/{release_id} → {target_dir}")
         return {"success": True, "data": data}
 
+    def _toolbox_install_package_zip_impl(self, api, root, tool_id, release_id, manifest, files, modal_id):
+        """安装 ``game_relative_zip``：下一个 .zip，客户端解压到 ``target_dir``。
+
+        与 ``_toolbox_install_package_impl`` 的差别只在交付形态 —— 清单恰好一个
+        工件，下载校验后交给 ``install.install_package_zip`` 解压 + 事务化落盘。
+
+        **解压后的成员名不由清单决定**，因此这里不做任何"按清单路径匹配"的
+        校验：包内布局由 ``archive.extract_zip_safe`` 净化 + ``package_dir``
+        收窄，落盘后每个文件的 sha256 由 journal 记录（用于完整性检查/卸载）。
+        """
+        from webutils.toolbox import install
+
+        target_dir = str(manifest.get("target_dir") or "")
+        if not target_dir:
+            raise ToolboxBridgeError("manifest_bad_target", "解压包清单缺少 target_dir，拒绝安装")
+        if len(files) != 1:
+            raise ToolboxBridgeError(
+                "manifest_bad_archive",
+                f"解压包清单必须恰好声明一个 .zip 工件（当前 {len(files)} 个）",
+            )
+        if not str(files[0].get("path") or "").lower().endswith(".zip"):
+            raise ToolboxBridgeError(
+                "manifest_bad_archive",
+                f"解压包清单的工件必须是 .zip：{files[0].get('path')}",
+            )
+
+        stubs = self._toolbox_download_all_files(api, tool_id, release_id, files, modal_id)
+        self._toolbox_progress(modal_id, 85, f"解压并安装到 {target_dir} …")
+        plan = install.InstallPlan(
+            kind="package_zip",
+            release_id=str(release_id),
+            version=str(manifest.get("version") or ""),
+            version_sort=str(manifest.get("version_sort") or ""),
+            dependencies=tuple(manifest.get("dependencies") or ()),
+            tool_id=str(tool_id),
+            target_dir=target_dir,
+            requires_runtime=bool(manifest.get("requires_runtime", False)),
+            stub_path=stubs[0],
+            archive_prefixes=tuple(manifest.get("archive_prefixes") or ()),
+        )
+        data = install.install_package_zip(root, plan)
+        self._toolbox_progress(modal_id, 100, "安装完成")
+        self.log_ui(
+            f"订阅工具：已解压安装 {tool_id}/{release_id} → {target_dir}"
+            f"（{data.get('files', 0)} 个文件）"
+        )
+        return {"success": True, "data": data}
+
     def _toolbox_install_download_impl(self, api, tool_id, release_id, manifest, files, modal_id):
         from webutils.toolbox import download
 
@@ -1303,11 +1363,23 @@ class ToolboxMixin:
                 "install_kind_unknown",
                 f"未知的安装类型（install_kind={kind or '缺失'}），拒绝安装",
             )
-        if kind == INSTALL_KIND_PACKAGE:
+        if kind in TARGET_DIR_KINDS:
             target_dir = str(manifest.get("target_dir") or "")
             if not target_dir:
                 raise ToolboxBridgeError(
                     "manifest_bad_target", "文件包清单缺少 target_dir，拒绝安装"
+                )
+        if kind == INSTALL_KIND_PACKAGE_ZIP:
+            # 解压型：清单必须恰好一个 .zip（服务端已校验，这里兜住旧站点/手改清单）
+            if len(files := (manifest.get("files") or [])) != 1:
+                raise ToolboxBridgeError(
+                    "manifest_bad_archive",
+                    f"解压包清单必须恰好声明一个 .zip 工件（当前 {len(files)} 个），拒绝安装",
+                )
+            if not str(files[0].get("path") or "").lower().endswith(".zip"):
+                raise ToolboxBridgeError(
+                    "manifest_bad_archive",
+                    f"解压包清单的工件必须是 .zip：{files[0].get('path')}，拒绝安装",
                 )
         if kind == INSTALL_KIND_DOWNLOAD and manifest.get("target_dir"):
             raise ToolboxBridgeError(
